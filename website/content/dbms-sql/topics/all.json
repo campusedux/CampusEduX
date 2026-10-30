@@ -1,0 +1,579 @@
+{
+  "source_ref": "chapter-17-subqueries/all",
+  "slug": "all",
+  "title": "ALL",
+  "description": "Reason about SQL ALL using universal comparisons, empty benchmarks and three-valued NULL logic, with native MySQL exercises and safe aggregate-rewrite boundaries.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Require a comparison to hold against every row\n\nALL quantifies a comparison over a subquery result. A condition such as salary greater than ALL benchmark salaries asks whether the salary exceeds every returned benchmark value. It is not a request to return all employees, nor is it an aggregate function. The operator before ALL still matters: greater than, less than, equals and not equals describe different universal comparison conditions.\n\nUse the phrase every comparison carefully because SQL includes unknown results involving NULL. ALL is true when every comparison is true, false when at least one comparison is false and otherwise unknown when unresolved comparisons remain. An empty comparison collection is true. That empty-input rule is a central feature of universal quantification rather than an accidental exception to memorize after the main example.\n\n## Check a nonempty known benchmark first\n\nConsider eight employees. Alice earns ninety thousand, Eve eighty five thousand, Bob seventy five thousand, Grace seventy thousand, Heidi sixty two thousand, Dave sixty thousand, Frank fifty five thousand and Cy fifty thousand. Grace and Heidi belong to Marketing. For this synthetic example, the Marketing benchmark salaries are therefore seventy thousand and sixty two thousand, both known and present.\n\n```sql\nSELECT employee_id, employee_name\nFROM salary_examples\nWHERE salary > ALL (\n  SELECT salary FROM salary_examples WHERE department = 'Marketing'\n)\nORDER BY employee_id;\n```\n\nAlice, Eve and Bob qualify because each salary exceeds both Marketing values. Grace does not qualify because her salary is equal to one benchmark rather than greater. Heidi does not qualify because her salary is below seventy thousand. With a nonempty collection of non-NULL benchmark values, greater than ALL can be reasoned about as exceeding the maximum, but those assumptions must travel with that shortcut.\n\n## Separate ALL from ANY\n\nANY requires at least one comparison to be true. With benchmarks sixty two thousand and seventy thousand, a salary of sixty five thousand is greater than ANY but not greater than ALL. For this nonempty non-NULL example, greater than ANY corresponds to exceeding the minimum, while greater than ALL corresponds to exceeding the maximum. Those mnemonics describe this restricted case rather than every possible SQL input.\n\nThe empty case makes the difference particularly clear. Greater than ANY of an empty collection is false because no qualifying comparison exists. Greater than ALL of an empty collection is true because no comparison contradicts the universal claim. A report with an accidentally empty benchmark can therefore return a much broader population than a business user expected.\n\n## State the empty-benchmark business policy\n\nSuppose a report should find employees exceeding every benchmark but only when at least one benchmark has been configured. The bare ALL condition alone does not enforce benchmark existence. Add a separate appropriate existence requirement if that is the real policy, and explain it in the interface or report definition. Do not silently change the mathematical operator to compensate for missing configuration.\n\n```sql\nSELECT c.candidate_id\nFROM pay_candidates AS c\nWHERE EXISTS (SELECT 1 FROM pay_benchmarks)\n  AND c.salary > ALL (SELECT b.salary FROM pay_benchmarks AS b)\nORDER BY c.candidate_id;\n```\n\nThis example separates two questions: whether any benchmark rows exist and whether every comparison succeeds. It still needs a decision about NULL benchmark salaries. Existence of a row with no recorded salary is not equivalent to existence of a usable known salary threshold. Model the intended completeness requirement instead of assuming row presence solves every missingness case.\n\n## Follow the three-valued truth table\n\nFor a candidate salary eighty thousand and benchmarks seventy thousand plus NULL, the known comparison is true and the missing comparison is unknown. ALL is unknown, so WHERE does not retain the candidate. For candidate sixty thousand against the same benchmarks, one comparison is false, which is enough to make ALL false even though another is unknown. A single counterexample defeats the universal condition.\n\n| Candidate | Benchmarks | Greater than ALL |\n|---|---|---|\n| 80000 | 70000, 62000 | True |\n| 65000 | 70000, 62000 | False |\n| 80000 | 70000, NULL | Unknown |\n| 60000 | 70000, NULL | False |\n| Any value | Empty collection | True |\n\nA NULL candidate compared with a nonempty ordinary benchmark collection yields unknown comparisons. Against an empty collection, the universal condition remains true because there are no comparisons at all. This is another reason to test empty input directly rather than assuming NULL always makes every possible containing expression unknown.\n\n## Do not replace ALL with MAX blindly\n\nMAX ignores NULL inputs and returns NULL for an empty input. Those behaviors differ from the quantified comparison. With benchmarks seventy thousand and NULL, exceeding MAX can be true while exceeding ALL is unknown. With no benchmarks, exceeding MAX is unknown while exceeding ALL is true. A rewrite that passes the pleasant nonempty fixture can therefore change the report's population on exactly the missing-data cases that need attention.\n\nThe MAX shortcut is valid for the simple greater-than interpretation only under the necessary nonempty, known-value assumptions and compatible comparisons. If the requirement intentionally ignores missing benchmark values, state that policy with an explicit filter and then still decide the empty-after-filtering case. Removing NULL rows changes the question; it is not a purely cosmetic cleanup.\n\n## Understand not-equals ALL and NOT IN\n\nThe predicate value not equals ALL of a subquery has the same quantified meaning as NOT IN for a compatible one-column comparison. It can be useful to read it as differing from every listed value. NULLs still matter: a blacklist containing NULL can leave a nonmatching candidate's exclusion test unknown, so WHERE does not keep that candidate. Do not describe NOT IN as automatically equivalent to every informal notion of not found.\n\nIf the intended policy is absence of a matching non-NULL identifier, NOT EXISTS with an explicitly correlated match may better express that policy. It does not necessarily reproduce the full three-valued expression result of NOT IN. Explain whether the goal is identical truth values or only an intentionally chosen row-selection policy, particularly when candidate identifiers can also be missing.\n\n## Compare other operators on their own terms\n\nLess than ALL of a nonempty non-NULL set means less than its minimum. Equals ALL requires equality with every returned value, so a collection containing two distinct known values cannot have a candidate equal to both under ordinary equality. Not equals ALL excludes every listed match. The quantifier stays universal while the comparison's meaning changes.\n\nDuplicates do not change the truth value of repeating the same comparison, but they can affect work performed or the clarity of a diagnostic result. Avoid adding DISTINCT solely because the word ALL seems to require unique input. Whether duplicate elimination helps performance is an optimizer question and should follow correctness rather than substitute for explaining the operator.\n\n## Validate dialect support and execution plans separately\n\nThese examples target MySQL quantified subqueries. SQLite does not supply the same ALL subquery syntax, so a SQLite-only exercise environment cannot certify the native expression. A hand-written emulation must be tested against empty, false-dominating-unknown and unknown-only cases before being called equivalent. A successful simple comparison is a much narrower piece of evidence.\n\nQuery cost depends on the engine's chosen strategy, source filtering and relevant access paths. Do not claim ALL physically runs a naive loop over every benchmark for every outer row merely because that is a useful logical explanation. Inspect actual plans and representative measurements when optimizing, while keeping the intended comparison population visible in the query.\n\n## Solve two quantified comparison exercises\n\nBeginner exercise: list candidates whose salary exceeds every known benchmark in a supplied nonempty fixture, then repeat with no benchmarks and predict which rows survive. The solution includes every candidate in the empty case under the bare universal condition. Intermediate exercise: return an explicit yes, no or unknown label for each candidate using a CASE expression around the quantified comparison and its negation.\n\nKeep the benchmark query visible during review: a mistaken department filter can change the comparison collection even when ALL itself is used correctly. Test one intended member and one excluded row so the report verifies the population as well as the quantifier.\n\nThe second lab includes a NULL benchmark and a definite false comparison so unknown is not mistaken for false in every row. Continue with [ANY](/learning/dbms-sql-tutorial/any), [NOT EXISTS](/learning/dbms-sql-tutorial/not-exists) and [NULL semantics](/learning/dbms-sql-tutorial/null-semantics). A complete explanation states the operator, benchmark population, empty policy and NULL policy before interpreting the output.",
+  "references": [
+    {
+      "title": "MySQL 8.4 subqueries with ALL",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/all-subqueries.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-17-all",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-17-all-1",
+          "test_id": "pt-dbms-sql-17-all",
+          "question_text": "For a nonempty collection of non-NULL numeric benchmarks, salary>ALL means salary is greater than what?",
+          "options": [
+            "At least one row (the minimum) — this is ANY's meaning",
+            "Every row (the maximum)",
+            "The average",
+            "Exactly the first row returned"
+          ],
+          "correct_index": 1,
+          "explanation": "It must exceed every benchmark; the maximum mnemonic is restricted to nonempty known values.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-17-all-2",
+          "test_id": "pt-dbms-sql-17-all",
+          "question_text": "Using Marketing salaries {70000, 62000}, what is `salary > ALL (SELECT salary FROM employees WHERE department='Marketing')` equivalent to?",
+          "options": [
+            "salary > 62000",
+            "salary > 70000",
+            "salary > 66000",
+            "salary >= 62000"
+          ],
+          "correct_index": 1,
+          "explanation": "ALL compares against the maximum of the subquery's results, which is 70000.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-17-all-3",
+          "test_id": "pt-dbms-sql-17-all",
+          "question_text": "If a subquery used with `> ALL` returns ZERO rows, the condition is:",
+          "options": [
+            "Always FALSE",
+            "Always TRUE (vacuously)",
+            "NULL/UNKNOWN",
+            "A runtime error"
+          ],
+          "correct_index": 1,
+          "explanation": "With no rows to fail against, \"greater than every one of them\" is trivially, vacuously true.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-17-all-4",
+          "test_id": "pt-dbms-sql-17-all",
+          "question_text": "Using the sample data, which employees satisfy `salary > ALL (SELECT salary FROM employees WHERE department = 'Marketing')`?",
+          "options": [
+            "All 8 employees",
+            "Alice, Eve, Bob",
+            "Only Alice",
+            "Grace, Heidi"
+          ],
+          "correct_index": 1,
+          "explanation": "These three employees all earn more than 70000, the maximum Marketing salary.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-17-all-5",
+          "test_id": "pt-dbms-sql-17-all",
+          "question_text": "`x <> ALL (subquery)` is equivalent to:",
+          "options": [
+            "x IN (subquery)",
+            "x NOT IN (subquery)",
+            "EXISTS (subquery)",
+            "x = ANY (subquery)"
+          ],
+          "correct_index": 1,
+          "explanation": "Being not-equal to every returned row is exactly the meaning of NOT IN.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-17-all-6",
+          "test_id": "pt-dbms-sql-17-all",
+          "question_text": "For greater-than comparisons on a nonempty collection of non-NULL numbers, which distinction between ANY and ALL is correct?",
+          "options": [
+            "ANY requires beating every row (max); ALL requires beating at least one (min)",
+            "ANY requires beating at least one row (min); ALL requires beating every row (max)",
+            "They behave identically on non-empty subqueries",
+            "ALL cannot be used with numeric columns"
+          ],
+          "correct_index": 1,
+          "explanation": "The minimum/maximum mnemonic needs these assumptions; empty and NULL cases differ.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-17-all-7",
+          "test_id": "pt-dbms-sql-17-all",
+          "question_text": "With nonempty known numeric benchmarks containing different values, why can confusing greater-than ANY with greater-than ALL change a report?",
+          "options": [
+            "No difference, both return identical rows always",
+            "The result set size can differ significantly since one compares to MIN and the other to MAX",
+            "One of them is always a syntax error",
+            "ALL always returns more rows than ANY"
+          ],
+          "correct_index": 1,
+          "explanation": "One qualifying comparison suffices for ANY; every comparison must qualify for ALL. NULL and empty cases require additional analysis.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-17-all-8",
+          "test_id": "pt-dbms-sql-17-all",
+          "question_text": "On an empty subquery, how do `> ANY` and `> ALL` differ?",
+          "options": [
+            "Both are always TRUE",
+            "Both are always FALSE",
+            "`> ANY` is FALSE, `> ALL` is TRUE (vacuously)",
+            "`> ANY` is TRUE, `> ALL` is FALSE"
+          ],
+          "correct_index": 2,
+          "explanation": "ANY needs at least one row to beat (impossible when empty, so FALSE); ALL is vacuously satisfied when there's nothing to fail against.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-17-all-new-9",
+          "test_id": "pt-dbms-sql-17-all",
+          "question_text": "A salary 65000 is compared with benchmarks62000and70000. What is greater-than ALL?",
+          "options": [
+            "False",
+            "True",
+            "A syntax error",
+            "Always NULL"
+          ],
+          "correct_index": 0,
+          "explanation": "The70000comparison is a counterexample.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-17-all-new-10",
+          "test_id": "pt-dbms-sql-17-all",
+          "question_text": "What does a false comparison do to ALL when another comparison is unknown?",
+          "options": [
+            "It makes ALL true",
+            "It makes ALL false",
+            "It is ignored",
+            "It forces a runtime error"
+          ],
+          "correct_index": 1,
+          "explanation": "One counterexample defeats the universal condition.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-17-all-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-17-all-application-new-1",
+          "test_id": "pt-dbms-sql-17-all-application",
+          "question_text": "What is 80000 greater-than ALL(subquery), where the subquery returns 70000 and NULL?",
+          "options": [
+            "True",
+            "False because every NULL is zero",
+            "Unknown",
+            "A duplicate row"
+          ],
+          "correct_index": 2,
+          "explanation": "There is no false comparison but one is unknown.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-17-all-application-new-2",
+          "test_id": "pt-dbms-sql-17-all-application",
+          "question_text": "Why can greater-than MAX differ from greater-than ALL on empty input?",
+          "options": [
+            "MAX always supplies zero",
+            "ALL always raises an error",
+            "Both are guaranteed identical",
+            "MAX supplies NULL while ALL over no comparisons is true"
+          ],
+          "correct_index": 3,
+          "explanation": "The empty-input contracts differ.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-17-all-application-new-3",
+          "test_id": "pt-dbms-sql-17-all-application",
+          "question_text": "What extra condition expresses that a benchmark must exist?",
+          "options": [
+            "A separate appropriate EXISTS requirement",
+            "Rename ALL to every",
+            "ORDER BY candidate_id",
+            "Add an output alias"
+          ],
+          "correct_index": 0,
+          "explanation": "Universal comparison alone permits an empty comparison population.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-17-all-application-new-4",
+          "test_id": "pt-dbms-sql-17-all-application",
+          "question_text": "Does a benchmark row with NULL salary establish a usable known threshold?",
+          "options": [
+            "Yes, NULL always means zero",
+            "No",
+            "Only if it has a key",
+            "Only if it appears first"
+          ],
+          "correct_index": 1,
+          "explanation": "Record existence and value completeness are separate.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-17-all-application-new-5",
+          "test_id": "pt-dbms-sql-17-all-application",
+          "question_text": "What does equals ALL(subquery), where the subquery returns 10 and 20 require under ordinary equality?",
+          "options": [
+            "Equality with either one",
+            "Equality with their average",
+            "Equality with both 10 and 20, which no ordinary numeric candidate satisfies",
+            "Equality with the last row only"
+          ],
+          "correct_index": 2,
+          "explanation": "The universal quantifier applies to each equality.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-17-all-application-new-6",
+          "test_id": "pt-dbms-sql-17-all-application",
+          "question_text": "Do repeated identical benchmark values change the comparison truth?",
+          "options": [
+            "Yes, they reverse every result",
+            "Only after three copies",
+            "Only when ordered",
+            "No"
+          ],
+          "correct_index": 3,
+          "explanation": "Repeating the same comparison does not change its logical result.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-17-all-application-new-7",
+          "test_id": "pt-dbms-sql-17-all-application",
+          "question_text": "What can a NULL in a NOT IN benchmark do to a nonmatching candidate?",
+          "options": [
+            "Leave the predicate unknown",
+            "Guarantee true",
+            "Delete the benchmark",
+            "Choose a random value"
+          ],
+          "correct_index": 0,
+          "explanation": "Not-equals ALL retains three-valued semantics.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-17-all-application-new-8",
+          "test_id": "pt-dbms-sql-17-all-application",
+          "question_text": "Can a NOT EXISTS absence policy differ from full NOT IN truth values?",
+          "options": [
+            "No, the names are interchangeable",
+            "Yes, especially with NULLs",
+            "Only on sorted tables",
+            "Only when IDs are strings"
+          ],
+          "correct_index": 1,
+          "explanation": "State whether matching truth values or an intentional selection policy is required.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-17-all-application-new-9",
+          "test_id": "pt-dbms-sql-17-all-application",
+          "question_text": "Can SQLite-only verification certify native MySQL ALL syntax?",
+          "options": [
+            "Yes, all SQL syntax is shared",
+            "Only on empty tables",
+            "No",
+            "Only with integer salaries"
+          ],
+          "correct_index": 2,
+          "explanation": "Native dialect support is a separate test target.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-17-all-application-new-10",
+          "test_id": "pt-dbms-sql-17-all-application",
+          "question_text": "Which assumptions make greater-than maximum a useful mnemonic here?",
+          "options": [
+            "Any empty set",
+            "Only NULL benchmark values",
+            "Any arbitrary text collection",
+            "A nonempty set of non-NULL compatible benchmark values"
+          ],
+          "correct_index": 3,
+          "explanation": "Missing and empty cases need their own reasoning.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cx-all-known-thresholds",
+      "slug": "all-known-thresholds",
+      "title": "Exceed every benchmark salary",
+      "difficulty": "Easy",
+      "task": "Return candidate_id for candidates whose salary is greater than every benchmark salary using ALL. Preserve the native empty-benchmark rule. Order by candidate_id.",
+      "schema_sql": "CREATE TABLE all_candidates(candidate_id INT PRIMARY KEY,salary INT); CREATE TABLE all_benchmarks(benchmark_id INT PRIMARY KEY,salary INT);",
+      "seed_sql": "INSERT INTO all_candidates VALUES (1,80),(2,65),(3,60); INSERT INTO all_benchmarks VALUES (1,70),(2,62);",
+      "expected": "candidate_id\n1",
+      "ordering": "Use the explicit ORDER BY in the requested result.",
+      "edge_cases": [
+        "Equality is insufficient for strict greater-than.",
+        "Empty benchmark retains even NULL candidates under bare ALL."
+      ],
+      "hints": [
+        "Do not replace ALL with MAX without testing empty input."
+      ],
+      "solution_sql": "SELECT candidate_id FROM all_candidates WHERE salary>ALL(SELECT salary FROM all_benchmarks) ORDER BY candidate_id;",
+      "explanation": "Every known comparison must be true; an empty benchmark collection makes the universal predicate true.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO all_candidates VALUES (1,0),(2,NULL);",
+          "expected": "candidate_id\n1\n2"
+        },
+        {
+          "seed_sql": "INSERT INTO all_candidates VALUES (1,70); INSERT INTO all_benchmarks VALUES (1,70);",
+          "expected": ""
+        }
+      ]
+    },
+    {
+      "id": "cx-all-three-valued-verdict",
+      "slug": "all-three-valued-verdict",
+      "title": "Display quantified true false and unknown separately",
+      "difficulty": "Medium",
+      "task": "Return candidate_id, verdict where verdict is 'yes' for salary>ALL benchmarks, 'no' when that predicate is false, and 'unknown' otherwise. Order by candidate_id.",
+      "schema_sql": "CREATE TABLE all_candidates(candidate_id INT PRIMARY KEY,salary INT); CREATE TABLE all_benchmarks(benchmark_id INT PRIMARY KEY,salary INT);",
+      "seed_sql": "INSERT INTO all_candidates VALUES (1,5),(2,20),(3,NULL); INSERT INTO all_benchmarks VALUES (1,10),(2,NULL);",
+      "expected": "candidate_id\tverdict\n1\tno\n2\tunknown\n3\tunknown",
+      "ordering": "Use the explicit ORDER BY in the requested result.",
+      "edge_cases": [
+        "False dominates unknown.",
+        "Empty comparison collection is true."
+      ],
+      "hints": [
+        "Test the predicate and its negation in separate CASE branches."
+      ],
+      "solution_sql": "SELECT candidate_id,CASE WHEN salary>ALL(SELECT salary FROM all_benchmarks) THEN 'yes' WHEN NOT(salary>ALL(SELECT salary FROM all_benchmarks)) THEN 'no' ELSE 'unknown' END AS verdict FROM all_candidates ORDER BY candidate_id;",
+      "explanation": "The first branch detects true, the second detects false, and ELSE preserves unknown instead of collapsing it into false.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO all_candidates VALUES (1,5),(2,NULL);",
+          "expected": "candidate_id\tverdict\n1\tyes\n2\tyes"
+        },
+        {
+          "seed_sql": "INSERT INTO all_candidates VALUES (1,20); INSERT INTO all_benchmarks VALUES (1,10);",
+          "expected": "candidate_id\tverdict\n1\tyes"
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": null,
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-17-all-1",
+      "test_id": "pt-dbms-sql-17-all",
+      "question_text": "`salary > ALL (subquery)` means salary is greater than:",
+      "options": [
+        "At least one row (the minimum) — this is ANY's meaning",
+        "Every row (the maximum)",
+        "The average",
+        "Exactly the first row returned"
+      ],
+      "correct_index": 1,
+      "explanation": "ALL demands beating the strongest value in the set, i.e., the maximum.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-17-all-2",
+      "test_id": "pt-dbms-sql-17-all",
+      "question_text": "Using Marketing salaries {70000, 62000}, what is `salary > ALL (SELECT salary FROM employees WHERE department='Marketing')` equivalent to?",
+      "options": [
+        "salary > 62000",
+        "salary > 70000",
+        "salary > 66000",
+        "salary >= 62000"
+      ],
+      "correct_index": 1,
+      "explanation": "ALL compares against the maximum of the subquery's results, which is 70000.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-17-all-3",
+      "test_id": "pt-dbms-sql-17-all",
+      "question_text": "If a subquery used with `> ALL` returns ZERO rows, the condition is:",
+      "options": [
+        "Always FALSE",
+        "Always TRUE (vacuously)",
+        "NULL/UNKNOWN",
+        "A runtime error"
+      ],
+      "correct_index": 1,
+      "explanation": "With no rows to fail against, \"greater than every one of them\" is trivially, vacuously true.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-17-all-4",
+      "test_id": "pt-dbms-sql-17-all",
+      "question_text": "Using the sample data, which employees satisfy `salary > ALL (SELECT salary FROM employees WHERE department = 'Marketing')`?",
+      "options": [
+        "All 8 employees",
+        "Alice, Eve, Bob",
+        "Only Alice",
+        "Grace, Heidi"
+      ],
+      "correct_index": 1,
+      "explanation": "These three employees all earn more than 70000, the maximum Marketing salary.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-17-all-5",
+      "test_id": "pt-dbms-sql-17-all",
+      "question_text": "`x <> ALL (subquery)` is equivalent to:",
+      "options": [
+        "x IN (subquery)",
+        "x NOT IN (subquery)",
+        "EXISTS (subquery)",
+        "x = ANY (subquery)"
+      ],
+      "correct_index": 1,
+      "explanation": "Being not-equal to every returned row is exactly the meaning of NOT IN.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-17-all-6",
+      "test_id": "pt-dbms-sql-17-all",
+      "question_text": "Which correctly distinguishes ANY from ALL?",
+      "options": [
+        "ANY requires beating every row (max); ALL requires beating at least one (min)",
+        "ANY requires beating at least one row (min); ALL requires beating every row (max)",
+        "They behave identically on non-empty subqueries",
+        "ALL cannot be used with numeric columns"
+      ],
+      "correct_index": 1,
+      "explanation": "ANY is the permissive operator (beats the minimum); ALL is the strict operator (beats the maximum).",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-17-all-7",
+      "test_id": "pt-dbms-sql-17-all",
+      "question_text": "A colleague mixes up ANY and ALL in `salary > ANY(...)` vs `salary > ALL(...)` over the same subquery. What's the practical consequence?",
+      "options": [
+        "No difference, both return identical rows always",
+        "The result set size can differ significantly since one compares to MIN and the other to MAX",
+        "One of them is always a syntax error",
+        "ALL always returns more rows than ANY"
+      ],
+      "correct_index": 1,
+      "explanation": "Since ANY and ALL compare against opposite ends of the value range, swapping them can drastically change the result.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-17-all-8",
+      "test_id": "pt-dbms-sql-17-all",
+      "question_text": "On an empty subquery, how do `> ANY` and `> ALL` differ?",
+      "options": [
+        "Both are always TRUE",
+        "Both are always FALSE",
+        "`> ANY` is FALSE, `> ALL` is TRUE (vacuously)",
+        "`> ANY` is TRUE, `> ALL` is FALSE"
+      ],
+      "correct_index": 2,
+      "explanation": "ANY needs at least one row to beat (impossible when empty, so FALSE); ALL is vacuously satisfied when there's nothing to fail against.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "/root/content_b",
+    "independent_review": "passed",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "canonical_answer_indices_preserved": true,
+    "independent_reviewer": "/root/review_d_and_programs",
+    "independent_review_scope": "Full notes,20MCQs with every option,canonical answer position and explanation,original diagrams,and all exercise contracts/fixtures or solved conceptual labs. Original identities/indices checked against public seed cache where applicable. Reported substantive findings corrected by coordinator and filtered recheck accepted;identified learner-facing spacing polished. Manual technical/editorial reasoning only;engine,provider,browser,external originality and AdSense evidence separate."
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-17-all",
+    "original_note_sha256": "dff16d76c6c2647e3f629f6f482c125286f14df80532e3bb056225811cc615fe",
+    "status": "drafted; not included in prepared paired migrations"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "ALL distinguishes counterexamples from unresolved comparisons",
+      "description": "A false comparison determines false; otherwise a NULL comparison can leave unknown. Empty input is true.",
+      "columns": [
+        "Candidate",
+        "Benchmarks",
+        "Greater-than ALL"
+      ],
+      "rows": [
+        [
+          "80",
+          "70, 62",
+          "True"
+        ],
+        [
+          "65",
+          "70, 62",
+          "False"
+        ],
+        [
+          "80",
+          "70, NULL",
+          "Unknown"
+        ],
+        [
+          "60",
+          "70, NULL",
+          "False"
+        ],
+        [
+          "NULL",
+          "Empty",
+          "True"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "provided",
+    "technical_review": "Independent manual diagram/content consistency review passed;actual static/browser rendering tracked separately.",
+    "server_rendering": "unverified",
+    "browser_rendering": "unverified",
+    "independent_review": "passed"
+  },
+  "authoring_status": "drafted; verification pending",
+  "sql_verification": {
+    "scope": "not executed; exact MySQL/provider verification pending",
+    "all_passed": false,
+    "cases": []
+  }
+}

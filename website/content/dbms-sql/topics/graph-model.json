@@ -1,0 +1,629 @@
+{
+  "source_ref": "chapter-3-data-models/graph-model",
+  "slug": "graph-model",
+  "title": "Graph Model",
+  "description": "Represent directed relationships with explicit identity and properties, then distinguish paths, endpoint sets, cycles, and traversal cost through bounded SQL graph mirrors.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Making relationships explicit facts\n\nA graph model represents entities and connections between them. Nodes identify entities, and edges represent relationships. In a property graph, nodes and relationships can carry properties, while labels or relationship types describe their roles under the selected product's rules. Other graph representations exist, so one product's property interface should not be treated as the universal grammar for all graphs.\n\nConsider a learning community where members follow other members. A node identifies a member, and a directed FOLLOWS edge goes from the follower to the followed member. A relationship could also carry a created time under an appropriate model. The edge is a fact with meaning rather than merely a line used to make a diagram decorative.\n\nNeo4j is a familiar property-graph database associated with the Cypher query language. The exercises here use MySQL tables to mirror nodes and edges. They test relationship and path reasoning without claiming to execute Cypher or verify native Neo4j storage, indexes, or transaction behavior.\n\n## Defining identity and direction\n\nA member's display name is not necessarily unique. Member 1 and Member 7 can both be called Mira while remaining distinct nodes. Queries and relationships should use the defined identifiers rather than equating nodes through labels. A name change also should not silently change every relationship's intended endpoint.\n\nDirection belongs to the relationship's meaning. If member 1 follows member 2, it does not follow that member 2 follows member 1. A query asking whom Mira follows differs from asking who follows Mira. Treating every edge as undirected can produce the wrong population even though the traversal returns plausible names.\n\nA model can also allow several relationship types between the same nodes. FOLLOWS and MENTORS are different facts; a query for one should not automatically include the other. Whether parallel same-type relationships or self-edges are permitted is a separate domain rule. The teaching fixture forbids self-edges but does not present that as a universal graph invariant.\n\n## Distinguishing one hop from a path\n\nA one-hop traversal follows one qualifying relationship. A two-hop path follows a first relationship to an intermediate node and another to an endpoint. The endpoint is not necessarily a new entity relative to the start, and several different paths can reach the same endpoint. State whether the task wants paths, endpoints, or counts before interpreting results.\n\nSuppose member 1 follows 2 and 3, and both 2 and 3 follow 5. There are two qualifying two-hop paths from 1 to 5 but only one distinct endpoint 5. Returning 5 twice is correct for a path listing and wrong for a requested set of distinct recommendations. The desired grain determines the duplicate policy.\n\nA path can also return to its start through a cycle. If 1 follows 2 and 2 follows 1, a two-hop traversal reaches 1 again. A recommendation task may exclude the starting member, but an analysis of cycles may intentionally retain that path. Filtering cycles is a task requirement rather than a universal rule that all repeated nodes are invalid.\n\n## Choosing a bounded query contract\n\nUnbounded traversal needs careful termination, uniqueness, and resource rules. A densely connected graph can have many paths even when the number of distinct nodes is modest. Asking for every possible path is different from asking whether one endpoint is reachable. The model alone does not limit the amount of work a query describes.\n\nA beginner task can restrict the source and relationship type to list direct outgoing neighbors. An intermediate recommendation can request distinct endpoints exactly two FOLLOWS hops away, excluding the source and members already followed directly. These conditions define a useful result that can be checked with a small original fixture.\n\nThe SQL mirror uses explicit joins for the two hops. This does not imply that every relational graph query is inherently slow or every native graph query is constant time. It makes the logical paths visible through the course's supported query environment. Physical traversal performance requires the actual implementation and workload.\n\n## Writing a direct-neighbor mirror\n\nThe fixture has nodes with node_id and node_name, plus edges with source_id, target_id, and edge_type. A unique triple represents one typed edge. Every fixture endpoint references an existing node. Actual foreign-key enforcement is outside this representation exercise and must not be claimed from a successful query over valid references.\n\n```sql\nSELECT n.node_id, n.node_name\nFROM edges e\nJOIN nodes n ON n.node_id = e.target_id\nWHERE e.source_id = 1 AND e.edge_type = 'FOLLOWS'\nORDER BY n.node_id;\n```\n\nThis query reads outgoing FOLLOWS endpoints, not incoming edges or unrelated relationship types. A repeated node name remains a separate identity through its identifier. An empty outgoing neighborhood produces no result rows; it does not prove the source node is absent or that the database failed.\n\n## Preserving path and endpoint semantics\n\nFor the two-hop task, join the first edge's target to the second edge's source. Filter both relationship types. Then remove the starting endpoint and any endpoint already present in the source's direct FOLLOWS neighborhood. Deduplicate endpoints only because this particular task requests one recommendation per member.\n\nA direct neighbor reached again through an intermediate node should remain excluded under that policy. A member reachable through three hops but not exactly two does not qualify. A member reachable through two different intermediates should appear once. Include each of those cases in fixtures so the query cannot pass merely by returning every node other than the source.\n\nPath properties can introduce further requirements. A shortest-path question needs a definition of distance, permitted edge types, and any weights. A recommendation query needs a relevance policy beyond simple reachability if product requirements demand it. Do not call a fixed two-hop endpoint set a verified shortest-path algorithm or a complete recommendation system.\n\n## Understanding performance without universal claims\n\nSome native graph implementations optimize relationship access, but no architectural term guarantees fast arbitrary multi-hop queries regardless of database size. Node degree, traversal depth, path multiplicity, filters, indexes, caching, and requested output all influence work. Even a cheap local edge access can be repeated an enormous number of times by an expansive query.\n\nRelational representations can also use suitable indexes and bounded joins effectively. A table getting larger does not automatically make every selective two-hop query proportionally slower. Compare actual plans and data distributions. A model comparison that assumes unindexed SQL and ideal graph access is not an evidence-based performance result.\n\nSimple tabular aggregation can be expressed in graph products too, but it may not be the strongest reason to choose one. Evaluate the full workload and required guarantees rather than declaring every sales total impossible or universally poor in a graph. The presence of relationships is a modeling feature, not a predetermined benchmark outcome.\n\n## Reviewing distribution and lifecycle\n\nA graph with many relationships crossing partition boundaries can require remote traversal and coordination. Partitioning an interconnected graph can therefore be challenging. The difficulty depends on locality, access patterns, product facilities, and consistency requirements; it is not proof that every graph must run on one server.\n\nUpdates need lifecycle rules as well. Deleting a node with relationships may be rejected or require a supported relationship-removal policy. An edge can have independent properties and history that should not disappear accidentally. Inspect actual product behavior before changing native definitions or deleting shared relationship facts.\n\nAuthorization remains a trusted requirement. Knowing a node identifier or reaching it through an edge does not by itself prove permission to view all properties. A path can connect public and private entities, so the real query boundary must enforce the intended record and field scope. UI hiding is not sufficient enforcement.\n\n## Comparing connected models accurately\n\nClassical CODASYL network sets and modern property graphs both represent connections, but their relationship rules, query interfaces, and schema facilities differ. Avoid declaring every graph schema-free or every network implementation limited to one operation style. Compare the required identity, cardinality, traversal, and validity contracts in the actual products.\n\nThe graph model is useful when relationships and paths are central to the questions being asked. Define direction, edge meaning, result grain, and traversal bounds explicitly. Test ordinary links, duplicate paths, cycles, and excluded relationships, while keeping native engine and operational verification separate from the SQL mirror's observed results.\n",
+  "references": [
+    {
+      "title": "Neo4j graph concepts",
+      "url": "https://neo4j.com/docs/getting-started/appendix/graphdb-concepts/"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-3-graph-model",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-3-graph-model-1",
+          "test_id": "pt-dbms-sql-3-graph-model",
+          "question_text": "What are the two fundamental building blocks of the graph data model?",
+          "options": [
+            "Tables and rows",
+            "Nodes (vertices) and edges (relationships)",
+            "Documents and collections",
+            "Keys and opaque values"
+          ],
+          "correct_index": 1,
+          "explanation": "The graph model represents data as nodes (entities) connected by edges (relationships), both of which can carry properties in a property graph.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-3-graph-model-2",
+          "test_id": "pt-dbms-sql-3-graph-model",
+          "question_text": "What is a 'property graph', as implemented by databases like Neo4j?",
+          "options": [
+            "A graph where only nodes can have properties, never edges",
+            "A graph model where both nodes and edges can carry their own key-value properties",
+            "A graph stored entirely as a relational table",
+            "A graph with no labels or types at all"
+          ],
+          "correct_index": 1,
+          "explanation": "In a property graph, both nodes and relationships can have attached properties, unlike a plain mathematical graph with unlabeled edges.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-3-graph-model-3",
+          "test_id": "pt-dbms-sql-3-graph-model",
+          "question_text": "What can native relationship-access optimizations improve without guaranteeing arbitrary traversal speed?",
+          "options": [
+            "Supported local relationship access, while degree, depth, path multiplicity, and other costs still matter",
+            "Full table scans optimized by the query planner",
+            "Automatic denormalization of all connected data into one row",
+            "In-memory caching of the entire dataset"
+          ],
+          "correct_index": 0,
+          "explanation": "No model guarantees fast multi-hop work independent of the requested paths.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-3-graph-model-4",
+          "test_id": "pt-dbms-sql-3-graph-model",
+          "question_text": "How should a two-hop relational query be compared with native graph traversal?",
+          "options": [
+            "Because relational databases cannot store friendship data",
+            "Measure actual plans, indexes, degrees, and required output rather than assume one universal cost ranking",
+            "Because SQL cannot express WHERE clauses",
+            "Because relational databases do not support recursive queries at all"
+          ],
+          "correct_index": 1,
+          "explanation": "Selective relational joins can be effective; graph paths can also expand greatly.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-3-graph-model-5",
+          "test_id": "pt-dbms-sql-3-graph-model",
+          "question_text": "Which query language is commonly associated with Neo4j for declaratively describing graph patterns?",
+          "options": [
+            "Cypher",
+            "OQL",
+            "DL/I",
+            "CQL"
+          ],
+          "correct_index": 0,
+          "explanation": "Cypher is Neo4j's declarative graph query language, used to describe node/relationship patterns to match.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-3-graph-model-6",
+          "test_id": "pt-dbms-sql-3-graph-model",
+          "question_text": "What should guide choosing a graph product for mostly simple tabular aggregates?",
+          "options": [
+            "Multi-hop relationship traversal like friend-of-a-friend",
+            "Shortest-path finding between two entities",
+            "The whole workload and actual supported costs rather than assuming relationships alone make it best",
+            "Fraud-ring detection via cycles of transactions"
+          ],
+          "correct_index": 2,
+          "explanation": "Graph products can aggregate; the question is suitability and measured behavior.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-3-graph-model-7",
+          "test_id": "pt-dbms-sql-3-graph-model",
+          "question_text": "How should property graphs and classical CODASYL sets be compared?",
+          "options": [
+            "They are functionally identical",
+            "Inspect actual relationship rules, schemas, and query interfaces rather than equate connected diagrams",
+            "The network model supports declarative queries while the graph model does not",
+            "Property graphs cannot attach properties to relationships"
+          ],
+          "correct_index": 1,
+          "explanation": "Graph products are not universally schema-free, and native network facilities vary.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-3-graph-model-8",
+          "test_id": "pt-dbms-sql-3-graph-model",
+          "question_text": "Why can distributing an interconnected graph be difficult?",
+          "options": [
+            "Graph databases cannot be distributed at all",
+            "Cross-partition relationships can add traversal and coordination costs depending on locality and product design",
+            "Graph databases have no concept of nodes or edges to partition",
+            "Key-value stores also cannot be partitioned, so the comparison is invalid"
+          ],
+          "correct_index": 1,
+          "explanation": "This does not imply every graph is restricted to one server.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-3-graph-model-new-9",
+          "test_id": "pt-dbms-sql-3-graph-model",
+          "question_text": "Does a directed FOLLOWS edge from 1 to 2 imply an edge from 2 to 1?",
+          "options": [
+            "Yes; all graph relationships are symmetric",
+            "No",
+            "Only if labels match",
+            "Only if node 1 is older"
+          ],
+          "correct_index": 1,
+          "explanation": "Direction is part of the modeled fact.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-3-graph-model-new-10",
+          "test_id": "pt-dbms-sql-3-graph-model",
+          "question_text": "Two paths reach one endpoint. What determines whether it should appear once or twice?",
+          "options": [
+            "The number of letters in its name",
+            "The current storage order",
+            "Whether the task asks for distinct endpoints or path occurrences",
+            "The graph product logo"
+          ],
+          "correct_index": 2,
+          "explanation": "Result grain defines duplicate handling.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-3-graph-model-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-3-graph-model-application-new-1",
+          "test_id": "pt-dbms-sql-3-graph-model-application",
+          "question_text": "1 follows 2 and 3; both follow 5. How many two-hop paths and distinct endpoints to 5 exist?",
+          "options": [
+            "One path and two endpoints",
+            "Two paths and two distinct endpoints",
+            "Two paths and one distinct endpoint",
+            "No path because names repeat"
+          ],
+          "correct_index": 2,
+          "explanation": "The intermediate choices differ while the final identity is the same.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-3-graph-model-application-new-2",
+          "test_id": "pt-dbms-sql-3-graph-model-application",
+          "question_text": "1 follows 2 and 2 follows 1. What can a two-hop traversal reach?",
+          "options": [
+            "Only node 2",
+            "A guaranteed new node",
+            "No node because graphs prohibit cycles",
+            "The starting node 1"
+          ],
+          "correct_index": 3,
+          "explanation": "A cycle can return to the origin.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-3-graph-model-application-new-3",
+          "test_id": "pt-dbms-sql-3-graph-model-application",
+          "question_text": "Recommendations exclude the source and direct neighbors. Node 4 is directly followed and also reached in two hops. Should it appear?",
+          "options": [
+            "No",
+            "Yes; two hops override the exclusion",
+            "Only if its name is short",
+            "Only if it has properties"
+          ],
+          "correct_index": 0,
+          "explanation": "The explicit direct-neighbor exclusion remains part of the task.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-3-graph-model-application-new-4",
+          "test_id": "pt-dbms-sql-3-graph-model-application",
+          "question_text": "A path contains a MENTORS edge but the task requires two FOLLOWS edges. Does it qualify?",
+          "options": [
+            "Yes; all edge types are interchangeable",
+            "No",
+            "Only if the path is short",
+            "Only if both nodes have names"
+          ],
+          "correct_index": 1,
+          "explanation": "Both relationship conditions must match.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-3-graph-model-application-new-5",
+          "test_id": "pt-dbms-sql-3-graph-model-application",
+          "question_text": "A source has no outgoing FOLLOWS edges. What is a valid direct-neighbor result?",
+          "options": [
+            "An automatically created neighbor",
+            "A mandatory syntax error",
+            "No rows",
+            "All incoming neighbors"
+          ],
+          "correct_index": 2,
+          "explanation": "An empty neighborhood can be a valid result.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-3-graph-model-application-new-6",
+          "test_id": "pt-dbms-sql-3-graph-model-application",
+          "question_text": "A graph has very high node degree and a deep unrestricted path query. What can still happen?",
+          "options": [
+            "Guaranteed constant total time",
+            "No path multiplicity",
+            "Automatic elimination of all cycles",
+            "Large traversal work despite efficient local access"
+          ],
+          "correct_index": 3,
+          "explanation": "A local optimization does not bound total requested work.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-3-graph-model-application-new-7",
+          "test_id": "pt-dbms-sql-3-graph-model-application",
+          "question_text": "Two nodes share a name. What should relationships use as identity?",
+          "options": [
+            "Their defined node identifiers",
+            "Only the name",
+            "Only name length",
+            "Only the current row number"
+          ],
+          "correct_index": 0,
+          "explanation": "Shared labels do not merge graph entities.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-3-graph-model-application-new-8",
+          "test_id": "pt-dbms-sql-3-graph-model-application",
+          "question_text": "A SQL mirror returns the expected two-hop set. What remains unverified?",
+          "options": [
+            "The fixture endpoints observed",
+            "Native Cypher execution and graph storage performance",
+            "The explicit hop count",
+            "The engine that ran the SQL"
+          ],
+          "correct_index": 1,
+          "explanation": "Representation logic and native engine behavior are separate evidence.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-3-graph-model-application-new-9",
+          "test_id": "pt-dbms-sql-3-graph-model-application",
+          "question_text": "A query returns exactly-two-hop endpoints. Is that a verified shortest-path implementation?",
+          "options": [
+            "Yes; every two-hop path is shortest",
+            "Only if every node has an ID",
+            "No; it answers a different bounded question",
+            "Only if the query has DISTINCT"
+          ],
+          "correct_index": 2,
+          "explanation": "Shortest-path semantics require an appropriate algorithm and task contract.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-3-graph-model-application-new-10",
+          "test_id": "pt-dbms-sql-3-graph-model-application",
+          "question_text": "A reachable private node appears in a path. Does reachability itself authorize exposing all its properties?",
+          "options": [
+            "Yes; edges always grant permission",
+            "Only if the path is directed",
+            "Only if the source is public",
+            "No; trusted access scope still applies"
+          ],
+          "correct_index": 3,
+          "explanation": "Relationship structure is not an authorization policy.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "dsa-dbms-sql-graph-direct-neighbors",
+      "slug": "graph-direct-neighbors",
+      "title": "Read directed outgoing follow relationships",
+      "difficulty": "Easy",
+      "task": "Return node_id, node_name for nodes reached by one outgoing FOLLOWS edge from node 1, ordered by node_id. Ignore incoming edges and other relationship types. The ordinary SQL tables mirror a property graph; no native Cypher operation runs.",
+      "schema_sql": "CREATE TABLE nodes (node_id INT PRIMARY KEY, node_name VARCHAR(40) NOT NULL);\nCREATE TABLE edges (source_id INT NOT NULL, target_id INT NOT NULL, edge_type VARCHAR(20) NOT NULL, PRIMARY KEY(source_id,target_id,edge_type), CHECK(source_id<>target_id));",
+      "seed_sql": "INSERT INTO nodes VALUES (1,'Mira'),(2,'Dev'),(3,'Noor'),(4,'Avi'); INSERT INTO edges VALUES (1,2,'FOLLOWS'),(3,1,'FOLLOWS'),(1,4,'MENTORS');",
+      "expected": "node_id\tnode_name\n2\tDev",
+      "ordering": "node_id ascending",
+      "constraints": [
+        "All fixture endpoints reference existing nodes",
+        "One edge per typed source/target triple",
+        "Self-edges excluded in this fixture"
+      ],
+      "edge_cases": [
+        "Incoming edges do not reverse themselves",
+        "Different edge types are excluded",
+        "Equal names retain separate identities"
+      ],
+      "hints": [
+        "Filter source and type",
+        "Join the target identifier to node identity"
+      ],
+      "solution_sql": "SELECT n.node_id,n.node_name FROM edges e JOIN nodes n ON n.node_id=e.target_id WHERE e.source_id=1 AND e.edge_type='FOLLOWS' ORDER BY n.node_id;",
+      "explanation": "The source/type predicate and target join preserve the requested edge direction and population.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO nodes VALUES (1,'Mira'),(2,'Mira'),(3,'Mira'); INSERT INTO edges VALUES (1,2,'FOLLOWS'),(1,3,'FOLLOWS');",
+          "expected": "node_id\tnode_name\n2\tMira\n3\tMira"
+        },
+        {
+          "seed_sql": "INSERT INTO nodes VALUES (1,'Mira');",
+          "expected": ""
+        }
+      ]
+    },
+    {
+      "id": "dsa-dbms-sql-graph-two-hop-set",
+      "slug": "graph-two-hop-set",
+      "title": "Find distinct two-hop endpoints beyond direct follows",
+      "difficulty": "Medium",
+      "task": "Return node_id, node_name for distinct endpoints reached by exactly two directed FOLLOWS hops from node 1. Exclude node 1 and any node already directly followed by node 1. Order by node_id. Multiple paths to one endpoint produce one row. This is a bounded SQL mirror, not a native shortest-path or recommendation engine.",
+      "schema_sql": "CREATE TABLE nodes (node_id INT PRIMARY KEY, node_name VARCHAR(40) NOT NULL);\nCREATE TABLE edges (source_id INT NOT NULL, target_id INT NOT NULL, edge_type VARCHAR(20) NOT NULL, PRIMARY KEY(source_id,target_id,edge_type), CHECK(source_id<>target_id));",
+      "seed_sql": "INSERT INTO nodes VALUES (1,'Mira'),(2,'Dev'),(3,'Noor'),(4,'Avi'),(5,'Ria'); INSERT INTO edges VALUES (1,2,'FOLLOWS'),(1,3,'FOLLOWS'),(1,4,'FOLLOWS'),(2,5,'FOLLOWS'),(3,5,'FOLLOWS'),(2,1,'FOLLOWS'),(2,4,'FOLLOWS');",
+      "expected": "node_id\tnode_name\n5\tRia",
+      "ordering": "node_id ascending",
+      "constraints": [
+        "Valid endpoint identities supplied by fixtures",
+        "Relationships are directed",
+        "Only FOLLOWS contributes"
+      ],
+      "edge_cases": [
+        "Deduplicate endpoints reached through two intermediates",
+        "A cycle back to source is excluded",
+        "A direct neighbor reached again is excluded",
+        "Wrong-type hops do not qualify"
+      ],
+      "hints": [
+        "Join the first target to the second source",
+        "Use NOT EXISTS for the direct-neighbor exclusion",
+        "Use DISTINCT only because the requested grain is endpoint identity"
+      ],
+      "solution_sql": "SELECT DISTINCT n.node_id,n.node_name FROM edges a JOIN edges b ON b.source_id=a.target_id JOIN nodes n ON n.node_id=b.target_id WHERE a.source_id=1 AND a.edge_type='FOLLOWS' AND b.edge_type='FOLLOWS' AND b.target_id<>1 AND NOT EXISTS (SELECT 1 FROM edges d WHERE d.source_id=1 AND d.target_id=b.target_id AND d.edge_type='FOLLOWS') ORDER BY n.node_id;",
+      "explanation": "The two joins define exactly two directed qualifying hops. Endpoint and direct-neighbor exclusions implement the task, while DISTINCT collapses alternative paths to the same requested identity.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO nodes VALUES (1,'Mira'),(2,'Dev'); INSERT INTO edges VALUES (1,2,'FOLLOWS'),(2,1,'FOLLOWS');",
+          "expected": ""
+        },
+        {
+          "seed_sql": "INSERT INTO nodes VALUES (1,'Mira'),(2,'Dev'),(3,'Noor'); INSERT INTO edges VALUES (1,2,'FOLLOWS'),(2,3,'MENTORS');",
+          "expected": ""
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-3-graph-model-1",
+      "test_id": "pt-dbms-sql-3-graph-model",
+      "question_text": "What are the two fundamental building blocks of the graph data model?",
+      "options": [
+        "Tables and rows",
+        "Nodes (vertices) and edges (relationships)",
+        "Documents and collections",
+        "Keys and opaque values"
+      ],
+      "correct_index": 1,
+      "explanation": "The graph model represents data as nodes (entities) connected by edges (relationships), both of which can carry properties in a property graph.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-3-graph-model-2",
+      "test_id": "pt-dbms-sql-3-graph-model",
+      "question_text": "What is a 'property graph', as implemented by databases like Neo4j?",
+      "options": [
+        "A graph where only nodes can have properties, never edges",
+        "A graph model where both nodes and edges can carry their own key-value properties",
+        "A graph stored entirely as a relational table",
+        "A graph with no labels or types at all"
+      ],
+      "correct_index": 1,
+      "explanation": "In a property graph, both nodes and relationships can have attached properties, unlike a plain mathematical graph with unlabeled edges.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-3-graph-model-3",
+      "test_id": "pt-dbms-sql-3-graph-model",
+      "question_text": "What architectural feature makes multi-hop graph traversals fast regardless of overall database size?",
+      "options": [
+        "Index-free adjacency, where each node stores direct pointers to its adjacent edges",
+        "Full table scans optimized by the query planner",
+        "Automatic denormalization of all connected data into one row",
+        "In-memory caching of the entire dataset"
+      ],
+      "correct_index": 0,
+      "explanation": "Index-free adjacency means traversing a relationship is a constant-time pointer hop rather than requiring an index lookup or join, keeping multi-hop traversals fast at any scale.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-3-graph-model-4",
+      "test_id": "pt-dbms-sql-3-graph-model",
+      "question_text": "Why would a query like 'friends of Alice's friends' become increasingly expensive in a relational database as the friendships table grows?",
+      "options": [
+        "Because relational databases cannot store friendship data",
+        "Because it requires a multi-way self-join whose cost grows with table size, unlike a graph database's constant-time pointer hops per edge",
+        "Because SQL cannot express WHERE clauses",
+        "Because relational databases do not support recursive queries at all"
+      ],
+      "correct_index": 1,
+      "explanation": "Relational databases must perform expensive self-joins to traverse relationships, and this cost scales with data size, whereas graph databases traverse via direct pointers.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-3-graph-model-5",
+      "test_id": "pt-dbms-sql-3-graph-model",
+      "question_text": "Which query language is commonly associated with Neo4j for declaratively describing graph patterns?",
+      "options": [
+        "Cypher",
+        "OQL",
+        "DL/I",
+        "CQL"
+      ],
+      "correct_index": 0,
+      "explanation": "Cypher is Neo4j's declarative graph query language, used to describe node/relationship patterns to match.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-3-graph-model-6",
+      "test_id": "pt-dbms-sql-3-graph-model",
+      "question_text": "For what type of query is the graph model generally a poor fit compared to a relational database?",
+      "options": [
+        "Multi-hop relationship traversal like friend-of-a-friend",
+        "Shortest-path finding between two entities",
+        "Simple tabular aggregation, such as total sales per region for a quarter",
+        "Fraud-ring detection via cycles of transactions"
+      ],
+      "correct_index": 2,
+      "explanation": "Simple GROUP BY-style aggregate reporting is trivial in SQL but awkward to express as a graph traversal; graph databases excel at relationship-heavy queries, not general OLAP rollups.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-3-graph-model-7",
+      "test_id": "pt-dbms-sql-3-graph-model",
+      "question_text": "How does the modern property graph model differ from the legacy CODASYL network model, despite both using 'nodes and connections'?",
+      "options": [
+        "They are functionally identical",
+        "The network model requires relationships to be predefined as rigid schema 'sets' navigated procedurally, while the property graph model allows new relationship types at runtime and is queried declaratively",
+        "The network model supports declarative queries while the graph model does not",
+        "Property graphs cannot attach properties to relationships"
+      ],
+      "correct_index": 1,
+      "explanation": "CODASYL's network model requires schema-defined sets navigated with procedural DML, whereas modern property graphs support flexible schema evolution and declarative pattern-matching query languages like Cypher.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-3-graph-model-8",
+      "test_id": "pt-dbms-sql-3-graph-model",
+      "question_text": "Why is horizontally scaling a graph database generally considered harder than scaling a key-value or column-family store?",
+      "options": [
+        "Graph databases cannot be distributed at all",
+        "A highly interconnected graph resists clean partitioning, since any partition cut is likely to sever edges and force cross-node traversal",
+        "Graph databases have no concept of nodes or edges to partition",
+        "Key-value stores also cannot be partitioned, so the comparison is invalid"
+      ],
+      "correct_index": 1,
+      "explanation": "Because graphs are highly interconnected, splitting them across nodes tends to cut across edges, requiring costly cross-partition traversal — unlike key-value/column-family data, which partitions cleanly by key.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "coordinator",
+    "independent_review": "unavailable; no agent tools",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Definitions and examples checked against questions; no plagiarism certification.",
+    "existing_question_corrections": [
+      "tq-dbms-sql-3-graph-model-3",
+      "tq-dbms-sql-3-graph-model-4",
+      "tq-dbms-sql-3-graph-model-6",
+      "tq-dbms-sql-3-graph-model-7",
+      "tq-dbms-sql-3-graph-model-8"
+    ],
+    "canonical_answer_indices_preserved": true
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-3-graph-model",
+    "original_note_sha256": "3564902bb880f1fbfa50919820cdd7c32c05a63af10d1ced06316987357dc653",
+    "status": "paired migration prepared; not applied"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Two paths can reach one recommendation endpoint",
+      "description": "The paths follow directed FOLLOWS edges. Member 5 is one distinct endpoint despite two paths; a cycle to 1 and a path to existing direct neighbor 4 are excluded under this task.",
+      "columns": [
+        "Path",
+        "Endpoint",
+        "Recommendation interpretation"
+      ],
+      "rows": [
+        [
+          "1 → 2 → 5",
+          "5",
+          "Qualifies"
+        ],
+        [
+          "1 → 3 → 5",
+          "5",
+          "Same endpoint; do not duplicate"
+        ],
+        [
+          "1 → 2 → 1",
+          "1",
+          "Exclude the source"
+        ],
+        [
+          "1 → 2 → 4",
+          "4",
+          "Exclude because 1 already follows 4"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "coordinator review",
+    "server_rendering": "passed",
+    "browser_rendering": "unverified",
+    "independent_review": "unavailable; no agent tools",
+    "rendering_check": "2026-10-29: 54 authored-package checks plus 8 diagram/access checks passed through actual renderers. Browser rendering unverified."
+  },
+  "sql_verification": {
+    "engine": "11.8.6-MariaDB-0+deb13u1 from Debian",
+    "scope": "MariaDB compatibility execution; exact MySQL 8.4/provider execution unverified",
+    "fingerprint": "86aea2eba15247fe86ba29b8505c662fe760dfa6ae23574f4153447734cc2675",
+    "cases": [
+      {
+        "problem": "graph-direct-neighbors",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "graph-direct-neighbors",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "graph-direct-neighbors",
+        "case": 2,
+        "passed": true
+      },
+      {
+        "problem": "graph-two-hop-set",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "graph-two-hop-set",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "graph-two-hop-set",
+        "case": 2,
+        "passed": true
+      }
+    ],
+    "all_passed": true
+  }
+}

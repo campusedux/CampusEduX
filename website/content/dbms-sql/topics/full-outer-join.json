@@ -1,0 +1,571 @@
+{
+  "source_ref": "chapter-16-joins/full-outer-join",
+  "slug": "full-outer-join",
+  "title": "FULL OUTER JOIN",
+  "description": "Reconcile unmatched rows on both sides, emulate FULL OUTER JOIN safely in MySQL, preserve duplicates and distinguish NULL keys from missing matches.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Preserve unmatched rows on both sides\n\nA full outer join combines matching row pairs and also retains unmatched rows from either input. Missing columns on the opposite side are represented by null extension. This makes the operation useful for reconciliation: comparing an expected equipment register with an observed equipment scan, for example, must show both registered-but-unseen assets and unexpected scanned assets. An inner join hides both categories, while one left join preserves only the chosen left population.\n\nThe join condition defines what counts as a match. A shared asset code can be appropriate when it identifies the same equipment in both systems, but repeated codes or null codes change the result. State whether one row represents an asset, an observation or a line on a manifest before comparing counts. A full join does not automatically deduplicate either input or decide which duplicate observation is authoritative.\n\n## Trace a minimal reconciliation fixture\n\nSuppose the register contains asset codes ten and twenty, while the scan contains twenty and thirty. The full result contains registered ten without a scan, matched twenty and scanned thirty without a registered row. That is three output rows. It is not simply the sum of input counts, because a matching pair contributes one combined row rather than two unmatched rows.\n\n| Registered code | Scanned code | Interpretation |\n|---|---|---|\n|10|NULL|Expected but not observed|\n|20|20|Matched|\n|NULL|30|Observed but not registered|\n\nIn databases supporting native syntax, FULL JOIN and FULL OUTER JOIN express the same join category. MySQL 8.4 does not provide that native join form. Its equivalent result can be built with a left join plus an anti-matching branch for the opposite input. Keep the emulation's duplicate semantics explicit instead of replacing the operation with a superficially similar set union.\n\n## Use disjoint branches in MySQL\n\n```sql\nSELECT r.asset_id AS registered_id,s.scan_id\nFROM register_assets r LEFT JOIN scans s ON s.asset_id=r.asset_id\nUNION ALL\nSELECT r.asset_id AS registered_id,s.scan_id\nFROM scans s LEFT JOIN register_assets r ON r.asset_id=s.asset_id\nWHERE r.asset_id IS NULL;\n```\n\nThe first branch contains all registered assets and every matching scan pair. The second contributes only scans with no registered match. Because those populations are disjoint, UNION ALL preserves the intended row multiplicities without repeating matched pairs. The null test uses a nonnull registered identity, not a nullable description that could be null in a real matched record.\n\nFor actual display ordering, wrap the union as a derived relation and apply an outer ORDER BY on the required keys. An ordering inside only one branch does not establish the final compound result order. Give columns clear aliases so a consumer can distinguish registered identity from scan identity, especially when the two inputs use different identifiers for the same business object.\n\n## Explain why a plain two-sided union can be wrong\n\nCombining an unrestricted left join and unrestricted right join with UNION ALL repeats every matching pair because it appears in both branches. Replacing UNION ALL with UNION removes those repeats but also removes legitimate duplicate projected rows. That can accidentally impose set semantics when the intended full join uses SQL bag semantics.\n\nFor example, two separate scan observations can have the same displayed asset code and status. If their scan identifiers are omitted, UNION can collapse them into one output row. A reconciliation of individual observations has then lost information. Use disjoint branches with UNION ALL to preserve multiplicity, or explicitly declare a set-based report when deduplicating is truly the requirement. Do not teach UNION as a universal full-join repair.\n\n## Calculate multiplicity from the matching relation\n\nIf one register key appears twice in one input and three times in the other, equality joins produce six matching pairs for that key. The full join preserves those six pairs; it does not choose one preferred row. With unique keys on both sides, a matched business key produces at most one pair. Schema constraints can therefore simplify the count reasoning, but a query cannot assume uniqueness merely because the sample happens to look tidy.\n\nLet M be the number of matching pairs, L the number of left rows having no match and R the number of right rows having no match. Full-join cardinality is M plus L plus R. This formula remains useful when matches multiply, provided the unmatched counts refer to individual input rows. Two table sizes alone do not determine M without information about keys, duplicate frequencies and the join condition.\n\n## Handle null keys without inventing a relationship\n\nOrdinary equality does not match a null asset code to another null asset code. Each such input row can therefore appear separately as unmatched. That behavior can be correct when null means an unknown identity. Treating two unknown codes as the same physical object may invent a relationship the evidence does not support.\n\nA null-safe equality condition is a different explicit contract. If chosen, update the anti-match reasoning and test its multiplicity carefully. A null test on a nullable business key may no longer distinguish unmatched rows from matched rows; use a guaranteed nonnull row identity or a NOT EXISTS branch with the same matching predicate. The predicate in both branches must express exactly the same relationship.\n\n## Place filters according to the population you want\n\nA condition on the join's ON clause controls which pairs count as matches. A later WHERE clause filters the combined result and can remove null-extended rows, reducing the preserved population. For a scan-status report, decide whether cancelled scans should be excluded from the input entirely or merely not count as evidence of a successful observation.\n\nThese are different questions. Removing cancelled scans before reconciliation treats them as absent from the observed population. Keeping them while excluding them from matching can show them as unmatched observations. Applying WHERE scan_status='valid' after a full join can also remove registered-only rows because their scan status is null. Write the intended candidate populations before placing the condition.\n\n## Produce matched and unmatched classifications\n\nA useful output contains both stable input identifiers and a classification. A CASE expression can label registered-only, scanned-only and matched rows using guaranteed nonnull identities. Do not overwrite source identifiers with a display label and then discard the evidence needed to investigate an unmatched record.\n\nFor an exception-only report, retain rows missing either side after the full result is formed. With properly chosen nonnull identities, the test registered_id IS NULL OR scan_id IS NULL identifies unmatched rows. A complete exception report is often more useful than a success-only match count, but it still needs access control and data minimization when the source contains personal or operationally sensitive information.\n\n## Solve the beginner and intermediate reconciliations\n\nFirst exercise: use register codes ten and twenty and scan codes twenty and thirty. Produce all three full-join rows using the disjoint MySQL branches, ordered by a coalesced display code. Explain why twenty appears once when each side is unique. Add register forty and predict one additional registered-only row without changing the existing matches.\n\nSecond exercise: give register code twenty two distinct scan observations. Return each observation identity plus every unmatched register or scan. The matched code now contributes two pairs, not one. Then produce only exception rows and verify that both valid matched observations disappear while the register-only ten and scan-only thirty remain. An empty scan input must preserve every register row; an empty register input must preserve every scan.\n\nInclude a completely unmatched duplicate-observation case too. Distinct scan identities must remain separate even when their business codes are identical and neither matches a registered asset. The expected output should enumerate both identities so deduplication mistakes are visible.\n\n## Check equivalence before tuning\n\nTest duplicate keys, duplicate projected values, null keys, empty inputs and filtered populations. Compare complete row multisets rather than only total counts: two wrong branches can coincidentally produce the expected number of rows. Preserve explicit ordering for deterministic exercise output, and document when an application report intentionally ignores order.\n\nContinue with [left joins](/learning/dbms-sql-tutorial/left-join), [right joins](/learning/dbms-sql-tutorial/right-join), [UNION ALL](/learning/dbms-sql-tutorial/union-all) and [join cardinality](/learning/dbms-sql-tutorial/join-cardinality). Full reconciliation is correct only when the matching relation, preserved populations and duplicate policy all match the task.",
+  "references": [
+    {
+      "title": "MySQL JOIN syntax",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/join.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-16-full-outer-join",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-16-full-outer-join-1",
+          "test_id": "pt-dbms-sql-16-full-outer-join",
+          "question_text": "What does FULL OUTER JOIN preserve?",
+          "options": [
+            "Only matched rows from both tables",
+            "Every row from BOTH tables, filling NULL where a match is missing on either side",
+            "Only the left table's rows",
+            "Only the right table's rows"
+          ],
+          "correct_index": 1,
+          "explanation": "FULL OUTER JOIN is the union of what LEFT and RIGHT JOIN each individually preserve.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-16-full-outer-join-2",
+          "test_id": "pt-dbms-sql-16-full-outer-join",
+          "question_text": "In a full reconciliation with registered asset10 absent from scans and scan code30 absent from registered assets, which missing populations must remain?",
+          "options": [
+            "No, only one of them",
+            "Both the registered-only asset10 and the scan-only code30, withNULLs for their missing counterparts",
+            "Neither is included",
+            "This depends on which table is listed first"
+          ],
+          "correct_index": 1,
+          "explanation": "Full reconciliation preserves unmatched rows from both populations, not only the rows on one chosen side.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-16-full-outer-join-3",
+          "test_id": "pt-dbms-sql-16-full-outer-join",
+          "question_text": "Does MySQL natively support FULL OUTER JOIN in the same way PostgreSQL and SQL Server do?",
+          "options": [
+            "Yes, identically",
+            "No; emulate it with a left-join branch and the opposite unmatched-only branch combined with UNION ALL",
+            "MySQL only supports FULL OUTER JOIN for two tables, never more",
+            "No database supports FULL OUTER JOIN"
+          ],
+          "correct_index": 1,
+          "explanation": "Use disjoint branches and a reliable nonnull left marker for the anti-match filter. Plain UNION can erase legitimate duplicate projections.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-16-full-outer-join-4",
+          "test_id": "pt-dbms-sql-16-full-outer-join",
+          "question_text": "Which MySQL emulation preserves full-join bag multiplicity without double-counting matched pairs?",
+          "options": [
+            "UNION ALL is not valid syntax here",
+            "A LEFT JOIN branch UNION ALL an opposite-side anti-match branch",
+            "UNION is faster in every case",
+            "There's no difference between UNION and UNION ALL here"
+          ],
+          "correct_index": 1,
+          "explanation": "The branches are disjoint; plain UNION can erase legitimate projected duplicates.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-16-full-outer-join-5",
+          "test_id": "pt-dbms-sql-16-full-outer-join",
+          "question_text": "When a.id and b.id are guaranteed nonnull identities, what does WHERE a.id IS NULL OR b.id IS NULL select after a full-join reconciliation?",
+          "options": [
+            "Finds only fully matched rows",
+            "Finds every unmatched row from EITHER side — a two-way reconciliation/anti-join between the two tables",
+            "Causes a syntax error",
+            "Returns the same result as INNER JOIN"
+          ],
+          "correct_index": 1,
+          "explanation": "This combines FULL OUTER JOIN's completeness with an anti-join-style filter, checking both sides at once.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-16-full-outer-join-6",
+          "test_id": "pt-dbms-sql-16-full-outer-join",
+          "question_text": "Is FULL OUTER JOIN's use of the OUTER keyword optional, like with LEFT/RIGHT JOIN?",
+          "options": [
+            "No, OUTER is mandatory for FULL JOIN",
+            "Yes — FULL JOIN and FULL OUTER JOIN mean the same thing",
+            "FULL JOIN and FULL OUTER JOIN are different operations entirely",
+            "OUTER changes FULL JOIN into an INNER JOIN"
+          ],
+          "correct_index": 1,
+          "explanation": "Consistent with LEFT/RIGHT, OUTER is optional and FULL JOIN behaves identically to FULL OUTER JOIN.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-16-full-outer-join-7",
+          "test_id": "pt-dbms-sql-16-full-outer-join",
+          "question_text": "Unique register keys10, 20 and scan keys20, 30 have one matched pair and one unmatched row per side. How many full result rows?",
+          "options": [
+            "Three rows: one matched pair plus two unmatched rows.",
+            "Always exactly 4 rows",
+            "Exactly two rows because unmatched inputs vanish",
+            "Always exactly 12 rows (a full cartesian product)"
+          ],
+          "correct_index": 0,
+          "explanation": "M+L+R gives1+1+1=3.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-16-full-outer-join-8",
+          "test_id": "pt-dbms-sql-16-full-outer-join",
+          "question_text": "What relationship does FULL OUTER JOIN have to LEFT JOIN and RIGHT JOIN?",
+          "options": [
+            "It is unrelated to both",
+            "It effectively combines what LEFT JOIN and RIGHT JOIN each preserve, into a single result",
+            "It is a stricter version of INNER JOIN",
+            "It only works when LEFT and RIGHT JOIN both return zero rows"
+          ],
+          "correct_index": 1,
+          "explanation": "FULL OUTER JOIN can be understood as the union of LEFT JOIN's and RIGHT JOIN's preserved rows.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-16-full-outer-join-c-new-1",
+          "test_id": "pt-dbms-sql-16-full-outer-join",
+          "question_text": "Register codes10, 20 and scan codes20, 30 are unique. How many full result rows exist?",
+          "options": [
+            "Three",
+            "Four",
+            "One",
+            "Six"
+          ],
+          "correct_index": 0,
+          "explanation": "One matched pair and one unmatched row on each side produce three rows.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-16-full-outer-join-c-new-2",
+          "test_id": "pt-dbms-sql-16-full-outer-join",
+          "question_text": "Why use an anti-matching second branch with UNION ALL?",
+          "options": [
+            "UNION ALL removes duplicates",
+            "The branches become disjoint while preserving legitimate multiplicity",
+            "It converts every NULL into zero",
+            "It makes all keys unique"
+          ],
+          "correct_index": 1,
+          "explanation": "Only unmatched opposite-side rows are added.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-16-full-outer-join-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-16-full-outer-join-c-new-3",
+          "test_id": "pt-dbms-sql-16-full-outer-join-application",
+          "question_text": "What goes wrong with unrestricted left join UNION ALL unrestricted right join?",
+          "options": [
+            "Unmatched rows disappear automatically",
+            "All scans become unique",
+            "Matched pairs appear twice",
+            "It guarantees set semantics"
+          ],
+          "correct_index": 2,
+          "explanation": "Both branches already contain the matching pairs.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-16-full-outer-join-c-new-4",
+          "test_id": "pt-dbms-sql-16-full-outer-join-application",
+          "question_text": "Why is UNION DISTINCT not a universal repair?",
+          "options": [
+            "It always raises a syntax error",
+            "It never removes rows",
+            "It prevents null extension",
+            "It can collapse legitimate duplicate projected rows"
+          ],
+          "correct_index": 3,
+          "explanation": "Bag-preserving full joins and set deduplication are different contracts.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-16-full-outer-join-c-new-5",
+          "test_id": "pt-dbms-sql-16-full-outer-join-application",
+          "question_text": "Two left rows and three right rows share one matching key. How many pairs?",
+          "options": [
+            "Six",
+            "Two",
+            "Three",
+            "One"
+          ],
+          "correct_index": 0,
+          "explanation": "Every matching left-right combination contributes a pair.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-16-full-outer-join-c-new-6",
+          "test_id": "pt-dbms-sql-16-full-outer-join-application",
+          "question_text": "Do two ordinary NULL equality keys match?",
+          "options": [
+            "Yes, always",
+            "No",
+            "Only in outer joins",
+            "Only if sorted"
+          ],
+          "correct_index": 1,
+          "explanation": "Ordinary equality evaluates unknown rather than true for NULL comparisons.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-16-full-outer-join-c-new-7",
+          "test_id": "pt-dbms-sql-16-full-outer-join-application",
+          "question_text": "Which null test reliably detects an unmatched row?",
+          "options": [
+            "Any nullable descriptive column",
+            "The text caption",
+            "A guaranteed nonnull right-side identity",
+            "The amount if it can be NULL"
+          ],
+          "correct_index": 2,
+          "explanation": "A real matched record cannot have null in that identity.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-16-full-outer-join-c-new-8",
+          "test_id": "pt-dbms-sql-16-full-outer-join-application",
+          "question_text": "What is full-join cardinality in terms of pair and unmatched counts?",
+          "options": [
+            "Left table size plus right table size always",
+            "M only",
+            "L times R",
+            "M plus L plus R"
+          ],
+          "correct_index": 3,
+          "explanation": "Matching pairs and each unmatched input row contribute output rows.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-16-full-outer-join-c-new-9",
+          "test_id": "pt-dbms-sql-16-full-outer-join-application",
+          "question_text": "Can a WHERE predicate on the scanned side remove registered-only rows?",
+          "options": [
+            "Yes, when their null-extended values fail the predicate",
+            "No, FULL prevents every filter",
+            "Only with integer keys",
+            "Only when there is no index"
+          ],
+          "correct_index": 0,
+          "explanation": "Preservation occurs before later result filtering.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-16-full-outer-join-c-new-10",
+          "test_id": "pt-dbms-sql-16-full-outer-join-application",
+          "question_text": "Does MySQL8.4 have native FULL OUTER JOIN syntax?",
+          "options": [
+            "Yes, always",
+            "No",
+            "Only for primary keys",
+            "Only in temporary views"
+          ],
+          "correct_index": 1,
+          "explanation": "Use an explicitly correct emulation for this dialect.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-16-full-outer-join-c-new-11",
+          "test_id": "pt-dbms-sql-16-full-outer-join-application",
+          "question_text": "What should an exception report retain?",
+          "options": [
+            "Only matched pairs",
+            "Only the newest key",
+            "Rows missing either side after correct reconciliation",
+            "Every row twice"
+          ],
+          "correct_index": 2,
+          "explanation": "Unmatched identities explain discrepancies in both directions.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-16-full-outer-join-c-new-12",
+          "test_id": "pt-dbms-sql-16-full-outer-join-application",
+          "question_text": "What should equivalence tests compare?",
+          "options": [
+            "Only query text length",
+            "Only a diagram title",
+            "Only the largest identifier",
+            "The complete row multiset, not only its count"
+          ],
+          "correct_index": 3,
+          "explanation": "Wrong duplicate behavior can hide behind a coincidentally correct count.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cx-c-full-asset-reconciliation",
+      "slug": "c-full-asset-reconciliation",
+      "title": "Reconcile every registered and scanned asset",
+      "difficulty": "Easy",
+      "task": "Return registered_id, scan_id, scanned_code preserving each scan identity and unmatched registered row. Order by COALESCE(registered_id, scanned_code), scan_id.",
+      "schema_sql": "CREATE TABLE register_assets(asset_id INT PRIMARY KEY); CREATE TABLE scans(scan_id INT PRIMARY KEY,asset_id INT NULL);",
+      "seed_sql": "INSERT INTO register_assets VALUES(10),(20); INSERT INTO scans VALUES(1,20),(2,30);",
+      "solution_sql": "SELECT * FROM (SELECT r.asset_id AS registered_id,s.scan_id,s.asset_id AS scanned_code FROM register_assets r LEFT JOIN scans s ON s.asset_id=r.asset_id UNION ALL SELECT r.asset_id,s.scan_id,s.asset_id FROM scans s LEFT JOIN register_assets r ON r.asset_id=s.asset_id WHERE r.asset_id IS NULL) x ORDER BY COALESCE(registered_id,scanned_code),scan_id;",
+      "expected": "registered_id\tscan_id\tscanned_code\n10\tNULL\tNULL\n20\t1\t20\nNULL\t2\t30",
+      "ordering": "Order exactly as requested by the task; row order is otherwise unspecified.",
+      "edge_cases": [
+        "Empty tables.",
+        "NULL values where the schema permits them.",
+        "Repeated matching values when keys permit them."
+      ],
+      "hints": [
+        "Disjoint branches preserve matching observation identities and unmatched rows exactly once."
+      ],
+      "explanation": "Disjoint branches preserve matching observation identities and unmatched rows exactly once.",
+      "validation_cases": [
+        {
+          "name": "no scans",
+          "seed_sql": "INSERT INTO register_assets VALUES(10);",
+          "expected": "registered_id\tscan_id\tscanned_code\n10\tNULL\tNULL"
+        },
+        {
+          "name": "duplicates",
+          "seed_sql": "INSERT INTO register_assets VALUES(20); INSERT INTO scans VALUES(1,20),(2,20);",
+          "expected": "registered_id\tscan_id\tscanned_code\n20\t1\t20\n20\t2\t20"
+        }
+      ]
+    },
+    {
+      "id": "cx-c-full-asset-exceptions",
+      "slug": "c-full-asset-exceptions",
+      "title": "Return discrepancies from either asset source",
+      "difficulty": "Medium",
+      "task": "Return registered_id, scan_id, scanned_code for unmatched rows from either source. Use the same ordering as the complete reconciliation. Order by COALESCE(registered_id, scanned_code), then scan_id, using the same output aliases. ",
+      "schema_sql": "CREATE TABLE register_assets(asset_id INT PRIMARY KEY); CREATE TABLE scans(scan_id INT PRIMARY KEY,asset_id INT NULL);",
+      "seed_sql": "INSERT INTO register_assets VALUES(10),(20); INSERT INTO scans VALUES(1,20),(2,30);",
+      "solution_sql": "SELECT * FROM (SELECT r.asset_id AS registered_id,s.scan_id,s.asset_id AS scanned_code FROM register_assets r LEFT JOIN scans s ON s.asset_id=r.asset_id UNION ALL SELECT r.asset_id,s.scan_id,s.asset_id FROM scans s LEFT JOIN register_assets r ON r.asset_id=s.asset_id WHERE r.asset_id IS NULL) x WHERE registered_id IS NULL OR scan_id IS NULL ORDER BY COALESCE(registered_id,scanned_code),scan_id;",
+      "expected": "registered_id\tscan_id\tscanned_code\n10\tNULL\tNULL\nNULL\t2\t30",
+      "ordering": "Order exactly as requested by the task; row order is otherwise unspecified.",
+      "edge_cases": [
+        "Empty tables.",
+        "NULL values where the schema permits them.",
+        "Repeated matching values when keys permit them."
+      ],
+      "hints": [
+        "Nonmatching rows survive from both populations; matching pairs are excluded by nonnull identities."
+      ],
+      "explanation": "Nonmatching rows survive from both populations; matching pairs are excluded by nonnull identities.",
+      "validation_cases": [
+        {
+          "name": "all matched",
+          "seed_sql": "INSERT INTO register_assets VALUES(20); INSERT INTO scans VALUES(1,20);",
+          "expected": ""
+        },
+        {
+          "name": "unknown scan",
+          "seed_sql": "INSERT INTO scans VALUES(1,NULL);",
+          "expected": "registered_id\tscan_id\tscanned_code\nNULL\t1\tNULL"
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": null,
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-16-full-outer-join-1",
+      "test_id": "pt-dbms-sql-16-full-outer-join",
+      "question_text": "What does FULL OUTER JOIN preserve?",
+      "options": [
+        "Only matched rows from both tables",
+        "Every row from BOTH tables, filling NULL where a match is missing on either side",
+        "Only the left table's rows",
+        "Only the right table's rows"
+      ],
+      "correct_index": 1,
+      "explanation": "FULL OUTER JOIN is the union of what LEFT and RIGHT JOIN each individually preserve.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-16-full-outer-join-2",
+      "test_id": "pt-dbms-sql-16-full-outer-join",
+      "question_text": "In the running example, does FULL OUTER JOIN include both Vikram (no department) and Marketing (no employees)?",
+      "options": [
+        "No, only one of them",
+        "Yes — both unmatched rows are preserved, one from each side",
+        "Neither is included",
+        "This depends on which table is listed first"
+      ],
+      "correct_index": 1,
+      "explanation": "FULL OUTER JOIN keeps unmatched rows from both sides simultaneously.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-16-full-outer-join-3",
+      "test_id": "pt-dbms-sql-16-full-outer-join",
+      "question_text": "Does MySQL natively support FULL OUTER JOIN in the same way PostgreSQL and SQL Server do?",
+      "options": [
+        "Yes, identically",
+        "No — MySQL historically lacks native FULL OUTER JOIN and requires simulating it with LEFT JOIN UNION RIGHT JOIN",
+        "MySQL only supports FULL OUTER JOIN for two tables, never more",
+        "No database supports FULL OUTER JOIN"
+      ],
+      "correct_index": 1,
+      "explanation": "This is a real, practically important dialect limitation.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-16-full-outer-join-4",
+      "test_id": "pt-dbms-sql-16-full-outer-join",
+      "question_text": "When simulating FULL OUTER JOIN with (A LEFT JOIN B) UNION (A RIGHT JOIN B), why must UNION (not UNION ALL) be used?",
+      "options": [
+        "UNION ALL is not valid syntax here",
+        "UNION ALL would double-count every matched row, since it would appear once from each side's join; UNION deduplicates it back to one row",
+        "UNION is faster in every case",
+        "There's no difference between UNION and UNION ALL here"
+      ],
+      "correct_index": 1,
+      "explanation": "Matched rows appear in both the LEFT and RIGHT JOIN halves, so deduplication via UNION prevents double-counting.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-16-full-outer-join-5",
+      "test_id": "pt-dbms-sql-16-full-outer-join",
+      "question_text": "What does FULL OUTER JOIN combined with `WHERE a.id IS NULL OR b.id IS NULL` accomplish?",
+      "options": [
+        "Finds only fully matched rows",
+        "Finds every unmatched row from EITHER side — a two-way reconciliation/anti-join between the two tables",
+        "Causes a syntax error",
+        "Returns the same result as INNER JOIN"
+      ],
+      "correct_index": 1,
+      "explanation": "This combines FULL OUTER JOIN's completeness with an anti-join-style filter, checking both sides at once.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-16-full-outer-join-6",
+      "test_id": "pt-dbms-sql-16-full-outer-join",
+      "question_text": "Is FULL OUTER JOIN's use of the OUTER keyword optional, like with LEFT/RIGHT JOIN?",
+      "options": [
+        "No, OUTER is mandatory for FULL JOIN",
+        "Yes — FULL JOIN and FULL OUTER JOIN mean the same thing",
+        "FULL JOIN and FULL OUTER JOIN are different operations entirely",
+        "OUTER changes FULL JOIN into an INNER JOIN"
+      ],
+      "correct_index": 1,
+      "explanation": "Consistent with LEFT/RIGHT, OUTER is optional and FULL JOIN behaves identically to FULL OUTER JOIN.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-16-full-outer-join-7",
+      "test_id": "pt-dbms-sql-16-full-outer-join",
+      "question_text": "How many total rows would you expect from a FULL OUTER JOIN if there are 4 employees (1 unmatched) and 3 departments (1 unmatched)?",
+      "options": [
+        "7 rows: 2 matched pairs, plus 1 unmatched employee, plus 1 unmatched department — wait, this needs the actual match count, but the key idea is: unmatched rows from BOTH sides are included alongside matched pairs",
+        "Always exactly 4 rows",
+        "Always exactly 3 rows",
+        "Always exactly 12 rows (a full cartesian product)"
+      ],
+      "correct_index": 0,
+      "explanation": "The exact count depends on how many rows actually match, but critically, every unmatched row from EITHER table is included in addition to the matched pairs — unlike INNER JOIN which would drop them.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-16-full-outer-join-8",
+      "test_id": "pt-dbms-sql-16-full-outer-join",
+      "question_text": "What relationship does FULL OUTER JOIN have to LEFT JOIN and RIGHT JOIN?",
+      "options": [
+        "It is unrelated to both",
+        "It effectively combines what LEFT JOIN and RIGHT JOIN each preserve, into a single result",
+        "It is a stricter version of INNER JOIN",
+        "It only works when LEFT and RIGHT JOIN both return zero rows"
+      ],
+      "correct_index": 1,
+      "explanation": "FULL OUTER JOIN can be understood as the union of LEFT JOIN's and RIGHT JOIN's preserved rows.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "/root/content_c",
+    "independent_review": "passed",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Independent manual content review passed within independent_review_scope; engine/browser/release gates separate.",
+    "canonical_answer_indices_preserved": true,
+    "editorial_record": "Original explanations, examples and scenarios; external originality clearance and AdSense review unperformed.",
+    "independent_reviewer": "/root/review_e_and_gaps",
+    "independent_review_scope": "Full notes,20MCQs with every option,canonical answer position and explanation,original diagrams,and all exercise contracts/fixtures or solved conceptual labs. Original identities/indices checked against public seed cache where applicable. Reported substantive findings corrected by coordinator and filtered recheck accepted;identified learner-facing spacing polished. Manual technical/editorial reasoning only;engine,provider,browser,external originality and AdSense evidence separate."
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-16-full-outer-join",
+    "original_note_sha256": "e4a801ba931b10574d44d03874eff70cfe7c2e1063bf61deb6c6da925c5fd365",
+    "status": "drafted; not included in prepared paired migrations"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Three reconciliation categories",
+      "description": "Both sources retain their unmatched identities while one matching pair combines the shared code20.",
+      "columns": [
+        "Registered code",
+        "Scanned code",
+        "Category"
+      ],
+      "rows": [
+        [
+          "10",
+          "No scan",
+          "Registered only"
+        ],
+        [
+          "20",
+          "20",
+          "Matched"
+        ],
+        [
+          "No register row",
+          "30",
+          "Scanned only"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "technical_review": "Independent manual diagram/content consistency review passed;actual static/browser rendering tracked separately.",
+    "server_rendering": "unverified",
+    "browser_rendering": "unverified",
+    "independent_review": "passed"
+  },
+  "authoring_status": "drafted; verification pending"
+}

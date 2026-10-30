@@ -11,18 +11,22 @@ export function EmptyState({
   title,
   subtitle,
   action,
+  text,
+  actions,
   className,
 }: {
   icon?: LucideIcon;
   title: string;
   subtitle?: string;
   action?: React.ReactNode;
+  text?: string;
+  actions?: React.ReactNode;
   className?: string;
 }) {
   return (
     <div
       className={cn(
-        "flex flex-col items-center justify-center rounded-2xl border border-dashed border-line bg-card/60 px-6 py-14 text-center",
+        "discovery-empty flex min-w-0 flex-col items-center justify-center rounded-2xl border border-line bg-card px-4 py-10 text-center [overflow-wrap:anywhere] sm:px-6 sm:py-14",
         className,
       )}
     >
@@ -32,8 +36,8 @@ export function EmptyState({
         <Icon className="relative h-7 w-7 text-primary" aria-hidden />
       </span>
       <p className="mt-4 font-display text-lg font-semibold text-ink">{title}</p>
-      {subtitle && <p className="mt-1 max-w-sm text-sm text-ink-muted">{subtitle}</p>}
-      {action && <div className="mt-5">{action}</div>}
+      {(text ?? subtitle) && <p className="mt-1 max-w-sm text-sm text-ink-muted">{text ?? subtitle}</p>}
+      {(actions ?? action) && <div className="mt-5 flex max-w-full flex-wrap justify-center gap-2">{actions ?? action}</div>}
     </div>
   );
 }

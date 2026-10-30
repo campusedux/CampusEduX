@@ -1,0 +1,634 @@
+{
+  "source_ref": "chapter-8-sql-fundamentals/dql",
+  "slug": "dql",
+  "title": "DQL",
+  "description": "Treat a query as a precise result contract: choose columns, define row grain, preserve NULL meaning, control join fan-out, group intentionally, and request deterministic ordering.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Reading information through a result contract\n\nData Query Language, commonly abbreviated DQL in teaching material, emphasizes retrieving information with SELECT. Some classifications include SELECT within DML instead of defining a separate family. The useful distinction here is the task: an ordinary retrieval query derives a result from permitted sources rather than directly inserting, updating, or deleting their business rows. The category name is not a security policy.\n\nA query should begin with a clear description of its promised result. Which population qualifies? What does one row represent? Which values and labels appear? Is ordering required? A statement that executes can still answer the wrong question because it counts joined combinations, hides missing values, or returns an arbitrary limited subset.\n\nThis topic uses MySQL 8.4 and a fictional employee dataset. Employee identifiers are unique, names are recorded labels, department identifies a reporting group, and salary is a non-null integer amount in the example's stated pay unit. Real compensation models require their own period, currency, and access definitions; the fixture only supports the query concepts being taught.\n\n## Choosing the output deliberately\n\nSELECT specifies expressions that become result columns. An explicit list such as id, name, salary communicates what a consumer needs. Selecting every column can be convenient during exploration, but application code using a star couples its response shape to the source definition. A later attribute can be exposed unexpectedly or alter positional result interpretation.\n\nAn explicit projection also preserves identity when labels repeat. Two employees named Sam remain separate people because their identifiers differ. Removing id simply because today's names appear unique can make later references or tie-breaking ambiguous. The right projection reflects the task rather than whichever three fields make the smallest screenshot.\n\nOutput aliases name derived values for the consumer. A label such as avg_salary should mean exactly what the expression computes. If the task intentionally requests an integer-truncated average, explain that convention; the label alone does not make a truncated value identical to a full fractional average. Units and calculation policy belong in the result contract.\n\n## Defining the qualifying population\n\nWHERE filters individual source rows using the stated condition. For a department report, an equality predicate can select employees recorded in Engineering. Binding a department value through an application API is separate from the SQL concept, and trusted access checks must still decide which employee records the actor is allowed to see.\n\n```sql\nSELECT id, name, salary\nFROM employees\nWHERE department = 'Engineering'\nORDER BY salary DESC, id ASC;\n```\n\nIn the retained fixture, Asha earns 85000, Priya earns 79000, and Rohan earns 72000 in Engineering. The query returns them in that salary order. Employees in Sales and Marketing do not qualify. The identifier tie-breaker specifies what should happen if a later fixture contains equal salaries.\n\nAn empty result is a valid outcome when no permitted employee matches. It is not the same as a database failure or an employee whose selected optional attribute is NULL. Applications should preserve those states rather than turning every empty response into an error or every missing value into a numeric zero.\n\n## Understanding result grain before joining\n\nThe grain describes what one result row represents. An employee listing ordinarily has one row per employee. Joining employees to projects can produce one row per employee-project assignment instead. If an employee has three matching assignments, that employee can correctly appear three times at the new grain.\n\nThe problem arises when a later calculation assumes the original grain. Summing employee salary after a one-to-many assignment join can count the same salary repeatedly. A many-to-many fan-out can multiply it further. The query can return a plausible number without a syntax error, so correctness requires reasoning about relationship cardinality rather than merely checking that a SUM exists.\n\nDISTINCT is not a universal repair. Two different employees can have equal salaries, so summing distinct salary values can remove a valid contribution. Fix the population or aggregation boundary according to the task, preserving employee identity. Structural illustrations showing one employee matching several assignments are useful because they make the multiplication visible before a formula hides it.\n\n## Aggregating the right facts\n\nGROUP BY changes the result grain to one row per grouping combination. A department summary can count employees and calculate the total or average salary. The grouped output should select grouped attributes or expressions that are meaningfully defined for each group. An arbitrary unrelated employee name is not a well-defined department summary.\n\nThe retained intermediate exercise intentionally computes an integer-truncated average using SUM salary DIV COUNT star. For positive fixture salaries, this drops the fractional remainder. Engineering's total 236000 divided by three gives 78666 under that convention. Sales gives 64333, while Marketing gives 56500. These are not claims that AVG universally returns an integer.\n\n```sql\nSELECT department, SUM(salary) DIV COUNT(*) AS avg_salary\nFROM employees\nGROUP BY department\nORDER BY avg_salary DESC, department ASC;\n```\n\nCOUNT star is appropriate here because salary is required for every fixture row. If salaries could be NULL, counting all rows as the denominator would answer a different question from averaging recorded salaries. A changed nullability rule therefore requires review of the calculation rather than blindly retaining the same expression.\n\n## Filtering groups with HAVING\n\nHAVING can restrict completed groups. A department report requiring at least two employees can use a grouped COUNT threshold. WHERE can first define the employees included in the calculation; HAVING then evaluates a condition on the resulting group. Reversing those responsibilities changes meaning or produces invalid syntax at the same query level.\n\nFor example, a department with three total employees but one qualifying active employee contributes one row to an active-only count. It does not qualify for a threshold of two just because three people exist before filtering. Include a fixture exposing that distinction when validating a report, rather than testing only groups whose members all satisfy every condition.\n\nGrouping does not promise a display order. Even if one run happens to list departments alphabetically, request ORDER BY when consumers need that sequence. A limited ranking also needs a tie policy, otherwise equally ranked groups near the boundary can be selected inconsistently under a changed access path.\n\n## Interpreting read behavior precisely\n\nAn ordinary projection over employee rows does not directly change their stored salaries or departments. That is a useful description of the examples, but SELECT is not a universal guarantee of no effects. Locking reads can acquire locks, expressions can invoke product-specific behavior, and repeated reads can observe different committed data or nondeterministic values.\n\nConsequently, read-only intent is different from repeatable output. Running the same listing later can show a new employee or updated salary. A transaction and its isolation behavior affect visibility, but the category DQL alone does not promise a frozen snapshot. Avoid defining query idempotence as always returning identical rows regardless of concurrent work.\n\nA query can also consume substantial resources without changing business rows. Broad scans, huge results, or long-held transaction contexts can affect other work. Permission to read a table does not make every possible report cheap or suitable for a public endpoint. Keep operational limits and trusted scope alongside the result requirements.\n\n## Reviewing an application query\n\nTrace the actual source, actor restrictions, joins, predicates, grouping, projection, and ordering. Check whether the application supplies values safely and whether server-side rules enforce the permitted population. A hidden filter or a client-provided employee identifier is not an independent authorization mechanism. Query correctness and authorization both need the appropriate evidence.\n\nValidate ordinary and awkward data: repeated names, equal salaries, no matching department, multiple child records, and relevant missing values. Compare the expected grain and values rather than only checking row count. The existing exercises preserve their identities and setup while making ordering and calculation policy explicit, so saved references continue to identify the same practice tasks.\n\nDQL is valuable when it produces a faithful account of the facts a consumer is permitted to read. Clear output contracts, intentional grouping, and explicit ordering make that account reviewable. Keep language classification, row mutation, lock effects, repeatability, and resource cost separate so a correct retrieval example is not exaggerated into a universal safety guarantee.\n",
+  "references": [
+    {
+      "title": "MySQL SELECT",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/select.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-8-dql",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-8-dql-1",
+          "test_id": "pt-dbms-sql-8-dql",
+          "question_text": "Which single statement makes up essentially all of DQL?",
+          "options": [
+            "INSERT",
+            "UPDATE",
+            "SELECT",
+            "CREATE"
+          ],
+          "correct_index": 2,
+          "explanation": "DQL is essentially just SELECT — reading data without modifying it.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-8-dql-2",
+          "test_id": "pt-dbms-sql-8-dql",
+          "question_text": "Does the ordinary employee listing directly change stored salaries or departments?",
+          "options": [
+            "Yes, every SELECT updates a 'last accessed' timestamp on the data",
+            "No; this ordinary retrieval example reads those business values without directly changing them",
+            "Only SELECT statements with a JOIN modify data",
+            "SELECT always modifies data unless LIMIT is used"
+          ],
+          "correct_index": 1,
+          "explanation": "This is not a universal claim that every SELECT is effect-free: locking and invoked behavior require separate review.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-8-dql-3",
+          "test_id": "pt-dbms-sql-8-dql",
+          "question_text": "Why is `SELECT *` generally discouraged in real application code?",
+          "options": [
+            "It is always slower than naming columns by a fixed, large amount",
+            "It silently returns extra/changed columns if the table's shape changes later, and breaks intention-revealing code",
+            "SELECT * is not valid SQL syntax",
+            "It can only be used with GROUP BY"
+          ],
+          "correct_index": 1,
+          "explanation": "SELECT * is convenient for exploration but fragile in application code, since it implicitly depends on the table's current column set.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-8-dql-4",
+          "test_id": "pt-dbms-sql-8-dql",
+          "question_text": "Why can a JOIN cause an aggregate result (like a SUM) to be silently wrong?",
+          "options": [
+            "JOINs always produce exactly one row per input row with no exceptions",
+            "An unintended many-to-many relationship in the JOIN can multiply rows ('fan-out'), causing values to be double- or over-counted",
+            "Aggregates cannot be used together with JOIN under any circumstances",
+            "JOIN always removes duplicate rows automatically"
+          ],
+          "correct_index": 1,
+          "explanation": "Row-multiplying JOINs are a classic, easy-to-miss source of incorrect aggregate results — the query runs fine and looks plausible while being wrong.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-8-dql-5",
+          "test_id": "pt-dbms-sql-8-dql",
+          "question_text": "Why does `LIMIT 5` without an ORDER BY not reliably give you a meaningful 'top 5'?",
+          "options": [
+            "LIMIT is illegal without ORDER BY in every dialect",
+            "Without ORDER BY, which rows come back is not guaranteed to be stable or meaningful — LIMIT just caps a count, it doesn't rank anything",
+            "LIMIT always returns the 5 most recently inserted rows regardless of ORDER BY",
+            "LIMIT and ORDER BY cannot be used in the same statement"
+          ],
+          "correct_index": 1,
+          "explanation": "LIMIT only caps the row count; it needs ORDER BY to determine WHICH rows those are in a reproducible, meaningful way.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-8-dql-6",
+          "test_id": "pt-dbms-sql-8-dql",
+          "question_text": "Why do SQL classifications differ about whether SELECT belongs in DQL or a broader DML family?",
+          "options": [
+            "Because SELECT actually deletes rows after reading them",
+            "The categories group language responsibilities differently; the distinction does not change the actual query semantics",
+            "Because DML and DQL use completely unrelated keywords",
+            "Because DQL was invented before DML existed"
+          ],
+          "correct_index": 1,
+          "explanation": "DQL emphasizes retrieval, while broader DML classifications can include querying as well as row manipulation.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-8-dql-7",
+          "test_id": "pt-dbms-sql-8-dql",
+          "question_text": "In `SELECT department, SUM(salary) DIV COUNT(*) AS avg_salary FROM employees GROUP BY department HAVING COUNT(*) >= 2`, what does the HAVING clause do?",
+          "options": [
+            "Filters individual employee rows before grouping",
+            "Filters entire department groups, keeping only those with 2 or more employees",
+            "Sorts the departments alphabetically",
+            "Limits the result to 2 rows"
+          ],
+          "correct_index": 1,
+          "explanation": "HAVING filters the grouped results (departments), keeping only groups satisfying the aggregate condition — here, at least 2 employees.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-8-dql-8",
+          "test_id": "pt-dbms-sql-8-dql",
+          "question_text": "Can repeating the same ordinary SELECT be assumed to return identical rows despite concurrent commits?",
+          "options": [
+            "It can only be executed once per session",
+            "No; read-only intent does not by itself guarantee repeatable output",
+            "It automatically caches its own result forever",
+            "It always returns exactly one row"
+          ],
+          "correct_index": 1,
+          "explanation": "Other transactions, visibility rules, and expressions can change observed results without this query directly modifying business rows.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-8-dql-new-9",
+          "test_id": "pt-dbms-sql-8-dql",
+          "question_text": "What does result grain describe?",
+          "options": [
+            "The table file's byte size",
+            "What one output row represents",
+            "The database port",
+            "The count of SELECT keywords"
+          ],
+          "correct_index": 1,
+          "explanation": "Employee and employee-project rows represent different facts.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-8-dql-new-10",
+          "test_id": "pt-dbms-sql-8-dql",
+          "question_text": "Why retain an employee identifier when names repeat?",
+          "options": [
+            "To make every salary unique",
+            "To remove all NULL values",
+            "To preserve identity and deterministic references",
+            "To avoid all joins"
+          ],
+          "correct_index": 2,
+          "explanation": "Names are labels rather than guaranteed unique identities.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-8-dql-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-8-dql-application-new-1",
+          "test_id": "pt-dbms-sql-8-dql-application",
+          "question_text": "Engineering salaries are 85000, 79000, and 72000. What is their descending order?",
+          "options": [
+            "72000, 79000, 85000",
+            "79000, 85000, 72000",
+            "85000, 79000, 72000",
+            "85000, 72000, 79000"
+          ],
+          "correct_index": 2,
+          "explanation": "The specified descending numeric order puts the highest amount first.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-8-dql-application-new-2",
+          "test_id": "pt-dbms-sql-8-dql-application",
+          "question_text": "Two Engineering employees have salary 90000. What resolves their order in the exercise?",
+          "options": [
+            "The shortest name first automatically",
+            "The insertion order by assumption",
+            "No tie-breaker is possible",
+            "id ascending"
+          ],
+          "correct_index": 3,
+          "explanation": "The explicit identifier sort resolves equal salaries.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-8-dql-application-new-3",
+          "test_id": "pt-dbms-sql-8-dql-application",
+          "question_text": "An employee with salary 60000 matches three project assignments. What can SUM(salary) over that join count?",
+          "options": [
+            "180000 for that employee's repeated joined contributions",
+            "Only 60000 automatically",
+            "Zero because joins forbid aggregation",
+            "The number of departments only"
+          ],
+          "correct_index": 0,
+          "explanation": "One-to-many matches repeat the parent value at the assignment grain.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-8-dql-application-new-4",
+          "test_id": "pt-dbms-sql-8-dql-application",
+          "question_text": "Two distinct employees each earn 60000. Why is SUM(DISTINCT salary) not a general fan-out repair?",
+          "options": [
+            "It always counts both employees separately",
+            "It can collapse two legitimate equal-valued contributions",
+            "It automatically restores employee identity",
+            "It rejects every duplicate name"
+          ],
+          "correct_index": 1,
+          "explanation": "Equal values can belong to different valid records.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-8-dql-application-new-5",
+          "test_id": "pt-dbms-sql-8-dql-application",
+          "question_text": "What is 236000 DIV 3 in the positive salary fixture?",
+          "options": [
+            "78667",
+            "78666.67",
+            "78666",
+            "236000"
+          ],
+          "correct_index": 2,
+          "explanation": "The task deliberately requests the truncated integer quotient.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-8-dql-application-new-6",
+          "test_id": "pt-dbms-sql-8-dql-application",
+          "question_text": "Salary becomes nullable but the formula retains COUNT(*) as denominator. What needs review?",
+          "options": [
+            "Only the column title",
+            "Only the number of application tiers",
+            "Only whether ORDER BY is uppercase",
+            "Whether missing-salary rows should count in the average"
+          ],
+          "correct_index": 3,
+          "explanation": "The denominator policy must match the intended measurement.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-8-dql-application-new-7",
+          "test_id": "pt-dbms-sql-8-dql-application",
+          "question_text": "A grouped department report uses HAVING COUNT(*) >= 2. Which groups remain?",
+          "options": [
+            "Groups containing at least two qualifying input rows",
+            "Only the first two departments alphabetically",
+            "Every department regardless of count",
+            "Only employees with identifier two"
+          ],
+          "correct_index": 0,
+          "explanation": "HAVING tests the completed group property.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-8-dql-application-new-8",
+          "test_id": "pt-dbms-sql-8-dql-application",
+          "question_text": "No employees match Engineering. What is a valid query outcome?",
+          "options": [
+            "An automatic insertion of an Engineering row",
+            "An empty result, distinct from a database error",
+            "A zero salary employee invented by SELECT",
+            "A guaranteed syntax failure"
+          ],
+          "correct_index": 1,
+          "explanation": "No matching rows can be a successful empty state.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-8-dql-application-new-9",
+          "test_id": "pt-dbms-sql-8-dql-application",
+          "question_text": "A query does not directly change rows but holds a locking read. What does DQL classification fail to guarantee?",
+          "options": [
+            "That the query has a source",
+            "That a result can have columns",
+            "No effects on concurrent work",
+            "That values can be selected"
+          ],
+          "correct_index": 2,
+          "explanation": "Lock and resource behavior require their own review.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-8-dql-application-new-10",
+          "test_id": "pt-dbms-sql-8-dql-application",
+          "question_text": "A query uses LIMIT without a requested ranking. What should a consumer not infer?",
+          "options": [
+            "That a row bound exists",
+            "That fewer rows can be returned",
+            "That SQL executed",
+            "That the returned rows are the meaningful highest-ranked rows"
+          ],
+          "correct_index": 3,
+          "explanation": "Limiting a count does not define top or best.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cp-dbms-sql-engineering-team-by-salary",
+      "slug": "engineering-team-by-salary",
+      "title": "Engineering Team by Salary",
+      "difficulty": "Easy",
+      "existing_problem": true,
+      "original_description_md5": "a63780f7411b219ce36752b9fe910eec",
+      "task": "Return id, name, salary for employees whose department is Engineering. Sort salary descending, then id ascending to resolve ties. Preserve separate employees with repeated names.",
+      "schema_sql": "CREATE TABLE employees (\n  id INTEGER PRIMARY KEY,\n  name TEXT NOT NULL,\n  department TEXT NOT NULL,\n  salary INTEGER NOT NULL,\n  manager_id INTEGER\n);",
+      "seed_sql": "INSERT INTO employees (id, name, department, salary, manager_id) VALUES\n(1, 'Asha', 'Engineering', 85000, NULL),\n(2, 'Rohan', 'Engineering', 72000, 1),\n(3, 'Neha', 'Sales', 68000, NULL),\n(4, 'Vikram', 'Sales', 61000, 3),\n(5, 'Priya', 'Engineering', 79000, 1),\n(6, 'Karan', 'Marketing', 55000, NULL),\n(7, 'Divya', 'Marketing', 58000, 6),\n(8, 'Aman', 'Sales', 64000, 3);",
+      "expected": "id\tname\tsalary\n1\tAsha\t85000\n5\tPriya\t79000\n2\tRohan\t72000",
+      "ordering": "salary descending, id ascending",
+      "constraints": [
+        "Existing employee IDs, schema, and setup retained",
+        "Salary is a required integer",
+        "Names can repeat"
+      ],
+      "edge_cases": [
+        "Equal sort values require the stated tie-breaker",
+        "An empty input returns no rows",
+        "Only the intended department population contributes"
+      ],
+      "hints": [
+        "Use a department row filter",
+        "Request both ordering keys"
+      ],
+      "solution_sql": "SELECT id,name,salary FROM employees WHERE department = 'Engineering' ORDER BY salary DESC,id ASC;",
+      "explanation": "The explicit projection and department predicate preserve the retained listing task. Salary rank and identifier tie-breaker make its sequence deterministic.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO employees (id, name, department, salary, manager_id) VALUES\n(1, 'Zara', 'Engineering', 90000, NULL),\n(2, 'Omar', 'Engineering', 90000, 1),\n(3, 'Leo', 'Finance', 70000, NULL),\n(4, 'Mia', 'Finance', 66000, 3),\n(5, 'Sam', 'Engineering', 58000, 1),\n(6, 'Tia', 'Finance', 72000, 3);",
+          "expected": "id\tname\tsalary\n1\tZara\t90000\n2\tOmar\t90000\n5\tSam\t58000"
+        },
+        {
+          "seed_sql": "",
+          "expected": ""
+        }
+      ]
+    },
+    {
+      "id": "cp-dbms-sql-average-salary-by-department",
+      "slug": "average-salary-by-department",
+      "title": "Average Salary by Department",
+      "difficulty": "Medium",
+      "existing_problem": true,
+      "original_description_md5": "0d1dd3c6ad0aeff372ccb3ad9f22e06c",
+      "task": "Return department and avg_salary for each department. Compute avg_salary as SUM(salary) DIV COUNT(*), the requested integer-truncated average for this positive non-null fixture. Sort avg_salary descending, then department ascending to resolve ties. Do not substitute fractional AVG output.",
+      "schema_sql": "CREATE TABLE employees (\n  id INTEGER PRIMARY KEY,\n  name TEXT NOT NULL,\n  department TEXT NOT NULL,\n  salary INTEGER NOT NULL,\n  manager_id INTEGER\n);",
+      "seed_sql": "INSERT INTO employees (id, name, department, salary, manager_id) VALUES\n(1, 'Asha', 'Engineering', 85000, NULL),\n(2, 'Rohan', 'Engineering', 72000, 1),\n(3, 'Neha', 'Sales', 68000, NULL),\n(4, 'Vikram', 'Sales', 61000, 3),\n(5, 'Priya', 'Engineering', 79000, 1),\n(6, 'Karan', 'Marketing', 55000, NULL),\n(7, 'Divya', 'Marketing', 58000, 6),\n(8, 'Aman', 'Sales', 64000, 3);",
+      "expected": "department\tavg_salary\nEngineering\t78666\nSales\t64333\nMarketing\t56500",
+      "ordering": "avg_salary descending, department ascending",
+      "constraints": [
+        "Existing employee IDs, schema, and setup retained",
+        "Salary is a required integer",
+        "Names can repeat"
+      ],
+      "edge_cases": [
+        "Equal sort values require the stated tie-breaker",
+        "An empty input returns no rows",
+        "The average convention intentionally discards the remainder"
+      ],
+      "hints": [
+        "Group by department and use integer DIV",
+        "Request both ordering keys"
+      ],
+      "solution_sql": "SELECT department,SUM(salary) DIV COUNT(*) AS avg_salary FROM employees GROUP BY department ORDER BY avg_salary DESC,department ASC;",
+      "explanation": "The grouped sum divided with DIV by the non-null employee count preserves the retained integer-average convention. Department resolves tied group averages.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO employees (id, name, department, salary, manager_id) VALUES\n(1, 'Zara', 'Engineering', 90000, NULL),\n(2, 'Omar', 'Engineering', 90000, 1),\n(3, 'Leo', 'Finance', 70000, NULL),\n(4, 'Mia', 'Finance', 66000, 3),\n(5, 'Sam', 'Engineering', 58000, 1),\n(6, 'Tia', 'Finance', 72000, 3);",
+          "expected": "department\tavg_salary\nEngineering\t79333\nFinance\t69333"
+        },
+        {
+          "seed_sql": "",
+          "expected": ""
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-8-dql-1",
+      "test_id": "pt-dbms-sql-8-dql",
+      "question_text": "Which single statement makes up essentially all of DQL?",
+      "options": [
+        "INSERT",
+        "UPDATE",
+        "SELECT",
+        "CREATE"
+      ],
+      "correct_index": 2,
+      "explanation": "DQL is essentially just SELECT — reading data without modifying it.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-8-dql-2",
+      "test_id": "pt-dbms-sql-8-dql",
+      "question_text": "Does a SELECT statement modify the underlying data?",
+      "options": [
+        "Yes, every SELECT updates a 'last accessed' timestamp on the data",
+        "No — SELECT is read-only and produces no side effects on the data itself",
+        "Only SELECT statements with a JOIN modify data",
+        "SELECT always modifies data unless LIMIT is used"
+      ],
+      "correct_index": 1,
+      "explanation": "SELECT reads data without changing it — that read-only property is exactly why DQL is sometimes treated as its own category apart from DML.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-8-dql-3",
+      "test_id": "pt-dbms-sql-8-dql",
+      "question_text": "Why is `SELECT *` generally discouraged in real application code?",
+      "options": [
+        "It is always slower than naming columns by a fixed, large amount",
+        "It silently returns extra/changed columns if the table's shape changes later, and breaks intention-revealing code",
+        "SELECT * is not valid SQL syntax",
+        "It can only be used with GROUP BY"
+      ],
+      "correct_index": 1,
+      "explanation": "SELECT * is convenient for exploration but fragile in application code, since it implicitly depends on the table's current column set.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-8-dql-4",
+      "test_id": "pt-dbms-sql-8-dql",
+      "question_text": "Why can a JOIN cause an aggregate result (like a SUM) to be silently wrong?",
+      "options": [
+        "JOINs always produce exactly one row per input row with no exceptions",
+        "An unintended many-to-many relationship in the JOIN can multiply rows ('fan-out'), causing values to be double- or over-counted",
+        "Aggregates cannot be used together with JOIN under any circumstances",
+        "JOIN always removes duplicate rows automatically"
+      ],
+      "correct_index": 1,
+      "explanation": "Row-multiplying JOINs are a classic, easy-to-miss source of incorrect aggregate results — the query runs fine and looks plausible while being wrong.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-8-dql-5",
+      "test_id": "pt-dbms-sql-8-dql",
+      "question_text": "Why does `LIMIT 5` without an ORDER BY not reliably give you a meaningful 'top 5'?",
+      "options": [
+        "LIMIT is illegal without ORDER BY in every dialect",
+        "Without ORDER BY, which rows come back is not guaranteed to be stable or meaningful — LIMIT just caps a count, it doesn't rank anything",
+        "LIMIT always returns the 5 most recently inserted rows regardless of ORDER BY",
+        "LIMIT and ORDER BY cannot be used in the same statement"
+      ],
+      "correct_index": 1,
+      "explanation": "LIMIT only caps the row count; it needs ORDER BY to determine WHICH rows those are in a reproducible, meaningful way.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-8-dql-6",
+      "test_id": "pt-dbms-sql-8-dql",
+      "question_text": "Why do some textbooks fold DQL into DML rather than treating it as separate?",
+      "options": [
+        "Because SELECT actually deletes rows after reading them",
+        "Because SELECT doesn't change data either, the same as DML's read-only aspect is sometimes argued to share — though DQL is commonly kept separate to emphasize reading vs writing as distinct jobs",
+        "Because DML and DQL use completely unrelated keywords",
+        "Because DQL was invented before DML existed"
+      ],
+      "correct_index": 1,
+      "explanation": "The categorization is partly a matter of convention — DQL/DML boundary differs across textbooks, though keeping SELECT (read) distinct from INSERT/UPDATE/DELETE (write) is a useful conceptual split.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-8-dql-7",
+      "test_id": "pt-dbms-sql-8-dql",
+      "question_text": "In `SELECT department, SUM(salary) DIV COUNT(*) AS avg_salary FROM employees GROUP BY department HAVING COUNT(*) >= 2`, what does the HAVING clause do?",
+      "options": [
+        "Filters individual employee rows before grouping",
+        "Filters entire department groups, keeping only those with 2 or more employees",
+        "Sorts the departments alphabetically",
+        "Limits the result to 2 rows"
+      ],
+      "correct_index": 1,
+      "explanation": "HAVING filters the grouped results (departments), keeping only groups satisfying the aggregate condition — here, at least 2 employees.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-8-dql-8",
+      "test_id": "pt-dbms-sql-8-dql",
+      "question_text": "What does it mean for a SELECT query to be 'idempotent' in the safest sense described here?",
+      "options": [
+        "It can only be executed once per session",
+        "Running it repeatedly always reads the same underlying data with zero side effects — no matter how many times you run it, nothing about the stored data changes",
+        "It automatically caches its own result forever",
+        "It always returns exactly one row"
+      ],
+      "correct_index": 1,
+      "explanation": "A read-only SELECT has no side effects, so repeated execution never changes anything about the stored data — a strong, useful safety property.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "coordinator",
+    "independent_review": "unavailable; no agent tools",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Definitions and examples checked against questions; no plagiarism certification.",
+    "existing_question_corrections": [
+      "tq-dbms-sql-8-dql-2",
+      "tq-dbms-sql-8-dql-6",
+      "tq-dbms-sql-8-dql-8"
+    ],
+    "canonical_answer_indices_preserved": true
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-8-dql",
+    "original_note_sha256": "84a72d99b4906dd2d983871fae27325bb7c29310e2e964bb8458570fff1a9a63",
+    "status": "paired migration prepared; not applied"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Why a project join can overcount employee salaries",
+      "description": "One employee matching three project assignments appears at the assignment grain three times. Summing the repeated salary does not represent one employee contribution.",
+      "columns": [
+        "Employee",
+        "Project match",
+        "Joined salary"
+      ],
+      "rows": [
+        [
+          "Employee 7",
+          "Project A",
+          "60000"
+        ],
+        [
+          "Employee 7",
+          "Project B",
+          "60000"
+        ],
+        [
+          "Employee 7",
+          "Project C",
+          "60000"
+        ],
+        [
+          "Correct employee-level contribution",
+          "One employee",
+          "60000"
+        ],
+        [
+          "Naive joined sum",
+          "Three repeated contributions",
+          "180000"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "coordinator review",
+    "server_rendering": "passed",
+    "browser_rendering": "unverified",
+    "independent_review": "unavailable; no agent tools",
+    "rendering_check": "2026-10-29: 44 authored-package render checks and 8 diagram/access integration checks passed. Desktop/mobile browser rendering unverified."
+  },
+  "sql_verification": {
+    "engine": "11.8.6-MariaDB-0+deb13u1 from Debian",
+    "scope": "MariaDB compatibility execution; exact MySQL 8.4/provider execution unverified",
+    "fingerprint": "92cf7caad0753424848e586497832bb823151c5866a9423e3af0895541354adb",
+    "cases": [
+      {
+        "problem": "engineering-team-by-salary",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "engineering-team-by-salary",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "engineering-team-by-salary",
+        "case": 2,
+        "passed": true
+      },
+      {
+        "problem": "average-salary-by-department",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "average-salary-by-department",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "average-salary-by-department",
+        "case": 2,
+        "passed": true
+      }
+    ],
+    "all_passed": true
+  }
+}

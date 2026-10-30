@@ -75,8 +75,7 @@ const config: Config = {
         danger: rgb("danger-text"),
       },
       fontFamily: {
-        // Self-hosted by next/font in the root layout (no external font host,
-        // so the CSP's `font-src 'self'` still holds).
+        // System stacks defined in globals.css require no external font fetch.
         sans: ["var(--font-sans)", "ui-sans-serif", "system-ui", "-apple-system", '"Segoe UI"', "Roboto", "Arial", "sans-serif"],
         display: ["var(--font-display)", "var(--font-sans)", "ui-sans-serif", "system-ui", "sans-serif"],
         // Alias so any stray `font-serif` never reintroduces a serif.
@@ -84,12 +83,12 @@ const config: Config = {
         mono: ["ui-monospace", "SFMono-Regular", "Menlo", "Consolas", "monospace"],
       },
       borderRadius: {
-        // Scale: sm 8 · md 12 · lg 16 · xl 20 · 2xl 16 (cards) · 3xl 24 (hero panels).
+        // Shared cards and controls use the 12px xl radius.
         sm: "0.5rem",
         DEFAULT: "0.75rem",
         md: "0.75rem",
         lg: "1rem",
-        xl: "1.25rem",
+        xl: "0.75rem",
         "2xl": "1rem",
       },
       boxShadow: {

@@ -1,5 +1,7 @@
 "use client";
 
+import { toast } from "@/components/ui/Toast";
+
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -147,10 +149,8 @@ export default function BuilderFeatures({
         </p>
         <Button
           className="mt-5"
-          onClick={async () => {
-            await saveNow();
-            router.push("/custom-projects/estimate");
-          }}
+          onClick={handleContinue}
+          loading={going}
         >
           Review mentoring estimate
         </Button>
@@ -237,6 +237,8 @@ export default function BuilderFeatures({
         return;
       }
       patch({ projectImagePath: path });
+    } catch (err) {
+      setUploadError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
     } finally {
       setImageBusy(false);
     }
@@ -277,6 +279,8 @@ export default function BuilderFeatures({
           ],
         }));
       }
+    } catch (err) {
+      setUploadError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
     } finally {
       setFileBusy(false);
     }
@@ -284,8 +288,14 @@ export default function BuilderFeatures({
 
   async function handleContinue() {
     setGoing(true);
-    await saveNow();
-    router.push("/custom-projects/estimate");
+    try {
+      await saveNow();
+      router.push("/custom-projects/estimate");
+    } catch (err) {
+      toast({ title: "Could not save", description: err instanceof Error ? err.message : undefined, tone: "error" });
+    } finally {
+      setGoing(false);
+    }
   }
 
   return (

@@ -1,0 +1,665 @@
+{
+  "source_ref": "chapter-5-keys-and-integrity/composite-key",
+  "slug": "composite-key",
+  "title": "Composite Key",
+  "description": "Model combined identities, preserve legitimate repeated components, audit duplicate enrollment triples, and enforce composite uniqueness independently of a surrogate key.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Identity can require several attributes\n\nA composite key uses two or more attributes together to identify a fact. In an enrollment model, student_id, course_id, and semester can jointly identify one registration if policy permits one registration per student-course-semester combination. A student can take several courses, a course can have several students, and the same pair can occur in different semesters. The combined identity preserves those legitimate distinctions.\n\nBegin by stating the fact grain. If the system records multiple attempts in the same semester, the three-attribute combination may no longer identify one occurrence. A different identifying rule is needed. Adding attributes merely until a sample becomes unique is not reliable design; the selected combination must reflect the business facts that remain distinct across every allowed state.\n\n## Combined uniqueness differs from component uniqueness\n\nA primary key on student_id and course_id requires the pair to be unique. It does not independently require student_id to be unique or course_id to be unique. One student can therefore appear in many pairs, and one course can appear with many students. A single pair can occur only once under that key rule.\n\nDeclaring each component separately UNIQUE produces a different, restrictive model. It can limit each student to one enrollment and each course to one student. A fixture containing one row would not reveal the mistake. Include repeated individual components in valid distinct combinations so that tests show the intended many-to-many participation rather than merely confirming one example was accepted.\n\n## Composite and minimal are related distinctions\n\nIn precise candidate-key reasoning, a key must be minimal: removing an attribute loses the identifying guarantee. A multi-attribute set containing an already sufficient student_id is a nonminimal superkey under that rule, even though SQL can enforce uniqueness over the larger combination. Be clear whether you are classifying a minimal logical key or describing a multi-column SQL uniqueness declaration.\n\nFor the student-course-semester identity, each component can matter. Remove semester and legitimate registrations in different terms can collide. Remove course_id and a student's different courses can collide. Remove student_id and different students in the same course and term can collide. These examples establish why the components are necessary under the documented registration policy, alongside the guarantee that the full triple is unique.\n\n## All key components need interpretation\n\nSemester should identify an agreed academic term, not just a vague display label such as Fall if different years are distinct. A canonical term code can keep the intended identity explicit. String comparisons, case handling, and formatting rules also affect stored uniqueness. State the coding contract instead of assuming that every visually different label represents a distinct term or vice versa.\n\nA composite primary key requires nonmissing values for its components. A nullable composite UNIQUE declaration can behave differently for combinations containing NULL under the target engine's rules. If the identity is required for every fact, make the nonmissing policy explicit. Otherwise missing components can undermine the claimed definite identification even when ordinary complete combinations are constrained as intended.\n\n## A surrogate can coexist with the business combination\n\nAn internal enrollment_id can serve as primary while a required student-course-semester combination remains UNIQUE. This can make references to the enrollment convenient while preserving the rule that two records must not claim the same business registration. The generated or supplied internal identifier alone does not enforce the combined business identity.\n\nConversely, choosing the natural combination as primary can be appropriate when it is stable and suitable for its callers. Neither pattern is universally superior. Reference width, update behaviour, public contracts, and fact lifecycle matter. Explain the guarantees each design preserves rather than declaring every composite primary key inherently wrong or every surrogate automatically sufficient to prevent duplicate facts.\n\n## Audit the complete proposed combination\n\nBefore adding a uniqueness rule, group the existing records by exactly the proposed identity attributes. Groups containing more than one row are current conflicts. The audit helps identify facts needing review; it is not an instruction to delete an arbitrary copy. Differences in other attributes can indicate contradictory records that require a domain-specific correction decision.\n\n```sql\nSELECT student_id, course_id, semester, COUNT(*) AS cnt\nFROM enrollments\nGROUP BY student_id, course_id, semester\nHAVING COUNT(*) > 1\nORDER BY student_id, course_id, semester;\n```\n\nGrouping only by student_id would treat legitimate different registrations as conflicts. Grouping by an already unique enrollment_id would hide every business-identity collision. The grouping must match the identity under investigation. A group of three reports cnt equal to three; it is not the same as reporting two excess copies beyond one representative.\n\n## Preserve retained exercises and data meaning\n\nAn existing duplicate-enrollment exercise can intentionally use an unconstrained staging table so conflicts are visible. Its schema and sample data should remain consistent with that diagnostic purpose. Adding a constraint before running its audit would prevent loading the very duplicate examples the task is designed to find. Detection and enforcement can therefore belong to separate exercises with different fixtures.\n\nA zero-row audit means no conflict was found in the tested population. It does not prove the combination is a universal candidate key for all future allowed states. That guarantee needs the modeled policy and trusted enforcement. Report both the current diagnostic result and the declaration or review needed for future writes rather than promoting one sample query into a permanent identity proof.\n\n## Constraint order and index order are different issues\n\nReordering the same attributes in a uniqueness declaration does not change which complete combinations are considered equal for logical uniqueness. The tuple values are still compared under their corresponding roles. It can change physical index usefulness for particular access patterns, depending on the engine and workload. Keep the logical rule separate from unsupported blanket performance claims.\n\nA lookup supplying only student_id can match several registrations even though the full triple is unique. To identify one registration by this business key, supply all needed components. A reference from another relation must similarly use a compatible supported definition for the chosen parent key. Matching the right number of columns is insufficient if their roles or order in a declared relationship are mismatched.\n\nA count of conflicting groups and a count of excess records are different summaries. Two groups containing three records each represent two conflicting identities and four excess records beyond one per identity. Name the chosen measurement clearly when estimating a correction workload, and retain enough identity information for an authorized reviewer to investigate individual groups.\n\n## Updates can move an identifying combination\n\nChanging a non-key description can leave the registration identity intact. Changing semester or course_id can move the fact to another identifying combination. If that combination already exists, a unique rule should reject the conflicting change. References to a composite identity can also require coordinated handling according to the actual supported foreign-key actions and transaction policy.\n\nThis does not mean every key component should be impossible to change forever. It means changes have identity consequences that callers and constraints must respect. A real migration or correction operation needs authorization and careful data review. Isolated fixtures can demonstrate a duplicate rejection without establishing production recovery, concurrency, or reference-transition behaviour that was never exercised.\n\n## Validate both accepted reuse and rejected collisions\n\nTest the same student on different courses, different students on one course, and the same student-course pair in different terms. Then attempt the exact identifying triple again, including a case with different descriptive values. The first cases should remain accepted and the repeated identity should be rejected under the declared policy. Also check required components for prohibited absence.\n\nComposite-key reasoning is useful because it expresses identity at the actual grain of a relationship or occurrence. Keep combined uniqueness distinct from component uniqueness, distinguish a required key from optional SQL uniqueness, and preserve separate roles for staging audits and enforcement. With explicit term codes, appropriate references, and focused boundary fixtures, the design can admit legitimate repeated participation while preventing two rows from claiming the same intended registration.\n",
+  "references": [],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-5-composite-key",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-5-composite-key-1",
+          "test_id": "pt-dbms-sql-5-composite-key",
+          "question_text": "What is a composite key?",
+          "options": [
+            "A key made of encrypted values",
+            "A minimal identifying combination of two or more attributes under the stated relation rules",
+            "A foreign key that references two tables at once",
+            "A deprecated kind of key no longer used"
+          ],
+          "correct_index": 1,
+          "explanation": "A composite candidate key has multiple necessary components; a redundant multi-column uniqueness declaration is a different logical classification.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-5-composite-key-2",
+          "test_id": "pt-dbms-sql-5-composite-key",
+          "question_text": "In an enrollment model permitting a student to take several courses and terms, does the composite primary key require student_id alone to be unique?",
+          "options": [
+            "Yes, always",
+            "No; the constraint guarantees uniqueness of the complete combination and permits student_id reuse",
+            "Only if the table has fewer than 10 rows",
+            "This cannot be determined from the schema"
+          ],
+          "correct_index": 1,
+          "explanation": "The declaration does not force repeats to occur, but it does not forbid legitimate repeats of a single component.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-5-composite-key-3",
+          "test_id": "pt-dbms-sql-5-composite-key",
+          "question_text": "For an unconstrained staging table with nonmissing proposed key components, which query finds repeated student-course-semester combinations?",
+          "options": [
+            "SELECT * FROM enrollments WHERE student_id IS NULL",
+            "SELECT student_id, course_id, semester, COUNT(*) FROM enrollments GROUP BY student_id, course_id, semester HAVING COUNT(*) > 1",
+            "SELECT DISTINCT student_id FROM enrollments",
+            "SELECT * FROM enrollments ORDER BY student_id"
+          ],
+          "correct_index": 1,
+          "explanation": "Grouping by exactly the composite key's columns and filtering groups with more than one row finds exactly the duplicate/violating combinations.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-5-composite-key-4",
+          "test_id": "pt-dbms-sql-5-composite-key",
+          "question_text": "Does the ORDER of columns in a composite key declaration affect its logical uniqueness guarantee?",
+          "options": [
+            "Yes, reordering changes which rows are considered duplicates",
+            "No — logical uniqueness is unaffected by order, though column order can affect which queries an underlying composite index serves efficiently",
+            "Order only matters for foreign keys, never primary keys",
+            "Composite keys must always be declared in alphabetical order"
+          ],
+          "correct_index": 1,
+          "explanation": "The uniqueness guarantee is order-independent, but the physical index built from a composite key is typically order-sensitive for performance purposes.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-5-composite-key-5",
+          "test_id": "pt-dbms-sql-5-composite-key",
+          "question_text": "Is it required to use a composite key as the actual PRIMARY KEY, rather than a surrogate key?",
+          "options": [
+            "Yes, composite keys must always be the primary key",
+            "No — a common pattern is a surrogate id as primary key, with the natural composite combination enforced as a separate UNIQUE constraint instead",
+            "Composite keys cannot be enforced as UNIQUE, only as PRIMARY KEY",
+            "SQL does not support composite UNIQUE constraints"
+          ],
+          "correct_index": 1,
+          "explanation": "Both approaches are valid and common; a surrogate primary key plus a composite UNIQUE constraint is a frequently used pattern.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-5-composite-key-6",
+          "test_id": "pt-dbms-sql-5-composite-key",
+          "question_text": "Can a foreign key also be composite?",
+          "options": [
+            "No, foreign keys must always be a single column",
+            "Yes — a composite foreign key references a composite primary/unique key in another table using multiple columns together",
+            "Only in NoSQL databases",
+            "Only if the referenced table has no primary key"
+          ],
+          "correct_index": 1,
+          "explanation": "Just like primary keys, foreign keys can span multiple columns when they reference a composite key elsewhere.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-5-composite-key-7",
+          "test_id": "pt-dbms-sql-5-composite-key",
+          "question_text": "Why might auditing a proposed composite key (before actually declaring it as a constraint) be valuable?",
+          "options": [
+            "It's never valuable — you should always just declare the constraint directly",
+            "Running the GROUP BY/HAVING check first reveals existing duplicate data that would make the constraint fail to apply, letting you clean it up first",
+            "Auditing is required by the SQL standard before any CREATE TABLE",
+            "SQL automatically performs this audit for you"
+          ],
+          "correct_index": 1,
+          "explanation": "The audit identifies existing conflicts for a deliberate review before an authorized constraint addition; it does not prescribe arbitrary deletion.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-5-composite-key-8",
+          "test_id": "pt-dbms-sql-5-composite-key",
+          "question_text": "In enrollments(student_id, course_id, semester), why is student_id alone NOT a valid single-column candidate key?",
+          "options": [
+            "Because student_id is never stored as an integer",
+            "Because a single student legitimately appears in multiple rows (once per course/semester), so student_id alone repeats",
+            "Because student_id must always be NULL",
+            "Because SQL forbids single-column candidate keys"
+          ],
+          "correct_index": 1,
+          "explanation": "Repetition of student_id across multiple enrollments is exactly why it can't serve as a standalone unique identifier here.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-5-composite-key-new-9",
+          "test_id": "pt-dbms-sql-5-composite-key",
+          "question_text": "Which registrations can coexist under a student-course-semester key?",
+          "options": [
+            "Two records with the same full triple",
+            "One student and course in different semesters",
+            "Any number with the same triple if names differ",
+            "Only one registration per student forever"
+          ],
+          "correct_index": 1,
+          "explanation": "Different term components distinguish legitimate separate registrations.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-5-composite-key-new-10",
+          "test_id": "pt-dbms-sql-5-composite-key",
+          "question_text": "What does a duplicate group count of three mean?",
+          "options": [
+            "Three attributes are missing",
+            "Two groups exist",
+            "Three records claim that proposed identity",
+            "The key has degree three"
+          ],
+          "correct_index": 2,
+          "explanation": "The count measures records in that group, not excess copies or attribute count.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-5-composite-key-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-5-composite-key-application-new-1",
+          "test_id": "pt-dbms-sql-5-composite-key-application",
+          "question_text": "Why is an unqualified term label such as Fall potentially insufficient?",
+          "options": [
+            "Labels cannot be strings",
+            "Fall is always NULL",
+            "Different academic years may require distinct term identities",
+            "All terms must be integers"
+          ],
+          "correct_index": 2,
+          "explanation": "The term component must distinguish the intended academic period.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-5-composite-key-application-new-2",
+          "test_id": "pt-dbms-sql-5-composite-key-application",
+          "question_text": "Does adding enrollment_id as primary automatically prevent repeated business triples?",
+          "options": [
+            "Yes; distinct internal ids forbid every duplicate fact",
+            "Only if names repeat",
+            "Only when the primary key is text",
+            "No; the combined business rule still needs enforcement"
+          ],
+          "correct_index": 3,
+          "explanation": "Internal occurrence identity does not enforce an independent business combination.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-5-composite-key-application-new-3",
+          "test_id": "pt-dbms-sql-5-composite-key-application",
+          "question_text": "Why must a duplicate-audit fixture remain unconstrained on the proposed combination?",
+          "options": [
+            "It intentionally loads conflicts to diagnose",
+            "All staging tables must disable every constraint",
+            "Constraints always make SELECT incorrect",
+            "A key is needed only for sorting"
+          ],
+          "correct_index": 0,
+          "explanation": "The diagnostic input population differs from accepted final data.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-5-composite-key-application-new-4",
+          "test_id": "pt-dbms-sql-5-composite-key-application",
+          "question_text": "Does swapping the same uniqueness columns change the logical duplicate combinations?",
+          "options": [
+            "Yes; every row gets a new identity",
+            "No; physical index effects are a separate question",
+            "Only when the row count is even",
+            "It removes the key"
+          ],
+          "correct_index": 1,
+          "explanation": "Uniqueness still applies to the same corresponding attribute roles.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-5-composite-key-application-new-5",
+          "test_id": "pt-dbms-sql-5-composite-key-application",
+          "question_text": "Why does grouping by unique enrollment_id hide repeated business triples?",
+          "options": [
+            "It enforces the business key",
+            "It changes term values",
+            "It splits every record into its own group",
+            "It drops every source column"
+          ],
+          "correct_index": 2,
+          "explanation": "The audit grouping must match the proposed identity.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-5-composite-key-application-new-6",
+          "test_id": "pt-dbms-sql-5-composite-key-application",
+          "question_text": "Which change can conflict with an existing composite identity?",
+          "options": [
+            "Renaming an unrelated display alias",
+            "Sorting by semester",
+            "Selecting fewer output columns",
+            "Moving a registration to an already occupied course-term combination for that student"
+          ],
+          "correct_index": 3,
+          "explanation": "A key-component update can collide with another fact.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-5-composite-key-application-new-7",
+          "test_id": "pt-dbms-sql-5-composite-key-application",
+          "question_text": "What extra policy matters for nullable composite UNIQUE components?",
+          "options": [
+            "Whether missing components satisfy the intended required identity contract",
+            "Only the header font",
+            "Only the shortest column name",
+            "Whether all strings are long"
+          ],
+          "correct_index": 0,
+          "explanation": "Optional uniqueness can differ from a definite nonmissing key.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-5-composite-key-application-new-8",
+          "test_id": "pt-dbms-sql-5-composite-key-application",
+          "question_text": "What does a zero-conflict audit establish?",
+          "options": [
+            "Every future write is valid",
+            "No observed duplicate combination in the checked data",
+            "The schema is fully normalized",
+            "A foreign key was tested"
+          ],
+          "correct_index": 1,
+          "explanation": "Sample diagnostics are narrower than allowed-state guarantees.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-5-composite-key-application-new-9",
+          "test_id": "pt-dbms-sql-5-composite-key-application",
+          "question_text": "What should a reference to a composite parent key use?",
+          "options": [
+            "Only whichever single label looks similar",
+            "A screen row number",
+            "A compatible supported definition matching the intended components",
+            "Every descriptive field regardless of role"
+          ],
+          "correct_index": 2,
+          "explanation": "Reference roles and supported definitions must align.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-5-composite-key-application-new-10",
+          "test_id": "pt-dbms-sql-5-composite-key-application",
+          "question_text": "Which valid fixture challenges overly restrictive per-component uniqueness?",
+          "options": [
+            "Only one row",
+            "A repeated full triple",
+            "A missing required term",
+            "One student taking two distinct courses in one term"
+          ],
+          "correct_index": 3,
+          "explanation": "The intended combination permits repeated individual components.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cx-composite-key-enforce",
+      "slug": "composite-key-enforce",
+      "title": "Protect the business triple alongside an internal primary identity",
+      "difficulty": "Easy",
+      "task": "Add UNIQUE(student_id, course_id, semester) named registration_identity to registrations, whose enrollment_id is already primary. Return enrollment_id, student_id, course_id and semester. All business key components are required.",
+      "starter_sql": "-- Add the combined registration_identity constraint and return the registrations.",
+      "schema_sql": "CREATE TABLE registrations (enrollment_id INT PRIMARY KEY, student_id INT NOT NULL, course_id INT NOT NULL, semester VARCHAR(20) NOT NULL);",
+      "seed_sql": "INSERT INTO registrations VALUES (1,1,10,'F2025'),(2,1,20,'F2025'),(3,1,10,'S2026'),(4,2,10,'F2025');",
+      "expected": "enrollment_id\tstudent_id\tcourse_id\tsemester\n1\t1\t10\tF2025\n2\t1\t20\tF2025\n3\t1\t10\tS2026\n4\t2\t10\tF2025",
+      "ordering": "Ascending enrollment_id.",
+      "constraints": [
+        "Initial business triples are unique; term codes are canonical."
+      ],
+      "edge_cases": [
+        "Individual identity components repeat legitimately.",
+        "A new internal id must not permit the same full business triple."
+      ],
+      "hints": [
+        "Add one multi-column UNIQUE constraint.",
+        "Keep the existing primary identity unchanged."
+      ],
+      "solution_sql": "ALTER TABLE registrations ADD CONSTRAINT registration_identity UNIQUE (student_id, course_id, semester);\nSELECT enrollment_id, student_id, course_id, semester FROM registrations ORDER BY enrollment_id;",
+      "explanation": "The combined uniqueness rule preserves the business identity independently of the internal primary identifier.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO registrations VALUES (2,7,8,'S2026'),(1,7,8,'F2025');",
+          "expected": "enrollment_id\tstudent_id\tcourse_id\tsemester\n1\t7\t8\tF2025\n2\t7\t8\tS2026"
+        },
+        {
+          "seed_sql": "",
+          "expected": ""
+        }
+      ],
+      "negative_validation_cases": [
+        {
+          "sql": "INSERT INTO registrations VALUES (99,1,10,'F2025');",
+          "error_codes": [
+            1062
+          ]
+        },
+        {
+          "sql": "INSERT INTO registrations VALUES (99,9,10,NULL);",
+          "error_codes": [
+            1048
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cp-dbms-sql-duplicate-enrollments",
+      "slug": "duplicate-enrollments",
+      "title": "Duplicate Enrollments",
+      "difficulty": "Medium",
+      "existing_problem": true,
+      "original_description_md5": "79a683b6962777d56a3ee0a84417f53c",
+      "task": "Return student_id, course_id, semester and cnt for every proposed enrollment combination appearing more than once. Preserve the supplied unconstrained schema and setup; this exercise audits conflicts rather than installing the constraint.",
+      "schema_sql": "CREATE TABLE enrollments (\n  student_id INTEGER NOT NULL,\n  course_id INTEGER NOT NULL,\n  semester TEXT NOT NULL\n);",
+      "seed_sql": "INSERT INTO enrollments (student_id, course_id, semester) VALUES\n(1, 101, 'Fall2025'),\n(1, 102, 'Fall2025'),\n(2, 101, 'Fall2025'),\n(1, 101, 'Fall2025'),\n(2, 102, 'Spring2026'),\n(3, 101, 'Fall2025');",
+      "expected": "student_id\tcourse_id\tsemester\tcnt\n1\t101\tFall2025\t2",
+      "ordering": "Ascending student_id, course_id, semester.",
+      "constraints": [
+        "Retained original problem identity, schema and seed are unchanged.",
+        "All proposed identity components are nonmissing."
+      ],
+      "edge_cases": [
+        "One student can have different courses or semesters without conflict.",
+        "Groups of three or more must report their complete count."
+      ],
+      "hints": [
+        "Group by every component of the proposed identity.",
+        "Keep groups with count greater than one."
+      ],
+      "solution_sql": "SELECT student_id, course_id, semester, COUNT(*) AS cnt FROM enrollments GROUP BY student_id, course_id, semester HAVING COUNT(*) > 1 ORDER BY student_id, course_id, semester;",
+      "explanation": "The grouping matches the intended business triple, revealing current conflicts without rejecting legitimate component reuse. This diagnosis does not enforce future writes.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO enrollments (student_id, course_id, semester) VALUES\n(5, 201, 'Fall2025'),\n(5, 201, 'Fall2025'),\n(6, 202, 'Fall2025'),\n(6, 202, 'Spring2026'),\n(7, 201, 'Fall2025');",
+          "expected": "student_id\tcourse_id\tsemester\tcnt\n5\t201\tFall2025\t2"
+        },
+        {
+          "seed_sql": "INSERT INTO enrollments VALUES (1,10,'F2025'),(1,10,'F2025'),(1,10,'F2025'),(1,10,'S2026');",
+          "expected": "student_id\tcourse_id\tsemester\tcnt\n1\t10\tF2025\t3"
+        },
+        {
+          "seed_sql": "",
+          "expected": ""
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-5-composite-key-1",
+      "test_id": "pt-dbms-sql-5-composite-key",
+      "question_text": "What is a composite key?",
+      "options": [
+        "A key made of encrypted values",
+        "A key made of two or more columns where the combination (not any single column) is unique",
+        "A foreign key that references two tables at once",
+        "A deprecated kind of key no longer used"
+      ],
+      "correct_index": 1,
+      "explanation": "Composite key = multi-column key where uniqueness comes from the combination.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-5-composite-key-2",
+      "test_id": "pt-dbms-sql-5-composite-key",
+      "question_text": "In enrollments(student_id, course_id, semester) with PRIMARY KEY (student_id, course_id, semester), is student_id alone unique?",
+      "options": [
+        "Yes, always",
+        "No — a student enrolls in many courses, so student_id repeats; only the full combination is unique",
+        "Only if the table has fewer than 10 rows",
+        "This cannot be determined from the schema"
+      ],
+      "correct_index": 1,
+      "explanation": "The whole point of this composite key is that no single column is unique on its own — only the combination is.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-5-composite-key-3",
+      "test_id": "pt-dbms-sql-5-composite-key",
+      "question_text": "Which query correctly finds rows that would violate an intended composite key on (student_id, course_id, semester)?",
+      "options": [
+        "SELECT * FROM enrollments WHERE student_id IS NULL",
+        "SELECT student_id, course_id, semester, COUNT(*) FROM enrollments GROUP BY student_id, course_id, semester HAVING COUNT(*) > 1",
+        "SELECT DISTINCT student_id FROM enrollments",
+        "SELECT * FROM enrollments ORDER BY student_id"
+      ],
+      "correct_index": 1,
+      "explanation": "Grouping by exactly the composite key's columns and filtering groups with more than one row finds exactly the duplicate/violating combinations.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-5-composite-key-4",
+      "test_id": "pt-dbms-sql-5-composite-key",
+      "question_text": "Does the ORDER of columns in a composite key declaration affect its logical uniqueness guarantee?",
+      "options": [
+        "Yes, reordering changes which rows are considered duplicates",
+        "No — logical uniqueness is unaffected by order, though column order can affect which queries an underlying composite index serves efficiently",
+        "Order only matters for foreign keys, never primary keys",
+        "Composite keys must always be declared in alphabetical order"
+      ],
+      "correct_index": 1,
+      "explanation": "The uniqueness guarantee is order-independent, but the physical index built from a composite key is typically order-sensitive for performance purposes.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-5-composite-key-5",
+      "test_id": "pt-dbms-sql-5-composite-key",
+      "question_text": "Is it required to use a composite key as the actual PRIMARY KEY, rather than a surrogate key?",
+      "options": [
+        "Yes, composite keys must always be the primary key",
+        "No — a common pattern is a surrogate id as primary key, with the natural composite combination enforced as a separate UNIQUE constraint instead",
+        "Composite keys cannot be enforced as UNIQUE, only as PRIMARY KEY",
+        "SQL does not support composite UNIQUE constraints"
+      ],
+      "correct_index": 1,
+      "explanation": "Both approaches are valid and common; a surrogate primary key plus a composite UNIQUE constraint is a frequently used pattern.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-5-composite-key-6",
+      "test_id": "pt-dbms-sql-5-composite-key",
+      "question_text": "Can a foreign key also be composite?",
+      "options": [
+        "No, foreign keys must always be a single column",
+        "Yes — a composite foreign key references a composite primary/unique key in another table using multiple columns together",
+        "Only in NoSQL databases",
+        "Only if the referenced table has no primary key"
+      ],
+      "correct_index": 1,
+      "explanation": "Just like primary keys, foreign keys can span multiple columns when they reference a composite key elsewhere.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-5-composite-key-7",
+      "test_id": "pt-dbms-sql-5-composite-key",
+      "question_text": "Why might auditing a proposed composite key (before actually declaring it as a constraint) be valuable?",
+      "options": [
+        "It's never valuable — you should always just declare the constraint directly",
+        "Running the GROUP BY/HAVING check first reveals existing duplicate data that would make the constraint fail to apply, letting you clean it up first",
+        "Auditing is required by the SQL standard before any CREATE TABLE",
+        "SQL automatically performs this audit for you"
+      ],
+      "correct_index": 1,
+      "explanation": "Attempting to add a uniqueness constraint over existing dirty data will fail; checking first with GROUP BY/HAVING lets you find and fix violations proactively.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-5-composite-key-8",
+      "test_id": "pt-dbms-sql-5-composite-key",
+      "question_text": "In enrollments(student_id, course_id, semester), why is student_id alone NOT a valid single-column candidate key?",
+      "options": [
+        "Because student_id is never stored as an integer",
+        "Because a single student legitimately appears in multiple rows (once per course/semester), so student_id alone repeats",
+        "Because student_id must always be NULL",
+        "Because SQL forbids single-column candidate keys"
+      ],
+      "correct_index": 1,
+      "explanation": "Repetition of student_id across multiple enrollments is exactly why it can't serve as a standalone unique identifier here.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "coordinator",
+    "independent_review": "unavailable; no agent tools",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Definitions and examples checked against questions; no plagiarism certification.",
+    "existing_question_corrections": [
+      "tq-dbms-sql-5-composite-key-1",
+      "tq-dbms-sql-5-composite-key-2",
+      "tq-dbms-sql-5-composite-key-3",
+      "tq-dbms-sql-5-composite-key-7"
+    ],
+    "canonical_answer_indices_preserved": true
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-5-composite-key",
+    "original_note_sha256": "c5c4f742c804975e2d694dcbd749406ff590a8dab748bcc58de66aaa1ef70d5c",
+    "status": "paired migration prepared; not applied"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Repeated components can form distinct registration identities",
+      "description": "The full student-course-term triple identifies the registration. The final proposal conflicts even with a separate new internal identifier.",
+      "columns": [
+        "student_id",
+        "course_id",
+        "semester",
+        "Identity outcome"
+      ],
+      "rows": [
+        [
+          "1",
+          "10",
+          "F2025",
+          "Valid first triple"
+        ],
+        [
+          "1",
+          "20",
+          "F2025",
+          "Valid different course"
+        ],
+        [
+          "1",
+          "10",
+          "S2026",
+          "Valid different term"
+        ],
+        [
+          "2",
+          "10",
+          "F2025",
+          "Valid different student"
+        ],
+        [
+          "1",
+          "10",
+          "F2025",
+          "Duplicate full identity; reject in accepted data"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "coordinator checked combined uniqueness, retained audit identity/setup and valid component reuse",
+    "server_rendering": "passed",
+    "browser_rendering": "unverified",
+    "independent_review": "unavailable; no agent tools",
+    "server_rendering_evidence": "2026-10-29: actual LessonBlock rendering passed for all authored packages in focused Vitest suite."
+  },
+  "sql_verification": {
+    "engine": "11.8.6-MariaDB-0+deb13u1 from Debian",
+    "scope": "MariaDB compatibility execution; exact MySQL 8.4/provider execution unverified",
+    "fingerprint": "a7776ba3273985ad36f1646c6aa636a6cbdd2d5a45ab86b6c552669d7aa79bd0",
+    "cases": [
+      {
+        "problem": "composite-key-enforce",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "composite-key-enforce",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "composite-key-enforce",
+        "case": 2,
+        "passed": true
+      },
+      {
+        "problem": "composite-key-enforce",
+        "negative_case": 0,
+        "error_code": 1062,
+        "passed": true
+      },
+      {
+        "problem": "composite-key-enforce",
+        "negative_case": 1,
+        "error_code": 1048,
+        "passed": true
+      },
+      {
+        "problem": "duplicate-enrollments",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "duplicate-enrollments",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "duplicate-enrollments",
+        "case": 2,
+        "passed": true
+      },
+      {
+        "problem": "duplicate-enrollments",
+        "case": 3,
+        "passed": true
+      }
+    ],
+    "all_passed": true
+  }
+}

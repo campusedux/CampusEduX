@@ -1,0 +1,598 @@
+{
+  "source_ref": "chapter-14-sql-functions/date-functions",
+  "slug": "date-functions",
+  "title": "Date Functions",
+  "description": "Use MySQL date functions to calculate calendar deadlines, compare date ranges, handle leap days and month ends, and avoid ambiguous reporting boundaries.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Treat dates as calendar values\n\nA date identifies a calendar day, rather than a duration or a local clock reading. A library loan issued on February 27 has a due date calculated from a lending rule. An order report for March needs a precise set of calendar days. SQL date functions help express both requirements, but choosing a function is only useful after the rule is clear. Adding one month and adding thirty days describe different policies, especially around short months.\n\nBegin with [SQL data types](/learning/dbms-sql-tutorial/data-types) and [comparison operators](/learning/dbms-sql-tutorial/comparison-operators). The examples here use MySQL 8.4 syntax and fixed dates so that the results remain reproducible. A DATE column has no time of day. A DATETIME or TIMESTAMP column needs additional decisions about clock time, storage semantics and reporting time zone before the same calendar filter can be interpreted safely.\n\n## Read and construct dates deliberately\n\nCURRENT_DATE returns the current date in the session time zone. It is useful for an operational dashboard, but a historical report should usually receive an explicit reporting date. Otherwise running the same query tomorrow changes its population. A session configured for a different time zone can also reach the next day at a different moment. Store the reporting boundary with the report request when repeatability matters.\n\n```sql\nSELECT CURRENT_DATE AS today,\n       CAST('2028-02-29' AS DATE) AS leap_day,\n       EXTRACT(YEAR FROM CAST('2028-02-29' AS DATE)) AS calendar_year;\n```\n\nUse unambiguous year-month-day literals. A string such as 03/04/2028 can mean different dates to different people, and relying on implicit conversion hides an input contract. Validate user input before it reaches a query, then bind the resulting value through the application's parameter mechanism. SQL examples with fixed literals illustrate the calendar calculation; they are not a reason to concatenate untrusted strings into SQL.\n\nYEAR, MONTH and DAY extract individual calendar components. Extraction is helpful for display or grouping, but a month number alone does not identify a month across years. Grouping by MONTH(order_date) merges March 2027 with March 2028. Keep the year too, or derive an explicit month start that retains the complete reporting period.\n\n## Add calendar intervals and inspect the edge\n\nDATE_ADD and DATE_SUB take a date expression and an INTERVAL. A fourteen-day loan has a different rule from a loan due one calendar month later. State the policy before choosing DAY or MONTH. Negative intervals are possible, but using DATE_SUB for backward movement often makes an introductory query easier to read and audit.\n\n```sql\nSELECT DATE_ADD('2028-02-20', INTERVAL 14 DAY) AS due_date,\n       DATE_ADD('2028-01-31', INTERVAL 1 MONTH) AS next_month,\n       DATE_SUB('2028-03-01', INTERVAL 1 DAY) AS previous_day;\n-- 2028-03-05, 2028-02-29, 2028-02-29\n```\n\nWhen the target month lacks the original day number, MySQL adjusts the result to the last valid day of that month. January 31 plus one month in a leap year becomes February 29. This is useful calendar behavior, but it is not reversible arithmetic: subtracting one month from February 29 produces January 29. A billing system that must preserve a month-end intention should store that intention explicitly rather than infer it from the latest adjusted date.\n\nRepeated addition can drift. Starting with January 31 and adding a month twice may reach March 29 through February, while adding two months to the original date reaches March 31. For recurring schedules, calculate each occurrence from an agreed anchor and recurrence rule. Test both leap and ordinary years before treating a convenient date expression as a scheduling specification.\n\n## Distinguish day differences from completed intervals\n\nDATEDIFF(first_date, second_date) returns the first date minus the second in days, using the date components. Time components do not contribute. This suits a comparison of calendar dates, but it does not measure elapsed hours. Two timestamps a few minutes apart across midnight can have a day difference of one, whereas two timestamps many hours apart on the same day have a day difference of zero.\n\n```sql\nSELECT DATEDIFF('2028-03-01', '2028-02-28') AS calendar_days,\n       TIMESTAMPDIFF(MONTH, '2028-01-31', '2028-02-29') AS completed_months;\n-- 2, 0\n```\n\nTIMESTAMPDIFF uses the start value before the end value, unlike the subtraction order of DATEDIFF. Its MONTH and YEAR results count completed intervals rather than merely counting changes in the displayed month or year. That distinction matters for age and service-duration rules. A requirement phrased as days employed, completed months employed or calendar months touched can lead to three different calculations.\n\n## Filter a complete month with a half-open range\n\nA robust March report includes the first instant of March and excludes the first instant of April. This half-open representation works naturally for both DATE values and timestamp-like values, without guessing a final time of day. It also avoids overlap when adjacent monthly reports are combined.\n\n```sql\nSELECT order_id, placed_at\nFROM orders\nWHERE placed_at >= '2028-03-01'\n  AND placed_at <  '2028-04-01'\nORDER BY placed_at, order_id;\n```\n\nBETWEEN includes both endpoints. Using a timestamp endpoint of March 31 at midnight excludes almost all of the final day, while using April 1 includes a boundary belonging to the next report. A fabricated final second can miss fractional seconds. Compare with the next boundary instead. If a report uses local business days while the data stores UTC values, convert the requested boundaries correctly before filtering; do not silently assume that every day is exactly twenty-four hours.\n\nKeeping the indexed column unwrapped can also help an ordinary range access path. A condition using YEAR and MONTH on every stored value may prevent the same straightforward index range. Actual plan selection depends on indexes, data distribution and optimizer behavior, so inspect an execution plan before claiming a performance improvement. Correct boundaries are the first objective; measured access behavior comes afterward.\n\n## Find month ends without inventing day counts\n\nLAST_DAY returns the final day of the month containing a valid date. It understands February and leap years, which is safer than maintaining a hand-written month-length list. A month-end balance can use that calendar boundary for presentation while still filtering timestamp data with the first day of the next month. Presentation labels and eligibility predicates do not need identical expressions.\n\n```sql\nSELECT LAST_DAY('2027-02-10') AS ordinary_february,\n       LAST_DAY('2028-02-10') AS leap_february;\n-- 2027-02-28, 2028-02-29\n```\n\nUnknown dates normally propagate through these calculations as NULL. A missing delivery date is not an ancient delivery date and should not be replaced by a convenient historical constant without a documented policy. Invalid date strings can trigger warnings, errors or special conversion behavior depending on the operation and SQL mode. Reject invalid input at the application boundary and enforce appropriate database constraints instead of depending on permissive conversion.\n\n## Separate formatting from calendar meaning\n\nDATE_FORMAT can produce a readable label, but a formatted string is no longer the original typed date. Sorting labels written as day-month-year text can place dates in an unexpected order. Keep the typed date for comparison and sorting, and format it at the final presentation boundary. A chart label such as March is useful only when its surrounding context supplies the year and reporting calendar.\n\nWeek reporting requires another explicit choice. Organizations can use different first weekdays and different definitions of the first week of a year. A week number without its matching week-year can mislabel dates close to New Year. If the requirement is a Monday-through-Sunday operational window, compute and retain the actual start and exclusive end dates. That representation makes the included days visible and avoids treating a display number as a complete period identity.\n\n## Verify the calendar contract\n\nUse a small test matrix that contains an ordinary month, February in both year types, a year transition, a missing value and a value exactly at each report boundary. Check the expected dates manually against the stated business rule. For month arithmetic, include a source day that does not exist in the target month. For differences, reverse the arguments once to expose an accidental sign error.\n\nA useful explanation names the population and the unit: orders placed during March in the business time zone, or completed calendar months since a fixed starting date. That sentence makes a query reviewable. Continue with [time functions](/learning/dbms-sql-tutorial/time-functions) for clock-oriented calculations and [conversion functions](/learning/dbms-sql-tutorial/conversion-functions) for explicit type conversion. Those topics extend the contract rather than remove the need to define it.",
+  "references": [
+    {
+      "title": "MySQL 8.4 date and time functions",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/date-and-time-functions.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-14-date-functions",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-14-date-functions-1",
+          "test_id": "pt-dbms-sql-14-date-functions",
+          "question_text": "What does CURRENT_DATE return?",
+          "options": [
+            "The current date and time together",
+            "Just today's date, with no time component",
+            "The date the table was created",
+            "NULL unless explicitly cast"
+          ],
+          "correct_index": 1,
+          "explanation": "CURRENT_DATE is a standard SQL function that returns today's date only, without any time-of-day component.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-14-date-functions-2",
+          "test_id": "pt-dbms-sql-14-date-functions",
+          "question_text": "Which function does MySQL use to add an interval of time to a date?",
+          "options": [
+            "DATEADD()",
+            "date + INTERVAL syntax only",
+            "DATE_ADD()",
+            "ADD_DATE_INTERVAL()"
+          ],
+          "correct_index": 2,
+          "explanation": "MySQL provides DATE_ADD(date, INTERVAL n unit) for adding time to a date (and DATE_SUB() for subtracting).",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-14-date-functions-3",
+          "test_id": "pt-dbms-sql-14-date-functions",
+          "question_text": "Which SQL Server function adds a number of days to a date?",
+          "options": [
+            "DATE_ADD()",
+            "DATEADD()",
+            "ADD_DATE()",
+            "date + INTERVAL"
+          ],
+          "correct_index": 1,
+          "explanation": "SQL Server's syntax is DATEADD(unit, number, date), e.g. DATEADD(day, 7, order_date).",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-14-date-functions-4",
+          "test_id": "pt-dbms-sql-14-date-functions",
+          "question_text": "What does EXTRACT(YEAR FROM order_date) return for order_date = '2024-01-05'?",
+          "options": [
+            "1",
+            "5",
+            "2024",
+            "'2024-01-05'"
+          ],
+          "correct_index": 2,
+          "explanation": "EXTRACT(YEAR FROM date) pulls out just the year component, 2024.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-14-date-functions-5",
+          "test_id": "pt-dbms-sql-14-date-functions",
+          "question_text": "In MySQL, what does DATEDIFF('2024-01-05', '2024-01-01') return?",
+          "options": [
+            "4",
+            "-4",
+            "0",
+            "1"
+          ],
+          "correct_index": 0,
+          "explanation": "MySQL's DATEDIFF(date1, date2) computes date1 - date2 in days: 2024-01-05 minus 2024-01-01 is 4 days.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-14-date-functions-6",
+          "test_id": "pt-dbms-sql-14-date-functions",
+          "question_text": "What is the key gotcha when porting a DATEDIFF() call from MySQL to SQL Server?",
+          "options": [
+            "SQL Server's DATEDIFF requires a unit argument first and computes date2 - date1, the reverse order and meaning of MySQL's two-argument version",
+            "SQL Server does not support DATEDIFF at all",
+            "MySQL's DATEDIFF always returns a negative number",
+            "There is no difference; both behave identically"
+          ],
+          "correct_index": 0,
+          "explanation": "SQL Server DATEDIFF(unit,start,end) counts the specified datepart boundaries crossed from start to end. MySQL DATEDIFF(first,second) instead subtracts the date components in days with reversed argument direction. Boundary counting is not generally elapsed-duration subtraction.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-14-date-functions-7",
+          "test_id": "pt-dbms-sql-14-date-functions",
+          "question_text": "Which PostgreSQL predicate uses interval arithmetic to include orders on or after the date thirty days before CURRENT_DATE?",
+          "options": [
+            "WHERE order_date >= CURRENT_DATE - INTERVAL '30 days'",
+            "WHERE order_date >= DATEADD(day, -30, CURRENT_DATE)",
+            "WHERE DATEDIFF(order_date, CURRENT_DATE) = 30",
+            "WHERE order_date = CURRENT_DATE - 30"
+          ],
+          "correct_index": 0,
+          "explanation": "The expression supplies a lower cutoff, not a bounded historical window: it also admits future dates. Add an explicit upper bound when the requirement excludes future orders.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-14-date-functions-8",
+          "test_id": "pt-dbms-sql-14-date-functions",
+          "question_text": "If order_date is NULL for a row, what does EXTRACT(MONTH FROM order_date) return for that row?",
+          "options": [
+            "0",
+            "1",
+            "NULL",
+            "An error"
+          ],
+          "correct_index": 2,
+          "explanation": "Like most scalar functions, EXTRACT propagates NULL — if the input date is NULL, the extracted part is also NULL.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-14-date-functions-new-9",
+          "test_id": "pt-dbms-sql-14-date-functions",
+          "question_text": "In MySQL, what is DATEDIFF('2028-03-01','2028-02-28')?",
+          "options": [
+            "1",
+            "2",
+            "-2",
+            "0"
+          ],
+          "correct_index": 1,
+          "explanation": "Leap-year February has a twenty-ninth day, so the calendar dates are two days apart.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-14-date-functions-new-10",
+          "test_id": "pt-dbms-sql-14-date-functions",
+          "question_text": "Which predicate includes all timestamp values in March without including April?",
+          "options": [
+            "value BETWEEN March 1 AND April 1",
+            "value = March 31",
+            "value >= March 1 AND value < April 1",
+            "MONTH(value)=3 without a year"
+          ],
+          "correct_index": 2,
+          "explanation": "A half-open range includes the start and excludes the next period start.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-14-date-functions-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-14-date-functions-application-new-1",
+          "test_id": "pt-dbms-sql-14-date-functions-application",
+          "question_text": "What does adding one month to January 31, 2028 produce in MySQL?",
+          "options": [
+            "March 2, 2028",
+            "February 31, 2028",
+            "Always an error",
+            "February 29, 2028"
+          ],
+          "correct_index": 3,
+          "explanation": "The target month has no day 31, so the result adjusts to its last valid day.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-14-date-functions-application-new-2",
+          "test_id": "pt-dbms-sql-14-date-functions-application",
+          "question_text": "Why can adding a month twice differ from adding two months once?",
+          "options": [
+            "An intermediate month-end adjustment can change the day number",
+            "SQL adds intervals randomly",
+            "Every month has thirty days",
+            "DATE_ADD ignores leap years"
+          ],
+          "correct_index": 0,
+          "explanation": "The first adjustment can become the input to the second calculation.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-14-date-functions-application-new-3",
+          "test_id": "pt-dbms-sql-14-date-functions-application",
+          "question_text": "Which context affects CURRENT_DATE in MySQL?",
+          "options": [
+            "The column alias",
+            "The session time zone",
+            "The order of selected columns",
+            "The number of indexes"
+          ],
+          "correct_index": 1,
+          "explanation": "The current session date can differ near midnight across time zones.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-14-date-functions-application-new-4",
+          "test_id": "pt-dbms-sql-14-date-functions-application",
+          "question_text": "Which expression finds the end of February without a manual leap-year test?",
+          "options": [
+            "MONTH of any date",
+            "DAY of January 1",
+            "LAST_DAY of a valid February date",
+            "COUNT of February rows"
+          ],
+          "correct_index": 2,
+          "explanation": "LAST_DAY returns the actual final calendar date of the containing month.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-14-date-functions-application-new-5",
+          "test_id": "pt-dbms-sql-14-date-functions-application",
+          "question_text": "What does DATEDIFF do with time components?",
+          "options": [
+            "Counts all elapsed seconds",
+            "Returns the number of complete hours",
+            "Requires identical times",
+            "Ignores them when calculating the date difference"
+          ],
+          "correct_index": 3,
+          "explanation": "DATEDIFF compares date components rather than elapsed timestamp duration.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-14-date-functions-application-new-6",
+          "test_id": "pt-dbms-sql-14-date-functions-application",
+          "question_text": "What is a risk of grouping only by MONTH(order_date)?",
+          "options": [
+            "The same month in different years is merged",
+            "Every row becomes unique",
+            "NULL automatically becomes January",
+            "The year is retained implicitly"
+          ],
+          "correct_index": 0,
+          "explanation": "Month numbers repeat every year; include the year or a complete month identity.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-14-date-functions-application-new-7",
+          "test_id": "pt-dbms-sql-14-date-functions-application",
+          "question_text": "Which function takes a unit followed by start and end values?",
+          "options": [
+            "DATEDIFF",
+            "TIMESTAMPDIFF",
+            "LAST_DAY",
+            "CURRENT_DATE"
+          ],
+          "correct_index": 1,
+          "explanation": "TIMESTAMPDIFF(unit,start,end) has a different argument order from DATEDIFF(first,second).",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-14-date-functions-application-new-8",
+          "test_id": "pt-dbms-sql-14-date-functions-application",
+          "question_text": "What should a reproducible historical report normally use?",
+          "options": [
+            "Only CURRENT_DATE at rerun time",
+            "The current browser title",
+            "An explicit saved reporting date or boundary",
+            "An arbitrary final second"
+          ],
+          "correct_index": 2,
+          "explanation": "An explicit boundary preserves the intended population when the report is rerun.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-14-date-functions-application-new-9",
+          "test_id": "pt-dbms-sql-14-date-functions-application",
+          "question_text": "Why avoid a fabricated final second in timestamp filters?",
+          "options": [
+            "DATE columns always contain hours",
+            "ORDER BY deletes boundary rows",
+            "The optimizer forbids seconds",
+            "Fractional-second values may fall after that second"
+          ],
+          "correct_index": 3,
+          "explanation": "The next-period exclusive boundary includes all representable times before it.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-14-date-functions-application-new-10",
+          "test_id": "pt-dbms-sql-14-date-functions-application",
+          "question_text": "How should a missing delivery date be treated?",
+          "options": [
+            "As unknown unless an explicit policy says otherwise",
+            "Automatically as January 1, 1900",
+            "As proof the item arrived today",
+            "As a measured zero-day delay"
+          ],
+          "correct_index": 0,
+          "explanation": "NULL conveys missing information; replacing it changes the meaning of the calculation.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cp-dbms-sql-orders-placed-in-march-2026",
+      "slug": "orders-placed-in-march-2026",
+      "title": "Orders Placed in March 2026",
+      "difficulty": "Medium",
+      "task": "Write a query returning `id`, `customer_name`, `order_date` for every order placed in March 2026 (the 1st through the 31st, inclusive), ordered by `id`. (This case may legitimately return zero rows if no order falls in that month.)",
+      "schema_sql": "CREATE TABLE orders (\n  id INTEGER PRIMARY KEY,\n  customer_name TEXT NOT NULL,\n  amount INTEGER NOT NULL,\n  order_date DATE NOT NULL\n);",
+      "seed_sql": "INSERT INTO orders (id, customer_name, amount, order_date) VALUES\n(1, 'Asha', 500, '2026-03-05'),\n(2, 'Rohan', 300, '2026-03-20'),\n(3, 'Neha', 700, '2026-04-02'),\n(4, 'Asha', 200, '2026-03-28');",
+      "expected": "id\tcustomer_name\torder_date\n1\tAsha\t2026-03-05\n2\tRohan\t2026-03-20\n4\tAsha\t2026-03-28",
+      "ordering": "Retain the ordering stated in the original task.",
+      "constraints": [
+        "Retain the supplied original fixture and output contract."
+      ],
+      "edge_cases": [
+        "Check the provided alternative fixture."
+      ],
+      "hints": [
+        "Identify the required row grain and output order before writing SQL."
+      ],
+      "solution_sql": "SELECT id, customer_name, order_date FROM orders WHERE order_date >= '2026-03-01' AND order_date < '2026-04-01' ORDER BY id;",
+      "explanation": "A half-open range (>= start of month AND < start of next month) correctly and safely includes every timestamp in the month. Reference: `SELECT id, customer_name, order_date FROM orders WHERE order_date >= '2026-03-01' AND order_date < '2026-04-01' ORDER BY id;`",
+      "validation_cases": [
+        {
+          "hidden": true,
+          "seed_sql": "INSERT INTO orders (id, customer_name, amount, order_date) VALUES\n(1, 'Zara', 1000, '2026-05-01'),\n(2, 'Omar', 400, '2026-05-15'),\n(3, 'Leo', 250, '2026-06-01');",
+          "expected": ""
+        }
+      ],
+      "existing_problem": true,
+      "original_description_md5": "ac2223cc283b449a1d8ab815a119321f",
+      "original_problem": {
+        "id": "cp-dbms-sql-orders-placed-in-march-2026",
+        "topic_id": null,
+        "title": "Orders Placed in March 2026",
+        "difficulty": "Medium",
+        "slug": "orders-placed-in-march-2026",
+        "description": "Write a query returning `id`, `customer_name`, `order_date` for every order placed in March 2026 (the 1st through the 31st, inclusive), ordered by `id`. (This case may legitimately return zero rows if no order falls in that month.)\n\n```sql\nCREATE TABLE orders (\n  id INTEGER PRIMARY KEY,\n  customer_name TEXT NOT NULL,\n  amount INTEGER NOT NULL,\n  order_date DATE NOT NULL\n);\n```\n\n**Sample data**:\n\n```sql\nINSERT INTO orders (id, customer_name, amount, order_date) VALUES\n(1, 'Asha', 500, '2026-03-05'),\n(2, 'Rohan', 300, '2026-03-20'),\n(3, 'Neha', 700, '2026-04-02'),\n(4, 'Asha', 200, '2026-03-28');\n```\n",
+        "examples": "[{\"input\": \"\", \"output\": \"id\\tcustomer_name\\torder_date\\n1\\tAsha\\t2026-03-05\\n2\\tRohan\\t2026-03-20\\n4\\tAsha\\t2026-03-28\"}]",
+        "test_cases": "[{\"hidden\": true, \"seed_sql\": \"INSERT INTO orders (id, customer_name, amount, order_date) VALUES\\n(1, 'Zara', 1000, '2026-05-01'),\\n(2, 'Omar', 400, '2026-05-15'),\\n(3, 'Leo', 250, '2026-06-01');\", \"expected\": \"\"}]",
+        "starter_code": null,
+        "editorial": "A half-open range (>= start of month AND < start of next month) correctly and safely includes every timestamp in the month. Reference: `SELECT id, customer_name, order_date FROM orders WHERE order_date >= '2026-03-01' AND order_date < '2026-04-01' ORDER BY id;`",
+        "supported_languages": null,
+        "sql_schema_sql": "CREATE TABLE orders (\n  id INTEGER PRIMARY KEY,\n  customer_name TEXT NOT NULL,\n  amount INTEGER NOT NULL,\n  order_date DATE NOT NULL\n);",
+        "sql_seed_sql": "INSERT INTO orders (id, customer_name, amount, order_date) VALUES\n(1, 'Asha', 500, '2026-03-05'),\n(2, 'Rohan', 300, '2026-03-20'),\n(3, 'Neha', 700, '2026-04-02'),\n(4, 'Asha', 200, '2026-03-28');",
+        "sql_check_sql": "",
+        "learning_topic_id": null,
+        "status": "published",
+        "is_premium": null,
+        "show_on_website": null,
+        "show_on_mobile": null,
+        "sort_order": 1
+      },
+      "check_sql": "",
+      "original_check_sql": ""
+    },
+    {
+      "id": "cx-date-functions-loan-deadlines",
+      "slug": "date-functions-loan-deadlines",
+      "title": "Calculate fourteen-day loan deadlines",
+      "difficulty": "Easy",
+      "task": "Return loan_id and due_date, calculated as issued_on plus fourteen calendar days, ordered by loan_id.",
+      "schema_sql": "CREATE TABLE loans(loan_id INT PRIMARY KEY,issued_on DATE NULL);",
+      "seed_sql": "INSERT INTO loans VALUES (1,'2028-02-20'),(2,'2027-12-25');",
+      "solution_sql": "SELECT loan_id,DATE_ADD(issued_on,INTERVAL 14 DAY) AS due_date FROM loans ORDER BY loan_id;",
+      "expected": "loan_id\tdue_date\n1\t2028-03-05\n2\t2028-01-08",
+      "explanation": "DAY expresses the agreed lending duration; the calendar handles leap days and year boundaries.",
+      "ordering": "Use the explicit ORDER BY in the required query; a scalar result has one row.",
+      "constraints": [
+        "Only the supplied synthetic tables are in scope."
+      ],
+      "edge_cases": [
+        "Ordinary February has fewer days than leap February."
+      ],
+      "hints": [
+        "DAY expresses the agreed lending duration; the calendar handles leap days and year boundaries."
+      ],
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO loans VALUES (4,'2027-02-20');",
+          "expected": "loan_id\tdue_date\n4\t2027-03-06"
+        },
+        {
+          "seed_sql": "",
+          "expected": ""
+        },
+        {
+          "seed_sql": "INSERT INTO loans VALUES (8,'2028-02-20'),(9,'2027-12-25'),(10,NULL);",
+          "expected": "loan_id\tdue_date\n8\t2028-03-05\n9\t2028-01-08\n10\tNULL"
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-14-date-functions-1",
+      "test_id": "pt-dbms-sql-14-date-functions",
+      "question_text": "What does CURRENT_DATE return?",
+      "options": [
+        "The current date and time together",
+        "Just today's date, with no time component",
+        "The date the table was created",
+        "NULL unless explicitly cast"
+      ],
+      "correct_index": 1,
+      "explanation": "CURRENT_DATE is a standard SQL function that returns today's date only, without any time-of-day component.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-14-date-functions-2",
+      "test_id": "pt-dbms-sql-14-date-functions",
+      "question_text": "Which function does MySQL use to add an interval of time to a date?",
+      "options": [
+        "DATEADD()",
+        "date + INTERVAL syntax only",
+        "DATE_ADD()",
+        "ADD_DATE_INTERVAL()"
+      ],
+      "correct_index": 2,
+      "explanation": "MySQL provides DATE_ADD(date, INTERVAL n unit) for adding time to a date (and DATE_SUB() for subtracting).",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-14-date-functions-3",
+      "test_id": "pt-dbms-sql-14-date-functions",
+      "question_text": "Which SQL Server function adds a number of days to a date?",
+      "options": [
+        "DATE_ADD()",
+        "DATEADD()",
+        "ADD_DATE()",
+        "date + INTERVAL"
+      ],
+      "correct_index": 1,
+      "explanation": "SQL Server's syntax is DATEADD(unit, number, date), e.g. DATEADD(day, 7, order_date).",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-14-date-functions-4",
+      "test_id": "pt-dbms-sql-14-date-functions",
+      "question_text": "What does EXTRACT(YEAR FROM order_date) return for order_date = '2024-01-05'?",
+      "options": [
+        "1",
+        "5",
+        "2024",
+        "'2024-01-05'"
+      ],
+      "correct_index": 2,
+      "explanation": "EXTRACT(YEAR FROM date) pulls out just the year component, 2024.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-14-date-functions-5",
+      "test_id": "pt-dbms-sql-14-date-functions",
+      "question_text": "In MySQL, what does DATEDIFF('2024-01-05', '2024-01-01') return?",
+      "options": [
+        "4",
+        "-4",
+        "0",
+        "1"
+      ],
+      "correct_index": 0,
+      "explanation": "MySQL's DATEDIFF(date1, date2) computes date1 - date2 in days: 2024-01-05 minus 2024-01-01 is 4 days.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-14-date-functions-6",
+      "test_id": "pt-dbms-sql-14-date-functions",
+      "question_text": "What is the key gotcha when porting a DATEDIFF() call from MySQL to SQL Server?",
+      "options": [
+        "SQL Server's DATEDIFF requires a unit argument first and computes date2 - date1, the reverse order and meaning of MySQL's two-argument version",
+        "SQL Server does not support DATEDIFF at all",
+        "MySQL's DATEDIFF always returns a negative number",
+        "There is no difference; both behave identically"
+      ],
+      "correct_index": 0,
+      "explanation": "SQL Server's DATEDIFF(unit, date1, date2) takes a unit and computes date2 minus date1, whereas MySQL's DATEDIFF(date1, date2) has no unit argument and computes date1 minus date2 — a real source of bugs when migrating code.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-14-date-functions-7",
+      "test_id": "pt-dbms-sql-14-date-functions",
+      "question_text": "Which of the following correctly filters PostgreSQL orders placed within the last 30 days using interval arithmetic?",
+      "options": [
+        "WHERE order_date >= CURRENT_DATE - INTERVAL '30 days'",
+        "WHERE order_date >= DATEADD(day, -30, CURRENT_DATE)",
+        "WHERE DATEDIFF(order_date, CURRENT_DATE) = 30",
+        "WHERE order_date = CURRENT_DATE - 30"
+      ],
+      "correct_index": 0,
+      "explanation": "PostgreSQL supports direct interval arithmetic on dates: subtracting an INTERVAL from CURRENT_DATE gives the date 30 days ago, and >= filters to that range.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-14-date-functions-8",
+      "test_id": "pt-dbms-sql-14-date-functions",
+      "question_text": "If order_date is NULL for a row, what does EXTRACT(MONTH FROM order_date) return for that row?",
+      "options": [
+        "0",
+        "1",
+        "NULL",
+        "An error"
+      ],
+      "correct_index": 2,
+      "explanation": "Like most scalar functions, EXTRACT propagates NULL — if the input date is NULL, the extracted part is also NULL.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "/root/worker_1",
+    "independent_review": "passed",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "author semantic review; independent review pending",
+    "canonical_answer_indices_preserved": true,
+    "independent_reviewer": "/root",
+    "independent_review_scope": "Full notes, 20 MCQs/options/explanations, two exercise contracts and six manually traced sample/alternative fixtures, original diagram and corrected internal links. SQL Server boundary-count wording and PostgreSQL lower-cutoff scope corrected without changing canonical indices. Exact engine/browser verification pending."
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-14-date-functions",
+    "original_note_sha256": "d68d7e543e8a95cfa1c3f6f7f709d6b6aeed026263813ab09f32f56061d24288",
+    "status": "drafted; not included in prepared paired migrations"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Calendar addition is not fixed-length month arithmetic",
+      "description": "These dates expose adjustment and recurrence drift.",
+      "columns": [
+        "Calculation",
+        "Result"
+      ],
+      "rows": [
+        [
+          "January 31, 2028 + 1 month",
+          "February 29, 2028"
+        ],
+        [
+          "February 29, 2028 + 1 month",
+          "March 29, 2028"
+        ],
+        [
+          "January 31, 2028 + 2 months",
+          "March 31, 2028"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "provided",
+    "technical_review": "coordinator independent manual review passed",
+    "server_rendering": "passed",
+    "browser_rendering": "unverified",
+    "independent_review": "passed",
+    "server_rendering_evidence": "2026-10-29 full Vitest:1310 passed/12 skipped; actual LessonBlock/TopicDiagrams render over230 packages. Browser visual QA remains unverified."
+  },
+  "authoring_status": "drafted; verification pending",
+  "sql_verification": {
+    "scope": "not executed; exact MySQL/provider verification pending",
+    "all_passed": false,
+    "cases": []
+  }
+}

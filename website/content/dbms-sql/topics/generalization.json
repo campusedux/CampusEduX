@@ -1,0 +1,622 @@
+{
+  "source_ref": "chapter-6-er-and-eer-modeling/generalization",
+  "slug": "generalization",
+  "title": "Generalization",
+  "description": "Factor common facts into a meaningful Person supertype, preserve shared identity across student and employee roles, and distinguish overlap, coverage and mapping enforcement.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Build a common type from related roles\n\nGeneralization is a bottom-up modeling process that identifies common properties of existing entity types and represents those shared facts in a suitable supertype. A campus model can generalize Student and Employee into Person when both roles describe people with common identity and descriptive properties. Student-specific and employment-specific facts remain associated with their respective roles rather than being erased by the common type.\n\nThe result is an is-a hierarchy: every Student occurrence in the stated model is a Person, and every Employee occurrence is a Person. This differs from an ordinary association such as Student enrolls in Course. A student is not a course, and a course is not merely another role of the student. Shared attributes alone are not sufficient justification for every possible hierarchy.\n\n## Verify that the common meaning is real\n\nStudent and Employee can both have a name and date of birth because they represent roles of a person. By contrast, Building and Person can both have an identifier and a label without one being a meaningful subtype of the other. A hierarchy should preserve domain semantics, not merely reduce the number of similarly named columns in a spreadsheet.\n\nEven apparently shared properties need compatible meaning. Student email might mean a preferred contact, while Employee email might mean an official work account. Those may need separate role properties rather than one common email value. Generalization should factor genuinely shared facts and define conflicting or role-dependent values deliberately instead of overwriting them during a mechanical merge.\n\n## Shared identity connects the same occurrence\n\nA student who also works for the campus can be one Person with both Student and Employee roles. The conceptual subtype occurrence shares the identity of that person rather than denoting an unrelated second human. Independent institutional numbers can identify role records, but their relationship to the common person identity must be explicit.\n\nDo not infer that two records concern one person merely because their names match. Two people can share a name, and one person's name can change. Existing student and employee identifiers may come from separate numbering systems and can collide numerically without representing the same person. A real consolidation needs an authorized identity-resolution policy, not an automatic join on whichever descriptive field looks convenient.\n\n## Overlap and disjointness need explicit rules\n\nAn overlapping hierarchy permits one Person to belong to several defined subtypes simultaneously. A teaching assistant who is both a student and an employee is a natural example under an allowed dual-role policy. A disjoint hierarchy instead permits at most one of the relevant subtype memberships for the same supertype occurrence. These are domain constraints, not consequences of drawing two branches.\n\nThe rules can differ at different levels. Person may overlap between Student and Employee, while another carefully defined set of subcategories could be disjoint. State the scope of each constraint. A single flag or a picture with separate boxes does not prove every branch in a larger hierarchy has the same overlap policy or that the database enforces it.\n\n## Coverage is another independent dimension\n\nA total generalization or specialization requires every relevant supertype occurrence to belong to at least one listed subtype. A partial hierarchy permits a Person who is neither Student nor Employee, such as another recorded campus visitor role outside those branches. This coverage question differs from whether memberships may overlap. Total does not mean disjoint, and partial does not mean overlapping.\n\nThere are therefore several valid combinations under different requirements. A partial overlapping Person hierarchy can include a dual-role person and a person with neither listed role. A total disjoint classification requires exactly one among the listed branches. Define the intended allowed states before choosing a mapping or writing a report that labels people from subtype membership.\n\n## Direction differs from specialization\n\nGeneralization begins with more specific types and identifies a shared supertype. Specialization begins with a broader type and identifies more specific roles or categories. Both can produce a Person-Student-Employee structure. The difference is the design direction, not an automatic difference in the final identity, overlap, or coverage constraints.\n\nDo not assume a hierarchy built bottom-up needs different runtime query syntax from an equivalent hierarchy designed top-down. The final declared model and mapping determine the SQL facts. The design history can explain why common properties were factored, but callers need a consistent resulting contract rather than depending on which branch a designer happened to sketch first.\n\n## One mapping separates common and role-specific facts\n\nA common relational approach uses Person(person_id, person_name), Student(person_id, programme), and Employee(person_id, job_title). Each subtype row uses the common person identity and stores its own role-specific properties. Supported primary and foreign-key declarations can protect local subtype uniqueness and parent existence. Names remain descriptive and can repeat across different people.\n\n```sql\nSELECT p.person_id, p.person_name, s.programme, e.job_title\nFROM persons p\nJOIN student_roles s ON s.person_id = p.person_id\nJOIN employee_roles e ON e.person_id = p.person_id\nORDER BY p.person_id;\n```\n\nThis query reports people who actually have both roles in the mapped population. It does not create a new Person for each role or join by name. The selected role tables are an implementation of the stated hierarchy; their existence alone does not prove every cross-table totality or disjointness policy is enforced.\n\n## Different mappings have different trade-offs\n\nAnother mapping can use one wider table with role indicators and compatible optional columns. A design can also represent particular subtypes through other established patterns. These choices affect nullability, joins, constraints, data duplication, and callers. No single physical arrangement is a universal consequence of the word generalization.\n\nA scalar discriminator can fit some disjoint classifications but cannot automatically represent overlapping roles without a suitable richer scheme. Separate subtype tables can naturally hold overlapping membership but do not by themselves prohibit it when the domain requires disjointness. Review the actual trusted enforcement for each intended hierarchy rule rather than treating a familiar table pattern as a complete proof.\n\n## Counts must distinguish people from role memberships\n\nA person with both Student and Employee roles counts once as a person and once in each role population. Adding student count to employee count can exceed the number of people with either role because dual-role people appear in both counts. A UNION of person identities or an explicit combined membership query can express the intended population.\n\nA report of all persons can preserve those with no listed role under a partial hierarchy. Inner joining both subtypes would instead return only dual-role people. Those are different reports over the same valid model. Use explicit labels such as both, student-only, employee-only, and neither when the task requires a full membership classification.\n\n## Changes need a lifecycle and authority policy\n\nA person can gain or lose a role without necessarily changing person identity. A student can become an employee, retain both roles, or finish study while employment continues under the domain's allowed transitions. Removing a subtype row should not automatically mean deleting all common person facts unless the lifecycle and references explicitly require that action.\n\nA real data migration needs review of identity mapping, existing records, dependent queries, retained history, and permitted transitions. Generalization is not authorization to merge similar-looking users or rewrite production identifiers. Isolated exercises demonstrate the chosen mapping on synthetic identities; they do not establish real-world person matching or every applicable production access rule.\n\n## Validate membership combinations and limitations\n\nUse two distinct people sharing a name, a student-only person, an employee-only person, a dual-role person, and a person with neither listed role under the partial overlapping contract. These cases expose name-based joins, incorrect scalar role assumptions, and double-counting. Check empty subtype populations and confirm the result order when consumers require it.\n\nA useful generalization explanation connects common meaning, shared identity, retained subtype facts, overlap, coverage, and mapping. The exercises verify queries over a deliberately partial overlapping Person hierarchy. Native cross-table hierarchy enforcement, exact MySQL/provider behavior, and production identity resolution remain separate concerns. Keeping those boundaries explicit lets the model reduce redundant common facts without collapsing distinct people or losing the roles that matter.\n",
+  "references": [],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-6-generalization",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-6-generalization-1",
+          "test_id": "pt-dbms-sql-6-generalization",
+          "question_text": "What is generalization in EER modeling?",
+          "options": [
+            "A top-down process of splitting an entity set into subclasses",
+            "A bottom-up process of abstracting common attributes of two or more entity sets into a single superclass",
+            "Treating a relationship as an entity",
+            "A rule that limits attribute values"
+          ],
+          "correct_index": 1,
+          "explanation": "Generalization identifies a meaningful common supertype while retaining the specific roles and identity semantics.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-6-generalization-2",
+          "test_id": "pt-dbms-sql-6-generalization",
+          "question_text": "When their meanings agree across the two roles, which properties can be factored into a common Person supertype?",
+          "options": [
+            "Attributes unique to Student only",
+            "Attributes unique to Employee only",
+            "Attributes shared by both, like Name, Date_of_Birth, and Email",
+            "Derived attributes only"
+          ],
+          "correct_index": 2,
+          "explanation": "Only genuinely common properties should be shared; an official work email and a preferred contact can require different role-specific meanings.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-6-generalization-3",
+          "test_id": "pt-dbms-sql-6-generalization",
+          "question_text": "How does generalization differ from specialization in terms of design direction?",
+          "options": [
+            "They are identical processes with no directional difference",
+            "Generalization is bottom-up (merging existing subclasses into a superclass); specialization is top-down (splitting an existing superclass into new subclasses)",
+            "Generalization is top-down; specialization is bottom-up",
+            "Neither has a defined direction"
+          ],
+          "correct_index": 1,
+          "explanation": "This is the core distinguishing feature: generalization merges upward, specialization splits downward, though both yield an ISA hierarchy.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-6-generalization-4",
+          "test_id": "pt-dbms-sql-6-generalization",
+          "question_text": "Which of these is NOT part of what generalization/specialization constraints describe?",
+          "options": [
+            "Disjoint vs. overlapping subclasses",
+            "Total vs. partial coverage of the superclass",
+            "The number of entity sets in a relationship (degree)",
+            "Whether a Person must be a Student, an Employee, or possibly neither/both"
+          ],
+          "correct_index": 2,
+          "explanation": "Relationship degree is an unrelated concept (6.12); disjoint/overlapping and total/partial are the EER-specific constraints on generalization hierarchies.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-6-generalization-5",
+          "test_id": "pt-dbms-sql-6-generalization",
+          "question_text": "How can the superclass-subclass link be represented in a common EER notation?",
+          "options": [
+            "As an ordinary diamond, same as any relationship",
+            "As an ISA triangle/arrow notation, distinct from the relationship diamond",
+            "As a double-line rectangle",
+            "As a dashed oval"
+          ],
+          "correct_index": 1,
+          "explanation": "ISA notation communicates the subtype relationship; exact symbols depend on the convention.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-6-generalization-6",
+          "test_id": "pt-dbms-sql-6-generalization",
+          "question_text": "Which statement correctly separates generalization from aggregation?",
+          "options": [
+            "They are two names for the same EER concept",
+            "Generalization forms an is-a hierarchy; EER aggregation abstracts a relationship occurrence for further association, serving a different modeling purpose",
+            "Aggregation always requires a weak entity; generalization never does",
+            "Generalization only applies to binary relationships"
+          ],
+          "correct_index": 1,
+          "explanation": "Both are modeling abstractions, but shared type identity and relationship abstraction answer different questions.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-6-generalization-7",
+          "test_id": "pt-dbms-sql-6-generalization",
+          "question_text": "If Student and Employee are generalized into Person, and it turns out some people are BOTH students and employees (e.g., teaching assistants), what constraint would apply?",
+          "options": [
+            "Disjoint",
+            "Overlapping",
+            "Total participation only, with no bearing on overlap",
+            "This scenario is impossible in EER modeling"
+          ],
+          "correct_index": 1,
+          "explanation": "When a single instance can belong to more than one subclass simultaneously, the hierarchy is overlapping rather than disjoint.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-6-generalization-8",
+          "test_id": "pt-dbms-sql-6-generalization",
+          "question_text": "What is the main design benefit of generalization?",
+          "options": [
+            "It increases data redundancy for performance",
+            "It reduces redundancy by factoring shared attributes of similar entity sets into one common superclass",
+            "It removes the need for primary keys",
+            "It converts entities into relationships"
+          ],
+          "correct_index": 1,
+          "explanation": "By pulling shared attributes into a superclass, generalization avoids storing the same attributes redundantly in each subclass.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-6-generalization-new-9",
+          "test_id": "pt-dbms-sql-6-generalization",
+          "question_text": "Does matching a student name to an employee name prove they are the same Person?",
+          "options": [
+            "Yes; names are universal keys",
+            "No; identity resolution needs a justified policy",
+            "Only if sorted",
+            "Only if both names are short"
+          ],
+          "correct_index": 1,
+          "explanation": "Common descriptions do not establish shared identity.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-6-generalization-new-10",
+          "test_id": "pt-dbms-sql-6-generalization",
+          "question_text": "Can a partial overlapping hierarchy include someone with both listed roles and someone with neither?",
+          "options": [
+            "No; partial forbids overlap",
+            "No; overlapping means total",
+            "Yes",
+            "Only if Person has no key"
+          ],
+          "correct_index": 2,
+          "explanation": "Coverage and overlap are independent dimensions.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-6-generalization-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-6-generalization-application-new-1",
+          "test_id": "pt-dbms-sql-6-generalization-application",
+          "question_text": "What distinguishes a common Person property from a role-specific email?",
+          "options": [
+            "The shorter label always wins",
+            "Every email must be shared",
+            "The actual property meaning and authority, not just the column spelling",
+            "Only storage type matters"
+          ],
+          "correct_index": 2,
+          "explanation": "Shared names can hide different business roles.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-6-generalization-application-new-2",
+          "test_id": "pt-dbms-sql-6-generalization-application",
+          "question_text": "What does joining both subtype tables through person_id report?",
+          "options": [
+            "Every person including neither",
+            "Only student-only people",
+            "Every distinct displayed name",
+            "People holding both roles"
+          ],
+          "correct_index": 3,
+          "explanation": "The join population is the intersection of role memberships.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-6-generalization-application-new-3",
+          "test_id": "pt-dbms-sql-6-generalization-application",
+          "question_text": "Why can student count plus employee count exceed people with either role?",
+          "options": [
+            "Dual-role people contribute to both role counts",
+            "Every primary key is duplicated",
+            "UNION always doubles counts",
+            "Names define new entities"
+          ],
+          "correct_index": 0,
+          "explanation": "Membership totals and distinct-person totals differ.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-6-generalization-application-new-4",
+          "test_id": "pt-dbms-sql-6-generalization-application",
+          "question_text": "Does separate subtype storage automatically enforce disjointness?",
+          "options": [
+            "Yes; different tables cannot share an identity",
+            "No; that needs an appropriate cross-role rule",
+            "Only if names are required",
+            "Only for empty tables"
+          ],
+          "correct_index": 1,
+          "explanation": "A physical mapping alone does not prove every hierarchy constraint.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-6-generalization-application-new-5",
+          "test_id": "pt-dbms-sql-6-generalization-application",
+          "question_text": "What can a scalar one-role discriminator fail to represent directly?",
+          "options": [
+            "A disjoint single-role category",
+            "A person identifier",
+            "Simultaneous overlapping subtype memberships",
+            "A required name"
+          ],
+          "correct_index": 2,
+          "explanation": "The representation must support the permitted combinations.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-6-generalization-application-new-6",
+          "test_id": "pt-dbms-sql-6-generalization-application",
+          "question_text": "Does gaining an Employee role necessarily create a new Person identity?",
+          "options": [
+            "Yes; every table row is a new human",
+            "Only if the job title changes",
+            "Only if names repeat",
+            "No; the same person can gain another role"
+          ],
+          "correct_index": 3,
+          "explanation": "Subtype membership and common identity differ.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-6-generalization-application-new-7",
+          "test_id": "pt-dbms-sql-6-generalization-application",
+          "question_text": "What is the direction of generalization?",
+          "options": [
+            "From specific roles toward a meaningful common supertype",
+            "Always from a supertype to only one subtype",
+            "From a query to a disk page",
+            "From a foreign key to a font"
+          ],
+          "correct_index": 0,
+          "explanation": "The final hierarchy can also be reached through top-down specialization.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-6-generalization-application-new-8",
+          "test_id": "pt-dbms-sql-6-generalization-application",
+          "question_text": "What distinguishes generalization from EER aggregation?",
+          "options": [
+            "They are identical names",
+            "Type inheritance versus treating an association occurrence as a higher-level participant",
+            "Only the diagram colour",
+            "Only row count"
+          ],
+          "correct_index": 1,
+          "explanation": "The two abstractions preserve different kinds of meaning.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-6-generalization-application-new-9",
+          "test_id": "pt-dbms-sql-6-generalization-application",
+          "question_text": "Which fixture challenges an unsafe name-based role merge?",
+          "options": [
+            "One unique person alone",
+            "An empty report title",
+            "Two different person ids sharing the same name",
+            "A shorter programme label"
+          ],
+          "correct_index": 2,
+          "explanation": "The query must follow common identity rather than labels.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-6-generalization-application-new-10",
+          "test_id": "pt-dbms-sql-6-generalization-application",
+          "question_text": "What remains outside synthetic role-query evidence?",
+          "options": [
+            "The selected fixture role combinations",
+            "The explicit output ordering",
+            "The tested shared-id join",
+            "Real-world person matching and production authority"
+          ],
+          "correct_index": 3,
+          "explanation": "Verification claims must match the executed scope.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cx-generalization-both",
+      "slug": "generalization-both",
+      "title": "Find people holding both generalized roles",
+      "difficulty": "Easy",
+      "task": "Return person_id, person_name, programme and job_title for people present in both student_roles and employee_roles.",
+      "schema_sql": "CREATE TABLE persons (person_id INT PRIMARY KEY, person_name VARCHAR(80) NOT NULL);\nCREATE TABLE student_roles (person_id INT PRIMARY KEY, programme VARCHAR(50) NOT NULL);\nCREATE TABLE employee_roles (person_id INT PRIMARY KEY, job_title VARCHAR(50) NOT NULL);",
+      "seed_sql": "INSERT INTO persons VALUES (1,'Asha'),(2,'Asha'),(3,'Mira'),(4,'Dev'); INSERT INTO student_roles VALUES (1,'Computing'),(2,'History'); INSERT INTO employee_roles VALUES (1,'Tutor'),(3,'Librarian');",
+      "expected": "person_id\tperson_name\tprogramme\tjob_title\n1\tAsha\tComputing\tTutor",
+      "ordering": "Ascending person_id.",
+      "constraints": [
+        "The model is deliberately partial and overlapping.",
+        "All supplied role references match persons; native cross-table hierarchy and FK enforcement are not exercised by temporary mirrors."
+      ],
+      "edge_cases": [
+        "Names can repeat across distinct identities.",
+        "A person can have both roles or neither."
+      ],
+      "hints": [
+        "Join role membership by the common person identity.",
+        "Distinguish membership absence from a missing person."
+      ],
+      "solution_sql": "SELECT p.person_id, p.person_name, s.programme, e.job_title FROM persons p JOIN student_roles s ON s.person_id = p.person_id JOIN employee_roles e ON e.person_id = p.person_id ORDER BY p.person_id;",
+      "explanation": "The query preserves shared person identity and the explicitly allowed subtype combinations.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO persons VALUES (1,'Asha'),(2,'Asha'); INSERT INTO student_roles VALUES (1,'Art'); INSERT INTO employee_roles VALUES (2,'Tutor');",
+          "expected": ""
+        },
+        {
+          "seed_sql": "",
+          "expected": ""
+        }
+      ]
+    },
+    {
+      "id": "cx-generalization-membership",
+      "slug": "generalization-membership",
+      "title": "Classify the partial overlapping Person population",
+      "difficulty": "Medium",
+      "task": "Return every person_id and role_state: both, student-only, employee-only or neither, based on current membership in the two role tables.",
+      "schema_sql": "CREATE TABLE persons (person_id INT PRIMARY KEY, person_name VARCHAR(80) NOT NULL);\nCREATE TABLE student_roles (person_id INT PRIMARY KEY, programme VARCHAR(50) NOT NULL);\nCREATE TABLE employee_roles (person_id INT PRIMARY KEY, job_title VARCHAR(50) NOT NULL);",
+      "seed_sql": "INSERT INTO persons VALUES (1,'Asha'),(2,'Asha'),(3,'Mira'),(4,'Dev'); INSERT INTO student_roles VALUES (1,'Computing'),(2,'History'); INSERT INTO employee_roles VALUES (1,'Tutor'),(3,'Librarian');",
+      "expected": "person_id\trole_state\n1\tboth\n2\tstudent-only\n3\temployee-only\n4\tneither",
+      "ordering": "Ascending person_id.",
+      "constraints": [
+        "The model is deliberately partial and overlapping.",
+        "All supplied role references match persons; native cross-table hierarchy and FK enforcement are not exercised by temporary mirrors."
+      ],
+      "edge_cases": [
+        "Names can repeat across distinct identities.",
+        "A person can have both roles or neither."
+      ],
+      "hints": [
+        "Join role membership by the common person identity.",
+        "Distinguish membership absence from a missing person."
+      ],
+      "solution_sql": "SELECT p.person_id, CASE WHEN s.person_id IS NOT NULL AND e.person_id IS NOT NULL THEN 'both' WHEN s.person_id IS NOT NULL THEN 'student-only' WHEN e.person_id IS NOT NULL THEN 'employee-only' ELSE 'neither' END AS role_state FROM persons p LEFT JOIN student_roles s ON s.person_id = p.person_id LEFT JOIN employee_roles e ON e.person_id = p.person_id ORDER BY p.person_id;",
+      "explanation": "The query preserves shared person identity and the explicitly allowed subtype combinations.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO persons VALUES (2,'Asha'),(1,'Asha');",
+          "expected": "person_id\trole_state\n1\tneither\n2\tneither"
+        },
+        {
+          "seed_sql": "INSERT INTO persons VALUES (9,'Mira'); INSERT INTO student_roles VALUES (9,'Art'); INSERT INTO employee_roles VALUES (9,'Tutor');",
+          "expected": "person_id\trole_state\n9\tboth"
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-6-generalization-1",
+      "test_id": "pt-dbms-sql-6-generalization",
+      "question_text": "What is generalization in EER modeling?",
+      "options": [
+        "A top-down process of splitting an entity set into subclasses",
+        "A bottom-up process of abstracting common attributes of two or more entity sets into a single superclass",
+        "Treating a relationship as an entity",
+        "A rule that limits attribute values"
+      ],
+      "correct_index": 1,
+      "explanation": "Generalization merges existing lower-level entity sets upward into a shared superclass, factoring out common attributes.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-6-generalization-2",
+      "test_id": "pt-dbms-sql-6-generalization",
+      "question_text": "In the college database, generalizing Student and Employee into Person is an example of factoring out which kind of attributes?",
+      "options": [
+        "Attributes unique to Student only",
+        "Attributes unique to Employee only",
+        "Attributes shared by both, like Name, Date_of_Birth, and Email",
+        "Derived attributes only"
+      ],
+      "correct_index": 2,
+      "explanation": "Generalization abstracts the attributes common to both entity sets into the new superclass Person.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-6-generalization-3",
+      "test_id": "pt-dbms-sql-6-generalization",
+      "question_text": "How does generalization differ from specialization in terms of design direction?",
+      "options": [
+        "They are identical processes with no directional difference",
+        "Generalization is bottom-up (merging existing subclasses into a superclass); specialization is top-down (splitting an existing superclass into new subclasses)",
+        "Generalization is top-down; specialization is bottom-up",
+        "Neither has a defined direction"
+      ],
+      "correct_index": 1,
+      "explanation": "This is the core distinguishing feature: generalization merges upward, specialization splits downward, though both yield an ISA hierarchy.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-6-generalization-4",
+      "test_id": "pt-dbms-sql-6-generalization",
+      "question_text": "Which of these is NOT part of what generalization/specialization constraints describe?",
+      "options": [
+        "Disjoint vs. overlapping subclasses",
+        "Total vs. partial coverage of the superclass",
+        "The number of entity sets in a relationship (degree)",
+        "Whether a Person must be a Student, an Employee, or possibly neither/both"
+      ],
+      "correct_index": 2,
+      "explanation": "Relationship degree is an unrelated concept (6.12); disjoint/overlapping and total/partial are the EER-specific constraints on generalization hierarchies.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-6-generalization-5",
+      "test_id": "pt-dbms-sql-6-generalization",
+      "question_text": "How is the superclass/subclass link drawn in an EER diagram?",
+      "options": [
+        "As an ordinary diamond, same as any relationship",
+        "As an ISA triangle/arrow notation, distinct from the relationship diamond",
+        "As a double-line rectangle",
+        "As a dashed oval"
+      ],
+      "correct_index": 1,
+      "explanation": "EER hierarchies use a distinct ISA triangle symbol rather than the diamond used for regular relationships.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-6-generalization-6",
+      "test_id": "pt-dbms-sql-6-generalization",
+      "question_text": "Which statement correctly separates generalization from aggregation?",
+      "options": [
+        "They are two names for the same EER concept",
+        "Generalization builds ISA hierarchies from shared attributes of entity sets; aggregation elevates an entire relationship into a higher-level entity so it can participate in further relationships — an unrelated concept",
+        "Aggregation always requires a weak entity; generalization never does",
+        "Generalization only applies to binary relationships"
+      ],
+      "correct_index": 1,
+      "explanation": "Generalization and aggregation address completely different EER modeling problems, despite both being 'advanced' constructs.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-6-generalization-7",
+      "test_id": "pt-dbms-sql-6-generalization",
+      "question_text": "If Student and Employee are generalized into Person, and it turns out some people are BOTH students and employees (e.g., teaching assistants), what constraint would apply?",
+      "options": [
+        "Disjoint",
+        "Overlapping",
+        "Total participation only, with no bearing on overlap",
+        "This scenario is impossible in EER modeling"
+      ],
+      "correct_index": 1,
+      "explanation": "When a single instance can belong to more than one subclass simultaneously, the hierarchy is overlapping rather than disjoint.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-6-generalization-8",
+      "test_id": "pt-dbms-sql-6-generalization",
+      "question_text": "What is the main design benefit of generalization?",
+      "options": [
+        "It increases data redundancy for performance",
+        "It reduces redundancy by factoring shared attributes of similar entity sets into one common superclass",
+        "It removes the need for primary keys",
+        "It converts entities into relationships"
+      ],
+      "correct_index": 1,
+      "explanation": "By pulling shared attributes into a superclass, generalization avoids storing the same attributes redundantly in each subclass.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "coordinator",
+    "independent_review": "unavailable; no agent tools",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Definitions and examples checked against questions; no plagiarism certification.",
+    "existing_question_corrections": [
+      "tq-dbms-sql-6-generalization-1",
+      "tq-dbms-sql-6-generalization-2",
+      "tq-dbms-sql-6-generalization-5",
+      "tq-dbms-sql-6-generalization-6"
+    ],
+    "canonical_answer_indices_preserved": true
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-6-generalization",
+    "original_note_sha256": "9c33677136d3bacd39625cf5aadda4fbfdabc14717a45a09b192f8696cb7c527",
+    "status": "paired migration prepared; not applied"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Common identity can support partial and overlapping roles",
+      "description": "The same person identifier is retained in subtype memberships. Shared names do not merge different person identities. The example permits both and neither.",
+      "columns": [
+        "Person identity",
+        "Student role",
+        "Employee role",
+        "Allowed membership"
+      ],
+      "rows": [
+        [
+          "1 Asha",
+          "Computing",
+          "Tutor",
+          "Both"
+        ],
+        [
+          "2 Asha",
+          "History",
+          "Absent",
+          "Student only; different person from 1"
+        ],
+        [
+          "3 Mira",
+          "Absent",
+          "Librarian",
+          "Employee only"
+        ],
+        [
+          "4 Dev",
+          "Absent",
+          "Absent",
+          "Neither under partial coverage"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "coordinator checked shared identity, distinct repeated names, partial coverage and overlapping roles",
+    "server_rendering": "passed",
+    "browser_rendering": "unverified",
+    "independent_review": "unavailable; no agent tools",
+    "server_rendering_evidence": "2026-10-29: 111 focused Vitest checks passed; all 102 authored packages rendered through actual LessonBlock."
+  },
+  "sql_verification": {
+    "engine": "11.8.6-MariaDB-0+deb13u1 from Debian",
+    "scope": "MariaDB compatibility execution; exact MySQL 8.4/provider execution unverified",
+    "fingerprint": "cd564bfbeff92f7b489661772ed4498c5a4bd2c21e51b9a3a3d628e99805a77a",
+    "cases": [
+      {
+        "problem": "generalization-both",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "generalization-both",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "generalization-both",
+        "case": 2,
+        "passed": true
+      },
+      {
+        "problem": "generalization-membership",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "generalization-membership",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "generalization-membership",
+        "case": 2,
+        "passed": true
+      }
+    ],
+    "all_passed": true
+  }
+}

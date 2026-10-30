@@ -1,0 +1,638 @@
+{
+  "source_ref": "chapter-7-relational-algebra/natural-join",
+  "slug": "natural-join",
+  "title": "Natural Join",
+  "description": "Read implicit equality on shared names, distinguish merged output columns from duplicate row elimination, and expose how unrelated common names can change a natural join’s meaning.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Shared attribute names define the predicate\n\nA natural join matches the common attribute names of its two inputs under the supported equality rules and presents one combined copy of each common join column. In the simple campus example, nstudents has student_id and name while nenrollments has student_id and course_id. Only student_id is shared, so the intended matching is easy to see from those exact definitions.\n\nThe operation depends on the full set of shared names, not on whichever one looks most likely to be a key. If both sources also contain status, that attribute becomes another comparison role in the natural join. This can change membership even when student_id still identifies the correct student. Always inspect both headings before inferring what the query actually compares.\n\n## A correct small example still needs explicit assumptions\n\nStudent 1 named Asha can have enrollments in Courses 101 and 102. Student 2 named Rohan can have an enrollment in Course 101. Natural matching over the sole shared student_id returns those participation facts with the corresponding student names. Repeating Asha across two output rows is correct because the result grain is one enrollment occurrence.\n\nThe result contains student_id, name, and course_id in the conceptual attribute set, with student_id represented once rather than two separately displayed source copies. The selected SQL list and product's output conventions determine actual presentation order. Use an explicit selected list when the consumer expects a fixed contract rather than relying on a broad SELECT star expansion.\n\n## Merged columns do not mean distinct rows\n\nNatural join's treatment of common columns is different from duplicate elimination across result tuples. An unconstrained nenrollments source can contain two identical student-course rows. Under ordinary SQL bag-like behaviour, the natural join can return both occurrences. One shared student_id output column does not imply one output row per student or one row per pair.\n\nIf the task asks for every enrollment occurrence, preserving those copies can match its stated input semantics. If the domain requires one current pair, an appropriate uniqueness rule belongs at the accepted-data boundary. DISTINCT in a report answers a selected set question; it does not enforce the missing source constraint or resolve contradictory properties attached to a participation fact.\n\n## SQL syntax makes the name inference deliberate\n\nNATURAL JOIN omits an explicit ON or USING clause because common names define its comparison in the illustrated form. Table aliases can still clarify which noncommon output roles come from which reference. The query does not create a foreign key, validate external student identity, or guarantee every source enrollment has a matching student.\n\n```sql\nSELECT student_id, s.name, e.course_id\nFROM nstudents s\nNATURAL JOIN nenrollments e\nORDER BY student_id, e.course_id;\n```\n\nThis is an inner matching report. Students with no enrollment are absent, and enrollment proposals naming no student are absent. A query intended to diagnose those unmatched cases needs a different preserving or anti-existence formulation. The familiar word natural does not establish that every input row survives or that every relationship is valid.\n\n## Unrelated names can silently narrow the result\n\nSuppose Student.status means active institutional account, while Enrollment.status means pending or completed course participation. Those properties have different meanings. A NATURAL JOIN over tables sharing both student_id and status requires their status values to agree, even when the intended association only uses student_id. An active student with a pending enrollment can therefore disappear incorrectly from a participation report.\n\nAn explicit ON equality on the intended identity avoids that particular implicit-name coupling. A deliberate USING(student_id) can also state the chosen matching attribute under supported syntax. Neither is automatically correct without domain review, but the predicate is visible rather than inferred from all current common names. Clarity helps reviewers distinguish the actual relationship from incidental spelling.\n\n## Schema evolution can change the comparison\n\nAdding a common column name to either source can change a natural join's inferred predicate without editing the query text. That is a meaningful compatibility risk for callers expecting the earlier population. A new descriptive timestamp or status field can introduce an unintended equality requirement, causing missing or changed matches that are difficult to notice in a narrow fixture.\n\nAn explicit ON clause is resistant to that specific automatic-predicate change, but it is not immune to every schema or semantic change. Renamed referenced attributes, changed types, altered domains, and different key guarantees still affect compatibility. Explain the demonstrated advantage precisely instead of claiming explicit joins can never break when database definitions evolve.\n\n## No common names gives an all-pairs case\n\nIn the natural-join interpretation used here, no shared attributes means there is no equality restriction, so the inner result behaves as a Cartesian product. Two rooms and three slots with disjoint headings can therefore yield six combinations. That is not necessarily a syntax error or evidence of an actual domain relationship between every pair.\n\nThis edge case reinforces the need to read the actual headings. A developer who assumes one intended common key exists can accidentally produce all pairs if naming changes remove it. Test source definitions and expected multiplicity rather than relying on the operator's friendly name. Candidate grids can be intentional, but an unintended product is a different and potentially expensive query population.\n\n## Same names do not establish semantic compatibility\n\nTwo id columns can represent unrelated entities. A natural join equating them can still execute and return matching numeric values even when the association has no domain meaning. Conversely, genuinely related columns with different names are not automatically matched by natural inference. Correct modeling must decide which roles identify the same referenced fact.\n\nAn employee department_id and a Department id can require an explicit equality despite their different labels. Renaming a column to make a natural join possible is another operation with its own scope and compatibility concerns. Do not change persistent schema names merely to force a keyword when a clear explicit predicate already expresses the established relationship.\n\n## NULL and comparison rules remain relevant\n\nAn ordinary inner equality involving NULL does not become TRUE merely because the condition was inferred. A missing common value can prevent a match. A preserving natural variant, where supported, adds different unmatched-row semantics and merged-value conventions. The exercises use ordinary inner forms and required comparison identifiers to keep that contract clear.\n\nString comparisons also follow the relevant product type and collation rules. Two status labels may be treated as equal or different according to those definitions. A successful local result over canonical examples does not establish every case-sensitive code comparison or exact hosted-provider behaviour. State the actual input domain and recorded verification engine rather than assuming the operator standardizes all comparison details.\n\n## Projection can intentionally clarify the result\n\nAn explicit SELECT list can avoid duplicate-looking comparison roles in a conventional ON join just as natural syntax can merge common columns automatically. Natural join is not the only way to display a clean result. The meaningful choice is which predicates and output roles the application wants to make explicit and stable.\n\nA report should keep identifiers when it represents distinct student or enrollment occurrences, even if displayed names repeat. Removing student_id and adding DISTINCT changes the result to a description set. That may be another valid task, but it should not be presented as an automatic improvement to a participation listing. Compare the requested result grain before changing syntax for cosmetic reasons.\n\n## Validate both intended and accidental common attributes\n\nUse several enrollments for one student, repeated names with different ids, duplicate enrollment occurrences, an unmatched proposal, and no matching source rows. In a separate demonstration, give both inputs a differently meaningful status attribute so the extra implicit equality becomes visible. These cases expose both output multiplicity and the risk of name-based predicate selection.\n\nThe retained natural-join exercise preserves its original identity, schema, and setup, while a companion query uses an explicit intended identity over status-bearing sources. Their fixture outputs verify the described populations on the local engine rather than exact MySQL/provider execution or native reference enforcement. Natural join is useful to understand as a precise name-driven operation, with its assumptions stated rather than mistaken for automatic domain correctness or universal duplicate removal.\n",
+  "references": [],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-7-natural-join",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-7-natural-join-1",
+          "test_id": "pt-dbms-sql-7-natural-join",
+          "question_text": "How does Natural Join decide which columns to match on?",
+          "options": [
+            "You must specify the columns explicitly in an ON clause",
+            "It automatically matches on ALL identically-named columns shared by the two relations",
+            "It always matches on the first column of each table",
+            "It matches on primary keys only, regardless of name"
+          ],
+          "correct_index": 1,
+          "explanation": "Natural Join's defining feature is automatic matching based purely on shared column names.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-7-natural-join-2",
+          "test_id": "pt-dbms-sql-7-natural-join",
+          "question_text": "In the illustrated ordinary natural inner join, how many combined output columns represent each common matching attribute?",
+          "options": [
+            "Two — one from each table, just like an Equi Join",
+            "Only one — Natural Join removes the duplicate matched column that an Equi Join would otherwise leave",
+            "Zero — the matched column is dropped entirely",
+            "It varies randomly"
+          ],
+          "correct_index": 1,
+          "explanation": "Common matching columns are merged in the output shape; this does not remove repeated result-row occurrences.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-7-natural-join-3",
+          "test_id": "pt-dbms-sql-7-natural-join",
+          "question_text": "What is the biggest real-world danger of using NATURAL JOIN?",
+          "options": [
+            "It is always slower than an explicit JOIN",
+            "It automatically matches on EVERY identically-named column, including unintended ones, which can silently produce a wrong result if the tables happen to share an unrelated column name",
+            "It cannot be used with more than two tables",
+            "NATURAL JOIN does not exist in standard SQL"
+          ],
+          "correct_index": 1,
+          "explanation": "An unexpected shared column name silently becomes part of the match condition, which is the classic pitfall of NATURAL JOIN.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-7-natural-join-4",
+          "test_id": "pt-dbms-sql-7-natural-join",
+          "question_text": "Why do many style guides recommend avoiding NATURAL JOIN in production code?",
+          "options": [
+            "NATURAL JOIN is deprecated in every SQL dialect",
+            "An explicit predicate avoids automatically adding a comparison for a newly shared name, while other schema changes still need review",
+            "NATURAL JOIN cannot be used with WHERE clauses",
+            "Explicit joins always execute faster"
+          ],
+          "correct_index": 1,
+          "explanation": "Explicit joins resist this particular implicit-name coupling, not every possible schema change.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-7-natural-join-5",
+          "test_id": "pt-dbms-sql-7-natural-join",
+          "question_text": "What happens if two tables joined with NATURAL JOIN share NO column names at all?",
+          "options": [
+            "The join raises an error",
+            "It silently produces a full Cartesian Product, since there's nothing to match on",
+            "It automatically returns an empty result",
+            "SQL infers a match based on data types instead"
+          ],
+          "correct_index": 1,
+          "explanation": "With no shared column names, there's no join condition at all, so every row pairs with every other row.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-7-natural-join-6",
+          "test_id": "pt-dbms-sql-7-natural-join",
+          "question_text": "Is Natural Join a special case of Equi Join?",
+          "options": [
+            "No, they are entirely unrelated",
+            "Yes — Natural Join is an Equi Join on all shared column names, plus automatic removal of the duplicate matched columns",
+            "Equi Join is a special case of Natural Join instead",
+            "They are exact synonyms"
+          ],
+          "correct_index": 1,
+          "explanation": "The inner natural matching uses equalities on common names and has merged output-column conventions. SQL bag result multiplicity is a separate issue.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-7-natural-join-7",
+          "test_id": "pt-dbms-sql-7-natural-join",
+          "question_text": "If nstudents(student_id, name) and nenrollments(student_id, course_id) are naturally joined, what columns appear in the result?",
+          "options": [
+            "student_id, name, student_id, course_id (four columns)",
+            "student_id, name, course_id (three columns, student_id appearing only once)",
+            "Only student_id",
+            "name and course_id only, without student_id"
+          ],
+          "correct_index": 1,
+          "explanation": "The shared student_id column is matched and included exactly once, alongside each table's other columns.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-7-natural-join-8",
+          "test_id": "pt-dbms-sql-7-natural-join",
+          "question_text": "Does NATURAL JOIN require you to write an explicit ON or USING clause?",
+          "options": [
+            "Yes, always",
+            "No — that's precisely the point of Natural Join; it infers the match automatically from shared column names",
+            "Only if the tables have more than 5 columns",
+            "Only for outer joins"
+          ],
+          "correct_index": 1,
+          "explanation": "The absence of an explicit condition, relying instead on name-matching, is what defines Natural Join.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-7-natural-join-new-9",
+          "test_id": "pt-dbms-sql-7-natural-join",
+          "question_text": "If both sources share student_id and unrelated status names, what does NATURAL JOIN compare?",
+          "options": [
+            "Only whichever column is primary",
+            "Both common attributes",
+            "Only the first displayed role",
+            "Neither because the status meanings differ"
+          ],
+          "correct_index": 1,
+          "explanation": "The inference uses names, not a semantic understanding of the properties.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-7-natural-join-new-10",
+          "test_id": "pt-dbms-sql-7-natural-join",
+          "question_text": "Does one merged student_id column imply one output row per student?",
+          "options": [
+            "Yes; natural joins deduplicate every entity",
+            "Only if names are short",
+            "No; multiple enrollment occurrences can remain",
+            "Only if course_id differs"
+          ],
+          "correct_index": 2,
+          "explanation": "Column merging and row multiplicity are separate.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-7-natural-join-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-7-natural-join-application-new-1",
+          "test_id": "pt-dbms-sql-7-natural-join-application",
+          "question_text": "What is the natural inner result with no common names under the stated interpretation?",
+          "options": [
+            "Always a syntax error",
+            "Always the empty relation",
+            "An unrestricted Cartesian product",
+            "The left source alone"
+          ],
+          "correct_index": 2,
+          "explanation": "There is no inferred equality restriction.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-7-natural-join-application-new-2",
+          "test_id": "pt-dbms-sql-7-natural-join-application",
+          "question_text": "Why can adding a shared status column change results without changing query text?",
+          "options": [
+            "The column always becomes a primary key",
+            "It grants a new user permission",
+            "It creates a stored procedure",
+            "It adds an implicit equality comparison"
+          ],
+          "correct_index": 3,
+          "explanation": "The predicate depends on current headings.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-7-natural-join-application-new-3",
+          "test_id": "pt-dbms-sql-7-natural-join-application",
+          "question_text": "Does an explicit ON predicate guarantee immunity from all schema changes?",
+          "options": [
+            "No; it avoids one name-inference risk but other dependencies remain",
+            "Yes; no compatibility review is ever needed",
+            "Only if it uses integer ids",
+            "Only if it selects one column"
+          ],
+          "correct_index": 0,
+          "explanation": "Its benefit should be stated precisely.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-7-natural-join-application-new-4",
+          "test_id": "pt-dbms-sql-7-natural-join-application",
+          "question_text": "How can related columns with different names be matched clearly?",
+          "options": [
+            "Assume NATURAL knows the foreign-key intent",
+            "Use an explicit appropriate equality predicate",
+            "Compare descriptions randomly",
+            "Add DISTINCT to every source"
+          ],
+          "correct_index": 1,
+          "explanation": "Names alone do not express every real reference.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-7-natural-join-application-new-5",
+          "test_id": "pt-dbms-sql-7-natural-join-application",
+          "question_text": "Two identical enrollment rows exist. Can a SQL natural join retain both?",
+          "options": [
+            "No; common-column merging always deduplicates",
+            "Only if the key is NULL",
+            "Yes, under ordinary bag-like occurrence semantics",
+            "Only if both tables are empty"
+          ],
+          "correct_index": 2,
+          "explanation": "Set duplicate elimination is not inherent in this output-column treatment.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-7-natural-join-application-new-6",
+          "test_id": "pt-dbms-sql-7-natural-join-application",
+          "question_text": "What does a natural inner join do to an enrollment with no student match?",
+          "options": [
+            "It enforces rejection at the original insert automatically",
+            "It creates a student",
+            "It changes the course identifier",
+            "It contributes no matched result row"
+          ],
+          "correct_index": 3,
+          "explanation": "Reading matches is different from trusted reference enforcement.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-7-natural-join-application-new-7",
+          "test_id": "pt-dbms-sql-7-natural-join-application",
+          "question_text": "Why keep explicit output columns despite natural matching?",
+          "options": [
+            "To state the consumer’s result roles and shape",
+            "To execute a persistent rename",
+            "To validate every source fact",
+            "To guarantee every row is authorized"
+          ],
+          "correct_index": 0,
+          "explanation": "Predicate inference and projection are different choices.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-7-natural-join-application-new-8",
+          "test_id": "pt-dbms-sql-7-natural-join-application",
+          "question_text": "Does matching numeric id values in unrelated tables prove a valid domain relationship?",
+          "options": [
+            "Yes; equal numbers have global identity",
+            "No",
+            "Only if sorted",
+            "Only if the aliases match"
+          ],
+          "correct_index": 1,
+          "explanation": "Shared type and spelling are weaker than semantic compatibility.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-7-natural-join-application-new-9",
+          "test_id": "pt-dbms-sql-7-natural-join-application",
+          "question_text": "What does a NULL ordinary equality do to an inner match?",
+          "options": [
+            "It always matches every absent identity",
+            "It becomes zero",
+            "It is not TRUE and does not qualify that pair",
+            "It forces a duplicate row"
+          ],
+          "correct_index": 2,
+          "explanation": "Inferred comparison still follows SQL absence rules.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-7-natural-join-application-new-10",
+          "test_id": "pt-dbms-sql-7-natural-join-application",
+          "question_text": "Which fixture exposes inappropriate same-name inference?",
+          "options": [
+            "Only one shared key and no other attributes",
+            "Two empty inputs",
+            "A different page title",
+            "Active Student status and pending Enrollment status for a valid student_id"
+          ],
+          "correct_index": 3,
+          "explanation": "The unrelated status roles can incorrectly restrict intended participation.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cx-natural-explicit-roles",
+      "slug": "natural-explicit-roles",
+      "title": "Keep unrelated status roles out of the intended identity match",
+      "difficulty": "Easy",
+      "task": "Return student_id, name and course_id for enrollment rows matching students by student_id only. Student.status and Enrollment.status have different meanings and must not be compared.",
+      "schema_sql": "CREATE TABLE students (student_id INT PRIMARY KEY, name VARCHAR(80) NOT NULL, status VARCHAR(30) NOT NULL);\nCREATE TABLE enrollments (student_id INT NOT NULL, course_id INT NOT NULL, status VARCHAR(30) NOT NULL);",
+      "seed_sql": "INSERT INTO students VALUES (1,'Asha','active'),(2,'Mira','active'); INSERT INTO enrollments VALUES (1,10,'pending'),(1,20,'completed'),(2,10,'pending');",
+      "expected": "student_id\tname\tcourse_id\n1\tAsha\t10\n1\tAsha\t20\n2\tMira\t10",
+      "ordering": "Ascending student_id, course_id.",
+      "constraints": [
+        "The explicit predicate is intentionally contrasted with accidental natural matching on status."
+      ],
+      "edge_cases": [
+        "Valid participants can have different status strings across roles.",
+        "An unmatched proposal contributes no inner row."
+      ],
+      "hints": [
+        "Name the intended equality with ON.",
+        "Do not equate unrelated attributes merely because their names match."
+      ],
+      "solution_sql": "SELECT s.student_id, s.name, e.course_id FROM students s JOIN enrollments e ON e.student_id = s.student_id ORDER BY s.student_id, e.course_id;",
+      "explanation": "Explicit identity matching preserves valid participation despite unrelated shared names; this demonstrates the natural-join risk rather than changing the source model.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO students VALUES (1,'Asha','active'); INSERT INTO enrollments VALUES (1,10,'pending');",
+          "expected": "student_id\tname\tcourse_id\n1\tAsha\t10"
+        },
+        {
+          "seed_sql": "INSERT INTO enrollments VALUES (99,10,'pending');",
+          "expected": ""
+        }
+      ]
+    },
+    {
+      "id": "cp-dbms-sql-natural-join-students-and-enrollments",
+      "slug": "natural-join-students-and-enrollments",
+      "title": "Natural Join: Students and Enrollments",
+      "difficulty": "Medium",
+      "existing_problem": true,
+      "original_description_md5": "a514cefcc11e156ed7c27edbc12bfa26",
+      "task": "Use NATURAL JOIN between the retained nstudents and nenrollments definitions, whose only shared attribute is student_id. Return student_id, name and course_id for every matching enrollment occurrence.",
+      "schema_sql": "CREATE TABLE nstudents (student_id INTEGER PRIMARY KEY, name TEXT NOT NULL);\nCREATE TABLE nenrollments (student_id INTEGER NOT NULL, course_id INTEGER NOT NULL);",
+      "seed_sql": "INSERT INTO nstudents (student_id, name) VALUES (1, 'Asha'), (2, 'Rohan'), (3, 'Neha');\nINSERT INTO nenrollments (student_id, course_id) VALUES (1, 101), (1, 102), (2, 101), (3, 103);",
+      "expected": "student_id\tname\tcourse_id\n1\tAsha\t101\n1\tAsha\t102\n2\tRohan\t101\n3\tNeha\t103",
+      "ordering": "Ascending student_id, course_id.",
+      "constraints": [
+        "Original problem identity, schema and setup retained.",
+        "student_id is the only shared attribute in the retained inputs."
+      ],
+      "edge_cases": [
+        "Several enrollments for one student remain separate.",
+        "Duplicate input enrollments are not automatically eliminated."
+      ],
+      "hints": [
+        "Read both actual headings before applying natural matching.",
+        "Select the requested output roles and final order explicitly."
+      ],
+      "solution_sql": "SELECT student_id, s.name, e.course_id FROM nstudents s NATURAL JOIN nenrollments e ORDER BY student_id, e.course_id;",
+      "explanation": "The stated single shared identity makes natural inference match the intended relation; common-column merging does not imply distinct participation rows.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO nstudents (student_id, name) VALUES (10, 'Zara'), (20, 'Omar');\nINSERT INTO nenrollments (student_id, course_id) VALUES (10, 501), (20, 502), (20, 503);",
+          "expected": "student_id\tname\tcourse_id\n10\tZara\t501\n20\tOmar\t502\n20\tOmar\t503"
+        },
+        {
+          "seed_sql": "INSERT INTO nstudents VALUES (1,'Asha'); INSERT INTO nenrollments VALUES (1,10),(1,10);",
+          "expected": "student_id\tname\tcourse_id\n1\tAsha\t10\n1\tAsha\t10"
+        },
+        {
+          "seed_sql": "",
+          "expected": ""
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-7-natural-join-1",
+      "test_id": "pt-dbms-sql-7-natural-join",
+      "question_text": "How does Natural Join decide which columns to match on?",
+      "options": [
+        "You must specify the columns explicitly in an ON clause",
+        "It automatically matches on ALL identically-named columns shared by the two relations",
+        "It always matches on the first column of each table",
+        "It matches on primary keys only, regardless of name"
+      ],
+      "correct_index": 1,
+      "explanation": "Natural Join's defining feature is automatic matching based purely on shared column names.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-7-natural-join-2",
+      "test_id": "pt-dbms-sql-7-natural-join",
+      "question_text": "How many copies of the matched column appear in a Natural Join's result?",
+      "options": [
+        "Two — one from each table, just like an Equi Join",
+        "Only one — Natural Join removes the duplicate matched column that an Equi Join would otherwise leave",
+        "Zero — the matched column is dropped entirely",
+        "It varies randomly"
+      ],
+      "correct_index": 1,
+      "explanation": "Natural Join specifically deduplicates the matched column(s) in its result, unlike a plain Equi Join.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-7-natural-join-3",
+      "test_id": "pt-dbms-sql-7-natural-join",
+      "question_text": "What is the biggest real-world danger of using NATURAL JOIN?",
+      "options": [
+        "It is always slower than an explicit JOIN",
+        "It automatically matches on EVERY identically-named column, including unintended ones, which can silently produce a wrong result if the tables happen to share an unrelated column name",
+        "It cannot be used with more than two tables",
+        "NATURAL JOIN does not exist in standard SQL"
+      ],
+      "correct_index": 1,
+      "explanation": "An unexpected shared column name silently becomes part of the match condition, which is the classic pitfall of NATURAL JOIN.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-7-natural-join-4",
+      "test_id": "pt-dbms-sql-7-natural-join",
+      "question_text": "Why do many style guides recommend avoiding NATURAL JOIN in production code?",
+      "options": [
+        "NATURAL JOIN is deprecated in every SQL dialect",
+        "An explicit JOIN ... ON is more verbose but immune to silently breaking if a table's columns change later to add an unintended shared name",
+        "NATURAL JOIN cannot be used with WHERE clauses",
+        "Explicit joins always execute faster"
+      ],
+      "correct_index": 1,
+      "explanation": "Explicit join conditions are robust to schema evolution in a way that NATURAL JOIN's implicit matching is not.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-7-natural-join-5",
+      "test_id": "pt-dbms-sql-7-natural-join",
+      "question_text": "What happens if two tables joined with NATURAL JOIN share NO column names at all?",
+      "options": [
+        "The join raises an error",
+        "It silently produces a full Cartesian Product, since there's nothing to match on",
+        "It automatically returns an empty result",
+        "SQL infers a match based on data types instead"
+      ],
+      "correct_index": 1,
+      "explanation": "With no shared column names, there's no join condition at all, so every row pairs with every other row.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-7-natural-join-6",
+      "test_id": "pt-dbms-sql-7-natural-join",
+      "question_text": "Is Natural Join a special case of Equi Join?",
+      "options": [
+        "No, they are entirely unrelated",
+        "Yes — Natural Join is an Equi Join on all shared column names, plus automatic removal of the duplicate matched columns",
+        "Equi Join is a special case of Natural Join instead",
+        "They are exact synonyms"
+      ],
+      "correct_index": 1,
+      "explanation": "Natural Join both restricts (equality only, on shared names) and extends (deduplicates matched columns) an ordinary Equi Join.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-7-natural-join-7",
+      "test_id": "pt-dbms-sql-7-natural-join",
+      "question_text": "If nstudents(student_id, name) and nenrollments(student_id, course_id) are naturally joined, what columns appear in the result?",
+      "options": [
+        "student_id, name, student_id, course_id (four columns)",
+        "student_id, name, course_id (three columns, student_id appearing only once)",
+        "Only student_id",
+        "name and course_id only, without student_id"
+      ],
+      "correct_index": 1,
+      "explanation": "The shared student_id column is matched and included exactly once, alongside each table's other columns.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-7-natural-join-8",
+      "test_id": "pt-dbms-sql-7-natural-join",
+      "question_text": "Does NATURAL JOIN require you to write an explicit ON or USING clause?",
+      "options": [
+        "Yes, always",
+        "No — that's precisely the point of Natural Join; it infers the match automatically from shared column names",
+        "Only if the tables have more than 5 columns",
+        "Only for outer joins"
+      ],
+      "correct_index": 1,
+      "explanation": "The absence of an explicit condition, relying instead on name-matching, is what defines Natural Join.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "coordinator",
+    "independent_review": "unavailable; no agent tools",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Definitions and examples checked against questions; no plagiarism certification.",
+    "existing_question_corrections": [
+      "tq-dbms-sql-7-natural-join-2",
+      "tq-dbms-sql-7-natural-join-4",
+      "tq-dbms-sql-7-natural-join-6"
+    ],
+    "canonical_answer_indices_preserved": true,
+    "batch_review": {
+      "reviewer": "coordinator",
+      "independent": false,
+      "scope": "New package only: notes, keyed examples, original question identities and canonical indices, every correct answer, exercises and recorded fixture outputs, diagram trace, content-only paired integration.",
+      "findings_resolved": "Outer Join retained absence question clarified: missing parent is a violation only when the modeled relationship requires it. Division retains its original Hard exercise; validator permits retained Hard alongside Easy while rejecting a new Hard substitute.",
+      "remaining": "Exact MySQL/provider execution, browser QA, independent review and applied-migration behavior unverified; output fixtures do not prove required source technique."
+    }
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-7-natural-join",
+    "original_note_sha256": "46c487b81c985c2c13fdca1e8e50dde920f409662319d2f9d9239de570a01516",
+    "status": "paired migration prepared; not applied"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Common names can represent different roles and add an unwanted predicate",
+      "description": "The correct student reference matches, but the unrelated status labels differ. Natural inference would compare both names; explicit student_id matching preserves the intended enrollment.",
+      "columns": [
+        "Source role",
+        "student_id",
+        "status meaning",
+        "Example value"
+      ],
+      "rows": [
+        [
+          "Student",
+          "1",
+          "Institutional account state",
+          "active"
+        ],
+        [
+          "Enrollment",
+          "1",
+          "Course participation state",
+          "pending"
+        ],
+        [
+          "Intended match",
+          "1 = 1",
+          "No required status equality",
+          "Keep the participation"
+        ],
+        [
+          "Natural inference",
+          "Matches student_id and status",
+          "active = pending is false",
+          "Incorrectly loses this intended match"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "coordinator checked shared-name predicate inference, row versus column duplicate distinction and exact retained exercise setup",
+    "server_rendering": "passed",
+    "browser_rendering": "unverified",
+    "independent_review": "unavailable; no agent tools",
+    "server_rendering_evidence": "Actual LessonBlock rendering passed in selected Vitest checks for natural-join, outer-join and division; no browser QA."
+  },
+  "sql_verification": {
+    "engine": "11.8.6-MariaDB-0+deb13u1 from Debian",
+    "scope": "MariaDB compatibility execution; exact MySQL 8.4/provider execution unverified",
+    "fingerprint": "2219d682356c16d143100f98aff459f06913fc1ca3378c4b5802f483afd873de",
+    "cases": [
+      {
+        "problem": "natural-explicit-roles",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "natural-explicit-roles",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "natural-explicit-roles",
+        "case": 2,
+        "passed": true
+      },
+      {
+        "problem": "natural-join-students-and-enrollments",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "natural-join-students-and-enrollments",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "natural-join-students-and-enrollments",
+        "case": 2,
+        "passed": true
+      },
+      {
+        "problem": "natural-join-students-and-enrollments",
+        "case": 3,
+        "passed": true
+      }
+    ],
+    "all_passed": true
+  }
+}

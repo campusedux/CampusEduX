@@ -1,0 +1,626 @@
+{
+  "source_ref": "chapter-2-dbms-architecture/logical-data-independence",
+  "slug": "logical-data-independence",
+  "title": "Logical Data Independence",
+  "description": "Preserve application contracts across logical database changes by maintaining mappings, identity, row cardinality, missing-value semantics, and compatible field meanings.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Changing a model while preserving its consumers\n\nLogical data independence is the ability to change the conceptual schema without requiring corresponding changes to external contracts or application code where those contracts can still be supported. The conceptual schema describes the database's logical facts and relationships. External schemas describe the perspectives consumed by particular applications. A maintained mapping between these levels can absorb some changes while continuing to provide the information consumers expect.\n\nThe qualification matters. Independence is a design goal supported by suitable interfaces and correct mappings, not a promise that arbitrary logical changes are invisible. If a required fact is removed and cannot be reconstructed, retaining the same column name cannot preserve its meaning. A successful query that returns plausible values may still have broken the application's contract.\n\nPhysical data independence concerns a different boundary: changing internal representation while maintaining logical behavior. Adding an ordinary access index is a typical physical example. Splitting a logical relation, changing a relationship, or introducing a required attribute concerns logical design. Logical independence is generally harder because applications often depend on the structure and meaning being changed.\n\n## Establishing the original result contract\n\nSuppose a Result Portal expects StudentID, Name, DeptID, and Marks, one row for every student. Marks can be NULL when no result has been recorded. StudentID is unique and stable, names can repeat, and the portal explicitly orders its display by StudentID. These details form a more useful contract than the vague statement that the portal reads Student.\n\nAn explicit projection can isolate the consumer from unrelated attributes. If an optional Email attribute is added to the conceptual Student relation, the result projection need not expose it. The portal can continue receiving the same columns and values. However, a caller using positional inserts, assuming every column appears in a response, or rejecting unexpected metadata may have additional dependencies that need review.\n\nAn unused attribute is therefore often easier to add compatibly than a structural split, but compatibility should be assessed against actual callers. A new mandatory field can affect existing writes even when a read-only projection remains unchanged. Read compatibility and write compatibility are distinct questions; protecting one report does not prove every consumer is unaffected.\n\n## Maintaining an external name after a rename\n\nAssume the conceptual model renames Marks to Score while preserving the same measurement, range, and missing-value meaning. A mapping can expose Score under the external alias Marks. The application continues using its promised label, while the database-side definition acknowledges the new source. In MySQL, this can be expressed as a projection in a view or other trusted query.\n\n```sql\nSELECT StudentID, Name, DeptID, Score AS Marks\nFROM Student\nORDER BY StudentID;\n```\n\nIf student 41 has Score eighty-four, the result still labels eighty-four as Marks. If Score is NULL, the result remains NULL. This is a naming adaptation, not a transformation of meaning. If Score instead becomes a percentage while the old Marks meant points out of fifty, an alias alone would produce an incompatible interpretation.\n\nA dependent view that still references a removed Marks column must be updated. Do not assume that calling an interface an external schema makes its dependencies disappear. Inspect the product's dependency behavior and the actual stored definition, then verify the mapping. Keeping a familiar name at the top level is useful only if the referenced values remain available and correctly understood.\n\n## Reconstructing a relation after a split\n\nNow suppose the college separates Student into Student containing StudentID, Name, and Marks, and StudentDept containing StudentID and DeptID. The purpose might be a change in logical organization; the word normalization alone is not proof that the split improves the design. The functional dependencies and intended rules must justify the actual structure.\n\nTo preserve the original portal, the mapping can combine the two relations through StudentID. If every student has exactly one matching StudentDept row, an identifier join can reconstruct one row per student with the original attributes. The required relationship is doing important work: without uniqueness on the StudentDept side, several department rows could duplicate a student in the portal.\n\nConsider student 41, Leena, with mark eighty-four and department ten. Splitting the facts into two relations should not change that result. A second student with a missing mark should still have a row and a missing mark. Testing only the first ordinary student would miss important compatibility conditions involving absence and relationship cardinality.\n\n## Choosing join behavior from the contract\n\nSuppose a revised model allows a student to have no department assignment yet, and the portal must still display every student. An inner join to StudentDept would omit those students. A left join can preserve each student and return NULL for missing department information. Whether that is compatible depends on the external contract's own rules about mandatory department values.\n\nIf the earlier interface guaranteed a non-null department for everyone, silently adding a NULL is a behavioral change, even though a left join preserves the row count. The mapping must either supply a genuinely equivalent value through a defined rule or coordinate a changed contract. Inventing department zero is not equivalent unless zero has a specified valid meaning and consumers already understand it.\n\nSimilarly, if the conceptual relationship changes from one department per student to many, a simple join changes the result grain. Combining departments into a string or selecting an arbitrary department may be useful in a newly defined interface, but it does not automatically preserve the earlier one-department meaning. The new requirement may require deliberate consumer changes.\n\n## Checking more than column spelling\n\nA compatibility review should include field names, types, value meaning, units, nullability, identifiers, row eligibility, and multiplicity. Ordering is also relevant when the consumer requires a deterministic sequence. A mapping returning the same column count can still violate every other property. For example, an accidental many-to-many join can multiply marks and inflate a later aggregate.\n\nWrite behavior requires separate attention. Some database views are not updatable, and a mapping that serves a report may not support existing inserts or updates. Even an updatable interface can have different validation behavior after a model change. Do not infer write compatibility from a successful SELECT. Trace the operations each caller actually performs and the trusted checks that govern them.\n\nAuthorization must remain intact as the mapping changes. A join might accidentally expose another department's students if its filtering or identity relationship is lost. Maintaining a familiar response shape is not permission to weaken access controls. A compatible logical interface must continue to enforce the intended scope through its actual trusted boundary.\n\n## Planning a controlled transition\n\nIdentify dependent applications and define the old contract before changing the model. Prepare the new structure and the mapping that can support that contract, then compare representative outputs under equivalent data. A gradual transition may keep an old interface while new callers adopt a revised one. The exact migration process depends on the repository and database; architecture terminology does not authorize production changes.\n\nDuring comparison, include repeated names, an empty database, missing optional relationships, boundary scores, and records that previously challenged the rules. Use identifiers for matching rows rather than trusting display order alone. Where order is part of the contract, compare a deliberately ordered result with appropriate tie-breakers so that storage choices do not obscure a difference.\n\nA rollback plan must account for information loss. A reversible rename is different from removing data that a previous model required. If a new structure records multiple departments, converting it back to one without a selection rule can discard facts. Preserve the old source or a reviewed transformation when needed; a compatibility view cannot undo lost information merely by renaming fields.\n\n## Recognizing the boundary of independence\n\nLogical independence succeeds when the revised conceptual representation can still supply the existing external meanings and operations through maintained mappings. It fails when those requirements are no longer supportable or when dependencies are left unmanaged. The boundary is practical and testable: ask whether each consumer still receives the promised facts and behavior, not whether a diagram still shows three layers.\n\nThis makes data independence a collaborative design responsibility. Database and application owners must agree on contracts, trace their dependencies, and verify representative behavior together. Stable interfaces reduce the cost of useful model changes, but honest compatibility claims still require evidence about identities, relationships, missing values, and the operations that real consumers rely on.\n",
+  "references": [
+    {
+      "title": "MySQL CREATE VIEW and dependency rules",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/create-view.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-2-logical-data-independence",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-2-logical-data-independence-1",
+          "test_id": "pt-dbms-sql-2-logical-data-independence",
+          "question_text": "Which boundary does logical data independence aim to protect when compatible mappings can preserve existing behavior?",
+          "options": [
+            "The physical file storage format",
+            "The conceptual schema (entities, attributes, relationships)",
+            "The client-side user interface",
+            "The network protocol used by drivers"
+          ],
+          "correct_index": 1,
+          "explanation": "It concerns conceptual changes while preserving supported external contracts; it does not guarantee transparency for arbitrary changes.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-2-logical-data-independence-2",
+          "test_id": "pt-dbms-sql-2-logical-data-independence",
+          "question_text": "In the example, adding a new `Email` attribute to `Student` required no change to the Result Portal application. Why?",
+          "options": [
+            "Because email addresses are never stored in databases",
+            "Because the Result Portal's view never referenced the `Email` column in the first place",
+            "Because logical data independence only applies to numeric columns",
+            "Because the internal schema absorbed the change instead"
+          ],
+          "correct_index": 1,
+          "explanation": "A conceptual change only threatens dependent views/applications if they reference the changed part; an unreferenced new column is safe.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-2-logical-data-independence-3",
+          "test_id": "pt-dbms-sql-2-logical-data-independence",
+          "question_text": "What is generally considered harder to fully achieve: logical or physical data independence?",
+          "options": [
+            "Physical data independence",
+            "Logical data independence",
+            "They are equally easy in all cases",
+            "Neither can ever be fully achieved"
+          ],
+          "correct_index": 1,
+          "explanation": "The text states logical independence is harder because conceptual restructuring is more likely to affect existing external view definitions than physical changes are.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-2-logical-data-independence-4",
+          "test_id": "pt-dbms-sql-2-logical-data-independence",
+          "question_text": "Student is split into Student and StudentDept with exactly one department row per student. What can preserve the Result Portal read contract?",
+          "options": [
+            "By rewriting the application to know about both new tables",
+            "By updating the external/conceptual mapping (the view definition) to re-join the split tables and still return the same output columns",
+            "It is impossible to avoid changes after a table split",
+            "By deleting the external schema entirely"
+          ],
+          "correct_index": 1,
+          "explanation": "A maintained identifier join can reconstruct the promised attributes when identity, cardinality, and meanings remain compatible.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-2-logical-data-independence-5",
+          "test_id": "pt-dbms-sql-2-logical-data-independence",
+          "question_text": "What specifically causes logical data independence to break in the renamed-column scenario?",
+          "options": [
+            "Renaming `Marks` to `Score` without updating the mapping that the dependent view relies on",
+            "Adding an attribute that nothing references",
+            "Increasing the page size used for internal storage",
+            "Adding a new index on the Student table"
+          ],
+          "correct_index": 0,
+          "explanation": "A rename that isn't compensated for in the external/conceptual mapping directly breaks any view still expecting the old column name.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-2-logical-data-independence-6",
+          "test_id": "pt-dbms-sql-2-logical-data-independence",
+          "question_text": "Why is logical data independence described as a 'goal the mapping layer is responsible for preserving' rather than something automatic?",
+          "options": [
+            "Because conceptual schemas can never actually change",
+            "Because unmanaged conceptual changes (like an uncompensated rename) can still break dependent external schemas if the mapping isn't updated",
+            "Because only physical changes ever require a mapping",
+            "Because external schemas are entirely independent of the conceptual schema"
+          ],
+          "correct_index": 1,
+          "explanation": "Logical independence must be actively preserved by updating the mapping when the conceptual schema changes in a way that affects existing views.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-2-logical-data-independence-7",
+          "test_id": "pt-dbms-sql-2-logical-data-independence",
+          "question_text": "A DBA merges two conceptual tables into one and assumes logical independence guarantees no application will ever need review. What is the flaw in this assumption?",
+          "options": [
+            "There is no flaw; logical independence guarantees this automatically in all cases",
+            "Logical independence is achieved only if the mapping is correctly updated to preserve the exact output any dependent view relied on — it is not an automatic guarantee for arbitrary restructuring",
+            "Merging tables never affects logical independence",
+            "Logical independence only applies to internal schema changes, not this scenario"
+          ],
+          "correct_index": 1,
+          "explanation": "Logical independence depends on the mapping being correctly maintained; assuming it is automatic regardless of how the mapping is (or isn't) updated is a common and risky mistake.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-2-logical-data-independence-8",
+          "test_id": "pt-dbms-sql-2-logical-data-independence",
+          "question_text": "Why is a table split generally riskier to logical data independence than adding a brand-new unused column?",
+          "options": [
+            "Because a table split changes the underlying join/structure that existing views may already depend on, while an unused new column has nothing depending on it yet",
+            "Because table splits are internal-schema changes, not conceptual ones",
+            "Because adding columns is always more disruptive than splitting tables",
+            "There is no difference in risk between the two"
+          ],
+          "correct_index": 0,
+          "explanation": "Structural changes like splitting a table affect the joins/columns existing views rely on, making them more likely to require mapping updates than a simple, unreferenced addition.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-2-logical-data-independence-new-9",
+          "test_id": "pt-dbms-sql-2-logical-data-independence",
+          "question_text": "Which property is essential when reconstructing one row per student after a split?",
+          "options": [
+            "A shared student name across every record",
+            "At most one matching department row per student",
+            "An arbitrary physical row order",
+            "A different index for every portal"
+          ],
+          "correct_index": 1,
+          "explanation": "A one-to-many match could multiply the original result rows.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-2-logical-data-independence-new-10",
+          "test_id": "pt-dbms-sql-2-logical-data-independence",
+          "question_text": "What does a successful read projection alone fail to prove?",
+          "options": [
+            "That the projection has any columns",
+            "That the SELECT was parsed",
+            "That existing write operations remain compatible",
+            "That identifiers can appear in output"
+          ],
+          "correct_index": 2,
+          "explanation": "Read mappings and write support have different requirements.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-2-logical-data-independence-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-2-logical-data-independence-application-new-1",
+          "test_id": "pt-dbms-sql-2-logical-data-independence-application",
+          "question_text": "Score replaces Marks with unchanged semantics. Which expression retains the old external name?",
+          "options": [
+            "Marks AS Score when Marks is absent",
+            "Score + 100 AS Marks",
+            "Score AS Marks",
+            "NULL AS Marks for every row"
+          ],
+          "correct_index": 2,
+          "explanation": "An alias adapts the name without changing the stored measurement.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-2-logical-data-independence-application-new-2",
+          "test_id": "pt-dbms-sql-2-logical-data-independence-application",
+          "question_text": "A student has no StudentDept row, but the portal must retain every student. Which join direction is appropriate?",
+          "options": [
+            "Student INNER JOIN StudentDept",
+            "An unconstrained cross join",
+            "StudentDept LEFT JOIN Student with no other change",
+            "Student LEFT JOIN StudentDept on the student identifier"
+          ],
+          "correct_index": 3,
+          "explanation": "Starting from Student and using a left join preserves unmatched students.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-2-logical-data-independence-application-new-3",
+          "test_id": "pt-dbms-sql-2-logical-data-independence-application",
+          "question_text": "StudentDept contains three rows for one student. What happens to a simple identifier join?",
+          "options": [
+            "That student can appear three times",
+            "The database always chooses exactly one row",
+            "The student is necessarily omitted",
+            "The extra rows become index pages only"
+          ],
+          "correct_index": 0,
+          "explanation": "Each matching relationship produces a joined combination.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-2-logical-data-independence-application-new-4",
+          "test_id": "pt-dbms-sql-2-logical-data-independence-application",
+          "question_text": "A new optional Email attribute is not referenced by an explicit result projection. What is the likely read-interface effect?",
+          "options": [
+            "Every report must expose Email",
+            "The projection can retain its existing shape",
+            "All old results become NULL",
+            "The index order must change"
+          ],
+          "correct_index": 1,
+          "explanation": "An explicit projection need not include an unrelated new attribute.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-2-logical-data-independence-application-new-5",
+          "test_id": "pt-dbms-sql-2-logical-data-independence-application",
+          "question_text": "An existing insert omits a newly required field with no usable default. What review gap would a SELECT-only check miss?",
+          "options": [
+            "The query necessarily loses all indexes",
+            "The external title is misspelled",
+            "The old write may fail validation",
+            "The data becomes automatically encrypted"
+          ],
+          "correct_index": 2,
+          "explanation": "A read-compatible change can still break existing writes.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-2-logical-data-independence-application-new-6",
+          "test_id": "pt-dbms-sql-2-logical-data-independence-application",
+          "question_text": "Marks used to mean points out of fifty; Score now means percent. Is Score AS Marks enough for compatibility?",
+          "options": [
+            "Yes; matching aliases prove identical meaning",
+            "Yes; all numeric fields are interchangeable",
+            "Only the storage medium matters",
+            "No; the measurement scale changed"
+          ],
+          "correct_index": 3,
+          "explanation": "Consumers interpreting old units would receive a different measurement.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-2-logical-data-independence-application-new-7",
+          "test_id": "pt-dbms-sql-2-logical-data-independence-application",
+          "question_text": "A left join preserves students but introduces NULL departments where the old contract required a value. What remains unresolved?",
+          "options": [
+            "The nullability and meaning promised to consumers",
+            "Only the number of SQL keywords",
+            "Only the page size",
+            "Nothing, because row counts match"
+          ],
+          "correct_index": 0,
+          "explanation": "Preserving row eligibility alone does not preserve required attribute values.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-2-logical-data-independence-application-new-8",
+          "test_id": "pt-dbms-sql-2-logical-data-independence-application",
+          "question_text": "A mapping selects an arbitrary department after membership becomes many-to-many. What is the problem?",
+          "options": [
+            "It guarantees all historical meanings",
+            "It may no longer represent the original one-department fact",
+            "It restores missing information automatically",
+            "It cannot affect any report"
+          ],
+          "correct_index": 1,
+          "explanation": "An arbitrary choice requires a new rule and cannot be called transparent by default.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-2-logical-data-independence-application-new-9",
+          "test_id": "pt-dbms-sql-2-logical-data-independence-application",
+          "question_text": "A new join loses the teacher-specific filter. Which compatibility dimension is affected?",
+          "options": [
+            "Only the heading hierarchy",
+            "Only index maintenance cost",
+            "The authorized scope of returned records",
+            "Only the connection timeout"
+          ],
+          "correct_index": 2,
+          "explanation": "Preserving access scope is part of maintaining the real interface contract.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-2-logical-data-independence-application-new-10",
+          "test_id": "pt-dbms-sql-2-logical-data-independence-application",
+          "question_text": "A rollback collapses multiple current memberships into one old field. What must be addressed?",
+          "options": [
+            "Only capitalization of the old column",
+            "Only the number of database files",
+            "Nothing because all migrations are reversible",
+            "Potential information loss and the required selection rule"
+          ],
+          "correct_index": 3,
+          "explanation": "A reverse shape transformation can discard facts unless a reviewed rule and data preservation strategy exist.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "dsa-dbms-sql-logical-independence-alias",
+      "slug": "logical-independence-alias",
+      "title": "Preserve an external score label",
+      "difficulty": "Easy",
+      "task": "The conceptual column score replaces marks without changing units or meaning. Return student_id, name, and score under the old output label marks. Preserve NULL and order by student_id.",
+      "schema_sql": "CREATE TABLE students (student_id INT PRIMARY KEY, name VARCHAR(40) NOT NULL, score INT NULL CHECK (score BETWEEN 0 AND 100));",
+      "seed_sql": "INSERT INTO students VALUES (42,'Dev',NULL),(41,'Leena',84);",
+      "expected": "student_id\tname\tmarks\n41\tLeena\t84\n42\tDev\tNULL",
+      "ordering": "student_id ascending",
+      "constraints": [
+        "Unique student_id",
+        "score can be NULL or between 0 and 100",
+        "The rename does not change score meaning"
+      ],
+      "edge_cases": [
+        "NULL must remain NULL",
+        "Zero is an actual recorded score",
+        "Empty input retains the promised headers"
+      ],
+      "hints": [
+        "Use a column alias",
+        "Do not replace missing values with zero"
+      ],
+      "solution_sql": "SELECT student_id, name, score AS marks FROM students ORDER BY student_id;",
+      "explanation": "The alias preserves the external label while retaining the original value and missing-value distinction.",
+      "validation_cases": [
+        {
+          "seed_sql": "",
+          "expected": ""
+        },
+        {
+          "seed_sql": "INSERT INTO students VALUES (1,'Ria',0);",
+          "expected": "student_id\tname\tmarks\n1\tRia\t0"
+        }
+      ]
+    },
+    {
+      "id": "dsa-dbms-sql-logical-independence-split",
+      "slug": "logical-independence-split",
+      "title": "Reconstruct a student perspective after a split",
+      "difficulty": "Medium",
+      "task": "Return student_id, name, dept_id, marks after department facts move to student_departments. Keep every student, including those without an assignment. The old read contract permits a NULL dept_id. Score still means the former marks. Order by student_id.",
+      "schema_sql": "CREATE TABLE students (student_id INT PRIMARY KEY, name VARCHAR(40) NOT NULL, score INT NULL CHECK (score BETWEEN 0 AND 100));\nCREATE TABLE student_departments (student_id INT PRIMARY KEY, dept_id INT NOT NULL CHECK (dept_id > 0));",
+      "seed_sql": "INSERT INTO students VALUES (43,'Leena',0),(41,'Leena',84),(42,'Dev',NULL); INSERT INTO student_departments VALUES (41,10),(43,20);",
+      "expected": "student_id\tname\tdept_id\tmarks\n41\tLeena\t10\t84\n42\tDev\tNULL\tNULL\n43\tLeena\t20\t0",
+      "ordering": "student_id ascending",
+      "constraints": [
+        "At most one department row per student",
+        "Fixture department rows reference existing students",
+        "The external contract allows missing dept_id",
+        "Names are not identifiers"
+      ],
+      "edge_cases": [
+        "Student without a department remains visible",
+        "Repeated names do not merge students",
+        "Missing mark remains NULL",
+        "Exactly one output row per student"
+      ],
+      "hints": [
+        "Start from students and preserve unmatched rows",
+        "Use the identifier join and alias score"
+      ],
+      "solution_sql": "SELECT s.student_id, s.name, d.dept_id, s.score AS marks FROM students s LEFT JOIN student_departments d ON d.student_id = s.student_id ORDER BY s.student_id;",
+      "explanation": "The left join retains the student population, the unique department-side identifier prevents multiplication, and the alias preserves the promised score label.",
+      "validation_cases": [
+        {
+          "seed_sql": "",
+          "expected": ""
+        },
+        {
+          "seed_sql": "INSERT INTO students VALUES (2,'Avi',100),(1,'Avi',NULL);",
+          "expected": "student_id\tname\tdept_id\tmarks\n1\tAvi\tNULL\tNULL\n2\tAvi\tNULL\t100"
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-2-logical-data-independence-1",
+      "test_id": "pt-dbms-sql-2-logical-data-independence",
+      "question_text": "What does Logical Data Independence allow a DBA to change without affecting external schemas or applications?",
+      "options": [
+        "The physical file storage format",
+        "The conceptual schema (entities, attributes, relationships)",
+        "The client-side user interface",
+        "The network protocol used by drivers"
+      ],
+      "correct_index": 1,
+      "explanation": "Logical data independence is specifically about shielding external schemas/applications from conceptual-level changes.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-2-logical-data-independence-2",
+      "test_id": "pt-dbms-sql-2-logical-data-independence",
+      "question_text": "In the example, adding a new `Email` attribute to `Student` required no change to the Result Portal application. Why?",
+      "options": [
+        "Because email addresses are never stored in databases",
+        "Because the Result Portal's view never referenced the `Email` column in the first place",
+        "Because logical data independence only applies to numeric columns",
+        "Because the internal schema absorbed the change instead"
+      ],
+      "correct_index": 1,
+      "explanation": "A conceptual change only threatens dependent views/applications if they reference the changed part; an unreferenced new column is safe.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-2-logical-data-independence-3",
+      "test_id": "pt-dbms-sql-2-logical-data-independence",
+      "question_text": "What is generally considered harder to fully achieve: logical or physical data independence?",
+      "options": [
+        "Physical data independence",
+        "Logical data independence",
+        "They are equally easy in all cases",
+        "Neither can ever be fully achieved"
+      ],
+      "correct_index": 1,
+      "explanation": "The text states logical independence is harder because conceptual restructuring is more likely to affect existing external view definitions than physical changes are.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-2-logical-data-independence-4",
+      "test_id": "pt-dbms-sql-2-logical-data-independence",
+      "question_text": "When `Student` is split into `Student` and `StudentDept` for normalization, how can the Result Portal application avoid any code changes?",
+      "options": [
+        "By rewriting the application to know about both new tables",
+        "By updating the external/conceptual mapping (the view definition) to re-join the split tables and still return the same output columns",
+        "It is impossible to avoid changes after a table split",
+        "By deleting the external schema entirely"
+      ],
+      "correct_index": 1,
+      "explanation": "The mapping layer between external and conceptual schemas can absorb structural changes like a table split, keeping the application's expected output columns unchanged.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-2-logical-data-independence-5",
+      "test_id": "pt-dbms-sql-2-logical-data-independence",
+      "question_text": "What specifically causes logical data independence to break in the renamed-column scenario?",
+      "options": [
+        "Renaming `Marks` to `Score` without updating the mapping that the dependent view relies on",
+        "Adding an attribute that nothing references",
+        "Increasing the page size used for internal storage",
+        "Adding a new index on the Student table"
+      ],
+      "correct_index": 0,
+      "explanation": "A rename that isn't compensated for in the external/conceptual mapping directly breaks any view still expecting the old column name.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-2-logical-data-independence-6",
+      "test_id": "pt-dbms-sql-2-logical-data-independence",
+      "question_text": "Why is logical data independence described as a 'goal the mapping layer is responsible for preserving' rather than something automatic?",
+      "options": [
+        "Because conceptual schemas can never actually change",
+        "Because unmanaged conceptual changes (like an uncompensated rename) can still break dependent external schemas if the mapping isn't updated",
+        "Because only physical changes ever require a mapping",
+        "Because external schemas are entirely independent of the conceptual schema"
+      ],
+      "correct_index": 1,
+      "explanation": "Logical independence must be actively preserved by updating the mapping when the conceptual schema changes in a way that affects existing views.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-2-logical-data-independence-7",
+      "test_id": "pt-dbms-sql-2-logical-data-independence",
+      "question_text": "A DBA merges two conceptual tables into one and assumes logical independence guarantees no application will ever need review. What is the flaw in this assumption?",
+      "options": [
+        "There is no flaw; logical independence guarantees this automatically in all cases",
+        "Logical independence is achieved only if the mapping is correctly updated to preserve the exact output any dependent view relied on — it is not an automatic guarantee for arbitrary restructuring",
+        "Merging tables never affects logical independence",
+        "Logical independence only applies to internal schema changes, not this scenario"
+      ],
+      "correct_index": 1,
+      "explanation": "Logical independence depends on the mapping being correctly maintained; assuming it is automatic regardless of how the mapping is (or isn't) updated is a common and risky mistake.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-2-logical-data-independence-8",
+      "test_id": "pt-dbms-sql-2-logical-data-independence",
+      "question_text": "Why is a table split generally riskier to logical data independence than adding a brand-new unused column?",
+      "options": [
+        "Because a table split changes the underlying join/structure that existing views may already depend on, while an unused new column has nothing depending on it yet",
+        "Because table splits are internal-schema changes, not conceptual ones",
+        "Because adding columns is always more disruptive than splitting tables",
+        "There is no difference in risk between the two"
+      ],
+      "correct_index": 0,
+      "explanation": "Structural changes like splitting a table affect the joins/columns existing views rely on, making them more likely to require mapping updates than a simple, unreferenced addition.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "coordinator",
+    "independent_review": "unavailable; no agent tools",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Definitions and examples checked against questions; no plagiarism certification.",
+    "existing_question_corrections": [
+      "tq-dbms-sql-2-logical-data-independence-1",
+      "tq-dbms-sql-2-logical-data-independence-4"
+    ],
+    "canonical_answer_indices_preserved": true
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-2-logical-data-independence",
+    "original_note_sha256": "2c80ea0d3039b2e46678f04f8ff8cae6ce4468caba136df4c2df4730a0a961e2",
+    "status": "paired migration prepared; not applied"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Compatibility checks for a student-table split",
+      "description": "A preserved interface requires identity, row eligibility, multiplicity, labels, and missing-value meaning to remain supported; matching column names alone is insufficient.",
+      "columns": [
+        "Original promise",
+        "Mapping requirement",
+        "Failure to test"
+      ],
+      "rows": [
+        [
+          "One row per student",
+          "Unique matching department identifier",
+          "Duplicate department rows multiply students"
+        ],
+        [
+          "Every student remains visible",
+          "A preserving join when assignments are optional",
+          "An inner join drops unassigned students"
+        ],
+        [
+          "marks label with unchanged scale",
+          "score AS marks",
+          "An alias cannot repair changed units"
+        ],
+        [
+          "Missing scores remain missing",
+          "Preserve NULL",
+          "Substituting zero invents a recorded score"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "coordinator review",
+    "server_rendering": "passed",
+    "browser_rendering": "unverified",
+    "independent_review": "unavailable; no agent tools",
+    "rendering_check": "2026-10-28: actual LessonBlock/TopicDiagrams server rendering; 25 authored-package tests passed. Desktop/mobile browser rendering unverified."
+  },
+  "sql_verification": {
+    "engine": "11.8.6-MariaDB-0+deb13u1 from Debian",
+    "scope": "MariaDB compatibility execution; exact MySQL 8.4/provider execution unverified",
+    "fingerprint": "f26d09edb56d9407e56d32002625217d60180c40031297971db7640aa457865d",
+    "cases": [
+      {
+        "problem": "logical-independence-alias",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "logical-independence-alias",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "logical-independence-alias",
+        "case": 2,
+        "passed": true
+      },
+      {
+        "problem": "logical-independence-split",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "logical-independence-split",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "logical-independence-split",
+        "case": 2,
+        "passed": true
+      }
+    ],
+    "all_passed": true
+  }
+}

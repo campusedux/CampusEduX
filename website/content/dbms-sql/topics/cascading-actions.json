@@ -1,0 +1,633 @@
+{
+  "source_ref": "chapter-5-keys-and-integrity/cascading-actions",
+  "slug": "cascading-actions",
+  "title": "Cascading Actions",
+  "description": "Choose referential actions from lifecycle requirements, trace multi-level impact, and preview affected synthetic facts without claiming native cascade execution.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Parent changes can affect dependent facts\n\nReferential actions specify how a supported foreign-key relationship responds to relevant parent deletions or identifying updates. A child can depend on an existing parent key, so removing or changing that key requires preserving the defined invariant. Depending on the chosen action, the database may reject the operation, propagate a change, remove dependent facts, or detach an optional reference.\n\nThese are data-lifecycle decisions rather than merely convenient syntax. A course enrollment, a temporary shopping selection, and an assessment history can have different retention needs even when each references a parent identity. Choose actions from the meaning and ownership of the related facts. Do not assume that every dependency should disappear automatically whenever its parent is no longer shown as active.\n\n## Cascading deletion removes matching children\n\nON DELETE CASCADE requests the supported deletion of child rows referencing the deleted parent. If a department deletion cascades to its courses, the matching course facts can be removed as a consequence of that parent deletion. Unrelated courses should not be affected by that relationship. The actual result depends on the declared constraints and other rules that govern the operation.\n\nA cascade is not a permission grant. The initiating operation still requires the application's relevant authority and database access. Nor does a diagram prove that a native cascade was executed. Inspect the actual declaration and engine behaviour, then verify the resulting state in an authorized isolated environment before claiming the action and its complete impact have been tested.\n\n## Restriction preserves a deliberate decision point\n\nRESTRICT rejects a relevant parent change while referencing child facts remain under the enforced rule. This can be appropriate when dependent history needs review or reassignment before a parent is removed. A failed deletion is useful information about a relationship that has not yet been resolved, rather than an obstacle to bypass by disabling integrity protections.\n\nRestriction does not prescribe the eventual product workflow. A department can perhaps be marked inactive, retain historical courses, or transfer suitable relationships through an authorized operation. Those choices depend on policy. The database action prevents an invalid transition; the application design decides which valid transitions users may request and how they are explained.\n\n## Setting an optional reference to NULL\n\nON DELETE SET NULL can detach a child reference rather than delete the child. The resulting absence must be compatible with the child definition and intended semantics. A column declared NOT NULL cannot support the desired absent state without a different design. The application also needs to understand what an unassigned child means after the parent relationship is removed.\n\nFor example, an optional advisor reference could become absent while a student record remains. That is a different lifecycle from deleting the student when the advisor record is removed. A course enrollment generally has a different dependency meaning again. Explain the resulting facts explicitly rather than assuming every nullable reference should automatically use SET NULL.\n\n## Parent-key updates differ from label updates\n\nON UPDATE actions concern changes to the referenced identifying values. Renaming a department description while its department_id remains unchanged does not necessarily change any reference identity. Updating the referenced key itself can require rejecting the change or propagating the corresponding values according to the supported configured action.\n\nStable internal identifiers can reduce unnecessary reference updates when public labels change. They do not make every identity correction impossible or irrelevant. A deliberate identity migration still needs dependency review and compatible transitions. Keep logical identity, descriptive attributes, and displayed labels separate when explaining which update would actually trigger a referential action.\n\n## Action clauses belong to the relationship\n\nThe action is specified as part of the foreign-key definition using the applicable ON DELETE or ON UPDATE clause. Different relationships from the same parent can use different supported policies. One child category might represent disposable dependent detail, while another represents retained history and restricts the parent change. Read the complete set of relevant constraints before predicting the final result.\n\nA textbook sketch that labels one arrow CASCADE can omit another child that blocks the requested deletion. A complete impact analysis must include all affected relationships and their rules. It must also consider triggers or other supported behaviour where present, rather than assuming the graph drawn for one exercise contains every possible side effect in a real application.\n\n## Cascades can cross several levels\n\nSuppose departments are referenced by courses and courses are referenced by enrollments. If both relationships use an applicable cascading deletion, deleting one department can affect its courses and their enrollments. The affected enrollment population follows the actual course identities in that department. It is not the number of departments, courses, or attributes alone that determines the number of dependent rows.\n\nA course with no enrollments contributes one affected course and zero affected enrollments. Several enrollments can reference one course. A student participating in courses across different departments can have some enrollments affected while others remain. Trace the fact identities at each level instead of assuming that all facts about any participating student must be removed.\n\n## Preview at the intended grain\n\nA read-only query over synthetic fixtures can list descendants that would be selected by a stated relationship chain. This is useful for understanding potential impact without performing the parent deletion. Its result is a logical preview under explicit assumptions, not evidence that the native engine executed the configured cascade or that a production operation is authorized.\n\n```sql\nSELECT e.enrollment_id, e.course_id, e.student_id\nFROM enrollments e\nJOIN courses c ON c.course_id = e.course_id\nWHERE c.department_id = 1\nORDER BY e.enrollment_id;\n```\n\nThe result has one row per matching enrollment. A course without enrollments does not appear in this child listing, although it may still be part of the affected course population. Use separately named counts or listings for different levels. An enrollment count is not a distinct-student count if one student has several relevant enrollments.\n\n## Avoid multiplying summary counts\n\nA department-course-enrollment join can repeat each course once per matching enrollment. COUNT(*) over that combined result can therefore overstate the number of courses. Count distinct course identities for the course total, and count a nonmissing enrollment identity for the enrollment total when preserving courses with no child matches. Both measurements need explicit names.\n\nA preserving join can include departments with no courses and courses with no enrollments. The unmatched output row is not an actual dependent fact. Testing empty branches and multiple children exposes counting errors that a perfectly balanced one-child-per-parent dataset hides. Keep the preview's population clear so users can interpret exactly what each reported number measures.\n\n## Cycles and engines require specific evidence\n\nSelf-references, circular dependencies, multiple paths, and depth restrictions can make referential-action behaviour engine-specific. Do not infer universal support from the fact that a simple two-table cascade is easy to describe. The intended engine, storage type, supported actions, and complete constraint graph determine which definitions and transitions are valid.\n\nA local temporary-table mirror without foreign keys cannot verify native cascading or restricted deletion. It can verify the preview query over chosen fixtures. Exact MySQL or provider checks require the corresponding supported environment and actual constraint operations. Leave that gap explicit rather than describing a successful SELECT as proof that a deletion chain, rollback, or concurrent transition behaved correctly.\n\n## Review lifecycle before executing a change\n\nBefore an authorized real parent operation, inspect ownership, retained history, child relationships, expected scope, and recovery requirements. A large impact can be correct when the dependency represents exclusively owned detail, but the same impact can be wrong for shared or historical facts. Preview results support review; they do not replace permission, current-state checks, or transaction planning.\n\nFor learning, include an unrelated department, a course without enrollments, several enrollments in one course, and a student appearing in multiple branches. Check both affected and unaffected identities in the result. Cascading actions become understandable when the explanation connects the declared relationship, parent operation, resulting child state, and verification scope. That precision supports deliberate lifecycle choices without turning every dependency into an automatic deletion policy.\n",
+  "references": [
+    {
+      "title": "MySQL 8.4 foreign-key referential actions",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/create-table-foreign-keys.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-5-cascading-actions",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-5-cascading-actions-1",
+          "test_id": "pt-dbms-sql-5-cascading-actions",
+          "question_text": "What are cascading actions used for?",
+          "options": [
+            "Encrypting foreign key values",
+            "Specifying what happens to child rows when a referenced parent row is updated or deleted",
+            "Automatically creating new indexes",
+            "Renaming columns automatically"
+          ],
+          "correct_index": 1,
+          "explanation": "ON DELETE/ON UPDATE cascading actions define the automatic response to changes on the parent side of a foreign key.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-5-cascading-actions-2",
+          "test_id": "pt-dbms-sql-5-cascading-actions",
+          "question_text": "What does ON DELETE CASCADE do?",
+          "options": [
+            "Refuses the delete if any child rows exist",
+            "Automatically deletes the child rows that reference the deleted parent row",
+            "Sets the child rows' foreign key to NULL",
+            "Renames the child rows"
+          ],
+          "correct_index": 1,
+          "explanation": "CASCADE propagates the delete to referencing child rows automatically.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-5-cascading-actions-3",
+          "test_id": "pt-dbms-sql-5-cascading-actions",
+          "question_text": "What must be true of a foreign key column for ON DELETE SET NULL to work?",
+          "options": [
+            "It must be the primary key",
+            "The column must allow NULL values",
+            "It must be a composite key",
+            "It must reference exactly one other table"
+          ],
+          "correct_index": 1,
+          "explanation": "SET NULL requires the column to permit NULL — attempting it on a NOT NULL foreign key column fails.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-5-cascading-actions-4",
+          "test_id": "pt-dbms-sql-5-cascading-actions",
+          "question_text": "What is the main risk of using ON DELETE CASCADE broadly?",
+          "options": [
+            "It has no risk and should always be used",
+            "Deleting one row can silently trigger a much larger chain of deletions than expected, especially across multiple cascading tables",
+            "CASCADE always requires manual confirmation before running",
+            "CASCADE only works on SELECT statements"
+          ],
+          "correct_index": 1,
+          "explanation": "Cascades can chain through multiple foreign key relationships, deleting far more data than a developer might initially expect.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-5-cascading-actions-5",
+          "test_id": "pt-dbms-sql-5-cascading-actions",
+          "question_text": "What does RESTRICT do when a delete is attempted on a referenced parent row?",
+          "options": [
+            "Deletes the child rows automatically",
+            "Rejects/blocks the delete if any child rows still reference the parent",
+            "Sets the parent row to NULL",
+            "Silently ignores the delete request with no error"
+          ],
+          "correct_index": 1,
+          "explanation": "RESTRICT is the 'safe' option that refuses to orphan or cascade — the operation must be handled explicitly instead.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-5-cascading-actions-6",
+          "test_id": "pt-dbms-sql-5-cascading-actions",
+          "question_text": "Why might a team deliberately choose RESTRICT over CASCADE, despite the extra manual work?",
+          "options": [
+            "RESTRICT is always faster to execute",
+            "It forces an explicit decision about dependent rows rather than risking accidental, far-reaching automatic deletion",
+            "RESTRICT is required by the SQL standard in every case",
+            "CASCADE is not supported by any real database"
+          ],
+          "correct_index": 1,
+          "explanation": "Trading convenience for safety is a deliberate, common design choice, especially for high-stakes parent tables.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-5-cascading-actions-7",
+          "test_id": "pt-dbms-sql-5-cascading-actions",
+          "question_text": "Where is a cascading action specified in SQL?",
+          "options": [
+            "As a separate CASCADE statement run after CREATE TABLE",
+            "As part of the FOREIGN KEY declaration, via ON DELETE / ON UPDATE clauses",
+            "As a comment in the schema",
+            "In a separate configuration file outside SQL entirely"
+          ],
+          "correct_index": 1,
+          "explanation": "Cascading behavior is declared directly on the FOREIGN KEY constraint itself.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-5-cascading-actions-8",
+          "test_id": "pt-dbms-sql-5-cascading-actions",
+          "question_text": "In a three-level chain (A referenced by B, B referenced by C, both with ON DELETE CASCADE), what happens when a row in A is deleted?",
+          "options": [
+            "Only B's matching rows are affected; C is never touched",
+            "The cascade can propagate through B into C as well, potentially deleting rows in both dependent tables",
+            "Nothing happens unless C is also directly referenced from A",
+            "This configuration is not allowed by SQL"
+          ],
+          "correct_index": 1,
+          "explanation": "Cascades chain across multiple foreign key relationships, which is exactly why the 'blast radius' of CASCADE needs careful attention in deep dependency chains.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-5-cascading-actions-new-9",
+          "test_id": "pt-dbms-sql-5-cascading-actions",
+          "question_text": "Does ON DELETE CASCADE itself authorize the initiating user?",
+          "options": [
+            "Yes; a cascade grants administrator rights",
+            "No; trusted permission checks remain separate",
+            "Only if the key is numeric",
+            "Only if the parent has one child"
+          ],
+          "correct_index": 1,
+          "explanation": "Referential action and caller authority are different concerns.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-5-cascading-actions-new-10",
+          "test_id": "pt-dbms-sql-5-cascading-actions",
+          "question_text": "Does changing a department description necessarily trigger an identifying-key update action?",
+          "options": [
+            "Yes; every label update changes all identities",
+            "Only if descriptions repeat",
+            "No; a stable referenced department_id can remain unchanged",
+            "Only for empty departments"
+          ],
+          "correct_index": 2,
+          "explanation": "Referential actions follow the relevant referenced values.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-5-cascading-actions-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-5-cascading-actions-application-new-1",
+          "test_id": "pt-dbms-sql-5-cascading-actions-application",
+          "question_text": "What can RESTRICT provide in a retained-history design?",
+          "options": [
+            "Automatic permission to delete history",
+            "Removal of every key",
+            "A decision point before changing a still-referenced parent",
+            "A permanent performance guarantee"
+          ],
+          "correct_index": 2,
+          "explanation": "It blocks the invalid transition while dependencies remain.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-5-cascading-actions-application-new-2",
+          "test_id": "pt-dbms-sql-5-cascading-actions-application",
+          "question_text": "What must a SET NULL result mean for the child?",
+          "options": [
+            "A deleted child automatically",
+            "An unchanged mandatory non-NULL value",
+            "A new primary key",
+            "A permitted and understood absent relationship"
+          ],
+          "correct_index": 3,
+          "explanation": "The resulting state must fit nullability and business semantics.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-5-cascading-actions-application-new-3",
+          "test_id": "pt-dbms-sql-5-cascading-actions-application",
+          "question_text": "Can different child relationships from one parent have different actions?",
+          "options": [
+            "Yes; their lifecycle requirements can differ",
+            "No; every arrow must cascade",
+            "Only if there are no keys",
+            "Only if all children are empty"
+          ],
+          "correct_index": 0,
+          "explanation": "Review the complete constraint graph, not one arrow.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-5-cascading-actions-application-new-4",
+          "test_id": "pt-dbms-sql-5-cascading-actions-application",
+          "question_text": "What does a synthetic SELECT preview establish?",
+          "options": [
+            "Native cascade execution",
+            "The modeled affected population under its query assumptions",
+            "Production deletion authority",
+            "Guaranteed rollback behaviour"
+          ],
+          "correct_index": 1,
+          "explanation": "Read-only impact semantics differ from action execution.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-5-cascading-actions-application-new-5",
+          "test_id": "pt-dbms-sql-5-cascading-actions-application",
+          "question_text": "A course has three enrollments. What can a naive joined course row count do?",
+          "options": [
+            "Always count it once",
+            "Remove its primary key",
+            "Count the course three times",
+            "Generate three departments"
+          ],
+          "correct_index": 2,
+          "explanation": "Join multiplicity changes the result grain.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-5-cascading-actions-application-new-6",
+          "test_id": "pt-dbms-sql-5-cascading-actions-application",
+          "question_text": "How can a summary count courses correctly in a course-enrollment join?",
+          "options": [
+            "Count every joined row as a course",
+            "Count student labels only",
+            "Count the number of attributes",
+            "Count distinct nonmissing course identities"
+          ],
+          "correct_index": 3,
+          "explanation": "The aggregate must reflect the intended object identity.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-5-cascading-actions-application-new-7",
+          "test_id": "pt-dbms-sql-5-cascading-actions-application",
+          "question_text": "Does a course without enrollments necessarily vanish from the affected course population?",
+          "options": [
+            "No; it can still be a matching course under the parent relationship",
+            "Yes; childlessness erases the course",
+            "Only if a student name repeats",
+            "Only if sorted"
+          ],
+          "correct_index": 0,
+          "explanation": "Different dependency levels have different populations.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-5-cascading-actions-application-new-8",
+          "test_id": "pt-dbms-sql-5-cascading-actions-application",
+          "question_text": "What should be inspected before predicting a multi-level cascade?",
+          "options": [
+            "Only the first diagram arrow",
+            "All relevant relationships and other enforcing behaviour",
+            "Only the parent name",
+            "Only the current font"
+          ],
+          "correct_index": 1,
+          "explanation": "Another constraint or action can change the final outcome.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-5-cascading-actions-application-new-9",
+          "test_id": "pt-dbms-sql-5-cascading-actions-application",
+          "question_text": "Can a single local query certify every engine’s cycle behaviour?",
+          "options": [
+            "Yes; SQL is identical everywhere",
+            "Only if it returns one row",
+            "No; supported definitions and transitions are engine-specific",
+            "Only if DISTINCT is used"
+          ],
+          "correct_index": 2,
+          "explanation": "Native action evidence requires the intended engine and graph.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-5-cascading-actions-application-new-10",
+          "test_id": "pt-dbms-sql-5-cascading-actions-application",
+          "question_text": "Why include an unrelated department in impact fixtures?",
+          "options": [
+            "To force all parents to be deleted",
+            "To make every row count equal",
+            "To add another primary key to one table",
+            "To verify that unaffected branches remain outside the predicted scope"
+          ],
+          "correct_index": 3,
+          "explanation": "A correct preview must exclude unrelated facts as well as include affected ones.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cx-cascading-preview",
+      "slug": "cascading-preview",
+      "title": "Preview enrollments under one department",
+      "difficulty": "Easy",
+      "task": "List enrollment_id, course_id and student_id whose course belongs to department_id 1. This is a logical read-only impact preview; execute no DELETE.",
+      "schema_sql": "CREATE TABLE departments (department_id INT PRIMARY KEY);\nCREATE TABLE courses (course_id INT PRIMARY KEY, department_id INT NOT NULL);\nCREATE TABLE enrollments (enrollment_id INT PRIMARY KEY, course_id INT NOT NULL, student_id INT NOT NULL);",
+      "seed_sql": "INSERT INTO departments VALUES (1),(2); INSERT INTO courses VALUES (10,1),(20,1),(30,2); INSERT INTO enrollments VALUES (1,10,7),(2,10,8),(3,30,7);",
+      "expected": "enrollment_id\tcourse_id\tstudent_id\n1\t10\t7\n2\t10\t8",
+      "ordering": "Ascending enrollment_id for the listing; ascending department_id for the summary.",
+      "constraints": [
+        "Synthetic query mirrors intentionally contain no foreign keys and execute no parent deletion.",
+        "Assume the depicted department-course-enrollment ownership chain for the preview only; native cascade enforcement and provider execution remain unverified."
+      ],
+      "edge_cases": [
+        "Courses can have no enrollments.",
+        "Several enrollment facts can share a course or student.",
+        "Unrelated branches must remain outside a targeted listing."
+      ],
+      "hints": [
+        "Follow the modeled identifier relationships.",
+        "Count each requested type of fact at its own grain."
+      ],
+      "solution_sql": "SELECT e.enrollment_id, e.course_id, e.student_id FROM enrollments e JOIN courses c ON c.course_id = e.course_id WHERE c.department_id = 1 ORDER BY e.enrollment_id;",
+      "explanation": "The statement previews the modeled dependency population. It is a read-only query, not a cascade operation or native referential-action test.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO departments VALUES (1); INSERT INTO courses VALUES (10,1);",
+          "expected": ""
+        },
+        {
+          "seed_sql": "INSERT INTO departments VALUES (2); INSERT INTO courses VALUES (10,2); INSERT INTO enrollments VALUES (1,10,7);",
+          "expected": ""
+        }
+      ]
+    },
+    {
+      "id": "cx-cascading-summary",
+      "slug": "cascading-summary",
+      "title": "Summarize dependency counts without course fan-out errors",
+      "difficulty": "Medium",
+      "task": "For every department return department_id, course_count and enrollment_count under the modeled chain. Preserve departments with no courses and courses with no enrollments. Count each course only once. This previews population and performs no deletion.",
+      "schema_sql": "CREATE TABLE departments (department_id INT PRIMARY KEY);\nCREATE TABLE courses (course_id INT PRIMARY KEY, department_id INT NOT NULL);\nCREATE TABLE enrollments (enrollment_id INT PRIMARY KEY, course_id INT NOT NULL, student_id INT NOT NULL);",
+      "seed_sql": "INSERT INTO departments VALUES (1),(2),(3); INSERT INTO courses VALUES (10,1),(20,1),(30,2); INSERT INTO enrollments VALUES (1,10,7),(2,10,8),(3,30,7);",
+      "expected": "department_id\tcourse_count\tenrollment_count\n1\t2\t2\n2\t1\t1\n3\t0\t0",
+      "ordering": "Ascending enrollment_id for the listing; ascending department_id for the summary.",
+      "constraints": [
+        "Synthetic query mirrors intentionally contain no foreign keys and execute no parent deletion.",
+        "Assume the depicted department-course-enrollment ownership chain for the preview only; native cascade enforcement and provider execution remain unverified."
+      ],
+      "edge_cases": [
+        "Courses can have no enrollments.",
+        "Several enrollment facts can share a course or student.",
+        "Unrelated branches must remain outside a targeted listing."
+      ],
+      "hints": [
+        "Follow the modeled identifier relationships.",
+        "Count each requested type of fact at its own grain."
+      ],
+      "solution_sql": "SELECT d.department_id, COUNT(DISTINCT c.course_id) AS course_count, COUNT(e.enrollment_id) AS enrollment_count FROM departments d LEFT JOIN courses c ON c.department_id = d.department_id LEFT JOIN enrollments e ON e.course_id = c.course_id GROUP BY d.department_id ORDER BY d.department_id;",
+      "explanation": "The statement previews the modeled dependency population. It is a read-only query, not a cascade operation or native referential-action test.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO departments VALUES (1); INSERT INTO courses VALUES (10,1),(20,1);",
+          "expected": "department_id\tcourse_count\tenrollment_count\n1\t2\t0"
+        },
+        {
+          "seed_sql": "",
+          "expected": ""
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-5-cascading-actions-1",
+      "test_id": "pt-dbms-sql-5-cascading-actions",
+      "question_text": "What are cascading actions used for?",
+      "options": [
+        "Encrypting foreign key values",
+        "Specifying what happens to child rows when a referenced parent row is updated or deleted",
+        "Automatically creating new indexes",
+        "Renaming columns automatically"
+      ],
+      "correct_index": 1,
+      "explanation": "ON DELETE/ON UPDATE cascading actions define the automatic response to changes on the parent side of a foreign key.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-5-cascading-actions-2",
+      "test_id": "pt-dbms-sql-5-cascading-actions",
+      "question_text": "What does ON DELETE CASCADE do?",
+      "options": [
+        "Refuses the delete if any child rows exist",
+        "Automatically deletes the child rows that reference the deleted parent row",
+        "Sets the child rows' foreign key to NULL",
+        "Renames the child rows"
+      ],
+      "correct_index": 1,
+      "explanation": "CASCADE propagates the delete to referencing child rows automatically.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-5-cascading-actions-3",
+      "test_id": "pt-dbms-sql-5-cascading-actions",
+      "question_text": "What must be true of a foreign key column for ON DELETE SET NULL to work?",
+      "options": [
+        "It must be the primary key",
+        "The column must allow NULL values",
+        "It must be a composite key",
+        "It must reference exactly one other table"
+      ],
+      "correct_index": 1,
+      "explanation": "SET NULL requires the column to permit NULL — attempting it on a NOT NULL foreign key column fails.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-5-cascading-actions-4",
+      "test_id": "pt-dbms-sql-5-cascading-actions",
+      "question_text": "What is the main risk of using ON DELETE CASCADE broadly?",
+      "options": [
+        "It has no risk and should always be used",
+        "Deleting one row can silently trigger a much larger chain of deletions than expected, especially across multiple cascading tables",
+        "CASCADE always requires manual confirmation before running",
+        "CASCADE only works on SELECT statements"
+      ],
+      "correct_index": 1,
+      "explanation": "Cascades can chain through multiple foreign key relationships, deleting far more data than a developer might initially expect.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-5-cascading-actions-5",
+      "test_id": "pt-dbms-sql-5-cascading-actions",
+      "question_text": "What does RESTRICT do when a delete is attempted on a referenced parent row?",
+      "options": [
+        "Deletes the child rows automatically",
+        "Rejects/blocks the delete if any child rows still reference the parent",
+        "Sets the parent row to NULL",
+        "Silently ignores the delete request with no error"
+      ],
+      "correct_index": 1,
+      "explanation": "RESTRICT is the 'safe' option that refuses to orphan or cascade — the operation must be handled explicitly instead.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-5-cascading-actions-6",
+      "test_id": "pt-dbms-sql-5-cascading-actions",
+      "question_text": "Why might a team deliberately choose RESTRICT over CASCADE, despite the extra manual work?",
+      "options": [
+        "RESTRICT is always faster to execute",
+        "It forces an explicit decision about dependent rows rather than risking accidental, far-reaching automatic deletion",
+        "RESTRICT is required by the SQL standard in every case",
+        "CASCADE is not supported by any real database"
+      ],
+      "correct_index": 1,
+      "explanation": "Trading convenience for safety is a deliberate, common design choice, especially for high-stakes parent tables.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-5-cascading-actions-7",
+      "test_id": "pt-dbms-sql-5-cascading-actions",
+      "question_text": "Where is a cascading action specified in SQL?",
+      "options": [
+        "As a separate CASCADE statement run after CREATE TABLE",
+        "As part of the FOREIGN KEY declaration, via ON DELETE / ON UPDATE clauses",
+        "As a comment in the schema",
+        "In a separate configuration file outside SQL entirely"
+      ],
+      "correct_index": 1,
+      "explanation": "Cascading behavior is declared directly on the FOREIGN KEY constraint itself.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-5-cascading-actions-8",
+      "test_id": "pt-dbms-sql-5-cascading-actions",
+      "question_text": "In a three-level chain (A referenced by B, B referenced by C, both with ON DELETE CASCADE), what happens when a row in A is deleted?",
+      "options": [
+        "Only B's matching rows are affected; C is never touched",
+        "The cascade can propagate through B into C as well, potentially deleting rows in both dependent tables",
+        "Nothing happens unless C is also directly referenced from A",
+        "This configuration is not allowed by SQL"
+      ],
+      "correct_index": 1,
+      "explanation": "Cascades chain across multiple foreign key relationships, which is exactly why the 'blast radius' of CASCADE needs careful attention in deep dependency chains.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "coordinator",
+    "independent_review": "unavailable; no agent tools",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Definitions and examples checked against questions; no plagiarism certification.",
+    "existing_question_corrections": [],
+    "canonical_answer_indices_preserved": true,
+    "verification_gaps": [
+      "Exact MySQL/provider execution, application authorization, rollback and concurrency remain unverified. Native synthetic MariaDB reference-action checks are recorded separately from these temporary query exercises."
+    ],
+    "native_reference_review": {
+      "date": "2026-10-29",
+      "engine": "11.8.6-MariaDB-0+deb13u1 from Debian",
+      "result": "13 synthetic native InnoDB checks passed; see progress.native_reference_verification for cases and verifier fingerprint.",
+      "scope": "Native InnoDB referential-action checks on synthetic persistent tables in isolated MariaDB scratch database; exact MySQL/provider, application authorization, rollback and concurrency unverified"
+    }
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-5-cascading-actions",
+    "original_note_sha256": "8a19461e0dd8b9026b809ce6e2e3747967a0aeff6d4dfa61eb07b5965eaddc91",
+    "status": "paired migration prepared; not applied"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "One parent relationship can lead to several dependency levels",
+      "description": "This logical preview assumes the stated chain. It distinguishes course impact from enrollment impact and leaves actual native action verification open.",
+      "columns": [
+        "Branch",
+        "Courses",
+        "Enrollments",
+        "Preview interpretation"
+      ],
+      "rows": [
+        [
+          "Department 1",
+          "10 and 20",
+          "1 and 2 under course 10",
+          "Two courses; two enrollments"
+        ],
+        [
+          "Course 20 in department 1",
+          "20",
+          "None",
+          "A course can be affected with zero enrollment facts"
+        ],
+        [
+          "Department 2",
+          "30",
+          "3",
+          "Unrelated to a department-1-only preview"
+        ],
+        [
+          "Department 3",
+          "None",
+          "None",
+          "Preserved zero counts in the summary"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "coordinator checked multi-level scope and separate fact-grain counts; native action execution remains unverified",
+    "server_rendering": "passed",
+    "browser_rendering": "unverified",
+    "independent_review": "unavailable; no agent tools",
+    "server_rendering_evidence": "2026-10-29: all 83 authored packages rendered through actual LessonBlock; 91 focused Vitest checks passed."
+  },
+  "sql_verification": {
+    "engine": "11.8.6-MariaDB-0+deb13u1 from Debian",
+    "scope": "MariaDB compatibility execution; exact MySQL 8.4/provider execution unverified",
+    "fingerprint": "19f2907f001ec7c0abf587772c8e0a736e37cd2ae48117cc1f4932feec654617",
+    "cases": [
+      {
+        "problem": "cascading-preview",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "cascading-preview",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "cascading-preview",
+        "case": 2,
+        "passed": true
+      },
+      {
+        "problem": "cascading-summary",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "cascading-summary",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "cascading-summary",
+        "case": 2,
+        "passed": true
+      }
+    ],
+    "all_passed": true
+  }
+}

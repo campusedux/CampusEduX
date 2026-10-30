@@ -1,0 +1,666 @@
+{
+  "source_ref": "chapter-10-sql-constraints/unique",
+  "slug": "unique",
+  "title": "UNIQUE",
+  "description": "Declare single and composite uniqueness at the intended grain, account for NULL and collation rules, and distinguish deduplicating proposed input from enforcing accepted state.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Uniqueness protects a stated value combination\n\nA UNIQUE constraint requires an accepted set of column values to obey the engine's uniqueness rules. A campus service might require each supplied contact code to identify at most one account, while still using account_id as the primary key. The unique property expresses a business rule about another value role, rather than turning every descriptive label into an identifier.\n\nStart by stating what must not repeat. If an enrollment permits one accepted row per student and course pair, the combination is unique. The same student may still appear with different courses, and the same course may appear with different students. Confusing pair uniqueness with separate uniqueness on each component accidentally changes a many-to-many participation model into a much stricter one.\n\n## Column and table forms express different shapes\n\nA single-column rule can appear with that column's definition or in a suitable table-level declaration. A composite rule lists the participating columns together in the appropriate table-level form. Two separate UNIQUE declarations are not equivalent to one UNIQUE(student_id, course_id) declaration. The separate declarations each reject repeated component values independently.\n\nFor example, pairs (1,10), (1,20) and (2,10) satisfy pair uniqueness even though student 1 and course 10 recur. A second (1,10) violates that pair rule. This concrete trace is more useful than memorizing syntax without a population model. Write the accepted grain in ordinary language before deciding which columns belong in the constraint.\n\n```sql\nCREATE TABLE accepted_enrollments (\n  student_id INT NOT NULL,\n  course_id INT NOT NULL,\n  CONSTRAINT uq_student_course UNIQUE (student_id, course_id)\n);\n```\n\n## Presence and uniqueness are separate decisions\n\nA nullable unique contact field may allow several missing values under the illustrated MySQL rules. That does not mean those rows share one known contact value. It means an absent marker is handled differently from repeated ordinary values by the uniqueness mechanism. If every row must provide the property, add the required presence rule explicitly.\n\nPostgreSQL also supports configurable NULL-distinctness behaviour in applicable unique definitions, including NULLS NOT DISTINCT. Therefore an explanation saying NULL is never treated alike for uniqueness everywhere is inaccurate. State the product, version and chosen rule. The exercises use ordinary MySQL nullable-unique behaviour for one task and required pair components for the other.\n\n## String comparison rules define what counts as duplicate\n\nUnique text values are compared under the relevant type and collation rules. Two spellings differing only in case may conflict under one collation and remain distinct under another. Domain expectations for institutional codes, email-like identifiers or display labels need to match those comparison semantics. A familiar-looking sample does not establish that the chosen rules fit every international input.\n\nThe fixtures use canonical labels that avoid case and accent ambiguity so their reference outputs are clear. That is an exercise boundary, not a claim that real uniqueness can ignore collation. If a production rule requires case-sensitive identifiers, choose and verify an appropriate definition. Do not try to repair a mismatched comparison policy by adding DISTINCT only to the display query.\n\n## A primary key has an additional identity role\n\nA table can have at most one primary-key constraint, including a composite one, and multiple supported unique constraints. It can also have no declared primary key. Saying every table must declare exactly one is not an accurate description of SQL syntax, even though a well-designed application table often needs a clear primary identity.\n\nPRIMARY KEY and UNIQUE with required values overlap in their accepted uniqueness and presence rules, but they are not identical declarations in every operational respect. The primary key identifies the table's designated key and can have engine-specific storage or reference significance. Do not reduce the difference to a universal text substitution that ignores metadata and implementation behaviour.\n\n## Existing duplicates can block a new rule\n\nAdding UNIQUE to a populated column requires its existing values to satisfy the intended rule under the chosen comparison semantics. A proposed change can fail when two accepted rows already conflict. The right response is to identify the domain conflict and its ownership, not silently delete one row or make up another identifier so the DDL appears to succeed.\n\nA diagnostic GROUP BY with a suitable count can expose repeated ordinary values, but NULL and collation interpretation still need to match the intended constraint. Checking an approximate sample is not proof that the full table satisfies the rule. Under a live workload, concurrent writers also need coordination so the state checked during preparation remains compatible with final enforcement.\n\n## Query deduplication does not enforce future writes\n\nSELECT DISTINCT returns a result set without repeated selected tuples. It does not add a constraint to the source or stop another writer from inserting a conflicting accepted row. A report can therefore look clean while the underlying table still violates the intended business rule. Keep result transformation and accepted-state enforcement as different operations.\n\nThe second exercise intentionally combines both: proposals can contain repeated student-course pairs, which the task treats as redundant proposals for the same accepted participation. DISTINCT chooses the requested target set, and the target UNIQUE rule protects that accepted set afterward. This is valid because the domain contract explicitly permits collapsing those proposal occurrences; it would be wrong for an event log that must preserve every attempt.\n\n## Handle conflicts according to the requested policy\n\nA duplicate-key error can represent a genuine conflicting submission, a retry of an already accepted request, or a defect in the writer. The application needs to decide which interpretation applies. A constraint establishes the boundary, but it does not decide whether to report a conflict, return an existing result or apply a carefully defined update.\n\nDo not add IGNORE or an upsert merely to hide every duplicate error. Those forms have their own accepted-state semantics and can mask unrelated problems or change data. The exercises use ordinary insertion and explicit negative cases so the boundary remains visible. More advanced conflict handling belongs to its own topic with an equally precise policy and tests.\n\n## Naming helps maintenance but differs by engine\n\nA named uniqueness rule makes the intended invariant easier to discuss and inspect. In MySQL, a unique constraint is backed through an index representation, and dropping the appropriate named unique index is the relevant illustrated form. Other products distinguish constraint-removal syntax differently. Inspect the actual catalog name rather than assume every engine assigns or exposes the same name.\n\nRemoving a unique rule changes accepted future writes even when no current rows change. Existing callers may rely on that guarantee for lookup or conflict behaviour. Review the dependency before describing constraint removal as a harmless performance adjustment. An index's maintenance cost is relevant, but it does not justify weakening a required integrity rule merely because writes become cheaper.\n\n## Index cost is a tradeoff within the integrity requirement\n\nSupported unique indexes perform maintenance when relevant rows change. That can contribute to write and storage cost, while also supporting particular lookups. The actual performance effect depends on workload, data distribution and engine behaviour. A tiny fixture cannot establish a production latency benefit or a universal cost ratio for adding a unique rule.\n\nFirst decide whether the invariant is required. If it is, evaluate supported implementations and workload effects while preserving that contract. If it is not required, avoid adding arbitrary restrictions just because the column seems important. An unnecessary unique constraint can reject legitimate repeated facts, which is a correctness problem before it is a performance consideration.\n\n## Validate pair boundaries and missing values deliberately\n\nThe introductory exercise creates a nullable unique contact field and loads rows whose ordinary contacts are distinct. Several NULL contacts remain permitted under the stated rules. A duplicate ordinary contact is rejected separately, making the missing-value distinction observable. A primary id keeps repeated missing contacts attached to distinct account rows.\n\nThe composite exercise includes (1,10), (1,20) and (2,10), plus a repeated proposal for (1,10). Its accepted output contains the three distinct pairs. A later duplicate-pair write is rejected, while different combinations remain valid. Empty input creates no invented participation. These cases verify the intended grain more effectively than several copies of one isolated key sample.\n\n## Keep the final claim aligned with the tested definition\n\nA useful illustration shows which repeated components are allowed and which complete tuple conflicts. The notes, MCQs and target DDL should all describe that same rule. This alignment lets the learner explain why a pair constraint differs from two individual constraints and why a unique optional property still needs a separate presence decision.\n\nRecorded MariaDB compatibility fixtures verify the supplied accepted and rejected writes. Exact MySQL/provider collation behaviour, production concurrency and application migration application remain separately unverified. PostgreSQL NULLS NOT DISTINCT is a documented contrast rather than a local native execution claim. The complete package teaches the actual invariant without pretending that uniqueness alone validates every business fact.\n",
+  "references": [
+    {
+      "title": "MySQL 8.4 CREATE TABLE constraints",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/create-table.html"
+    },
+    {
+      "title": "PostgreSQL 18 CREATE TABLE unique rules",
+      "url": "https://www.postgresql.org/docs/18/sql-createtable.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-10-unique",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-10-unique-1",
+          "test_id": "pt-dbms-sql-10-unique",
+          "question_text": "Which SQL clause is required when a uniqueness rule must span two columns together, such as (student_id, course_id)?",
+          "options": [
+            "Two separate column-level UNIQUE clauses, one per column",
+            "A table-level UNIQUE clause listing both columns",
+            "A CHECK constraint referencing both columns",
+            "A FOREIGN KEY referencing both columns"
+          ],
+          "correct_index": 1,
+          "explanation": "Column-level UNIQUE applies to a single column only; a composite uniqueness rule requires the table-level UNIQUE (col1, col2) form.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-10-unique-2",
+          "test_id": "pt-dbms-sql-10-unique",
+          "question_text": "Under ordinary nullable UNIQUE behaviour in the illustrated MySQL definition, can several rows have NULL?",
+          "options": [
+            "Zero — NULL is forbidden in a UNIQUE column",
+            "Exactly one",
+            "Yes; repeated missing markers are permitted by this chosen rule",
+            "Unlimited only if the column is also indexed manually"
+          ],
+          "correct_index": 2,
+          "explanation": "Products and options such as PostgreSQL NULLS NOT DISTINCT can choose different uniqueness treatment.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-10-unique-3",
+          "test_id": "pt-dbms-sql-10-unique",
+          "question_text": "What is the correct way to drop a named UNIQUE constraint `uq_users_username` in MySQL?",
+          "options": [
+            "ALTER TABLE users DROP CONSTRAINT uq_users_username;",
+            "ALTER TABLE users DROP UNIQUE uq_users_username;",
+            "ALTER TABLE users DROP INDEX uq_users_username;",
+            "DROP UNIQUE ON users.uq_users_username;"
+          ],
+          "correct_index": 2,
+          "explanation": "MySQL implements UNIQUE constraints as unique indexes internally, so they are dropped with DROP INDEX rather than DROP CONSTRAINT.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-10-unique-4",
+          "test_id": "pt-dbms-sql-10-unique",
+          "question_text": "What happens when you run ALTER TABLE users ADD CONSTRAINT uq_username UNIQUE (username); on a table that already has two rows with the same username value?",
+          "options": [
+            "The constraint is added and future duplicates are blocked, but the existing duplicates remain",
+            "The statement fails because existing data violates the new constraint",
+            "MySQL silently deletes one of the duplicate rows",
+            "The constraint is added in a disabled state"
+          ],
+          "correct_index": 1,
+          "explanation": "Adding a UNIQUE constraint validates existing data first; duplicates already present cause the ALTER TABLE to be rejected.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-10-unique-5",
+          "test_id": "pt-dbms-sql-10-unique",
+          "question_text": "How many primary-key constraints can a table declare?",
+          "options": [
+            "At most one; it may also declare several supported unique rules",
+            "Any number of both",
+            "Exactly one of each",
+            "Any number of PRIMARY KEY, exactly one UNIQUE"
+          ],
+          "correct_index": 0,
+          "explanation": "SQL permits a table with no declared primary key.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-10-unique-6",
+          "test_id": "pt-dbms-sql-10-unique",
+          "question_text": "How should PRIMARY KEY be distinguished from a required UNIQUE rule?",
+          "options": [
+            "They are unrelated features with no overlap",
+            "They overlap in presence and uniqueness but differ in designated key role and possible engine-specific behaviour",
+            "UNIQUE is a stricter version of PRIMARY KEY",
+            "PRIMARY KEY allows NULLs while UNIQUE does not"
+          ],
+          "correct_index": 1,
+          "explanation": "They are not universally identical metadata or storage declarations.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-10-unique-7",
+          "test_id": "pt-dbms-sql-10-unique",
+          "question_text": "In a composite constraint UNIQUE (a, b), which of the following is allowed?",
+          "options": [
+            "Duplicate values in column a alone, as long as the (a, b) pair as a whole is not duplicated",
+            "Any duplicate row where a matches another row's a",
+            "No duplicates in either column individually",
+            "Duplicate (a, b) pairs as long as a is not the primary key"
+          ],
+          "correct_index": 0,
+          "explanation": "A composite UNIQUE constraint only forbids duplicate combinations of the listed columns; individual columns may repeat freely on their own.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-10-unique-8",
+          "test_id": "pt-dbms-sql-10-unique",
+          "question_text": "Why might a database administrator avoid adding a UNIQUE constraint to a column that doesn't strictly need one?",
+          "options": [
+            "UNIQUE constraints prevent the column from ever being updated",
+            "UNIQUE automatically creates a supporting index in most engines, adding overhead to write-heavy workloads",
+            "UNIQUE constraints cannot coexist with NOT NULL",
+            "UNIQUE constraints are deprecated in modern SQL"
+          ],
+          "correct_index": 1,
+          "explanation": "Most engines back a UNIQUE constraint with an index to enforce it efficiently, and that index carries maintenance cost on every insert/update, which matters for high-write tables.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-10-unique-new-9",
+          "test_id": "pt-dbms-sql-10-unique",
+          "question_text": "Does UNIQUE(student_id,course_id) forbid a student from taking two different courses?",
+          "options": [
+            "Yes",
+            "No",
+            "Only if ids are integers",
+            "Only on an empty table"
+          ],
+          "correct_index": 1,
+          "explanation": "The complete pair, not each component alone, is protected.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-10-unique-new-10",
+          "test_id": "pt-dbms-sql-10-unique",
+          "question_text": "Does SELECT DISTINCT enforce source uniqueness for future writes?",
+          "options": [
+            "Yes",
+            "Only when ordered",
+            "No",
+            "Only with VARCHAR"
+          ],
+          "correct_index": 2,
+          "explanation": "A result transformation does not change accepted table state.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-10-unique-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-10-unique-application-new-1",
+          "test_id": "pt-dbms-sql-10-unique-application",
+          "question_text": "Which pair conflicts with an accepted (1,10)?",
+          "options": [
+            "(1,20)",
+            "(2,10)",
+            "Another (1,10)",
+            "(2,20)"
+          ],
+          "correct_index": 2,
+          "explanation": "The protected combination must repeat.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-10-unique-application-new-2",
+          "test_id": "pt-dbms-sql-10-unique-application",
+          "question_text": "Why can collation matter for a unique code?",
+          "options": [
+            "It grants all users access",
+            "It automatically chooses business identity",
+            "It removes every constraint",
+            "It determines relevant string comparison behaviour"
+          ],
+          "correct_index": 3,
+          "explanation": "Case and accent treatment can affect duplicate interpretation.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-10-unique-application-new-3",
+          "test_id": "pt-dbms-sql-10-unique-application",
+          "question_text": "Can a SQL table omit a declared primary key?",
+          "options": [
+            "Yes",
+            "No",
+            "Only if empty",
+            "Only with no text"
+          ],
+          "correct_index": 0,
+          "explanation": "At most one is different from exactly one required declaration.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-10-unique-application-new-4",
+          "test_id": "pt-dbms-sql-10-unique-application",
+          "question_text": "What should happen before resolving existing duplicate accepted identities?",
+          "options": [
+            "Silent arbitrary deletion",
+            "A domain decision about the conflicting facts",
+            "Random key invention",
+            "Only a report alias"
+          ],
+          "correct_index": 1,
+          "explanation": "DDL success is not a valid reason to discard legitimate data.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-10-unique-application-new-5",
+          "test_id": "pt-dbms-sql-10-unique-application",
+          "question_text": "Why does the proposal-copy exercise use DISTINCT?",
+          "options": [
+            "All event logs should lose duplicates",
+            "UNIQUE always deletes duplicates first",
+            "Its contract treats repeated pair proposals as the same accepted participation",
+            "It changes every id"
+          ],
+          "correct_index": 2,
+          "explanation": "The target set grain is explicitly requested.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-10-unique-application-new-6",
+          "test_id": "pt-dbms-sql-10-unique-application",
+          "question_text": "Does a unique nullable contact necessarily require a contact on every row?",
+          "options": [
+            "Yes",
+            "Only if the contact is long",
+            "Only with an index name",
+            "No"
+          ],
+          "correct_index": 3,
+          "explanation": "Presence is a separate requirement.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-10-unique-application-new-7",
+          "test_id": "pt-dbms-sql-10-unique-application",
+          "question_text": "What does dropping a required unique index change?",
+          "options": [
+            "The future integrity boundary as well as index maintenance",
+            "Only note formatting",
+            "No behaviour",
+            "Only output order"
+          ],
+          "correct_index": 0,
+          "explanation": "Callers may rely on duplicate rejection.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-10-unique-application-new-8",
+          "test_id": "pt-dbms-sql-10-unique-application",
+          "question_text": "Does a duplicate error prescribe one universal application response?",
+          "options": [
+            "Yes, always ignore it",
+            "No",
+            "Yes, always delete the old row",
+            "Yes, always overwrite"
+          ],
+          "correct_index": 1,
+          "explanation": "Retries, conflicting requests and defects need a policy.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-10-unique-application-new-9",
+          "test_id": "pt-dbms-sql-10-unique-application",
+          "question_text": "What does one successful sample fail to establish?",
+          "options": [
+            "Its recorded reference output",
+            "The supplied accepted pair set",
+            "Production concurrency and every collation boundary",
+            "A tested duplicate rejection"
+          ],
+          "correct_index": 2,
+          "explanation": "Evidence has a defined scope.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-10-unique-application-new-10",
+          "test_id": "pt-dbms-sql-10-unique-application",
+          "question_text": "Why not add uniqueness to every important label?",
+          "options": [
+            "Every label is globally unique",
+            "It always improves correctness",
+            "It has no acceptance effect",
+            "Legitimate repeated descriptions may be allowed"
+          ],
+          "correct_index": 3,
+          "explanation": "A constraint must represent an actual invariant.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cx-unique-nullable-contacts",
+      "slug": "unique-nullable-contacts",
+      "title": "Enforce unique supplied contacts while permitting missing ones",
+      "difficulty": "Easy",
+      "task": "Create TEMPORARY accounts(account_id INT PRIMARY KEY,contact VARCHAR(80) NULL,CONSTRAINT uq_contact UNIQUE(contact)). Copy account_input and return account_id,contact. The ordinary MySQL-style nullable unique rule permits multiple NULL contacts; ordinary supplied contacts in every positive fixture are distinct.",
+      "schema_sql": "CREATE TABLE account_input (account_id INT PRIMARY KEY,contact VARCHAR(80) NULL);",
+      "seed_sql": "INSERT INTO account_input VALUES (1,'alpha@example.test'),(2,NULL),(3,NULL);",
+      "expected": "account_id\tcontact\n1\talpha@example.test\n2\tNULL\n3\tNULL",
+      "ordering": "Ascending account_id.",
+      "constraints": [
+        "Input has distinct ordinary contacts.",
+        "Null contacts are intentionally optional."
+      ],
+      "edge_cases": [
+        "Several NULL contacts remain separate account rows.",
+        "A repeated ordinary contact is rejected."
+      ],
+      "hints": [
+        "Use a separate primary identity and nullable unique contact role.",
+        "Do not deduplicate account rows merely because contact is absent."
+      ],
+      "solution_sql": "CREATE TEMPORARY TABLE accounts (account_id INT PRIMARY KEY,contact VARCHAR(80) NULL,CONSTRAINT uq_contact UNIQUE(contact)); INSERT INTO accounts SELECT account_id,contact FROM account_input; SELECT account_id,contact FROM accounts ORDER BY account_id;",
+      "explanation": "The unique rule applies to supplied contact values under the stated engine rules while primary identity preserves distinct accounts.",
+      "validation_cases": [
+        {
+          "seed_sql": "",
+          "expected": ""
+        },
+        {
+          "seed_sql": "INSERT INTO account_input VALUES (8,NULL),(7,NULL);",
+          "expected": "account_id\tcontact\n7\tNULL\n8\tNULL"
+        }
+      ],
+      "negative_validation_cases": [
+        {
+          "sql": "INSERT INTO accounts VALUES (99,'alpha@example.test');",
+          "error_codes": [
+            1062
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cx-unique-composite-proposals",
+      "slug": "unique-composite-proposals",
+      "title": "Accept a pair set and protect future composite uniqueness",
+      "difficulty": "Medium",
+      "task": "Create TEMPORARY accepted_enrollments with student_id INT NOT NULL,course_id INT NOT NULL and UNIQUE(student_id,course_id). Treat proposals as a set of requested participations: copy each distinct pair exactly once. Return the accepted pairs. A repeated student with another course and a repeated course with another student are permitted.",
+      "schema_sql": "CREATE TABLE proposals (student_id INT NOT NULL,course_id INT NOT NULL);",
+      "seed_sql": "INSERT INTO proposals VALUES (1,10),(1,20),(2,10),(1,10);",
+      "expected": "student_id\tcourse_id\n1\t10\n1\t20\n2\t10",
+      "ordering": "Ascending student_id,course_id.",
+      "constraints": [
+        "Proposal occurrences intentionally collapse to the requested pair set.",
+        "The accepted target enforces complete pair uniqueness."
+      ],
+      "edge_cases": [
+        "Component repetition is allowed when the full pair differs.",
+        "A duplicate accepted pair is rejected."
+      ],
+      "hints": [
+        "List both columns together in one unique rule.",
+        "Use DISTINCT to implement this proposal-to-set policy."
+      ],
+      "solution_sql": "CREATE TEMPORARY TABLE accepted_enrollments (student_id INT NOT NULL,course_id INT NOT NULL,CONSTRAINT uq_student_course UNIQUE(student_id,course_id)); INSERT INTO accepted_enrollments SELECT DISTINCT student_id,course_id FROM proposals; SELECT student_id,course_id FROM accepted_enrollments ORDER BY student_id,course_id;",
+      "explanation": "The copy defines an accepted pair set and the constraint preserves that invariant for future writes.",
+      "validation_cases": [
+        {
+          "seed_sql": "",
+          "expected": ""
+        },
+        {
+          "seed_sql": "INSERT INTO proposals VALUES (7,8),(7,8),(7,9);",
+          "expected": "student_id\tcourse_id\n7\t8\n7\t9"
+        }
+      ],
+      "negative_validation_cases": [
+        {
+          "sql": "INSERT INTO accepted_enrollments VALUES (1,10);",
+          "error_codes": [
+            1062
+          ]
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-10-unique-1",
+      "test_id": "pt-dbms-sql-10-unique",
+      "question_text": "Which SQL clause is required when a uniqueness rule must span two columns together, such as (student_id, course_id)?",
+      "options": [
+        "Two separate column-level UNIQUE clauses, one per column",
+        "A table-level UNIQUE clause listing both columns",
+        "A CHECK constraint referencing both columns",
+        "A FOREIGN KEY referencing both columns"
+      ],
+      "correct_index": 1,
+      "explanation": "Column-level UNIQUE applies to a single column only; a composite uniqueness rule requires the table-level UNIQUE (col1, col2) form.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-10-unique-2",
+      "test_id": "pt-dbms-sql-10-unique",
+      "question_text": "In standard PostgreSQL behavior, how many rows can have NULL in a UNIQUE column?",
+      "options": [
+        "Zero — NULL is forbidden in a UNIQUE column",
+        "Exactly one",
+        "Multiple rows, since NULL is never considered equal to another NULL",
+        "Unlimited only if the column is also indexed manually"
+      ],
+      "correct_index": 2,
+      "explanation": "PostgreSQL, like MySQL and Oracle, treats each NULL as an unknown value, so multiple NULLs don't violate uniqueness; SQL Server differs and allows only one.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-10-unique-3",
+      "test_id": "pt-dbms-sql-10-unique",
+      "question_text": "What is the correct way to drop a named UNIQUE constraint `uq_users_username` in MySQL?",
+      "options": [
+        "ALTER TABLE users DROP CONSTRAINT uq_users_username;",
+        "ALTER TABLE users DROP UNIQUE uq_users_username;",
+        "ALTER TABLE users DROP INDEX uq_users_username;",
+        "DROP UNIQUE ON users.uq_users_username;"
+      ],
+      "correct_index": 2,
+      "explanation": "MySQL implements UNIQUE constraints as unique indexes internally, so they are dropped with DROP INDEX rather than DROP CONSTRAINT.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-10-unique-4",
+      "test_id": "pt-dbms-sql-10-unique",
+      "question_text": "What happens when you run ALTER TABLE users ADD CONSTRAINT uq_username UNIQUE (username); on a table that already has two rows with the same username value?",
+      "options": [
+        "The constraint is added and future duplicates are blocked, but the existing duplicates remain",
+        "The statement fails because existing data violates the new constraint",
+        "MySQL silently deletes one of the duplicate rows",
+        "The constraint is added in a disabled state"
+      ],
+      "correct_index": 1,
+      "explanation": "Adding a UNIQUE constraint validates existing data first; duplicates already present cause the ALTER TABLE to be rejected.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-10-unique-5",
+      "test_id": "pt-dbms-sql-10-unique",
+      "question_text": "How many PRIMARY KEY constraints and how many UNIQUE constraints can a single table have?",
+      "options": [
+        "Exactly one PRIMARY KEY, and any number of UNIQUE constraints",
+        "Any number of both",
+        "Exactly one of each",
+        "Any number of PRIMARY KEY, exactly one UNIQUE"
+      ],
+      "correct_index": 0,
+      "explanation": "A table has at most one PRIMARY KEY but can define multiple UNIQUE constraints on different columns or column combinations.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-10-unique-6",
+      "test_id": "pt-dbms-sql-10-unique",
+      "question_text": "Which best describes the relationship between PRIMARY KEY and UNIQUE at the syntax/semantics level?",
+      "options": [
+        "They are unrelated features with no overlap",
+        "PRIMARY KEY is equivalent to UNIQUE plus NOT NULL bundled together",
+        "UNIQUE is a stricter version of PRIMARY KEY",
+        "PRIMARY KEY allows NULLs while UNIQUE does not"
+      ],
+      "correct_index": 1,
+      "explanation": "A PRIMARY KEY combines the uniqueness guarantee of UNIQUE with an implicit NOT NULL, which is why PRIMARY KEY columns can never contain NULL.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-10-unique-7",
+      "test_id": "pt-dbms-sql-10-unique",
+      "question_text": "In a composite constraint UNIQUE (a, b), which of the following is allowed?",
+      "options": [
+        "Duplicate values in column a alone, as long as the (a, b) pair as a whole is not duplicated",
+        "Any duplicate row where a matches another row's a",
+        "No duplicates in either column individually",
+        "Duplicate (a, b) pairs as long as a is not the primary key"
+      ],
+      "correct_index": 0,
+      "explanation": "A composite UNIQUE constraint only forbids duplicate combinations of the listed columns; individual columns may repeat freely on their own.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-10-unique-8",
+      "test_id": "pt-dbms-sql-10-unique",
+      "question_text": "Why might a database administrator avoid adding a UNIQUE constraint to a column that doesn't strictly need one?",
+      "options": [
+        "UNIQUE constraints prevent the column from ever being updated",
+        "UNIQUE automatically creates a supporting index in most engines, adding overhead to write-heavy workloads",
+        "UNIQUE constraints cannot coexist with NOT NULL",
+        "UNIQUE constraints are deprecated in modern SQL"
+      ],
+      "correct_index": 1,
+      "explanation": "Most engines back a UNIQUE constraint with an index to enforce it efficiently, and that index carries maintenance cost on every insert/update, which matters for high-write tables.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "coordinator",
+    "independent_review": "unavailable; no agent tools",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Definitions and examples checked against questions; no plagiarism certification.",
+    "existing_question_corrections": [
+      "tq-dbms-sql-10-unique-2",
+      "tq-dbms-sql-10-unique-5",
+      "tq-dbms-sql-10-unique-6"
+    ],
+    "canonical_answer_indices_preserved": true,
+    "batch_review": {
+      "reviewer": "coordinator",
+      "independent": false,
+      "scope": "This new package: explained definitions and boundaries, retained source question identities/canonical indices, new correct answers and explanations, exercise solutions and recorded fixtures, diagram trace and prepared integration.",
+      "execution_evidence": "Focused MariaDB reference cases and selected actual LessonBlock rendering passed; no browser QA or exact MySQL/provider execution.",
+      "source_preservation": "Original snapshots retained; eight retained exercises across this continuation matched source identity, difficulty, schema, seed and trailing checker.",
+      "limits": "No independent worker available. Output fixtures do not prove arbitrary student submissions used a requested technique. Native PostgreSQL/other-engine concepts remain documented or explicitly mirrored, not verified by MariaDB."
+    }
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-10-unique",
+    "original_note_sha256": "4630ba73d5d8e1b88c427be8774fe39da297922c78b1b42b7c057a8178de97ef",
+    "status": "paired migration prepared; not applied"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Composite uniqueness protects the complete pair, not each component alone",
+      "description": "Repeated students or courses are valid when the complete participation differs; one repeated full pair conflicts.",
+      "columns": [
+        "Proposed pair",
+        "Compared with accepted (1,10)",
+        "Pair rule"
+      ],
+      "rows": [
+        [
+          "(1,20)",
+          "Same student, different course",
+          "Allowed"
+        ],
+        [
+          "(2,10)",
+          "Different student, same course",
+          "Allowed"
+        ],
+        [
+          "(2,20)",
+          "Both components differ",
+          "Allowed"
+        ],
+        [
+          "(1,10)",
+          "Complete pair repeats",
+          "Rejected by target UNIQUE"
+        ],
+        [
+          "NULL in an optional single unique field",
+          "Different stated nullable rule",
+          "Handled by chosen engine/options"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "coordinator checked component-versus-pair identity, nullable uniqueness, collation scope and set transformation versus enforcement",
+    "server_rendering": "passed",
+    "browser_rendering": "unverified",
+    "independent_review": "unavailable; no agent tools",
+    "server_rendering_evidence": "Selected actual LessonBlock Vitest rendering passed for this batch; no browser QA."
+  },
+  "sql_verification": {
+    "engine": "11.8.6-MariaDB-0+deb13u1 from Debian",
+    "scope": "MariaDB compatibility execution; exact MySQL 8.4/provider execution unverified",
+    "fingerprint": "c8bda1a9196b2a7238361dd01cb2cf8ae2b8f97ae32f6c21629c8c49362fd475",
+    "cases": [
+      {
+        "problem": "unique-nullable-contacts",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "unique-nullable-contacts",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "unique-nullable-contacts",
+        "case": 2,
+        "passed": true
+      },
+      {
+        "problem": "unique-nullable-contacts",
+        "negative_case": 0,
+        "error_code": 1062,
+        "passed": true
+      },
+      {
+        "problem": "unique-composite-proposals",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "unique-composite-proposals",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "unique-composite-proposals",
+        "case": 2,
+        "passed": true
+      },
+      {
+        "problem": "unique-composite-proposals",
+        "negative_case": 0,
+        "error_code": 1062,
+        "passed": true
+      }
+    ],
+    "all_passed": true
+  }
+}

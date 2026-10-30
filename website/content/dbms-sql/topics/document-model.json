@@ -1,0 +1,640 @@
+{
+  "source_ref": "chapter-3-data-models/document-model",
+  "slug": "document-model",
+  "title": "Document Model",
+  "description": "Model nested document facts with explicit validation, identity, embedding and reference choices, and missing-value semantics, with MySQL JSON practice kept distinct from native document-engine verification.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Storing a structured aggregate as a document\n\nThe document data model represents information through documents that can contain named fields, nested objects, and arrays. JSON-like examples make the structure readable, while actual products may use a representation such as BSON with additional supported types. A document is more than an opaque string when the database can interpret supported internal fields for queries and indexes.\n\nMongoDB is a familiar document database, but the model is not defined by one product's exact API or transaction limits. MySQL also provides JSON facilities inside a relational database. Using a JSON column does not turn every surrounding table and operation into a standalone document database, and equivalent-looking JSON does not prove identical behavior across engines.\n\nConsider a learning catalog document with a title, level, and author object. Another document can contain an optional estimated duration. The representation can support variation, but the application still needs a contract for which fields are required, what types they accept, and how readers interpret absent values.\n\n## Keeping flexibility separate from missing rules\n\nFlexible schema means documents can have different shapes under the selected product's rules. It does not mean structure is irrelevant or validation is impossible. MongoDB supports schema validation, including field-type and value restrictions. A product can reject invalid writes or use other configured behavior, so inspect the actual validation policy rather than assuming all collections accept everything.\n\nThe phrase schema-on-read emphasizes interpreting structure when reading, but many real designs combine reader expectations with write-time validation. A title can be required while an optional duration remains flexible. Without a shared contract, one writer might store duration as an integer number of minutes and another as a sentence, making later filtering ambiguous.\n\nA migration from one document shape to another also needs compatibility planning. Adding an optional field differs from replacing a string field with an object. Existing documents and older readers may remain in the system. A schema-free slogan does not supply an evolution policy or make every change invisible.\n\n## Preserving document identity\n\nA document needs an identity appropriate to the application's references and updates. Two catalog entries can share the title SQL Basics without representing the same course. A stable identifier distinguishes them even when their visible fields match. Updating a title should not accidentally replace the identity used by bookmarks, enrollment records, or external links.\n\nEmbedded values need their own identity decisions. An address value might simply be part of one user's current profile, while an independently managed delivery location may require a distinct identity and lifecycle. A nested object does not automatically become an independently identified entity merely because it has several named fields.\n\nArrays introduce another distinction: an array position is not always a stable identifier for an entry. Reordering or inserting elements can change positions. If callers must update one address across time, a modeled entry identifier can be more appropriate than assuming the third array item always refers to the same location.\n\n## Choosing embedding from the facts\n\nEmbedding places related data inside the parent document. A user's addresses array can make retrieving that defined aggregate convenient. This differs from storing each address in a separate relation or collection and connecting it by references. The choice should follow ownership, access patterns, update frequency, size, and integrity requirements.\n\nEmbedding an exclusively owned value does not necessarily create redundant copies of the same fact. Redundancy becomes a separate concern when an authoritative address or course fact is duplicated across documents. If one fact has several copies, updating only one can leave readers with conflicting states. The design needs an explicit source-of-truth and propagation policy.\n\nDo not call every nested array automatically a normalization defect. Ask what each value represents and whether it is intentionally part of an aggregate or a separately shared fact. A document layout can be appropriate for one task while awkward for another that needs cross-entry uniqueness, independent history, or frequent updates to a shared entity.\n\n## Understanding document queries and indexes\n\nA document engine can offer predicates and indexes over supported fields within documents. That distinguishes its rich document interface from the simplest opaque-value key-value abstraction. Real products overlap: some key-value systems also offer structured values and secondary indexes. Classify the actual access contract rather than drawing a universal boundary from one marketing category.\n\nA query for beginner catalog entries must define how missing level values and unexpected types behave. An index can help supported predicates, but it does not establish field validity or actor permission. A query that executes successfully can still expose an unrelated document population or interpret mixed value types incorrectly.\n\nRead costs depend on the actual query, index, document size, and engine. Fetching one useful aggregate can avoid assembling separate facts, but very large documents or duplicated data can create other costs. Fewer visible joins is not a universal performance proof. Measure the workload and preserve required consistency and access behavior.\n\n## Distinguishing missing fields and null values\n\nA missing field and a field explicitly containing JSON null are different document states. An empty string is different again, as is the string whose four letters spell null. A reader should preserve distinctions the task needs instead of replacing every case with the same blank label.\n\nIn MySQL, JSON_CONTAINS_PATH can check whether a path exists, JSON_EXTRACT obtains a supported path value, and JSON_TYPE can distinguish an explicit JSON null from a string value. JSON_UNQUOTE can expose a selected JSON string as text. These are MySQL-oriented examples, not MongoDB query syntax.\n\n```sql\nSELECT document_id,\n       JSON_UNQUOTE(JSON_EXTRACT(body, '$.title')) AS title\nFROM catalog_documents\nWHERE JSON_UNQUOTE(JSON_EXTRACT(body, '$.level')) = 'beginner'\nORDER BY document_id;\n```\n\nThe fixture defines level as a string when present. A document lacking that level does not qualify through the equality condition. The task also requires a title for qualifying fixtures; simply using a valid JSON type does not enforce that application-level rule. Syntactic JSON validity and schema validity are different checks.\n\n## Defining update and transaction boundaries\n\nA document can be a useful update boundary when related values change together through a supported operation. That does not mean every document store is limited to one-document transactions or that every multi-document workflow is automatically atomic. MongoDB supports multi-document transactions on supported deployments, with specific version and operational requirements.\n\nThe right boundary follows the business operation. Updating duplicated course facts across several documents requires a consistency policy even when each individual update is atomic. An interrupted propagation can leave mixed versions. References, embedding, transactions, or a reviewed asynchronous mechanism each carry trade-offs rather than removing the requirement to define consistency.\n\nA client retrieving a document also needs trusted authorization for its fields and records. Hiding a nested field in the interface is not enough if the response still contains it. Flexible structure must not become a shortcut for storing secrets or exposing private profile data inside a convenient aggregate.\n\n## Comparing document and wide-column organization\n\nDocument and wide-column models organize information differently. Documents emphasize structured values and aggregates; wide-column systems commonly emphasize keyed partitions and named column organization under their actual product rules. Cassandra and Bigtable are not identical products, and neither category supplies a universal write-throughput guarantee.\n\nAn event dataset might fit several representations. The choice depends on query population, access keys, retention, update patterns, and transaction needs. Compare those concrete properties rather than assuming deeply nested data always requires a document store or that high volume always requires a particular NoSQL category.\n\nA MySQL JSON exercise can test document-field reasoning without proving native MongoDB behavior. Likewise, MariaDB compatibility execution does not establish every MySQL JSON storage or indexing guarantee. Record the engine and the exact functions exercised, and keep native and provider verification separate.\n\n## Reviewing a document contract\n\nUse original fixtures covering optional fields, explicit null, empty text, repeated labels, and nested values. Verify required fields and types where the actual engine enforces them, then inspect query meaning and output population separately. A valid JSON parser result cannot substitute for authorization or business-schema checks.\n\nThe document model is useful when an aggregate structure matches required facts and access patterns. Preserve identity, define absence and validation policies, and make embedding or references deliberate. That produces understandable documents without claiming that flexibility removes schemas, that nesting guarantees performance, or that a successful field query verifies every native engine feature.\n",
+  "references": [
+    {
+      "title": "MongoDB schema validation",
+      "url": "https://www.mongodb.com/docs/manual/core/schema-validation/"
+    },
+    {
+      "title": "MySQL JSON path queries",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/json-search-functions.html"
+    },
+    {
+      "title": "MySQL JSON value attributes",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/json-attribute-functions.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-3-document-model",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-3-document-model-1",
+          "test_id": "pt-dbms-sql-3-document-model",
+          "question_text": "What is the defining storage unit of the document model?",
+          "options": [
+            "A fixed-schema table row",
+            "A self-contained, semi-structured document (e.g., JSON/BSON) that can nest objects and arrays",
+            "An opaque binary blob addressable only by key",
+            "A wide sparse column family"
+          ],
+          "correct_index": 1,
+          "explanation": "Document databases store data as self-contained documents, typically JSON or BSON, which can include nested objects and arrays.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-3-document-model-2",
+          "test_id": "pt-dbms-sql-3-document-model",
+          "question_text": "What does flexible document structure imply about validation?",
+          "options": [
+            "The schema is enforced strictly at write time by the database",
+            "Documents can vary, while configured write validation and reader contracts can still impose rules",
+            "Every document must be validated against a fixed schema before insertion",
+            "Reads are not permitted until a schema is defined"
+          ],
+          "correct_index": 1,
+          "explanation": "Flexible does not mean unvalidated or without a shared schema.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-3-document-model-3",
+          "test_id": "pt-dbms-sql-3-document-model",
+          "question_text": "Which of these databases is a well-known document-model implementation?",
+          "options": [
+            "MongoDB",
+            "Redis",
+            "Cassandra",
+            "Neo4j"
+          ],
+          "correct_index": 0,
+          "explanation": "MongoDB is one of the most widely used document databases, storing data as BSON documents.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-3-document-model-4",
+          "test_id": "pt-dbms-sql-3-document-model",
+          "question_text": "Which capability distinguishes rich document access from the simplest opaque-value key-value abstraction?",
+          "options": [
+            "Whether the database uses a network connection",
+            "Querying supported internal fields, while real product capabilities can overlap",
+            "Whether the database supports replication",
+            "Whether the database is open source"
+          ],
+          "correct_index": 1,
+          "explanation": "This is not a universal classification test for every modern product.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-3-document-model-5",
+          "test_id": "pt-dbms-sql-3-document-model",
+          "question_text": "How should an embedded addresses array be evaluated against separate address facts?",
+          "options": [
+            "Because arrays are not allowed in relational databases",
+            "Review aggregate ownership, shared identity, access patterns, and whether authoritative facts are duplicated",
+            "Because the document has no _id field",
+            "Because JSON cannot represent arrays"
+          ],
+          "correct_index": 1,
+          "explanation": "Embedding is not automatically redundant duplication or a universal normalization violation.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-3-document-model-6",
+          "test_id": "pt-dbms-sql-3-document-model",
+          "question_text": "What is a key trade-off of embedding denormalized data (like duplicated address info) across many documents?",
+          "options": [
+            "There are no trade-offs; it is strictly better",
+            "Updating a piece of duplicated data requires updating every document copy, risking inconsistency",
+            "It makes single-document reads slower",
+            "It requires a JOIN operation for every query"
+          ],
+          "correct_index": 1,
+          "explanation": "Because data is duplicated across documents rather than normalized once, updates must be propagated to every copy, which can introduce inconsistency if missed.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-3-document-model-7",
+          "test_id": "pt-dbms-sql-3-document-model",
+          "question_text": "How should document and wide-column models be compared?",
+          "options": [
+            "They are functionally identical",
+            "Compare actual structure and access contracts rather than assuming a universal performance ranking",
+            "Column-family databases cannot store more than one row",
+            "Document databases cannot be distributed across servers"
+          ],
+          "correct_index": 1,
+          "explanation": "Cassandra and other products have specific schema and consistency behavior.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-3-document-model-8",
+          "test_id": "pt-dbms-sql-3-document-model",
+          "question_text": "Can MongoDB support multi-document transactions on suitable deployments?",
+          "options": [
+            "Yes, under the supported deployment, version, and operational rules",
+            "Support for SQL joins across collections",
+            "Automatic schema enforcement",
+            "Elimination of the _id field"
+          ],
+          "correct_index": 0,
+          "explanation": "The model does not imply single-document-only transactions or universal support in every environment.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-3-document-model-new-9",
+          "test_id": "pt-dbms-sql-3-document-model",
+          "question_text": "Does valid JSON alone prove a required title field exists?",
+          "options": [
+            "Yes; JSON requires every title",
+            "No; syntactic validity and application schema are separate",
+            "Only if the value is stored in a table",
+            "Only if the document is short"
+          ],
+          "correct_index": 1,
+          "explanation": "Required field rules need explicit validation.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-3-document-model-new-10",
+          "test_id": "pt-dbms-sql-3-document-model",
+          "question_text": "What can make an array position unsuitable as a durable address identity?",
+          "options": [
+            "Every array is unordered in all engines",
+            "Positions automatically grant permissions",
+            "Insertion and reordering can change positions",
+            "Every address is a database role"
+          ],
+          "correct_index": 2,
+          "explanation": "A stable entry reference may need its own identifier.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-3-document-model-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-3-document-model-application-new-1",
+          "test_id": "pt-dbms-sql-3-document-model-application",
+          "question_text": "Two documents share title SQL Basics but have distinct IDs. What should a bookmark preserve?",
+          "options": [
+            "Only the title by assumption",
+            "Only its current array position",
+            "The intended stable document identity",
+            "Only the document length"
+          ],
+          "correct_index": 2,
+          "explanation": "Equal labels do not identify the same entity.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-3-document-model-application-new-2",
+          "test_id": "pt-dbms-sql-3-document-model-application",
+          "question_text": "An exclusively owned address is embedded once in one profile. Is duplicated authority inevitable?",
+          "options": [
+            "Yes; every nested value has many copies",
+            "Only if the city is long",
+            "Only if the document has an ID",
+            "No; assess whether any fact is actually copied elsewhere"
+          ],
+          "correct_index": 3,
+          "explanation": "Embedding and redundant duplication are distinct design questions.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-3-document-model-application-new-3",
+          "test_id": "pt-dbms-sql-3-document-model-application",
+          "question_text": "A city path is absent in one document and explicitly JSON null in another. What should review recognize?",
+          "options": [
+            "Two different document states",
+            "One identical mandatory value",
+            "Two SQL primary keys",
+            "A guaranteed syntax error"
+          ],
+          "correct_index": 0,
+          "explanation": "A missing path differs from an existing path holding JSON null.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-3-document-model-application-new-4",
+          "test_id": "pt-dbms-sql-3-document-model-application",
+          "question_text": "A city is the JSON string null. Is it the same as JSON null?",
+          "options": [
+            "Yes; four letters always mean absence",
+            "No; the string is a recorded text value",
+            "Only if JSON_UNQUOTE is used",
+            "Only if the field is indexed"
+          ],
+          "correct_index": 1,
+          "explanation": "The JSON type distinguishes string content from null.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-3-document-model-application-new-5",
+          "test_id": "pt-dbms-sql-3-document-model-application",
+          "question_text": "A required level predicate compares to beginner, but the path is missing. Does the fixture equality select it?",
+          "options": [
+            "Yes; missing means beginner",
+            "Only if the title repeats",
+            "No",
+            "Only if the document is stored last"
+          ],
+          "correct_index": 2,
+          "explanation": "The missing extracted value does not satisfy the stated equality.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-3-document-model-application-new-6",
+          "test_id": "pt-dbms-sql-3-document-model-application",
+          "question_text": "One authoritative course title is copied into many documents and only one copy changes. What must the design address?",
+          "options": [
+            "Only the indentation",
+            "Only the object ID type",
+            "Only the document display color",
+            "Consistency and propagation of the shared fact"
+          ],
+          "correct_index": 3,
+          "explanation": "Redundant authoritative copies can diverge.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-3-document-model-application-new-7",
+          "test_id": "pt-dbms-sql-3-document-model-application",
+          "question_text": "A document update is atomic. Does that alone make a multi-document workflow atomic?",
+          "options": [
+            "No; the full operation needs supported guarantees",
+            "Yes; every document store groups all writes",
+            "Only if all titles match",
+            "Only if there are two documents"
+          ],
+          "correct_index": 0,
+          "explanation": "The workflow boundary can extend beyond one document.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-3-document-model-application-new-8",
+          "test_id": "pt-dbms-sql-3-document-model-application",
+          "question_text": "A browser hides a private nested field but still receives it. What remains wrong?",
+          "options": [
+            "The field was securely deleted",
+            "The response exposed data beyond the intended presentation",
+            "The database necessarily has no schema",
+            "The JSON parser guarantees secrecy"
+          ],
+          "correct_index": 1,
+          "explanation": "UI hiding is not a trusted data-exposure boundary.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-3-document-model-application-new-9",
+          "test_id": "pt-dbms-sql-3-document-model-application",
+          "question_text": "A MySQL JSON mirror passes on MariaDB. What remains separate?",
+          "options": [
+            "The observed compatibility output",
+            "The fixture data used",
+            "Exact MySQL/provider and native MongoDB behavior",
+            "The functions executed in that run"
+          ],
+          "correct_index": 2,
+          "explanation": "Execution evidence is scoped to the actual engine and operation.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-3-document-model-application-new-10",
+          "test_id": "pt-dbms-sql-3-document-model-application",
+          "question_text": "A small embedded read is fast. What should not be inferred without broader evidence?",
+          "options": [
+            "That the measured read completed",
+            "That structure can influence cost",
+            "That the workload has an access pattern",
+            "Every embedding and update pattern is superior"
+          ],
+          "correct_index": 3,
+          "explanation": "Model performance is workload-specific.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "dsa-dbms-sql-document-level",
+      "slug": "document-level",
+      "title": "Read a field-filtered JSON catalog",
+      "difficulty": "Easy",
+      "task": "Return document_id and title for JSON catalog documents with level equal to the string beginner. Extract title as unquoted text and order by document_id. Qualifying fixture documents always have a string title. This is MySQL JSON practice, not MongoDB query execution.",
+      "schema_sql": "CREATE TABLE catalog_documents (document_id INT PRIMARY KEY, body JSON NOT NULL);",
+      "seed_sql": "INSERT INTO catalog_documents VALUES (2,'{\"title\":\"Indexes\",\"level\":\"advanced\"}'),(1,'{\"title\":\"SQL Basics\",\"level\":\"beginner\"}'),(3,'{\"title\":\"Unclassified\"}');",
+      "expected": "document_id\ttitle\n1\tSQL Basics",
+      "ordering": "document_id ascending",
+      "constraints": [
+        "body is syntactically valid JSON",
+        "level and title are strings when provided in these fixtures",
+        "Document IDs are unique"
+      ],
+      "edge_cases": [
+        "Missing level does not qualify",
+        "Repeated titles preserve different identities",
+        "Empty input returns no rows"
+      ],
+      "hints": [
+        "Use JSON_EXTRACT for paths",
+        "Use JSON_UNQUOTE for string results"
+      ],
+      "solution_sql": "SELECT document_id,JSON_UNQUOTE(JSON_EXTRACT(body,'$.title')) AS title FROM catalog_documents WHERE JSON_UNQUOTE(JSON_EXTRACT(body,'$.level'))='beginner' ORDER BY document_id;",
+      "explanation": "The path predicate defines the intended document population and the projection preserves the explicit identity and text title.",
+      "validation_cases": [
+        {
+          "seed_sql": "",
+          "expected": ""
+        },
+        {
+          "seed_sql": "INSERT INTO catalog_documents VALUES (2,'{\"title\":\"Same\",\"level\":\"beginner\"}'),(1,'{\"title\":\"Same\",\"level\":\"beginner\"}');",
+          "expected": "document_id\ttitle\n1\tSame\n2\tSame"
+        }
+      ]
+    },
+    {
+      "id": "dsa-dbms-sql-document-null-states",
+      "slug": "document-null-states",
+      "title": "Distinguish absent paths, JSON null, and text",
+      "difficulty": "Medium",
+      "task": "For every catalog_documents row, interpret $.address.city and return document_id, city_status, city_value. Status is missing for an absent path, json_null for explicit JSON null, and text for a string (including an empty string or the letters null). city_value is the unquoted text for text status and SQL NULL otherwise. Order by document_id. Fixtures contain only these three city states.",
+      "schema_sql": "CREATE TABLE catalog_documents (document_id INT PRIMARY KEY, body JSON NOT NULL);",
+      "seed_sql": "INSERT INTO catalog_documents VALUES (1,'{}'),(2,'{\"address\":{\"city\":null}}'),(3,'{\"address\":{\"city\":\"Pune\"}}'),(4,'{\"address\":{\"city\":\"null\"}}'),(5,'{\"address\":{\"city\":\"\"}}');",
+      "expected": "document_id\tcity_status\tcity_value\n1\tmissing\tNULL\n2\tjson_null\tNULL\n3\ttext\tPune\n4\ttext\tnull\n5\ttext\t",
+      "ordering": "document_id ascending",
+      "constraints": [
+        "Only absent, JSON null, or string city values appear",
+        "Do not replace missing values with empty text",
+        "The status column preserves the distinction"
+      ],
+      "edge_cases": [
+        "A missing address also means absent city path",
+        "Explicit JSON null differs from the string null",
+        "An empty recorded city is text"
+      ],
+      "hints": [
+        "Check path existence before JSON_TYPE",
+        "Convert explicit null to SQL NULL deliberately"
+      ],
+      "solution_sql": "SELECT document_id,CASE WHEN JSON_CONTAINS_PATH(body,'one','$.address.city')=0 THEN 'missing' WHEN JSON_TYPE(JSON_EXTRACT(body,'$.address.city'))='NULL' THEN 'json_null' ELSE 'text' END AS city_status,CASE WHEN JSON_TYPE(JSON_EXTRACT(body,'$.address.city'))='STRING' THEN JSON_UNQUOTE(JSON_EXTRACT(body,'$.address.city')) ELSE NULL END AS city_value FROM catalog_documents ORDER BY document_id;",
+      "explanation": "Existence and JSON type checks keep absent paths separate from explicit null and recorded text. The result maps only the defined absence states to SQL NULL.",
+      "validation_cases": [
+        {
+          "seed_sql": "",
+          "expected": ""
+        },
+        {
+          "seed_sql": "INSERT INTO catalog_documents VALUES (7,'{\"address\":{}}'),(8,'{\"address\":{\"city\":\"NULL\"}}');",
+          "expected": "document_id\tcity_status\tcity_value\n7\tmissing\tNULL\n8\ttext\tNULL"
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-3-document-model-1",
+      "test_id": "pt-dbms-sql-3-document-model",
+      "question_text": "What is the defining storage unit of the document model?",
+      "options": [
+        "A fixed-schema table row",
+        "A self-contained, semi-structured document (e.g., JSON/BSON) that can nest objects and arrays",
+        "An opaque binary blob addressable only by key",
+        "A wide sparse column family"
+      ],
+      "correct_index": 1,
+      "explanation": "Document databases store data as self-contained documents, typically JSON or BSON, which can include nested objects and arrays.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-3-document-model-2",
+      "test_id": "pt-dbms-sql-3-document-model",
+      "question_text": "What does 'schema-on-read' mean in the context of document databases?",
+      "options": [
+        "The schema is enforced strictly at write time by the database",
+        "Documents in the same collection are not required to share an identical structure; the application interprets structure when reading",
+        "Every document must be validated against a fixed schema before insertion",
+        "Reads are not permitted until a schema is defined"
+      ],
+      "correct_index": 1,
+      "explanation": "Schema-on-read means the database does not enforce a rigid structure at write time; different documents in a collection can have different shapes, with structure interpreted at read/query time.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-3-document-model-3",
+      "test_id": "pt-dbms-sql-3-document-model",
+      "question_text": "Which of these databases is a well-known document-model implementation?",
+      "options": [
+        "MongoDB",
+        "Redis",
+        "Cassandra",
+        "Neo4j"
+      ],
+      "correct_index": 0,
+      "explanation": "MongoDB is one of the most widely used document databases, storing data as BSON documents.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-3-document-model-4",
+      "test_id": "pt-dbms-sql-3-document-model",
+      "question_text": "What is the clearest distinguishing test between a document database and a key-value store?",
+      "options": [
+        "Whether the database uses a network connection",
+        "Whether the database can query and index fields inside the stored value, not just retrieve it whole by key",
+        "Whether the database supports replication",
+        "Whether the database is open source"
+      ],
+      "correct_index": 1,
+      "explanation": "A key-value store treats its value as an opaque blob; a document store understands and can query the internal structure of the document.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-3-document-model-5",
+      "test_id": "pt-dbms-sql-3-document-model",
+      "question_text": "In the example user document with an embedded 'addresses' array, why is this considered denormalization compared to a relational design?",
+      "options": [
+        "Because arrays are not allowed in relational databases",
+        "Because data that would normally be split into a separate 'addresses' table is embedded directly inside the parent document",
+        "Because the document has no _id field",
+        "Because JSON cannot represent arrays"
+      ],
+      "correct_index": 1,
+      "explanation": "In a relational design, addresses would typically live in a separate normalized table joined by a foreign key; the document model embeds them directly in the same document.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-3-document-model-6",
+      "test_id": "pt-dbms-sql-3-document-model",
+      "question_text": "What is a key trade-off of embedding denormalized data (like duplicated address info) across many documents?",
+      "options": [
+        "There are no trade-offs; it is strictly better",
+        "Updating a piece of duplicated data requires updating every document copy, risking inconsistency",
+        "It makes single-document reads slower",
+        "It requires a JOIN operation for every query"
+      ],
+      "correct_index": 1,
+      "explanation": "Because data is duplicated across documents rather than normalized once, updates must be propagated to every copy, which can introduce inconsistency if missed.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-3-document-model-7",
+      "test_id": "pt-dbms-sql-3-document-model",
+      "question_text": "How does a document database differ from a column-family database like Cassandra?",
+      "options": [
+        "They are functionally identical",
+        "Document stores optimize for flexible, deeply nested JSON-like data, while column-family stores organize sparse columns grouped into families optimized for very high write throughput at massive scale",
+        "Column-family databases cannot store more than one row",
+        "Document databases cannot be distributed across servers"
+      ],
+      "correct_index": 1,
+      "explanation": "Column-family stores like Cassandra structure data around static column families for extreme write scalability, whereas document stores focus on flexible nested structures resembling application objects.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-3-document-model-8",
+      "test_id": "pt-dbms-sql-3-document-model",
+      "question_text": "As of MongoDB 4.0+, what transactional capability was added beyond the model's natural single-document atomicity?",
+      "options": [
+        "Multi-document ACID transactions",
+        "Support for SQL joins across collections",
+        "Automatic schema enforcement",
+        "Elimination of the _id field"
+      ],
+      "correct_index": 0,
+      "explanation": "MongoDB introduced multi-document ACID transactions starting in version 4.0, though single-document atomicity remains the model's natural strength.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "coordinator",
+    "independent_review": "unavailable; no agent tools",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Definitions and examples checked against questions; no plagiarism certification.",
+    "existing_question_corrections": [
+      "tq-dbms-sql-3-document-model-2",
+      "tq-dbms-sql-3-document-model-4",
+      "tq-dbms-sql-3-document-model-5",
+      "tq-dbms-sql-3-document-model-7",
+      "tq-dbms-sql-3-document-model-8"
+    ],
+    "canonical_answer_indices_preserved": true
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-3-document-model",
+    "original_note_sha256": "bfd16b1c5cd95b088b8d3f8cc817ea565db63328773ae8259825383db7066427",
+    "status": "paired migration prepared; not applied"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Document city states that a reader must distinguish",
+      "description": "The path may be absent, explicitly null, or a recorded string. The exercise keeps a separate status so even the text NULL can be distinguished from an SQL-null output value.",
+      "columns": [
+        "Document shape",
+        "Path state",
+        "Interpretation"
+      ],
+      "rows": [
+        [
+          "{}",
+          "Absent",
+          "No city field supplied"
+        ],
+        [
+          "address: {city: null}",
+          "JSON null",
+          "Explicit absence marker"
+        ],
+        [
+          "address: {city: \"Pune\"}",
+          "String",
+          "Recorded city text"
+        ],
+        [
+          "address: {city: \"null\"}",
+          "String",
+          "Four letters, not JSON null"
+        ],
+        [
+          "address: {city: \"\"}",
+          "String",
+          "Recorded empty text"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "coordinator review",
+    "server_rendering": "passed",
+    "browser_rendering": "unverified",
+    "independent_review": "unavailable; no agent tools",
+    "rendering_check": "2026-10-29: 54 authored-package checks plus 8 diagram/access checks passed through actual renderers. Browser rendering unverified."
+  },
+  "sql_verification": {
+    "engine": "11.8.6-MariaDB-0+deb13u1 from Debian",
+    "scope": "MariaDB compatibility execution; exact MySQL 8.4/provider execution unverified",
+    "fingerprint": "dce655894d2f8e648aa521aec5bfda7f79bcd0fff1cfd8b0921c9acfe377bf24",
+    "cases": [
+      {
+        "problem": "document-level",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "document-level",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "document-level",
+        "case": 2,
+        "passed": true
+      },
+      {
+        "problem": "document-null-states",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "document-null-states",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "document-null-states",
+        "case": 2,
+        "passed": true
+      }
+    ],
+    "all_passed": true
+  }
+}

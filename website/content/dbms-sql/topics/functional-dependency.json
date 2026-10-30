@@ -1,0 +1,566 @@
+{
+  "source_ref": "chapter-21-normalization-and-functional-dependencies/functional-dependency",
+  "slug": "functional-dependency",
+  "title": "Functional Dependency",
+  "description": "Understand functional dependencies as domain invariants, distinguish determinants from keys, derive closure and identify nonnull SQL counterexamples without guessing schema rules.",
+  "dialect": "MySQL 8.4",
+  "notes": "## State a rule about all permitted rows\n\nA functional dependency describes a constraint between attribute sets in a relation. Written X determines Y, it means that any two permitted rows agreeing on every attribute of X must agree on every attribute of Y. The dependency is a rule about valid data, not merely a pattern that happens to hold in today's sample. X is the determinant and Y is the determined attribute set.\n\nContinue with [closure of attributes](/learning/dbms-sql-tutorial/closure-of-attributes), [candidate key](/learning/dbms-sql-tutorial/candidate-key) and [2NF](/learning/dbms-sql-tutorial/2nf). Functional dependencies provide the reasoning foundation for keys and several normal forms. They do not specify which index the optimizer chooses or how rows are physically stored.\n\n## Start from a clear business identity\n\nSuppose a training centre assigns each course a stable course_code and one official course_title. The rule course_code determines course_title states that two rows for the same code cannot disagree about its title within the model. A title alone need not identify a course, because two courses can share a similar or identical title.\n\nThe model's scope matters. If titles can change over time and historical versions coexist, course_code alone may no longer determine the historical title. The determinant might need a version or effective-date attribute. A dependency can be correct for a current catalogue and wrong for a history table. Establish the relation's meaning before importing a rule from another context.\n\n## Read composite determinants as complete sets\n\nConsider enrolments with learner_id, course_code, learner_name, course_title and grade. A learner can take many courses and a course can contain many learners. Under a one-attempt-per-learner-and-course model, the pair learner_id,course_code determines grade. Neither component alone necessarily determines the grade.\n\nThe pair also determines attributes available through either component. learner_id determines learner_name under the current-name assumption, and course_code determines course_title under the current-catalogue assumption. These are separate dependencies. Keeping them explicit helps reveal why storing learner and course labels repeatedly in the enrolment relation can create update anomalies.\n\n## Distinguish a dependency from its converse\n\nIf learner_id determines learner_name, learner_name does not automatically determine learner_id. Several learners can share a name. A dependency points in a particular direction. Reversing an arrow without a business rule can create false candidate keys and lead to a decomposition that loses the ability to distinguish real entities.\n\nThe same applies to location codes, telephone labels and course titles. A sample with unique names may tempt a designer to infer a reverse dependency, but a new valid row can refute it. Ask whether the domain forbids the counterexample, not merely whether the sample currently lacks it. Identity should follow stable rules rather than temporary presentation uniqueness.\n\n## Understand trivial dependencies\n\nA dependency is trivial when the determined attributes are already contained in the determinant. The pair learner_id,course_code determines learner_id because agreeing on the pair necessarily includes agreeing on learner_id. This follows from the definition and requires no special business assumption.\n\nTrivial dependencies are useful in formal reasoning even though they may add little new design information. A dependency with an additional determined attribute, such as the pair determining grade, is nontrivial. Distinguishing them prevents a normal-form check from treating every syntactically written arrow as evidence of a design problem.\n\n## Combine valid rules through inference\n\nArmstrong-style reasoning includes reflexivity, augmentation and transitivity. Reflexivity captures trivial dependencies. Augmentation adds the same attributes to both sides of a valid dependency. Transitivity says that if X determines Y and Y determines Z, then X determines Z. These rules concern logical implication over all permitted relations.\n\nFor example, if learner_id determines programme_code and programme_code determines programme_name, learner_id determines programme_name. This does not mean a programme has only one learner. The dependency follows from a chain of uniquely determined values, while the inverse direction can still describe many learners per programme.\n\n## Use closure to test what a determinant implies\n\nThe closure of X is the set of attributes that can be derived from X using the known dependency set. Start with X itself, then repeatedly add determined attributes whose determinants are already included. Stop when no rule adds anything new. This finite procedure makes key reasoning systematic rather than dependent on spotting an informal chain by eye.\n\nIf the closure includes every relation attribute, X is a superkey. It is a candidate key only when no proper subset is also a superkey. Minimality refers to removing attributes from the determinant, not choosing the shortest name or smallest numeric value. A composite candidate key can be necessary even when each component has a separate useful dependency.\n\n## Detect counterexamples in a nonnull SQL sample\n\nFor a synthetic catalogue whose code and title are nonnull, a grouped query can reveal codes associated with more than one distinct title. Such a result is a witness that the sample violates the proposed code-to-title rule. It does not decide whether the rule should be adopted; that requires domain requirements.\n\n```sql\nSELECT course_code\nFROM catalogue_observations\nGROUP BY course_code\nHAVING COUNT(DISTINCT course_title) > 1\nORDER BY course_code;\n```\n\nAn empty result means no counterexample was found in the supplied population. It does not prove that every future permitted state obeys the dependency. Null-bearing data needs an explicit interpretation because SQL aggregates and uniqueness rules do not exactly reproduce the classical no-null relational model.\n\n## Avoid confusing uniqueness with repeated consistency\n\nA functional dependency allows multiple rows to share determinant values as long as their determined values agree. If several enrolments repeat the same course code and title, course_code can still determine course_title even though the code is not unique in the enrolment table. Uniqueness of the determinant across complete rows is a stronger key-related condition.\n\nAdding UNIQUE(course_code,course_title) to a wide enrolment table is not a general way to enforce course_code determines course_title. It can still permit the same code with two different titles, because the pairs differ. Normalizing a course catalogue into one row per code can express the intended identity and allow other rows to reference it.\n\n## Separate design dependencies from enforcement mechanisms\n\nA dependency describes an invariant. Primary keys, unique constraints, foreign keys and normalized relation boundaries are mechanisms that can help enforce particular invariants. Do not assume an arbitrary dependency can be expressed by one convenient index declaration. Inspect the actual schema and permitted write paths before proposing implementation.\n\nLikewise, declaring a dependency in a diagram does not repair inconsistent stored records. A migration would need an approved data-resolution policy and compatibility review. A learning exercise can identify contradictory observations without deleting either row or pretending to know which title is authoritative.\n\n## Use dependencies to explain anomalies\n\nRepeated course titles in an enrolment table create multiple copies of the same determined fact. Updating one copy while leaving another unchanged violates the intended dependency. Separating course identity and title into a course relation reduces that repetition, while enrolments retain the learner-course relationship and its grade.\n\nThe exercises identify conflicting titles and conflicting grades under a composite determinant. They include repeated identical observations so that COUNT(*) alone cannot substitute for counting distinct determined values. This contrast teaches the precise rule: agreement on the determinant must imply agreement on the determined values, not that every repeated determinant is automatically an error.\n\n## Ask which assumptions the rule depends on\n\nThe grade example assumes one attempt per learner and course. If retakes are valid and each attempt has its own grade, the proposed pair no longer determines a single grade across the full history. An attempt identifier or attempt number must participate in the model. This is not a failure of dependency theory; it reveals that the original determinant described a narrower business situation.\n\nWrite these assumptions beside a dependency set before calculating normal forms. Current-name versus name-history, one official course title versus localized titles, and one attempt versus multiple attempts all change valid attribute relationships. A formally correct closure calculation over the wrong assumptions can still lead to an unsuitable database design. Domain review and formal inference therefore complement each other.\n",
+  "references": [
+    {
+      "title": "Primary reference",
+      "url": "https://www.db-book.com/slides-dir/PDF-dir/ch7.pdf"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-21-functional-dependency",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-21-functional-dependency-1",
+          "test_id": "pt-dbms-sql-21-functional-dependency",
+          "question_text": "What does X determines Y require?",
+          "options": [
+            "Every X value occurs only once",
+            "Rows agreeing on X agree on Y",
+            "Y always determines X",
+            "X is physically indexed"
+          ],
+          "correct_index": 1,
+          "explanation": "The dependency constrains value consistency across rows sharing the determinant.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-21-functional-dependency-2",
+          "test_id": "pt-dbms-sql-21-functional-dependency",
+          "question_text": "What is X called?",
+          "options": [
+            "The projection order",
+            "The determinant",
+            "The clustered leaf",
+            "The nullable placeholder"
+          ],
+          "correct_index": 1,
+          "explanation": "X supplies the attributes whose agreement forces agreement on Y.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-21-functional-dependency-3",
+          "test_id": "pt-dbms-sql-21-functional-dependency",
+          "question_text": "Does a dependency's converse automatically hold?",
+          "options": [
+            "Yes",
+            "No",
+            "Only for text",
+            "Only if sorted"
+          ],
+          "correct_index": 1,
+          "explanation": "Several determinant values may share one determined value.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-21-functional-dependency-4",
+          "test_id": "pt-dbms-sql-21-functional-dependency",
+          "question_text": "Can repeated identical course-code/title observations obey the dependency?",
+          "options": [
+            "No",
+            "Yes",
+            "Only with DISTINCT storage",
+            "Only in an empty table"
+          ],
+          "correct_index": 1,
+          "explanation": "Repeated determinant values are permitted when their determined values agree.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-21-functional-dependency-5",
+          "test_id": "pt-dbms-sql-21-functional-dependency",
+          "question_text": "Does a sample without violations prove a future domain rule?",
+          "options": [
+            "Yes",
+            "Only with ten rows",
+            "No",
+            "Only if alphabetized"
+          ],
+          "correct_index": 2,
+          "explanation": "A sample can refute a rule but cannot establish every permitted future state.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-21-functional-dependency-6",
+          "test_id": "pt-dbms-sql-21-functional-dependency",
+          "question_text": "What can change a current-title dependency in a history relation?",
+          "options": [
+            "A shorter alias",
+            "Multiple versions per code",
+            "An extra caption",
+            "Output ordering"
+          ],
+          "correct_index": 1,
+          "explanation": "Historical versions can give one code different valid titles at different times.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-21-functional-dependency-7",
+          "test_id": "pt-dbms-sql-21-functional-dependency",
+          "question_text": "When is X determines Y trivial?",
+          "options": [
+            "When X has one character",
+            "When Y is contained in X",
+            "When Y is null",
+            "When the relation is indexed"
+          ],
+          "correct_index": 1,
+          "explanation": "Agreement on X already entails agreement on its own subset.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-21-functional-dependency-8",
+          "test_id": "pt-dbms-sql-21-functional-dependency",
+          "question_text": "What does augmentation do?",
+          "options": [
+            "Reverse every dependency",
+            "Add the same attributes to both sides",
+            "Delete all determinants",
+            "Choose a physical index"
+          ],
+          "correct_index": 1,
+          "explanation": "The added agreement preserves the original dependency implication.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-21-functional-dependency-new-9",
+          "test_id": "pt-dbms-sql-21-functional-dependency",
+          "question_text": "What does transitivity infer from X→Y and Y→Z?",
+          "options": [
+            "X→Z",
+            "Z→X",
+            "Y→X always",
+            "No rule"
+          ],
+          "correct_index": 0,
+          "explanation": "Agreement on X forces Y and then Z.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-21-functional-dependency-new-10",
+          "test_id": "pt-dbms-sql-21-functional-dependency",
+          "question_text": "What is an attribute closure?",
+          "options": [
+            "Every current table row",
+            "All attributes implied by a starting set",
+            "Only the primary-key name",
+            "Only numeric attributes"
+          ],
+          "correct_index": 1,
+          "explanation": "Repeated application of applicable dependencies derives the closure.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-21-functional-dependency-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-21-functional-dependency-application-new-1",
+          "test_id": "pt-dbms-sql-21-functional-dependency-application",
+          "question_text": "When is X a superkey?",
+          "options": [
+            "It has the longest name",
+            "It has a numeric type",
+            "Its closure includes all relation attributes",
+            "It appears in ORDER BY"
+          ],
+          "correct_index": 2,
+          "explanation": "A superkey determines the entire row under the dependency set.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-21-functional-dependency-application-new-2",
+          "test_id": "pt-dbms-sql-21-functional-dependency-application",
+          "question_text": "What extra property makes a superkey a candidate key?",
+          "options": [
+            "It is always a single column",
+            "It is physically clustered",
+            "It has no display label",
+            "No proper subset is a superkey"
+          ],
+          "correct_index": 3,
+          "explanation": "Candidate-key minimality concerns removable attributes.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-21-functional-dependency-application-new-3",
+          "test_id": "pt-dbms-sql-21-functional-dependency-application",
+          "question_text": "Why can learner_id alone fail to determine grade?",
+          "options": [
+            "A learner can take several courses",
+            "Learners cannot have names",
+            "Grades are always null",
+            "Indexes forbid it"
+          ],
+          "correct_index": 0,
+          "explanation": "The grade belongs to the learner-course pair under the stated model.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-21-functional-dependency-application-new-4",
+          "test_id": "pt-dbms-sql-21-functional-dependency-application",
+          "question_text": "What does a grouped code with two distinct nonnull titles demonstrate?",
+          "options": [
+            "A proven valid future rule",
+            "A sample dependency violation",
+            "Only harmless duplication",
+            "A foreign key"
+          ],
+          "correct_index": 1,
+          "explanation": "The same determinant is associated with disagreeing determined values.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-21-functional-dependency-application-new-5",
+          "test_id": "pt-dbms-sql-21-functional-dependency-application",
+          "question_text": "Why is COUNT(*) alone insufficient for that test?",
+          "options": [
+            "It never counts rows",
+            "It always ignores titles",
+            "Repeated consistent rows also raise the count",
+            "It enforces normalization"
+          ],
+          "correct_index": 2,
+          "explanation": "Multiplicity is not the same as disagreement in determined values.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-21-functional-dependency-application-new-6",
+          "test_id": "pt-dbms-sql-21-functional-dependency-application",
+          "question_text": "Does UNIQUE(code,title) generally enforce code→title?",
+          "options": [
+            "Yes",
+            "Only with a long title",
+            "Only after sorting",
+            "No"
+          ],
+          "correct_index": 3,
+          "explanation": "Different code-title pairs can share the same code and still satisfy pair uniqueness.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-21-functional-dependency-application-new-7",
+          "test_id": "pt-dbms-sql-21-functional-dependency-application",
+          "question_text": "Why model courses separately from enrolments?",
+          "options": [
+            "To avoid repeated course facts",
+            "To erase learner identity",
+            "To make every learner a course",
+            "To guarantee faster every query"
+          ],
+          "correct_index": 0,
+          "explanation": "The course title belongs to the course identity rather than each enrolment occurrence.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-21-functional-dependency-application-new-8",
+          "test_id": "pt-dbms-sql-21-functional-dependency-application",
+          "question_text": "Does a dependency diagram itself enforce writes?",
+          "options": [
+            "Yes",
+            "No",
+            "Only if arrows are bold",
+            "Only in SQL"
+          ],
+          "correct_index": 1,
+          "explanation": "Actual constraints and trusted write paths implement invariants.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-21-functional-dependency-application-new-9",
+          "test_id": "pt-dbms-sql-21-functional-dependency-application",
+          "question_text": "Why specify no-null assumptions for the sample query?",
+          "options": [
+            "NULL always equals every value",
+            "COUNT DISTINCT counts every null",
+            "Classical dependency reasoning and SQL NULL behavior differ",
+            "Types are irrelevant"
+          ],
+          "correct_index": 2,
+          "explanation": "Missing-value interpretation must be stated before treating SQL observations as a formal relation.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-21-functional-dependency-application-new-10",
+          "test_id": "pt-dbms-sql-21-functional-dependency-application",
+          "question_text": "What does normalization need besides current rows?",
+          "options": [
+            "Only index names",
+            "Only UI labels",
+            "Only row sorting",
+            "Verified domain dependencies"
+          ],
+          "correct_index": 3,
+          "explanation": "Design rules concern all valid states rather than accidental sample patterns.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cx-functional-dependency-title-counterexamples",
+      "slug": "functional-dependency-title-counterexamples",
+      "title": "Find conflicting course titles",
+      "difficulty": "Easy",
+      "task": "Return course_code values associated with more than one distinct course_title, ordered by course_code.",
+      "schema_sql": "CREATE TABLE catalogue_observations(observation_id INT PRIMARY KEY,course_code VARCHAR(10) NOT NULL,course_title VARCHAR(30) NOT NULL);",
+      "seed_sql": "INSERT INTO catalogue_observations VALUES (1,'DB','Databases'),(2,'DB','Databases'),(3,'SQL','SQL Basics'),(4,'SQL','Querying');",
+      "solution_sql": "SELECT course_code FROM catalogue_observations GROUP BY course_code HAVING COUNT(DISTINCT course_title)>1 ORDER BY course_code;",
+      "expected": "course_code\nSQL",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO catalogue_observations VALUES (1,'A','Same'),(2,'A','Same');",
+          "expected": ""
+        }
+      ],
+      "ordering": "Order by keys explicitly stated in the task.",
+      "constraints": [
+        "Use supplied synthetic data.",
+        "Return only requested columns."
+      ],
+      "edge_cases": [
+        "Repeated consistent observations are valid"
+      ],
+      "hints": [
+        "Count distinct titles for each nonnull determinant."
+      ],
+      "explanation": "Count distinct titles for each nonnull determinant."
+    },
+    {
+      "id": "cx-functional-dependency-composite-counterexamples",
+      "slug": "functional-dependency-composite-counterexamples",
+      "title": "Find conflicting grades for a learner-course pair",
+      "difficulty": "Medium",
+      "task": "Return learner_id,course_code pairs associated with more than one distinct grade. All fields are nonnull. Order by learner_id,course_code.",
+      "schema_sql": "CREATE TABLE grade_observations(observation_id INT PRIMARY KEY,learner_id INT NOT NULL,course_code VARCHAR(10) NOT NULL,grade INT NOT NULL);",
+      "seed_sql": "INSERT INTO grade_observations VALUES (1,1,'DB',80),(2,1,'DB',80),(3,1,'SQL',70),(4,1,'SQL',90),(5,2,'DB',60);",
+      "solution_sql": "SELECT learner_id,course_code FROM grade_observations GROUP BY learner_id,course_code HAVING COUNT(DISTINCT grade)>1 ORDER BY learner_id,course_code;",
+      "expected": "learner_id\tcourse_code\n1\tSQL",
+      "validation_cases": [
+        {
+          "seed_sql": "",
+          "expected": ""
+        }
+      ],
+      "ordering": "Order by keys explicitly stated in the task.",
+      "constraints": [
+        "Use supplied synthetic data.",
+        "Return only requested columns."
+      ],
+      "edge_cases": [
+        "Separate learners",
+        "Separate courses",
+        "Repeated equal grades"
+      ],
+      "hints": [
+        "Group by the complete determinant and test disagreement in grades."
+      ],
+      "explanation": "Group by the complete determinant and test disagreement in grades."
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-21-functional-dependency-1",
+      "test_id": "pt-dbms-sql-21-functional-dependency",
+      "question_text": "Which of the following correctly states what the functional dependency InstructorID -> InstructorOffice means?",
+      "options": [
+        "Every office has exactly one instructor assigned to it",
+        "For any given InstructorID value, the InstructorOffice value is always the same, in every valid instance of the table",
+        "InstructorOffice values must be unique across all instructors",
+        "InstructorID can be derived from InstructorOffice"
+      ],
+      "correct_index": 1,
+      "explanation": "X -> Y means X determines Y: knowing InstructorID always tells you the same InstructorOffice value. It says nothing about the reverse direction.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-21-functional-dependency-2",
+      "test_id": "pt-dbms-sql-21-functional-dependency",
+      "question_text": "In the sample data, why does CourseID -> InstructorID hold?",
+      "options": [
+        "Because every course has a unique CourseName",
+        "Because, under the simplified 'one instructor of record per course' rule, a given CourseID always maps to the same InstructorID (e.g., C1 always means I1)",
+        "Because InstructorID values are alphabetically ordered",
+        "Because EnrollmentDate depends on CourseID"
+      ],
+      "correct_index": 1,
+      "explanation": "The FD holds because the business rule fixes exactly one instructor per course; every row with CourseID='C1' has InstructorID='I1'.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-21-functional-dependency-3",
+      "test_id": "pt-dbms-sql-21-functional-dependency",
+      "question_text": "Why does StudentName -> StudentID NOT hold as a functional dependency, even though today's sample data shows unique names (Asha, Ravi, Kiran)?",
+      "options": [
+        "Because StudentName is a numeric column",
+        "Because an FD must hold for every valid instance of the data, and two different students could share the same name in the future, breaking the determination",
+        "Because functional dependencies only apply to primary keys",
+        "Because StudentName is a derived attribute"
+      ],
+      "correct_index": 1,
+      "explanation": "A functional dependency is a permanent schema-level rule, not an accident of the current snapshot; name uniqueness today doesn't guarantee it always holds, so the FD is invalid.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-21-functional-dependency-4",
+      "test_id": "pt-dbms-sql-21-functional-dependency",
+      "question_text": "Which of the following is a trivial functional dependency?",
+      "options": [
+        "CourseID -> CourseName",
+        "{StudentID, CourseID} -> StudentID",
+        "InstructorID -> InstructorName",
+        "StudentID -> StudentName"
+      ],
+      "correct_index": 1,
+      "explanation": "{StudentID, CourseID} -> StudentID is trivial because StudentID is already part of the left-hand side (Y is a subset of X) — it holds automatically and adds no new information.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-21-functional-dependency-5",
+      "test_id": "pt-dbms-sql-21-functional-dependency",
+      "question_text": "What is the determinant in the functional dependency {StudentID, CourseID} -> EnrollmentDate?",
+      "options": [
+        "EnrollmentDate",
+        "StudentID alone",
+        "{StudentID, CourseID} together, as a composite",
+        "CourseID alone"
+      ],
+      "correct_index": 2,
+      "explanation": "The determinant (the X side) is the whole composite {StudentID, CourseID} — the FD notation treats a multi-attribute left-hand side as a single determinant.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-21-functional-dependency-6",
+      "test_id": "pt-dbms-sql-21-functional-dependency",
+      "question_text": "Can a functional dependency ever be established just by inspecting three sample rows and finding no contradiction?",
+      "options": [
+        "Yes, three rows with no contradiction always prove the FD holds",
+        "No — sample rows can disprove an FD (by showing a counter-example) but can never fully prove one holds for all future valid instances; that requires understanding the real-world business rule",
+        "Yes, but only if the rows are sorted",
+        "No, functional dependencies can never be verified by data at all"
+      ],
+      "correct_index": 1,
+      "explanation": "FDs are asserted based on business rules that must hold universally; a finite sample can only ever falsify an FD, never conclusively prove it holds forever.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-21-functional-dependency-7",
+      "test_id": "pt-dbms-sql-21-functional-dependency",
+      "question_text": "If a university later allowed courses to be co-taught by multiple instructors of record, which FD from the running example would break?",
+      "options": [
+        "StudentID -> StudentName",
+        "CourseID -> InstructorID (a single CourseID could now map to more than one InstructorID)",
+        "InstructorID -> InstructorOffice",
+        "{StudentID, CourseID} -> EnrollmentDate"
+      ],
+      "correct_index": 1,
+      "explanation": "If a course could have multiple instructors, CourseID would no longer determine a single InstructorID value, invalidating that specific FD and requiring a schema redesign.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-21-functional-dependency-8",
+      "test_id": "pt-dbms-sql-21-functional-dependency",
+      "question_text": "Which statement best distinguishes a functional dependency from the redundancy discussed in 21.1?",
+      "options": [
+        "They are the same thing under two different names",
+        "A functional dependency is the underlying business rule (X determines Y); redundancy is the physical symptom of storing Y's value multiple times when that rule is combined with an unrelated composite key",
+        "Functional dependencies only exist in normalized tables",
+        "Redundancy causes functional dependencies, not the other way around"
+      ],
+      "correct_index": 1,
+      "explanation": "The FD is the abstract rule; redundancy is what happens when a table's key doesn't match that rule's determinant, forcing dependent values to be physically duplicated.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "/root/worker_2",
+    "independent_review": "passed",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "authored; independent review pending",
+    "canonical_answer_indices_preserved": true,
+    "editorial_record": "Original prose and assessments. Seed snapshots and canonical answer indices retained; external originality clearance pending.",
+    "independent_reviewer": "/root",
+    "independent_review_scope": "Full notes,20 MCQs/options/reasoning,both counterexample exercises with four predicted outputs and dependency diagram reviewed. Permitted-state invariant, converse, composite determinant, inference/closure, historical scope and snapshot limitations correct. Replaced nonexistent normalization link with actual2nf identity; consistent duplicates correctly distinguished from conflicting dependent values. Exact MySQL/provider, browser and release validation remain separate."
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-21-functional-dependency",
+    "original_note_sha256": "44fd71fe1cf6c5707236a04d8330ea3009010105b701b81683f19f11bbdc1a5c",
+    "status": "drafted; not included in prepared paired migrations"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Agreement on a determinant must preserve its dependent value",
+      "description": "Repeated consistent observations are allowed; conflicting values violate the stated rule.",
+      "columns": [
+        "Code",
+        "Observed titles",
+        "Code→title holds in sample?"
+      ],
+      "rows": [
+        [
+          "DB",
+          "Databases,Databases",
+          "Yes"
+        ],
+        [
+          "SQL",
+          "SQL Basics,Querying",
+          "No"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "technical_review": "coordinator independent manual review passed",
+    "browser_rendering": "unverified",
+    "independent_review": "passed",
+    "server_rendering": "passed",
+    "server_rendering_evidence": "2026-10-29 full Vitest:1310 passed/12 skipped; actual LessonBlock/TopicDiagrams render over230 packages. Browser visual QA remains unverified."
+  },
+  "authoring_status": "drafted; verification pending",
+  "sql_verification": {
+    "scope": "not executed; exact MySQL/provider execution pending",
+    "all_passed": false,
+    "cases": []
+  }
+}

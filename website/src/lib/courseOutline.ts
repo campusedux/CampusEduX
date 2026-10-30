@@ -1,4 +1,5 @@
 import type { LearningTree } from "@/lib/learning.types";
+import { databaseGroupName, DBMS_SQL_SLUG } from "@/lib/databaseTutorial";
 
 /**
  * Slim, client-safe view of a Learning grid tree: just what navigation,
@@ -29,9 +30,10 @@ export interface CourseOutline {
 
 export function toOutline(tree: LearningTree): CourseOutline {
   let n = 0;
-  const sections = tree.sections.map((s) => ({
+  const visibleSections = tree.grid.slug === DBMS_SQL_SLUG ? tree.sections.filter((s) => s.topics.length > 0) : tree.sections;
+  const sections = visibleSections.map((s) => ({
     id: s.id,
-    name: s.name,
+    name: databaseGroupName(tree.grid.slug, s.name),
     lessons: s.topics.map((t) => ({ id: t.id, slug: t.slug, title: t.title, isPremium: t.is_premium, number: ++n })),
   }));
   const order = sections.flatMap((s) => s.lessons.map((l) => l.slug));

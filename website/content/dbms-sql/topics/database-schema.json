@@ -1,0 +1,609 @@
+{
+  "source_ref": "chapter-4-relational-model/database-schema",
+  "slug": "database-schema",
+  "title": "Database Schema",
+  "description": "Connect relation definitions into a coherent database design, reason about cross-relation constraints, and query or audit related campus facts.",
+  "dialect": "MySQL 8.4",
+  "notes": "## The design spans related facts\n\nA database schema describes the logical structure of a database as a whole. In a relational setting, it brings together relation schemas and the integrity rules connecting them. A college system might define Student, Course, and Enrollment. Understanding each relation separately is useful, but the database design must also explain how an enrollment identifies its student and course and which combinations are permitted.\n\nThis broader view prevents local definitions from contradicting one another. Student.student_id and Enrollment.student_id should represent compatible identities. An Enrollment key should reflect whether repeated enrollments or attempts are permitted. Each relation can look reasonable in isolation while the combined design allows orphan references or prevents a legitimate student from taking several courses. The database schema is where these relationships must be considered together.\n\n## Distinguish a relation schema from the whole\n\nA relation schema describes one relation's attributes, domains, and relevant rules. The database schema collects these definitions and their relationships. Student(student_id, student_name) is one relation schema. Adding Course(course_id, course_name) and Enrollment(student_id, course_id), together with the intended keys and references, describes a larger design. The whole is not simply another name for the Student table.\n\nA foreign key can be declared in a table's SQL definition while expressing a rule that spans relations. Saying it belongs to the database schema does not mean it has no local declaration. It means its validity and purpose require understanding the referenced relation too. The location of a statement in a DDL file should not be confused with the conceptual scope of the rule.\n\n## Structure is different from current contents\n\nThe database instance is the collection of current relation instances under the schema. Enrolling a student changes the data while leaving the definitions intact. Introducing an Instructor relation changes the database schema. Adding a column or changing a key also changes the structural contract, even if only a small number of current rows appear to be affected.\n\nA database schema can be defined while all its relations are empty. No student or enrollment facts are required merely to establish their structures. Empty referencing tables do not create orphan references. Later inserts must satisfy the defined constraints. This distinction makes it possible to prepare and inspect a design before loading data, while still recognising that applying it to existing data creates additional compatibility questions.\n\n## Keys establish the identities being connected\n\nSuppose Student uses student_id as its primary key and Course uses course_id. Enrollment can connect them using both identifiers. If one enrollment per pair is intended, a composite key on student_id and course_id expresses that rule. If attempts are separate facts, the model needs an additional identifying attribute or another explicit identity design that preserves the intended uniqueness.\n\nNames are generally poor substitutes for these relationships. Two courses can have the same title in different contexts, and two students can share a name. Joining on labels can combine unrelated facts. A schema diagram should distinguish key references from descriptive similarities so that later queries follow actual modeled identities rather than convenient strings that happen to match in a small demonstration dataset.\n\n## Referential rules connect allowed states\n\nA foreign key can require each nonmissing child reference to correspond to an allowed parent identity. This restricts valid database instances across relations. A positive integer check on Enrollment.student_id does not provide the same guarantee: it can accept a number for which no student exists. Type compatibility, local membership rules, and reference existence are separate layers of validity.\n\nThe intended parent-deletion behaviour also needs definition. Should deleting a student be blocked while enrollments remain, or should related records be handled through another explicitly chosen policy? The answer depends on data ownership, retention requirements, and product behaviour. Do not assume that drawing a relationship arrow automatically selects a deletion policy or proves an engine enforces the intended referential action.\n\n## A schema diagram is a reading aid\n\nA useful diagram names the relations, shows their identifying attributes, and labels references. Read an arrow as an intended structural relationship, not evidence that all current data is valid. The deployed DDL, selected storage engine, and observed accepted and rejected operations determine enforcement. A diagram and an executable constraint should communicate the same rule, but they provide different kinds of evidence.\n\nFor a student-course association, the diagram should show Enrollment between Student and Course. One student can participate in many enrollment facts, and one course can participate in many such facts. Keeping that association explicit avoids duplicating full student records under every course and gives relationship-specific attributes, such as enrollment date, a clear place to belong.\n\n## Queries use the design as a map\n\nAn ordinary enrollment report follows the modeled identifiers and combines the related labels. Explicit aliases clarify which attributes come from each relation. The output grain is one enrollment, so a student taking two courses can legitimately appear twice. Repeated labels are not automatically duplicate facts and should not be removed without considering the selected identity.\n\n```sql\nSELECT e.student_id, e.course_id,\n       s.student_name, c.course_name\nFROM enrollments e\nJOIN students s ON s.student_id = e.student_id\nJOIN courses c ON c.course_id = e.course_id\nORDER BY e.student_id, e.course_id;\n```\n\nAn inner join returns enrollments whose references match both sources. It does not include unenrolled students or courses without enrollments. Those populations need different queries. A report requirement should state whether it concerns relationship facts, all students, all courses, or invalid imported references before selecting join types and counting rows.\n\n## Audit proposed data before accepting it\n\nImported enrollment rows may contain missing parents even when the intended final design forbids them. A staging area can hold those proposals for diagnosis. A preserving join or existence test can identify which reference is absent. Such an audit helps prepare valid data, but it does not replace database enforcement once records reach the trusted final relations.\n\nInclude a proposal with both references missing, not just one invalid student. A report that checks only student existence can overlook a missing course. Keep the proposal identifier in the output so reviewers can trace the rejected submission. If the audit supplies separate flags for missing student and missing course, both conditions can be reported without hiding one behind an exclusive classification branch.\n\n## Circular dependencies need joint reasoning\n\nTwo relations can reference each other in some designs. That possibility requires joint analysis of creation, insertion, optionality, updates, and deletion behaviour. It is misleading to declare every circular reference universally forbidden or universally easy to populate. The available constraint timing and storage-engine rules affect which transitions are possible, even when the final intended state looks consistent.\n\nAvoid weakening integrity rules merely to make a sample load succeed. Instead, revisit whether the modeled relationship needs to be mandatory in both directions at every intermediate step. A teaching example can discuss the dependency without pretending to verify an engine-specific loading strategy. Record the relevant limitation when only the final query results, rather than constraint transitions, have actually been tested.\n\n## Schema review includes consumers and evidence\n\nA structural change can affect application queries, reports, imports, generated types, and constraints elsewhere in the database. Review direct callers and shared contracts before preparing a change. A new relation definition alone does not prove a safe migration for existing records. Data compatibility, authorization, operational sequencing, and rollback behaviour require their own appropriate evidence and approval.\n\nKeep the assumed enrollment policy visible whenever the same relation names appear in examples. The database schema is useful because it makes the whole collection of facts intelligible. Read relation definitions together, connect real identities, and state the cross-relation rules. Then distinguish the design from its current contents and from the execution evidence available. This produces explanations and SQL reports that preserve meaning across the database rather than treating each table as an unrelated rectangular file.\n",
+  "references": [],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-4-database-schema",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-4-database-schema-1",
+          "test_id": "pt-dbms-sql-4-database-schema",
+          "question_text": "What does a database schema represent?",
+          "options": [
+            "The data currently stored in one table",
+            "The complete structural design of the entire database: all relation schemas plus cross-relation constraints",
+            "A single relation's set of tuples",
+            "The physical hard-disk layout of the DBMS"
+          ],
+          "correct_index": 1,
+          "explanation": "The database schema is the full structural blueprint spanning every relation and the constraints between them.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-4-database-schema-2",
+          "test_id": "pt-dbms-sql-4-database-schema",
+          "question_text": "Which of the following would be part of the database schema for a college database?",
+          "options": [
+            "The specific 4 rows currently in Students",
+            "The Students, Courses, and Enrollments relation schemas plus their foreign-key links",
+            "Today's date",
+            "The number of students who enrolled last semester"
+          ],
+          "correct_index": 1,
+          "explanation": "The relation schemas and the constraints (including foreign keys) linking them together constitute the database schema.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-4-database-schema-3",
+          "test_id": "pt-dbms-sql-4-database-schema",
+          "question_text": "How does a Database Schema differ from a single Relation Schema?",
+          "options": [
+            "A database schema is one relation's structure; a relation schema covers the whole database",
+            "A database schema aggregates ALL relation schemas plus inter-relation constraints; a relation schema describes just one relation",
+            "They are identical terms for the same concept",
+            "A relation schema always has more attributes than a database schema"
+          ],
+          "correct_index": 1,
+          "explanation": "The database schema is the union of every relation schema in the system, plus constraints spanning them, such as foreign keys.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-4-database-schema-4",
+          "test_id": "pt-dbms-sql-4-database-schema",
+          "question_text": "A foreign key linking Enrollments.student_id to Students.id is best understood as part of:",
+          "options": [
+            "Only the Enrollments relation schema, with no bearing on the database schema",
+            "The overall database schema, since it expresses a relationship BETWEEN two relation schemas",
+            "The database instance, since it involves actual ID values",
+            "Neither the relation schema nor the database schema"
+          ],
+          "correct_index": 1,
+          "explanation": "Although declared syntactically inside one table's definition, a foreign key constraint expresses a cross-relation relationship and is conceptually part of the database schema.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-4-database-schema-5",
+          "test_id": "pt-dbms-sql-4-database-schema",
+          "question_text": "Is it valid for a database schema to be considered complete even if all its relations currently hold zero rows?",
+          "options": [
+            "No, a database schema requires at least some data to be valid",
+            "Yes — the schema (structure + constraints) is complete as soon as it is defined, regardless of whether data has been inserted",
+            "Only if there is exactly one relation in the schema",
+            "No, this would violate referential integrity"
+          ],
+          "correct_index": 1,
+          "explanation": "A database schema is a structural definition; it can be fully valid with every relation instance still empty.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-4-database-schema-6",
+          "test_id": "pt-dbms-sql-4-database-schema",
+          "question_text": "Adding a brand-new table 'Instructors' to the college database is an example of a change to:",
+          "options": [
+            "The database instance only",
+            "The database schema, since a new relation schema is being introduced",
+            "Neither the schema nor the instance",
+            "Only the Students relation schema"
+          ],
+          "correct_index": 1,
+          "explanation": "Introducing a new relation schema changes the overall structural design, i.e., the database schema.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-4-database-schema-7",
+          "test_id": "pt-dbms-sql-4-database-schema",
+          "question_text": "Circular foreign keys between two relations (each referencing the other) must be validated:",
+          "options": [
+            "Independently, one relation schema at a time, ignoring the other",
+            "Together, considering the referenced identities, allowed states and supported insertion or deletion transitions",
+            "Only at the database instance level, never at schema design time",
+            "They are not allowed to exist in any relational database schema"
+          ],
+          "correct_index": 1,
+          "explanation": "Circular dependencies require joint design reasoning; the permitted transitions depend on actual engine and constraint behaviour.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-4-database-schema-8",
+          "test_id": "pt-dbms-sql-4-database-schema",
+          "question_text": "Which pair of terms mirrors the Relation Schema vs. Relation distinction, but at the whole-database level?",
+          "options": [
+            "Attribute vs. Domain",
+            "Database Schema vs. Database Instance",
+            "Degree vs. Cardinality",
+            "Tuple vs. Attribute"
+          ],
+          "correct_index": 1,
+          "explanation": "Just as Relation Schema (structure) contrasts with Relation (data), Database Schema (structure) contrasts with Database Instance (data), scaled to the entire database.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-4-database-schema-new-9",
+          "test_id": "pt-dbms-sql-4-database-schema",
+          "question_text": "Student is empty and Course is empty. Does the schema necessarily cease to exist?",
+          "options": [
+            "Yes; data creates all definitions",
+            "No; structure can exist before data is loaded",
+            "Only keys cease to exist",
+            "Only courses lose attributes"
+          ],
+          "correct_index": 1,
+          "explanation": "Empty instances do not erase their schema definitions.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-4-database-schema-new-10",
+          "test_id": "pt-dbms-sql-4-database-schema",
+          "question_text": "Which operation changes the instance without necessarily changing the schema?",
+          "options": [
+            "Adding an Instructor relation",
+            "Changing a key",
+            "Adding a valid enrollment",
+            "Adding a foreign key"
+          ],
+          "correct_index": 2,
+          "explanation": "A valid inserted fact changes current contents.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-4-database-schema-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-4-database-schema-application-new-1",
+          "test_id": "pt-dbms-sql-4-database-schema-application",
+          "question_text": "Why should an enrollment join use student identifiers rather than student names?",
+          "options": [
+            "Names always have different types",
+            "Identifiers imply all authorization",
+            "Different students can share a name",
+            "SQL forbids name comparisons"
+          ],
+          "correct_index": 2,
+          "explanation": "Identifiers follow the intended relationship rather than descriptive coincidence.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-4-database-schema-application-new-2",
+          "test_id": "pt-dbms-sql-4-database-schema-application",
+          "question_text": "Does CHECK(student_id > 0) establish that a student exists?",
+          "options": [
+            "Yes; positive numbers are all registered",
+            "Only when the table is sorted",
+            "Yes; it creates the Student relation",
+            "No; positivity does not enforce parent existence"
+          ],
+          "correct_index": 3,
+          "explanation": "Referential integrity is a separate cross-relation rule.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-4-database-schema-application-new-3",
+          "test_id": "pt-dbms-sql-4-database-schema-application",
+          "question_text": "A student takes two courses. How many enrollment-grain report rows can be correct?",
+          "options": [
+            "Two",
+            "Always one",
+            "Zero by definition",
+            "The number of Student attributes"
+          ],
+          "correct_index": 0,
+          "explanation": "Each row represents a separate student-course fact.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-4-database-schema-application-new-4",
+          "test_id": "pt-dbms-sql-4-database-schema-application",
+          "question_text": "What population does an inner join from enrollments to both parents describe?",
+          "options": [
+            "Every student, including unenrolled students",
+            "Enrollments matching both parent sources",
+            "Only courses with zero enrollment",
+            "Every proposed invalid reference"
+          ],
+          "correct_index": 1,
+          "explanation": "Inner joins retain matching combinations.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-4-database-schema-application-new-5",
+          "test_id": "pt-dbms-sql-4-database-schema-application",
+          "question_text": "Why retain a proposal_id in an import reference audit?",
+          "options": [
+            "To create a foreign key automatically",
+            "To change the source degree",
+            "To trace each problematic submitted fact",
+            "To sort parents on disk"
+          ],
+          "correct_index": 2,
+          "explanation": "Traceable identity supports correction of individual proposals.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-4-database-schema-application-new-6",
+          "test_id": "pt-dbms-sql-4-database-schema-application",
+          "question_text": "A proposal has neither a matching student nor course. What should a two-flag audit report?",
+          "options": [
+            "Only the student flag forever",
+            "Only the course flag forever",
+            "Neither because the errors cancel",
+            "Both missing-reference flags"
+          ],
+          "correct_index": 3,
+          "explanation": "The two existence checks are independent.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-4-database-schema-application-new-7",
+          "test_id": "pt-dbms-sql-4-database-schema-application",
+          "question_text": "What does a relationship arrow in a diagram prove by itself?",
+          "options": [
+            "The depicted design intent, not actual database enforcement",
+            "Every write has been tested",
+            "Production migration success",
+            "All parent deletion behaviour"
+          ],
+          "correct_index": 0,
+          "explanation": "Runtime constraints need evidence beyond a drawing.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-4-database-schema-application-new-8",
+          "test_id": "pt-dbms-sql-4-database-schema-application",
+          "question_text": "Which rule must be chosen deliberately for parent deletion?",
+          "options": [
+            "Whether columns have labels",
+            "How referencing child facts are handled",
+            "The screen font",
+            "The query result aliases"
+          ],
+          "correct_index": 1,
+          "explanation": "Referential actions affect retained facts and valid transitions.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-4-database-schema-application-new-9",
+          "test_id": "pt-dbms-sql-4-database-schema-application",
+          "question_text": "Why must circular references be assessed jointly?",
+          "options": [
+            "Every circular reference is universally illegal",
+            "They never involve data",
+            "Allowed states and transitions depend on both relationships",
+            "They eliminate all keys"
+          ],
+          "correct_index": 2,
+          "explanation": "Creation and data changes must respect the combined dependencies.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-4-database-schema-application-new-10",
+          "test_id": "pt-dbms-sql-4-database-schema-application",
+          "question_text": "What must accompany schema-change review in a shared application?",
+          "options": [
+            "Only a count of table names",
+            "Only the new relation title",
+            "Only a sample screenshot",
+            "Caller and existing-data compatibility evidence"
+          ],
+          "correct_index": 3,
+          "explanation": "A structural contract affects all consumers relying on it.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cx-database-schema-report",
+      "slug": "database-schema-report",
+      "title": "Read enrollment facts across a database design",
+      "difficulty": "Easy",
+      "task": "Return student_id, course_id, student_name, course_name for enrollment rows matching both parents. Sort by student_id, course_id, then proposal_id. Retain separate matching proposals.",
+      "schema_sql": "CREATE TABLE students (student_id INT PRIMARY KEY, student_name VARCHAR(50) NOT NULL);\nCREATE TABLE courses (course_id INT PRIMARY KEY, course_name VARCHAR(50) NOT NULL);\nCREATE TABLE enrollments (proposal_id INT PRIMARY KEY, student_id INT NOT NULL, course_id INT NOT NULL);",
+      "seed_sql": "INSERT INTO students VALUES (1,'Asha'),(2,'Asha'); INSERT INTO courses VALUES (10,'Databases'),(20,'Networks'); INSERT INTO enrollments VALUES (1,1,10),(2,1,20),(3,2,10),(4,9,10);",
+      "expected": "student_id\tcourse_id\tstudent_name\tcourse_name\n1\t10\tAsha\tDatabases\n1\t20\tAsha\tNetworks\n2\t10\tAsha\tDatabases",
+      "ordering": "Use the explicit identifier ordering requested in the task.",
+      "constraints": [
+        "These fixtures use temporary-table SQL mirrors without foreign keys.",
+        "Query and audit results do not establish actual FK enforcement or production authorization."
+      ],
+      "edge_cases": [
+        "Descriptive names can repeat.",
+        "An imported proposal can lack either or both referenced parents."
+      ],
+      "hints": [
+        "Follow identifiers rather than matching names.",
+        "For the audit preserve proposals with no matching parent."
+      ],
+      "solution_sql": "SELECT e.student_id, e.course_id, s.student_name, c.course_name FROM enrollments e JOIN students s ON s.student_id = e.student_id JOIN courses c ON c.course_id = e.course_id ORDER BY e.student_id, e.course_id, e.proposal_id;",
+      "explanation": "The SQL reads the modeled references explicitly. Scratch results verify query semantics only; actual foreign-key enforcement remains outside these temporary-table fixtures.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO students VALUES (3,'Dev'); INSERT INTO courses VALUES (7,'Art'); INSERT INTO enrollments VALUES (1,3,7),(2,3,7);",
+          "expected": "student_id\tcourse_id\tstudent_name\tcourse_name\n3\t7\tDev\tArt\n3\t7\tDev\tArt"
+        },
+        {
+          "seed_sql": "INSERT INTO enrollments VALUES (1,99,88);",
+          "expected": ""
+        }
+      ]
+    },
+    {
+      "id": "cx-database-schema-audit",
+      "slug": "database-schema-audit",
+      "title": "Identify missing references before import",
+      "difficulty": "Medium",
+      "task": "Treat enrollments as proposed imports. Return proposal_id, missing_student and missing_course (integer flags 1 or 0) only for proposals missing at least one parent. Sort proposal_id ascending.",
+      "schema_sql": "CREATE TABLE students (student_id INT PRIMARY KEY, student_name VARCHAR(50) NOT NULL);\nCREATE TABLE courses (course_id INT PRIMARY KEY, course_name VARCHAR(50) NOT NULL);\nCREATE TABLE enrollments (proposal_id INT PRIMARY KEY, student_id INT NOT NULL, course_id INT NOT NULL);",
+      "seed_sql": "INSERT INTO students VALUES (1,'Asha'); INSERT INTO courses VALUES (10,'Databases'); INSERT INTO enrollments VALUES (1,1,10),(2,9,10),(3,1,99),(4,9,99);",
+      "expected": "proposal_id\tmissing_student\tmissing_course\n2\t1\t0\n3\t0\t1\n4\t1\t1",
+      "ordering": "Use the explicit identifier ordering requested in the task.",
+      "constraints": [
+        "These fixtures use temporary-table SQL mirrors without foreign keys.",
+        "Query and audit results do not establish actual FK enforcement or production authorization."
+      ],
+      "edge_cases": [
+        "Descriptive names can repeat.",
+        "An imported proposal can lack either or both referenced parents."
+      ],
+      "hints": [
+        "Follow identifiers rather than matching names.",
+        "For the audit preserve proposals with no matching parent."
+      ],
+      "solution_sql": "SELECT e.proposal_id, CASE WHEN s.student_id IS NULL THEN 1 ELSE 0 END AS missing_student, CASE WHEN c.course_id IS NULL THEN 1 ELSE 0 END AS missing_course FROM enrollments e LEFT JOIN students s ON s.student_id = e.student_id LEFT JOIN courses c ON c.course_id = e.course_id WHERE s.student_id IS NULL OR c.course_id IS NULL ORDER BY e.proposal_id;",
+      "explanation": "The SQL reads the modeled references explicitly. Scratch results verify query semantics only; actual foreign-key enforcement remains outside these temporary-table fixtures.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO students VALUES (1,'Mira'); INSERT INTO courses VALUES (2,'Art'); INSERT INTO enrollments VALUES (9,1,2);",
+          "expected": ""
+        },
+        {
+          "seed_sql": "INSERT INTO enrollments VALUES (7,1,2);",
+          "expected": "proposal_id\tmissing_student\tmissing_course\n7\t1\t1"
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-4-database-schema-1",
+      "test_id": "pt-dbms-sql-4-database-schema",
+      "question_text": "What does a database schema represent?",
+      "options": [
+        "The data currently stored in one table",
+        "The complete structural design of the entire database: all relation schemas plus cross-relation constraints",
+        "A single relation's set of tuples",
+        "The physical hard-disk layout of the DBMS"
+      ],
+      "correct_index": 1,
+      "explanation": "The database schema is the full structural blueprint spanning every relation and the constraints between them.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-4-database-schema-2",
+      "test_id": "pt-dbms-sql-4-database-schema",
+      "question_text": "Which of the following would be part of the database schema for a college database?",
+      "options": [
+        "The specific 4 rows currently in Students",
+        "The Students, Courses, and Enrollments relation schemas plus their foreign-key links",
+        "Today's date",
+        "The number of students who enrolled last semester"
+      ],
+      "correct_index": 1,
+      "explanation": "The relation schemas and the constraints (including foreign keys) linking them together constitute the database schema.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-4-database-schema-3",
+      "test_id": "pt-dbms-sql-4-database-schema",
+      "question_text": "How does a Database Schema differ from a single Relation Schema?",
+      "options": [
+        "A database schema is one relation's structure; a relation schema covers the whole database",
+        "A database schema aggregates ALL relation schemas plus inter-relation constraints; a relation schema describes just one relation",
+        "They are identical terms for the same concept",
+        "A relation schema always has more attributes than a database schema"
+      ],
+      "correct_index": 1,
+      "explanation": "The database schema is the union of every relation schema in the system, plus constraints spanning them, such as foreign keys.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-4-database-schema-4",
+      "test_id": "pt-dbms-sql-4-database-schema",
+      "question_text": "A foreign key linking Enrollments.student_id to Students.id is best understood as part of:",
+      "options": [
+        "Only the Enrollments relation schema, with no bearing on the database schema",
+        "The overall database schema, since it expresses a relationship BETWEEN two relation schemas",
+        "The database instance, since it involves actual ID values",
+        "Neither the relation schema nor the database schema"
+      ],
+      "correct_index": 1,
+      "explanation": "Although declared syntactically inside one table's definition, a foreign key constraint expresses a cross-relation relationship and is conceptually part of the database schema.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-4-database-schema-5",
+      "test_id": "pt-dbms-sql-4-database-schema",
+      "question_text": "Is it valid for a database schema to be considered complete even if all its relations currently hold zero rows?",
+      "options": [
+        "No, a database schema requires at least some data to be valid",
+        "Yes — the schema (structure + constraints) is complete as soon as it is defined, regardless of whether data has been inserted",
+        "Only if there is exactly one relation in the schema",
+        "No, this would violate referential integrity"
+      ],
+      "correct_index": 1,
+      "explanation": "A database schema is a structural definition; it can be fully valid with every relation instance still empty.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-4-database-schema-6",
+      "test_id": "pt-dbms-sql-4-database-schema",
+      "question_text": "Adding a brand-new table 'Instructors' to the college database is an example of a change to:",
+      "options": [
+        "The database instance only",
+        "The database schema, since a new relation schema is being introduced",
+        "Neither the schema nor the instance",
+        "Only the Students relation schema"
+      ],
+      "correct_index": 1,
+      "explanation": "Introducing a new relation schema changes the overall structural design, i.e., the database schema.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-4-database-schema-7",
+      "test_id": "pt-dbms-sql-4-database-schema",
+      "question_text": "Circular foreign keys between two relations (each referencing the other) must be validated:",
+      "options": [
+        "Independently, one relation schema at a time, ignoring the other",
+        "Together, as part of the overall database schema design, since neither constraint makes sense in isolation",
+        "Only at the database instance level, never at schema design time",
+        "They are not allowed to exist in any relational database schema"
+      ],
+      "correct_index": 1,
+      "explanation": "Circular references span two relation schemas and must be reasoned about jointly as part of the whole database schema.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-4-database-schema-8",
+      "test_id": "pt-dbms-sql-4-database-schema",
+      "question_text": "Which pair of terms mirrors the Relation Schema vs. Relation distinction, but at the whole-database level?",
+      "options": [
+        "Attribute vs. Domain",
+        "Database Schema vs. Database Instance",
+        "Degree vs. Cardinality",
+        "Tuple vs. Attribute"
+      ],
+      "correct_index": 1,
+      "explanation": "Just as Relation Schema (structure) contrasts with Relation (data), Database Schema (structure) contrasts with Database Instance (data), scaled to the entire database.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "coordinator",
+    "independent_review": "unavailable; no agent tools",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Definitions and examples checked against questions; no plagiarism certification.",
+    "existing_question_corrections": [
+      "tq-dbms-sql-4-database-schema-7"
+    ],
+    "canonical_answer_indices_preserved": true
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-4-database-schema",
+    "original_note_sha256": "03a4508cb6285d2c550f3dd47123c0fc6b623412482d2b138866e274a4768ade",
+    "status": "paired migration prepared; not applied"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Enrollment connects two parent identities",
+      "description": "The association references student and course identities; the labels are descriptive. This is a logical map, not evidence that deployed constraints were executed.",
+      "columns": [
+        "Relation",
+        "Identity",
+        "Relationship role"
+      ],
+      "rows": [
+        [
+          "Student",
+          "student_id",
+          "Parent identity for a student"
+        ],
+        [
+          "Course",
+          "course_id",
+          "Parent identity for a course"
+        ],
+        [
+          "Enrollment",
+          "student_id + course_id for one enrollment per pair",
+          "student_id references Student; course_id references Course"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "coordinator checked relationship grain and distinction between FK design and query-only fixtures",
+    "server_rendering": "passed",
+    "browser_rendering": "unverified",
+    "independent_review": "unavailable; no agent tools",
+    "server_rendering_evidence": "2026-10-29: actual LessonBlock static render for every package; focused Vitest suite passed."
+  },
+  "sql_verification": {
+    "engine": "11.8.6-MariaDB-0+deb13u1 from Debian",
+    "scope": "MariaDB compatibility execution; exact MySQL 8.4/provider execution unverified",
+    "fingerprint": "af4c60063b73a4796c828aee7c1a6ab205abe31a40b97631566836ec53404442",
+    "cases": [
+      {
+        "problem": "database-schema-report",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "database-schema-report",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "database-schema-report",
+        "case": 2,
+        "passed": true
+      },
+      {
+        "problem": "database-schema-audit",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "database-schema-audit",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "database-schema-audit",
+        "case": 2,
+        "passed": true
+      }
+    ],
+    "all_passed": true
+  }
+}

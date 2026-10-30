@@ -1,0 +1,514 @@
+{
+  "source_ref": "chapter-21-normalization-and-functional-dependencies/deletion-anomaly",
+  "slug": "deletion-anomaly",
+  "title": "Deletion Anomaly",
+  "description": "Recognize deletion anomalies caused by storing independent facts together, trace the lost dependency, and design a lossless separation that preserves required information.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Notice information lost beyond the intended deletion\n\nA deletion anomaly occurs when removing a fact that should disappear also removes a different fact that should remain. A campus club might store club details only inside membership rows. Removing the last member can then erase the only recorded club meeting room, even though the club still exists and still has that room assignment. The deletion did exactly what its row predicate requested, but the table design coupled two independent lifetimes.\n\nThe important question is not whether DELETE can remove data. Deletion normally removes selected facts. The anomaly is the unintended loss of another fact that the application needs independently. Review [data redundancy](/learning/dbms-sql-tutorial/data-redundancy), [functional dependencies](/learning/dbms-sql-tutorial/functional-dependency) and [normalization](/learning/dbms-sql-tutorial/1nf) before treating every deleted row as a design failure.\n\n## Separate the facts hidden in one row\n\nConsider a table containing membership_id, learner_id, club_id, club_name and meeting_room. One row says that a learner belongs to a club, but it also repeats the club's name and meeting room. Under the assumed rules, club_id determines club_name and meeting_room. Membership identity determines the learner-club membership. Those are different dependencies with potentially different lifetimes.\n\n| Membership | Learner | Club | Club name | Meeting room |\n|---|---|---|---|---|\n| 1 | 10 | 7 | Astronomy | R12 |\n| 2 | 20 | 7 | Astronomy | R12 |\n| 3 | 30 | 9 | Robotics | R18 |\n\nRemoving membership 1 leaves another row that still records Astronomy's room. Removing membership 3 removes the sole Robotics membership and the sole stored statement that Robotics meets in R18. The design therefore behaves differently at the last-row boundary. A test containing several members in every club can miss the defect completely.\n\n## Write the intended lifetimes in words\n\nA club may exist before its first member joins and after its last member leaves. A membership exists only while that learner-club association is valid under the application's history policy. If both statements are true, the club facts should not depend on a membership row being present. That lifetime distinction is stronger evidence than a rule to split tables simply because a label repeats.\n\nSometimes the apparently independent fact is not actually required to survive. A temporary registration batch might be defined to exist only while it contains registrations. In that domain, removing the last registration and its batch metadata may be an intended lifecycle action. Requirements determine whether the information loss is anomalous. Confirm those requirements rather than applying normalization slogans without a business model.\n\nHistorical requirements add another layer. Removing a current membership may still require preserving past participation. A normalized schema does not by itself decide whether to retain history, mark an end date or erase a record. The anomaly analysis identifies independent facts; retention and authorized deletion policy are separate design decisions.\n\n## Decompose along the relevant dependency\n\nA straightforward design stores club facts in clubs and association facts in memberships. Each membership refers to its club through a foreign key. The club row can remain when the final membership is removed, preserving the name and meeting room without inventing a placeholder member.\n\n```sql\nCREATE TABLE clubs (\n  club_id INT PRIMARY KEY,\n  club_name VARCHAR(50) NOT NULL,\n  meeting_room VARCHAR(20) NOT NULL\n);\nCREATE TABLE memberships (\n  membership_id INT PRIMARY KEY,\n  learner_id INT NOT NULL,\n  club_id INT NOT NULL,\n  UNIQUE(learner_id, club_id),\n  FOREIGN KEY(club_id) REFERENCES clubs(club_id)\n);\n```\n\nThe uniqueness rule here assumes at most one current membership per learner and club. If the table records separate historical membership periods, the appropriate business key can differ. The example demonstrates dependency separation, not a universal production schema. Real schema changes require inspecting callers, migrations, constraints and existing data before implementation.\n\nA join can reconstruct the combined current view when needed. Normalization does not mean the application can never display a membership beside its club details. It means those facts have authoritative storage matching their dependencies, and a query combines them for a particular presentation.\n\n```sql\nSELECT m.membership_id, m.learner_id,\n       c.club_id, c.club_name, c.meeting_room\nFROM memberships AS m\nJOIN clubs AS c ON c.club_id = m.club_id\nORDER BY m.membership_id;\n```\n\n## Check lossless reconstruction and constraints\n\nA decomposition should preserve the intended information when the relations are joined. With a required foreign key from each membership to a unique club row, the shown join associates every valid membership with exactly one club. Club rows without members remain valid in clubs, even though an inner membership join does not display them. A club roster report should start from clubs if those empty clubs must appear.\n\nAn incomplete join predicate can reintroduce false combinations. Matching on club_name instead of a stable club identifier can merge clubs that happen to share a name. Separating tables does not eliminate the need for complete keys, valid references and correct caller queries. The design and its reconstruction path must be reviewed together.\n\nPreserving dependencies also matters. If one club can have several rooms on different dates, club_id alone does not determine one meeting_room under the real requirements. The original example's assumption would be wrong, and a schedule relation may be needed. Discover the actual dependency before selecting a normal form or declaring a decomposition complete.\n\n## Distinguish foreign-key actions from the anomaly\n\nA foreign key prevents particular invalid references, but it does not automatically choose the desired lifecycle. Deleting a club parent may be restricted, cascade to memberships or use another configured action. Those policies must match the domain and existing data-integrity requirements. Do not add cascading deletion merely because separate tables now exist.\n\nDeleting a child membership does not ordinarily delete its referenced parent club through a standard child-to-parent foreign key. That direction is why the normalized design can preserve club facts after the final child disappears. A trigger or application workflow could still remove the parent, so trace actual behavior rather than assume the schema diagram is the whole system.\n\nBackups and transactions solve different problems. A transaction can make a requested set of changes atomic, and a backup can support recovery under a reviewed process. Neither corrects a schema that cannot represent a club independently of membership. Keeping an unnecessary dummy membership would mask the missing representation and contaminate membership counts.\n\n## Compare related anomalies without merging them\n\nAn insertion anomaly would make it difficult to record a new club before a learner joins. An update anomaly would allow repeated club-room copies to disagree after only some rows are changed. The deletion anomaly appears when the final carrier of an independently needed fact is removed. All three can arise from the same mixed-dependency design, but they are different observable failures.\n\nA surrogate primary key alone does not solve them. Assigning a unique membership_id to every row makes row identity clear while leaving club details repeated and dependent on membership existence. The fix must address which facts belong to which entity or relationship, not merely add another identifier column.\n\n## Work through the last-row boundary\n\nFor a modeling exercise, list two clubs, one with two memberships and one with one membership. Remove one membership from the first club on paper and state which facts remain representable. Then remove the sole membership from the second club and identify the lost club facts. Repeat using separate clubs and memberships and explain why the club row survives.\n\nFor a second exercise, change the requirement so a club can reserve several rooms by date. Derive the new dependency and identify why a single meeting_room column no longer captures the domain. These exercises assess fact lifetimes, dependencies and reconstruction rather than memorized DELETE syntax.\n\nWhen migrating an existing mixed table, inconsistent repeated club details require a reviewed reconciliation rule. Choosing one arbitrary room value would silently discard disagreement. Inventory those conflicts and preserve evidence before preparing any approved data transformation; a clean example does not prove existing production rows are already consistent.\n\n## Verify the redesign against actual needs\n\nCheck zero-member, one-member and several-member clubs, duplicate display names and a membership referencing a nonexistent club. Confirm both the permitted removal of a membership and denied invalid references at the trusted database boundary when an implementation is authorized. Verify that reports retain intended empty clubs and that history and visibility rules remain intact.\n\nContinue with [insertion anomalies](/learning/dbms-sql-tutorial/insertion-anomaly), [update anomalies](/learning/dbms-sql-tutorial/update-anomaly) and [third normal form](/learning/dbms-sql-tutorial/3nf). A successful analysis names the independent fact that would be lost, explains why its lifetime differs and demonstrates a design that preserves it without fabricated rows.",
+  "references": [
+    {
+      "title": "Database Design: normalization",
+      "url": "https://opentextbc.ca/dbdesign01/chapter/chapter-12-normalization/"
+    },
+    {
+      "title": "MySQL 8.4 foreign key constraints",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/create-table-foreign-keys.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-21-deletion-anomaly",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-21-deletion-anomaly-1",
+          "test_id": "pt-dbms-sql-21-deletion-anomaly",
+          "question_text": "Assume one enrollment row is the only stored record of course C3 and its instructor I3; both entities must remain after enrollment ends. What happens if that row is deleted?",
+          "options": [
+            "Only the enrollment fact is removed; course and instructor data are preserved elsewhere",
+            "The course (Computer Networks) and instructor (Dr. Singh, Room 118) facts are also lost, since no other row stores them",
+            "The delete is rejected by the database automatically",
+            "Only the CourseName field is deleted, InstructorID remains"
+          ],
+          "correct_index": 1,
+          "explanation": "Since C3 and I3 only ever appear in that one row, deleting it erases the only record of the course's and instructor's existence — the deletion anomaly.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-21-deletion-anomaly-2",
+          "test_id": "pt-dbms-sql-21-deletion-anomaly",
+          "question_text": "What is the deletion anomaly, precisely?",
+          "options": [
+            "A DELETE statement running slower than expected",
+            "The loss of independent, unrelated facts as an unintended side effect of deleting a row that represents a different fact",
+            "A foreign key constraint blocking a DELETE",
+            "The automatic cascading of deletes to child tables"
+          ],
+          "correct_index": 1,
+          "explanation": "It specifically describes accidentally destroying facts (like course/instructor existence) that have nothing to do with the fact actually being deleted (an enrollment).",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-21-deletion-anomaly-3",
+          "test_id": "pt-dbms-sql-21-deletion-anomaly",
+          "question_text": "If two other students besides Ravi were also enrolled in C3, and Ravi's enrollment row is deleted, what happens to the Computer Networks / Dr. Singh data?",
+          "options": [
+            "It is lost regardless of the other enrollments",
+            "It survives, because it is still present in the other students' C3 rows — but this correctness is accidental, not guaranteed by the schema",
+            "The database throws a referential integrity error",
+            "It moves automatically to a backup table"
+          ],
+          "correct_index": 1,
+          "explanation": "With other rows still referencing C3/I3, the data happens to survive — but this is fragile: nothing in the schema guarantees at least one other row will always exist.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-21-deletion-anomaly-4",
+          "test_id": "pt-dbms-sql-21-deletion-anomaly",
+          "question_text": "In a wide relation that stores enrollment plus the only course and instructor details, why can removing its last enrollment erase independent facts?",
+          "options": [
+            "Because DELETE statements are inherently unsafe in SQL",
+            "Because three logically independent facts (enrollment, course existence, instructor existence) are conflated into a single row instead of separate relations",
+            "Because CourseID is not indexed",
+            "Because InstructorOffice is a nullable column"
+          ],
+          "correct_index": 1,
+          "explanation": "The root cause is the same design flaw as the other anomalies: unrelated entities' facts are packed into one row, so removing one fact can take the others down with it.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-21-deletion-anomaly-5",
+          "test_id": "pt-dbms-sql-21-deletion-anomaly",
+          "question_text": "How does the deletion anomaly differ from a deliberate `DELETE FROM Course WHERE CourseID = 'C3'` in a properly normalized schema?",
+          "options": [
+            "They are functionally identical in every way",
+            "The normalized delete is an explicit, intentional operation on the Course entity itself; the anomaly is an implicit, unintended loss of Course data as a side effect of deleting an Enrollment row",
+            "The anomaly only happens in normalized schemas",
+            "There is no difference — both always cascade to child tables"
+          ],
+          "correct_index": 1,
+          "explanation": "In a normalized design, deleting a course is a conscious act on the Course table. The anomaly is specifically about losing course data unintentionally via an unrelated enrollment deletion.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-21-deletion-anomaly-6",
+          "test_id": "pt-dbms-sql-21-deletion-anomaly",
+          "question_text": "Is an `ON DELETE CASCADE` foreign key in a normalized schema the same problem as the deletion anomaly?",
+          "options": [
+            "Yes, both are unwanted and equally harmful",
+            "No — CASCADE is a controlled, explicit, intentional rule about related-row cleanup; the deletion anomaly is an uncontrolled, implicit loss of unrelated master data",
+            "Yes, because both involve DELETE statements",
+            "No, because CASCADE never actually deletes any rows"
+          ],
+          "correct_index": 1,
+          "explanation": "A configured cascade is an explicit parent-to-child action. It must still match requirements; being deliberate does not make every cascade appropriate.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-21-deletion-anomaly-7",
+          "test_id": "pt-dbms-sql-21-deletion-anomaly",
+          "question_text": "Which decomposition eliminates the deletion anomaly for course and instructor data?",
+          "options": [
+            "Adding a NOT NULL constraint to CourseName",
+            "Store Course and Instructor independently from Enrollment; a child delete alone then preserves their rows unless another configured workflow removes them",
+            "Adding a composite index on (StudentID, CourseID)",
+            "Renaming the CourseID column"
+          ],
+          "correct_index": 1,
+          "explanation": "Separating lifetimes addresses the representation defect. Triggers, application cleanup and configured reference actions still need their own review; never claim deletion is impossible under every workflow.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-21-deletion-anomaly-8",
+          "test_id": "pt-dbms-sql-21-deletion-anomaly",
+          "question_text": "A student's enrollment row is the last reference to a given CourseID. In the unnormalized design, what is the underlying reason this is even possible?",
+          "options": [
+            "Because CourseID is a foreign key with no ON DELETE rule",
+            "Because CourseName and instructor data are stored redundantly inside the Enrollment-level row rather than in an independent Course relation with its own lifecycle",
+            "Because the database engine automatically purges orphaned data",
+            "Because StudentID is nullable"
+          ],
+          "correct_index": 1,
+          "explanation": "The course/instructor facts have no independent existence in this schema — they only exist as attributes riding along on enrollment rows, so the last such row's deletion takes them with it.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-21-deletion-anomaly-new-9",
+          "test_id": "pt-dbms-sql-21-deletion-anomaly",
+          "question_text": "What makes the loss of a club room after its final membership is removed an anomaly?",
+          "options": [
+            "DELETE is never allowed",
+            "The club-room fact is still needed independently",
+            "Every table must retain every row forever",
+            "Room names cannot be text"
+          ],
+          "correct_index": 1,
+          "explanation": "The unintended loss concerns a separate fact lifetime.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-21-deletion-anomaly-new-10",
+          "test_id": "pt-dbms-sql-21-deletion-anomaly",
+          "question_text": "Which dependency supports separating club details from memberships in the example?",
+          "options": [
+            "member_id determines every club forever",
+            "meeting_room determines learner_id",
+            "club_id determines club_name and meeting_room",
+            "club_name must be globally unique"
+          ],
+          "correct_index": 2,
+          "explanation": "Club attributes depend on club identity rather than a membership occurrence.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-21-deletion-anomaly-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-21-deletion-anomaly-application-new-1",
+          "test_id": "pt-dbms-sql-21-deletion-anomaly-application",
+          "question_text": "Which fixture most directly exposes the deletion anomaly?",
+          "options": [
+            "Only clubs with many members",
+            "Only an empty SELECT",
+            "Only different room labels",
+            "A club with exactly one membership"
+          ],
+          "correct_index": 3,
+          "explanation": "Removing the last carrier reveals the unintended information loss.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-21-deletion-anomaly-application-new-2",
+          "test_id": "pt-dbms-sql-21-deletion-anomaly-application",
+          "question_text": "Does adding a surrogate membership_id alone remove the anomaly?",
+          "options": [
+            "No",
+            "Yes,always",
+            "Only if it is an integer",
+            "Only if ordered ascending"
+          ],
+          "correct_index": 0,
+          "explanation": "A row identifier does not separate independent dependencies.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-21-deletion-anomaly-application-new-3",
+          "test_id": "pt-dbms-sql-21-deletion-anomaly-application",
+          "question_text": "Which relation should own club facts if clubs can exist without members?",
+          "options": [
+            "Only memberships",
+            "clubs",
+            "Only a temporary report",
+            "A dummy membership"
+          ],
+          "correct_index": 1,
+          "explanation": "The entity must be representable independently of its child association.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-21-deletion-anomaly-application-new-4",
+          "test_id": "pt-dbms-sql-21-deletion-anomaly-application",
+          "question_text": "Does deleting a child membership normally cascade upward through a standard foreign key to delete its club?",
+          "options": [
+            "Always",
+            "Only for unique club names",
+            "No",
+            "Only when a SELECT uses JOIN"
+          ],
+          "correct_index": 2,
+          "explanation": "Standard reference actions govern parent changes and referencing children,not automatic upward deletion.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-21-deletion-anomaly-application-new-5",
+          "test_id": "pt-dbms-sql-21-deletion-anomaly-application",
+          "question_text": "What can a backup fail to fix about the original design?",
+          "options": [
+            "The possibility of restoring any data",
+            "Every row identifier",
+            "The SQL parser",
+            "Its inability to represent an independent club without membership"
+          ],
+          "correct_index": 3,
+          "explanation": "Recovery tooling and schema representation solve different problems.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-21-deletion-anomaly-application-new-6",
+          "test_id": "pt-dbms-sql-21-deletion-anomaly-application",
+          "question_text": "What would make the example club_id-to-room dependency invalid?",
+          "options": [
+            "A club can reserve several rooms on different dates",
+            "Two members share a club",
+            "Every club has an ID",
+            "A report orders club names"
+          ],
+          "correct_index": 0,
+          "explanation": "The true domain would require room assignments at a different grain.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-21-deletion-anomaly-application-new-7",
+          "test_id": "pt-dbms-sql-21-deletion-anomaly-application",
+          "question_text": "What does an inner membership-to-club join omit?",
+          "options": [
+            "Every valid membership",
+            "Clubs with no memberships",
+            "All club names",
+            "Only clubs with two members"
+          ],
+          "correct_index": 1,
+          "explanation": "The club roster must preserve clubs separately if empty clubs belong in the report.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-21-deletion-anomaly-application-new-8",
+          "test_id": "pt-dbms-sql-21-deletion-anomaly-application",
+          "question_text": "How is a deletion anomaly different from an update anomaly?",
+          "options": [
+            "They are always the same statement",
+            "Update anomalies require DELETE",
+            "Deletion loses an independently needed fact; update can leave repeated copies inconsistent",
+            "Deletion anomalies require an index"
+          ],
+          "correct_index": 2,
+          "explanation": "Related design weaknesses have distinct observable effects.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-21-deletion-anomaly-application-new-9",
+          "test_id": "pt-dbms-sql-21-deletion-anomaly-application",
+          "question_text": "Why is a dummy member a poor way to preserve club details?",
+          "options": [
+            "It creates a real learner automatically",
+            "It normalizes the design completely",
+            "It enforces every foreign key",
+            "It fabricates membership facts and distorts counts"
+          ],
+          "correct_index": 3,
+          "explanation": "Independent entity facts should have an independent representation.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-21-deletion-anomaly-application-new-10",
+          "test_id": "pt-dbms-sql-21-deletion-anomaly-application",
+          "question_text": "What must be checked before declaring a production decomposition complete?",
+          "options": [
+            "Real dependencies,callers,constraints,history and reconstruction",
+            "Only the number of new tables",
+            "Only successful CREATE TABLE syntax",
+            "Only the title of the diagram"
+          ],
+          "correct_index": 0,
+          "explanation": "A sound model must preserve behavior and data-integrity contracts.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [],
+  "coding_not_applicable": "This topic assesses dependency analysis, independent fact lifetimes and lossless schema design. The notes include two concrete modeling exercises and educational SQL definitions; automatic DELETE-output tasks would test mutation syntax rather than the anomaly and could encourage treating a destructive operation as the learning objective.",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-21-deletion-anomaly-1",
+      "test_id": "pt-dbms-sql-21-deletion-anomaly",
+      "question_text": "Ravi (S2) is the only student enrolled in C3. What happens if his enrollment row is deleted from the unnormalized StudentCourse table?",
+      "options": [
+        "Only the enrollment fact is removed; course and instructor data are preserved elsewhere",
+        "The course (Computer Networks) and instructor (Dr. Singh, Room 118) facts are also lost, since no other row stores them",
+        "The delete is rejected by the database automatically",
+        "Only the CourseName field is deleted, InstructorID remains"
+      ],
+      "correct_index": 1,
+      "explanation": "Since C3 and I3 only ever appear in that one row, deleting it erases the only record of the course's and instructor's existence — the deletion anomaly.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-21-deletion-anomaly-2",
+      "test_id": "pt-dbms-sql-21-deletion-anomaly",
+      "question_text": "What is the deletion anomaly, precisely?",
+      "options": [
+        "A DELETE statement running slower than expected",
+        "The loss of independent, unrelated facts as an unintended side effect of deleting a row that represents a different fact",
+        "A foreign key constraint blocking a DELETE",
+        "The automatic cascading of deletes to child tables"
+      ],
+      "correct_index": 1,
+      "explanation": "It specifically describes accidentally destroying facts (like course/instructor existence) that have nothing to do with the fact actually being deleted (an enrollment).",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-21-deletion-anomaly-3",
+      "test_id": "pt-dbms-sql-21-deletion-anomaly",
+      "question_text": "If two other students besides Ravi were also enrolled in C3, and Ravi's enrollment row is deleted, what happens to the Computer Networks / Dr. Singh data?",
+      "options": [
+        "It is lost regardless of the other enrollments",
+        "It survives, because it is still present in the other students' C3 rows — but this correctness is accidental, not guaranteed by the schema",
+        "The database throws a referential integrity error",
+        "It moves automatically to a backup table"
+      ],
+      "correct_index": 1,
+      "explanation": "With other rows still referencing C3/I3, the data happens to survive — but this is fragile: nothing in the schema guarantees at least one other row will always exist.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-21-deletion-anomaly-4",
+      "test_id": "pt-dbms-sql-21-deletion-anomaly",
+      "question_text": "Which of the following best explains WHY the deletion anomaly occurs in this schema?",
+      "options": [
+        "Because DELETE statements are inherently unsafe in SQL",
+        "Because three logically independent facts (enrollment, course existence, instructor existence) are conflated into a single row instead of separate relations",
+        "Because CourseID is not indexed",
+        "Because InstructorOffice is a nullable column"
+      ],
+      "correct_index": 1,
+      "explanation": "The root cause is the same design flaw as the other anomalies: unrelated entities' facts are packed into one row, so removing one fact can take the others down with it.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-21-deletion-anomaly-5",
+      "test_id": "pt-dbms-sql-21-deletion-anomaly",
+      "question_text": "How does the deletion anomaly differ from a deliberate `DELETE FROM Course WHERE CourseID = 'C3'` in a properly normalized schema?",
+      "options": [
+        "They are functionally identical in every way",
+        "The normalized delete is an explicit, intentional operation on the Course entity itself; the anomaly is an implicit, unintended loss of Course data as a side effect of deleting an Enrollment row",
+        "The anomaly only happens in normalized schemas",
+        "There is no difference — both always cascade to child tables"
+      ],
+      "correct_index": 1,
+      "explanation": "In a normalized design, deleting a course is a conscious act on the Course table. The anomaly is specifically about losing course data unintentionally via an unrelated enrollment deletion.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-21-deletion-anomaly-6",
+      "test_id": "pt-dbms-sql-21-deletion-anomaly",
+      "question_text": "Is an `ON DELETE CASCADE` foreign key in a normalized schema the same problem as the deletion anomaly?",
+      "options": [
+        "Yes, both are unwanted and equally harmful",
+        "No — CASCADE is a controlled, explicit, intentional rule about related-row cleanup; the deletion anomaly is an uncontrolled, implicit loss of unrelated master data",
+        "Yes, because both involve DELETE statements",
+        "No, because CASCADE never actually deletes any rows"
+      ],
+      "correct_index": 1,
+      "explanation": "CASCADE is a deliberate design decision about how related child rows should behave; the anomaly is the accidental destruction of independent facts due to poor table design, which is a very different situation.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-21-deletion-anomaly-7",
+      "test_id": "pt-dbms-sql-21-deletion-anomaly",
+      "question_text": "Which decomposition eliminates the deletion anomaly for course and instructor data?",
+      "options": [
+        "Adding a NOT NULL constraint to CourseName",
+        "Splitting Course and Instructor into their own relations, separate from Enrollment, so deleting an enrollment row can never remove course or instructor data",
+        "Adding a composite index on (StudentID, CourseID)",
+        "Renaming the CourseID column"
+      ],
+      "correct_index": 1,
+      "explanation": "Once Course and Instructor exist as independent relations, an Enrollment delete only ever removes enrollment facts — course and instructor rows persist independently, as they should.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-21-deletion-anomaly-8",
+      "test_id": "pt-dbms-sql-21-deletion-anomaly",
+      "question_text": "A student's enrollment row is the last reference to a given CourseID. In the unnormalized design, what is the underlying reason this is even possible?",
+      "options": [
+        "Because CourseID is a foreign key with no ON DELETE rule",
+        "Because CourseName and instructor data are stored redundantly inside the Enrollment-level row rather than in an independent Course relation with its own lifecycle",
+        "Because the database engine automatically purges orphaned data",
+        "Because StudentID is nullable"
+      ],
+      "correct_index": 1,
+      "explanation": "The course/instructor facts have no independent existence in this schema — they only exist as attributes riding along on enrollment rows, so the last such row's deletion takes them with it.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "/root/worker_1",
+    "independent_review": "passed",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "author semantic review; independent review pending",
+    "canonical_answer_indices_preserved": true,
+    "independent_reviewer": "/root",
+    "independent_review_scope": "Full notes,20 MCQs/options/reasoning,two design exercises and fact-lifetime diagram reviewed. Last-row boundary, independent entity lifetime, lossless reconstruction, surrogate-key insufficiency, FK direction and backup distinction correct. Made inherited enrollment scenario self-contained and removed absolute claim that normalization prevents any workflow from deleting parent facts. Exact MySQL/provider, browser and release validation remain separate."
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-21-deletion-anomaly",
+    "original_note_sha256": "8bd86dadda2e777150115955cf0c1eef33f4cea7e6fa672bfbe48a9d34caa456",
+    "status": "drafted; not included in prepared paired migrations"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Separate lifetimes preserve the club after membership removal",
+      "description": "The membership can end without erasing the independently existing club.",
+      "columns": [
+        "Fact",
+        "Authoritative relation",
+        "Survives final membership removal"
+      ],
+      "rows": [
+        [
+          "Club name and room",
+          "clubs",
+          "Yes"
+        ],
+        [
+          "Learner-club association",
+          "memberships",
+          "No,if intentionally removed"
+        ],
+        [
+          "Historical participation",
+          "Separate reviewed retention design",
+          "According to explicit policy"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "provided",
+    "technical_review": "coordinator independent manual review passed",
+    "server_rendering": "passed",
+    "browser_rendering": "unverified",
+    "independent_review": "passed",
+    "server_rendering_evidence": "2026-10-29 full Vitest:1310 passed/12 skipped; actual LessonBlock/TopicDiagrams render over230 packages. Browser visual QA remains unverified."
+  },
+  "authoring_status": "drafted; verification pending",
+  "sql_verification": {
+    "scope": "not executed; exact MySQL/provider verification pending",
+    "all_passed": false,
+    "cases": []
+  }
+}

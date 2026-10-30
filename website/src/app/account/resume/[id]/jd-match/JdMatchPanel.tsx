@@ -11,16 +11,23 @@ export default function JdMatchPanel({ resumeId }: { resumeId: string }) {
   const [checking, setChecking] = useState(false);
 
   async function handleCheck() {
+    if (checking) return;
     setChecking(true);
     setError(null);
-    const outcome = await matchResumeToJdAction(resumeId, jdText);
-    setChecking(false);
-    if ("error" in outcome) {
-      setError(outcome.error);
-      setResult(null);
-      return;
+    try {
+      const outcome = await matchResumeToJdAction(resumeId, jdText);
+      setChecking(false);
+      if ("error" in outcome) {
+        setError(outcome.error);
+        setResult(null);
+        return;
+      }
+      setResult(outcome);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
+    } finally {
+      setChecking(false);
     }
-    setResult(outcome);
   }
 
   return (

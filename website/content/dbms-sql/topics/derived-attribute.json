@@ -1,0 +1,621 @@
+{
+  "source_ref": "chapter-6-er-and-eer-modeling/derived-attribute",
+  "slug": "derived-attribute",
+  "title": "Derived Attribute",
+  "description": "Define calculated properties through authoritative sources, reference points and population grain, then verify deterministic ages and completed-credit totals.",
+  "dialect": "MySQL 8.4",
+  "notes": "## A derived property follows a calculation rule\n\nA derived attribute has a value determined from other recorded facts under an explicit calculation rule. A student's age at a specified date can be derived from date of birth. Completed credits can be derived from qualifying course enrollments and their credit amounts. The label describes dependence on authoritative sources, not merely whether the final number happens to appear in an SQL column.\n\nBegin with a sentence defining the intended quantity. Completed credits might mean credits from courses whose enrollment status is completed, once per qualifying student-course pair under the stated policy. That differs from credits for every proposed enrollment or the number of course rows. A correct expression needs the population and units as well as an attractive output name.\n\n## Base facts and derived values have different roles\n\nDate_of_birth is a recorded source fact, while age at a reference date depends on it and the reference point. A corrected birth date can change the derived age. A new day can also change the age without any database write to the student record. Storing an independently edited age alongside the source risks inconsistent claims unless a deliberate synchronization or historical-snapshot contract explains the relationship.\n\nLikewise, a credit amount belongs to the relevant course definition or version, while a student's total depends on qualifying participation facts. A change in course credits can have historical implications. If completed credits must reflect the amount awarded at completion, the authoritative source may be a recorded award rather than the current catalogue amount. State which interpretation the exercise or application uses before selecting a join.\n\n## Time-sensitive derivations need a reference point\n\nAge is not fully defined by subtracting birth years from an unspecified current year. The birthday boundary matters. For a student born on 2 January 2000, age on 1 January 2026 is twenty-five under the exercise's completed-year rule, while age on 2 January is twenty-six. A simple year-number subtraction would get the first case wrong.\n\nA deterministic test uses a fixed reference date rather than the day the test happens to run. MySQL's TIMESTAMPDIFF with YEAR supports the illustrated completed-year calculation. Calendar conventions, leap-day policies, invalid dates, and timezone-sensitive timestamps can require additional domain decisions. Do not claim that one introductory expression establishes every legal or institutional age policy for every calendar case.\n\n## Missing sources should not become invented facts\n\nA missing date of birth does not establish age zero. An unrecorded score does not establish a failing score. A derivation must state how absent inputs affect eligibility and output. It can exclude records lacking required inputs or report a defined absence, but it should not silently manufacture a normal value merely because a report looks cleaner with numbers everywhere.\n\nA genuine empty collection can have a defined total of zero when the task asks for the sum of no awarded credits. An unknown input is a different situation. Decide which meaning applies before using COALESCE. Replacing an absent aggregate with zero is appropriate in the stated zero-inclusive credit report, but that does not justify replacing every missing individual fact with zero in other tasks.\n\n## Derived and simple are independent classifications\n\nA derived total can be one simple numeric result. A structured derived result can also have components if the model needs them. Single-valued and multivalued describe another dimension: a total per student at one reference point differs from a collection of totals over recorded terms. Classification should name the quantity and its relevant occurrence rather than assuming every calculated property has one universal structure.\n\nIn common Chen-style notation, a derived attribute can be drawn with a dashed oval. That communicates conceptual dependence without implementing a refresh mechanism. Other diagram conventions can show the same idea differently. A visible dashed shape is not evidence that a trigger, generated column, query, or background process keeps the actual stored result consistent.\n\n## Compute a current result from its sources\n\nA SELECT can calculate a property without modifying its source data. The output alias names the derived role. Selecting a fixed reference-date age makes both the units and reproducibility clear. Filter absent and future birth dates according to the exercise policy so the output does not silently contain unsupported negative ages or invented missing values.\n\n```sql\nSELECT student_id,\n       TIMESTAMPDIFF(YEAR, birth_date, '2026-01-01') AS age_years\nFROM students\nWHERE birth_date IS NOT NULL\n  AND birth_date <= '2026-01-01'\nORDER BY student_id;\n```\n\nThis query demonstrates the stated calculation contract on supported dates. It does not certify external birth-date truth or authorize access to personal information. A real application still needs trusted access and validation rules around the sources. Query arithmetic and data authority solve different parts of the system's requirements.\n\n## Aggregation changes the fact grain\n\nA completed-credit report starts with course enrollment facts and returns one total per student. Different courses can have equal credit amounts, and both should contribute if both qualifying facts belong to the student. SUM(DISTINCT credits) would incorrectly collapse equal amounts merely because the numbers match. Identity belongs to the course or award occurrence, not the numeric amount being added.\n\nPreserve students with no completed enrollments when the task asks for every student. Apply completion eligibility without discarding unmatched students, and return zero for their empty completed-credit population under the stated rule. A report of only students with a qualifying completion is another valid task, but it has a different population. The output contract must choose which one is intended.\n\n## Caching does not remove derivation\n\nA deliberately stored result can remain conceptually derived if its authoritative value follows the source rule. A cached total may be useful for performance or a fixed historical snapshot. The system then needs an explicit consistency contract: when is it refreshed, which changes trigger recomputation, and can readers observe temporarily stale values? Storing the number does not answer those questions automatically.\n\nA trigger-based refresh needs coverage of all relevant insert, update, and delete paths, including changes in referenced source values where applicable. A periodic refresh can intentionally permit bounded staleness. An immutable snapshot can intentionally preserve an older reference state. These are different designs. Do not describe a cache as always immediately correct merely because one update path has a trigger.\n\n## Verify source changes and boundary cases\n\nFor age, test a birthday on the reference date, a birthday just after it, a missing birth date, and a future birth date under the stated exclusion policy. For credit totals, test two completed courses with equal credits, an incomplete enrollment, and a student with no qualifying course. These counterexamples expose wrong arithmetic, wrong population, and mistaken duplicate elimination.\n\nIf a cached result is involved, compare it with the authoritative calculation after the supported source transitions. An ordinary read-only fixture does not establish trigger completeness or concurrent refresh behaviour. Record those gaps separately. The exercises here compute the results on demand and therefore make no claim that a separate stored copy stays synchronized under every mutation.\n\n## Keep derivation claims proportional to evidence\n\nA useful definition names the sources, population grain, units, time reference, absence policy, and operation. It identifies whether the answer is current, historical, or cached and explains which source changes can affect it. That gives reviewers a concrete contract instead of relying on the word total, count, or age to imply the intended calculation.\n\nA result label should also reflect whether the answer is rounded or truncated. A displayed whole number must not silently stand in for a more precise quantity when the report contract requires the remainder. The SQL fixtures verify deterministic completed-year ages and a deliberately simplified completed-credit total based on supplied course values. MariaDB execution is compatibility evidence, while exact MySQL/provider execution and production permissions remain separate. Derived attributes are useful when the calculation and authority are explicit, letting the model avoid contradictory independent copies without pretending every calculated value is timeless or automatically correct.\n",
+  "references": [
+    {
+      "title": "MySQL 8.4 date calculations",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/date-calculations.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-6-derived-attribute",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-6-derived-attribute-1",
+          "test_id": "pt-dbms-sql-6-derived-attribute",
+          "question_text": "What is a derived attribute?",
+          "options": [
+            "An attribute that can hold multiple values",
+            "An attribute whose value can be computed from other attributes rather than stored independently",
+            "An attribute that identifies the entity uniquely",
+            "An attribute that cannot be decomposed"
+          ],
+          "correct_index": 1,
+          "explanation": "A derived attribute's value is calculated from other data, such as Age from Date_of_Birth.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-6-derived-attribute-2",
+          "test_id": "pt-dbms-sql-6-derived-attribute",
+          "question_text": "Why can a current age be derived from a date of birth and an explicit reference date rather than independently edited?",
+          "options": [
+            "Because Age is always NULL",
+            "Because it can be computed from Date_of_Birth and the current date, and storing it separately would make it go stale/inconsistent over time",
+            "Because Age is a multi-valued attribute",
+            "Because Date_of_Birth cannot be stored in databases"
+          ],
+          "correct_index": 1,
+          "explanation": "Age depends on the reference date and a defined calendar rule; it can change even when the birth-date source remains unchanged.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-6-derived-attribute-3",
+          "test_id": "pt-dbms-sql-6-derived-attribute",
+          "question_text": "In the common Chen-style notation, how can a derived attribute be shown?",
+          "options": [
+            "Double-line oval",
+            "Solid-line oval, same as any other attribute",
+            "Dashed-outline oval",
+            "Rectangle with rounded corners"
+          ],
+          "correct_index": 2,
+          "explanation": "A dashed oval visually flags that the attribute is computed rather than directly stored base data.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-6-derived-attribute-4",
+          "test_id": "pt-dbms-sql-6-derived-attribute",
+          "question_text": "Which of these is a valid derived attribute in the college database?",
+          "options": [
+            "Date_of_Birth for a Student",
+            "A distinct-enrolled-student count derived from the relevant qualifying enrollment identities under a stated policy",
+            "Roll_No for a Student",
+            "Course_Name for a Course"
+          ],
+          "correct_index": 1,
+          "explanation": "Counting enrollment rows counts students only if the stated relationship grain makes that correspondence valid.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-6-derived-attribute-5",
+          "test_id": "pt-dbms-sql-6-derived-attribute",
+          "question_text": "A system stores a 'Total_Marks' column that is refreshed by a database trigger whenever component marks change. Does this contradict the concept of a derived attribute?",
+          "options": [
+            "Yes, because derived attributes must never physically exist as a column",
+            "No; the result can be stored deliberately, but correctness still needs the authoritative rule and complete refresh or snapshot contract",
+            "Yes, because triggers cannot be used with derived attributes",
+            "No, because Total_Marks is actually a multi-valued attribute"
+          ],
+          "correct_index": 1,
+          "explanation": "Caching and snapshots can preserve a derived property. One trigger path alone does not prove every source change is covered.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-6-derived-attribute-6",
+          "test_id": "pt-dbms-sql-6-derived-attribute",
+          "question_text": "Which pair of concepts does 'derived vs. stored' NOT overlap with directly?",
+          "options": [
+            "Single-valued vs. multi-valued — derivation is about the source of the value, an independent axis from occurrence count",
+            "Simple vs. composite",
+            "Strong vs. weak entity",
+            "All of the above are independent of derived vs. stored"
+          ],
+          "correct_index": 3,
+          "explanation": "Derived-vs-stored is orthogonal to simple/composite, single/multi-valued, and strong/weak entity classification — all are independent axes.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-6-derived-attribute-7",
+          "test_id": "pt-dbms-sql-6-derived-attribute",
+          "question_text": "What is the main risk of storing a derived attribute's value directly instead of computing it on demand?",
+          "options": [
+            "It uses more CPU at query time",
+            "It can become inconsistent with its source data over time (an update anomaly), since the two copies can drift apart",
+            "It cannot be indexed",
+            "It becomes a multi-valued attribute automatically"
+          ],
+          "correct_index": 1,
+          "explanation": "Storing derived data risks the stored copy going out of sync with the source attributes it was computed from.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-6-derived-attribute-8",
+          "test_id": "pt-dbms-sql-6-derived-attribute",
+          "question_text": "Which attribute pair correctly shows a stored (base) attribute feeding a derived attribute?",
+          "options": [
+            "Roll_No (stored) -> Name (derived)",
+            "Date_of_Birth (stored) -> Age (derived)",
+            "CGPA (stored) -> Roll_No (derived)",
+            "Skills (stored) -> Phone_Number (derived)"
+          ],
+          "correct_index": 1,
+          "explanation": "Date_of_Birth is directly supplied/stored data; Age is computed from it, making Age the derived attribute.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-6-derived-attribute-new-9",
+          "test_id": "pt-dbms-sql-6-derived-attribute",
+          "question_text": "What must an age calculation specify besides the birth-date source?",
+          "options": [
+            "Only a shorter alias",
+            "The reference date and calendar rule",
+            "Only the student name",
+            "Only the current row count"
+          ],
+          "correct_index": 1,
+          "explanation": "Time-sensitive derived values need an explicit reference point.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-6-derived-attribute-new-10",
+          "test_id": "pt-dbms-sql-6-derived-attribute",
+          "question_text": "At 2026-01-01, what is the completed-year age for a birth date of 2000-01-02 under the exercise rule?",
+          "options": [
+            "26",
+            "24",
+            "25",
+            "0"
+          ],
+          "correct_index": 2,
+          "explanation": "The birthday has not occurred at the stated reference point.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-6-derived-attribute-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-6-derived-attribute-application-new-1",
+          "test_id": "pt-dbms-sql-6-derived-attribute-application",
+          "question_text": "Does a missing birth date establish age zero?",
+          "options": [
+            "Yes; every missing input is zero",
+            "Only if the table is empty",
+            "No; an absent source is not a known zero",
+            "Only if the name repeats"
+          ],
+          "correct_index": 2,
+          "explanation": "The derivation must preserve the meaning of absence.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-6-derived-attribute-application-new-2",
+          "test_id": "pt-dbms-sql-6-derived-attribute-application",
+          "question_text": "Why can SUM(DISTINCT credits) undercount a student’s completed credits?",
+          "options": [
+            "All credit values are identifiers",
+            "SUM always removes zero",
+            "DISTINCT joins all courses",
+            "Different qualifying courses can have equal credit amounts"
+          ],
+          "correct_index": 3,
+          "explanation": "The equal numeric amounts can represent separate contributions.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-6-derived-attribute-application-new-3",
+          "test_id": "pt-dbms-sql-6-derived-attribute-application",
+          "question_text": "Can a deliberately cached total still be conceptually derived?",
+          "options": [
+            "Yes; its authority can remain the source calculation",
+            "No; storage erases dependence",
+            "Only if the total is NULL",
+            "Only if there are no source facts"
+          ],
+          "correct_index": 0,
+          "explanation": "Storage strategy and conceptual origin are distinct.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-6-derived-attribute-application-new-4",
+          "test_id": "pt-dbms-sql-6-derived-attribute-application",
+          "question_text": "What does one refresh trigger fail to prove automatically?",
+          "options": [
+            "The trigger name",
+            "Coverage of every relevant source mutation and consistency requirement",
+            "That the field has a column",
+            "That the result is a number"
+          ],
+          "correct_index": 1,
+          "explanation": "A complete synchronization claim needs broader path evidence.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-6-derived-attribute-application-new-5",
+          "test_id": "pt-dbms-sql-6-derived-attribute-application",
+          "question_text": "Why fix the reference date in automated age fixtures?",
+          "options": [
+            "It grants access to birth dates",
+            "It eliminates all calendar policy questions",
+            "Expected answers stay deterministic over time",
+            "It changes every birthday"
+          ],
+          "correct_index": 2,
+          "explanation": "Tests should not silently change with the day they run.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-6-derived-attribute-application-new-6",
+          "test_id": "pt-dbms-sql-6-derived-attribute-application",
+          "question_text": "Which grain does a completed-credit total use?",
+          "options": [
+            "One result per character in a code",
+            "Always one per database server",
+            "One per distinct numeric credit amount",
+            "One derived result per student over qualifying contribution facts"
+          ],
+          "correct_index": 3,
+          "explanation": "The aggregate population and owner establish the result meaning.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-6-derived-attribute-application-new-7",
+          "test_id": "pt-dbms-sql-6-derived-attribute-application",
+          "question_text": "Can a student with no completed courses have a zero total under this contract?",
+          "options": [
+            "Yes; the task explicitly defines an empty contribution total as zero",
+            "No; zero always means unknown",
+            "Only if the student is deleted",
+            "Only if credits are unique"
+          ],
+          "correct_index": 0,
+          "explanation": "A defined empty sum differs from an unknown individual source.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-6-derived-attribute-application-new-8",
+          "test_id": "pt-dbms-sql-6-derived-attribute-application",
+          "question_text": "What may a historically awarded-credit report need instead of current catalogue credits?",
+          "options": [
+            "Only the current course title",
+            "A recorded award or appropriate source version",
+            "A row position",
+            "A guessed constant"
+          ],
+          "correct_index": 1,
+          "explanation": "Source authority must match the historical requirement.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-6-derived-attribute-application-new-9",
+          "test_id": "pt-dbms-sql-6-derived-attribute-application",
+          "question_text": "Does a dashed diagram oval implement refresh behaviour?",
+          "options": [
+            "Yes; it creates a trigger",
+            "Only if double-lined",
+            "No; it communicates the conceptual derivation",
+            "Only for numeric attributes"
+          ],
+          "correct_index": 2,
+          "explanation": "Diagram notation and execution are separate.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-6-derived-attribute-application-new-10",
+          "test_id": "pt-dbms-sql-6-derived-attribute-application",
+          "question_text": "What should a derived-property explanation name?",
+          "options": [
+            "Only a friendly result label",
+            "Only the attribute length",
+            "Only the source table title",
+            "Sources, population, units, reference point and absence policy"
+          ],
+          "correct_index": 3,
+          "explanation": "These ingredients make the calculation reviewable.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cx-derived-age",
+      "slug": "derived-age",
+      "title": "Derive deterministic ages at an explicit date",
+      "difficulty": "Easy",
+      "task": "Return student_id and age_years using TIMESTAMPDIFF(YEAR, birth_date, 2026-01-01 as a date). Exclude missing or later birth dates. The fixed date defines the exercise reference point.",
+      "schema_sql": "CREATE TABLE students (student_id INT PRIMARY KEY, birth_date DATE NULL);",
+      "seed_sql": "INSERT INTO students VALUES (1,'1990-01-01'),(2,'2000-01-02'),(3,NULL),(4,'2026-01-02');",
+      "expected": "student_id\tage_years\n1\t36\n2\t25",
+      "ordering": "Ascending student_id.",
+      "constraints": [
+        "Supplied birth dates are valid Gregorian dates or NULL; the selected fixtures do not involve leap-day policy."
+      ],
+      "edge_cases": [
+        "Birthday on the reference date is included.",
+        "A later birthday in the year must not be counted early."
+      ],
+      "hints": [
+        "Use a fixed quoted reference date.",
+        "A year-number subtraction alone misses birthday boundaries."
+      ],
+      "solution_sql": "SELECT student_id, TIMESTAMPDIFF(YEAR, birth_date, '2026-01-01') AS age_years FROM students WHERE birth_date IS NOT NULL AND birth_date <= '2026-01-01' ORDER BY student_id;",
+      "explanation": "The expression applies the declared completed-year rule at a reproducible reference point without inventing values from missing or future dates.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO students VALUES (1,'2026-01-01'),(2,'2025-01-01');",
+          "expected": "student_id\tage_years\n1\t0\n2\t1"
+        },
+        {
+          "seed_sql": "INSERT INTO students VALUES (1,NULL);",
+          "expected": ""
+        }
+      ]
+    },
+    {
+      "id": "cx-derived-credits",
+      "slug": "derived-credits",
+      "title": "Derive completed credits from the qualifying course population",
+      "difficulty": "Medium",
+      "task": "Return every student_id and completed_credits. Sum credits from enrollment rows with status completed only. Include students without completions as zero. Different courses with equal credits must both contribute.",
+      "schema_sql": "CREATE TABLE students (student_id INT PRIMARY KEY);\nCREATE TABLE courses (course_id INT PRIMARY KEY, credits INT NOT NULL);\nCREATE TABLE enrollments (student_id INT NOT NULL, course_id INT NOT NULL, status VARCHAR(20) NOT NULL, PRIMARY KEY(student_id,course_id));",
+      "seed_sql": "INSERT INTO students VALUES (1),(2),(3); INSERT INTO courses VALUES (10,3),(20,3),(30,4); INSERT INTO enrollments VALUES (1,10,'completed'),(1,20,'completed'),(1,30,'pending'),(2,30,'completed');",
+      "expected": "student_id\tcompleted_credits\n1\t6\n2\t4\n3\t0",
+      "ordering": "Ascending student_id.",
+      "constraints": [
+        "Supplied references match students and courses; credits are nonnegative.",
+        "This simplified task treats supplied course credits as the authoritative contribution; historical award versions and native FK enforcement are outside these fixtures."
+      ],
+      "edge_cases": [
+        "Equal amounts from different courses both count.",
+        "A pending enrollment contributes nothing."
+      ],
+      "hints": [
+        "Apply completion eligibility while preserving the student population.",
+        "Use a normal sum of qualifying contributions, not DISTINCT numeric amounts."
+      ],
+      "solution_sql": "SELECT s.student_id, COALESCE(SUM(c.credits), 0) AS completed_credits FROM students s LEFT JOIN enrollments e ON e.student_id = s.student_id AND e.status = 'completed' LEFT JOIN courses c ON c.course_id = e.course_id GROUP BY s.student_id ORDER BY s.student_id;",
+      "explanation": "The derived total follows the qualifying enrollment grain and the explicitly chosen source authority, preserving empty contribution sets as zero.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO students VALUES (1); INSERT INTO courses VALUES (10,3); INSERT INTO enrollments VALUES (1,10,'pending');",
+          "expected": "student_id\tcompleted_credits\n1\t0"
+        },
+        {
+          "seed_sql": "",
+          "expected": ""
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-6-derived-attribute-1",
+      "test_id": "pt-dbms-sql-6-derived-attribute",
+      "question_text": "What is a derived attribute?",
+      "options": [
+        "An attribute that can hold multiple values",
+        "An attribute whose value can be computed from other attributes rather than stored independently",
+        "An attribute that identifies the entity uniquely",
+        "An attribute that cannot be decomposed"
+      ],
+      "correct_index": 1,
+      "explanation": "A derived attribute's value is calculated from other data, such as Age from Date_of_Birth.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-6-derived-attribute-2",
+      "test_id": "pt-dbms-sql-6-derived-attribute",
+      "question_text": "Why is Age typically treated as a derived attribute rather than stored directly?",
+      "options": [
+        "Because Age is always NULL",
+        "Because it can be computed from Date_of_Birth and the current date, and storing it separately would make it go stale/inconsistent over time",
+        "Because Age is a multi-valued attribute",
+        "Because Date_of_Birth cannot be stored in databases"
+      ],
+      "correct_index": 1,
+      "explanation": "Storing a value that is always reproducible from other data risks redundancy and inconsistency; it's better computed on demand.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-6-derived-attribute-3",
+      "test_id": "pt-dbms-sql-6-derived-attribute",
+      "question_text": "How is a derived attribute represented in an ER diagram?",
+      "options": [
+        "Double-line oval",
+        "Solid-line oval, same as any other attribute",
+        "Dashed-outline oval",
+        "Rectangle with rounded corners"
+      ],
+      "correct_index": 2,
+      "explanation": "A dashed oval visually flags that the attribute is computed rather than directly stored base data.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-6-derived-attribute-4",
+      "test_id": "pt-dbms-sql-6-derived-attribute",
+      "question_text": "Which of these is a valid derived attribute in the college database?",
+      "options": [
+        "Date_of_Birth for a Student",
+        "Number_of_Students_Enrolled for a Course, computed by counting related Enrollment rows",
+        "Roll_No for a Student",
+        "Course_Name for a Course"
+      ],
+      "correct_index": 1,
+      "explanation": "This count can always be recomputed from the Enrollment relationship rather than being independently stored and maintained.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-6-derived-attribute-5",
+      "test_id": "pt-dbms-sql-6-derived-attribute",
+      "question_text": "A system stores a 'Total_Marks' column that is refreshed by a database trigger whenever component marks change. Does this contradict the concept of a derived attribute?",
+      "options": [
+        "Yes, because derived attributes must never physically exist as a column",
+        "No — this is a deliberate performance-driven denormalization; the attribute's authoritative value still comes from other data, it is just cached for speed",
+        "Yes, because triggers cannot be used with derived attributes",
+        "No, because Total_Marks is actually a multi-valued attribute"
+      ],
+      "correct_index": 1,
+      "explanation": "Caching a derived value for performance is a common real-world trade-off; it doesn't change that the value is conceptually derived, just that a redundant copy is materialized deliberately.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-6-derived-attribute-6",
+      "test_id": "pt-dbms-sql-6-derived-attribute",
+      "question_text": "Which pair of concepts does 'derived vs. stored' NOT overlap with directly?",
+      "options": [
+        "Single-valued vs. multi-valued — derivation is about the source of the value, an independent axis from occurrence count",
+        "Simple vs. composite",
+        "Strong vs. weak entity",
+        "All of the above are independent of derived vs. stored"
+      ],
+      "correct_index": 3,
+      "explanation": "Derived-vs-stored is orthogonal to simple/composite, single/multi-valued, and strong/weak entity classification — all are independent axes.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-6-derived-attribute-7",
+      "test_id": "pt-dbms-sql-6-derived-attribute",
+      "question_text": "What is the main risk of storing a derived attribute's value directly instead of computing it on demand?",
+      "options": [
+        "It uses more CPU at query time",
+        "It can become inconsistent with its source data over time (an update anomaly), since the two copies can drift apart",
+        "It cannot be indexed",
+        "It becomes a multi-valued attribute automatically"
+      ],
+      "correct_index": 1,
+      "explanation": "Storing derived data risks the stored copy going out of sync with the source attributes it was computed from.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-6-derived-attribute-8",
+      "test_id": "pt-dbms-sql-6-derived-attribute",
+      "question_text": "Which attribute pair correctly shows a stored (base) attribute feeding a derived attribute?",
+      "options": [
+        "Roll_No (stored) -> Name (derived)",
+        "Date_of_Birth (stored) -> Age (derived)",
+        "CGPA (stored) -> Roll_No (derived)",
+        "Skills (stored) -> Phone_Number (derived)"
+      ],
+      "correct_index": 1,
+      "explanation": "Date_of_Birth is directly supplied/stored data; Age is computed from it, making Age the derived attribute.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "coordinator",
+    "independent_review": "unavailable; no agent tools",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Definitions and examples checked against questions; no plagiarism certification.",
+    "existing_question_corrections": [
+      "tq-dbms-sql-6-derived-attribute-2",
+      "tq-dbms-sql-6-derived-attribute-3",
+      "tq-dbms-sql-6-derived-attribute-4",
+      "tq-dbms-sql-6-derived-attribute-5"
+    ],
+    "canonical_answer_indices_preserved": true
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-6-derived-attribute",
+    "original_note_sha256": "d4ccecc93bb8d0ee84ca66118ad2df1d80f1a861ab42884a2a744b5842adb038",
+    "status": "paired migration prepared; not applied"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "A derived result depends on both sources and a calculation contract",
+      "description": "Current values and historical snapshots can use different reference points. Equal numeric course credits can still represent separate qualifying contributions.",
+      "columns": [
+        "Derived role",
+        "Authoritative inputs",
+        "Required rule"
+      ],
+      "rows": [
+        [
+          "Age at 2026-01-01",
+          "Birth date and fixed date",
+          "Completed-year calculation; exclude missing/future dates"
+        ],
+        [
+          "Completed credits",
+          "Student’s qualifying enrollments and supplied course credits",
+          "Sum each completed contribution, including equal amounts"
+        ],
+        [
+          "Cached total",
+          "Source facts plus refresh policy",
+          "Storage does not remove source dependence"
+        ],
+        [
+          "Historical total",
+          "Relevant recorded award/version facts",
+          "Do not silently substitute a changed current catalogue"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "coordinator checked explicit reference date, birthday fixtures, contribution grain and cache-authority distinction",
+    "server_rendering": "passed",
+    "browser_rendering": "unverified",
+    "independent_review": "unavailable; no agent tools",
+    "server_rendering_evidence": "2026-10-29: all authored packages rendered through actual LessonBlock in the passing focused Vitest suite."
+  },
+  "sql_verification": {
+    "engine": "11.8.6-MariaDB-0+deb13u1 from Debian",
+    "scope": "MariaDB compatibility execution; exact MySQL 8.4/provider execution unverified",
+    "fingerprint": "f681bbc1364562fb044e65e0a13269a2f6b78c83bfb676beaaa7e0b879c675ff",
+    "cases": [
+      {
+        "problem": "derived-age",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "derived-age",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "derived-age",
+        "case": 2,
+        "passed": true
+      },
+      {
+        "problem": "derived-credits",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "derived-credits",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "derived-credits",
+        "case": 2,
+        "passed": true
+      }
+    ],
+    "all_passed": true
+  }
+}

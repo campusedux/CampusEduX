@@ -1,0 +1,512 @@
+{
+  "source_ref": "chapter-22-transactions/atomicity",
+  "slug": "atomicity",
+  "title": "Atomicity",
+  "description": "Learn transaction atomicity through InnoDB seat transfers, rollback failure labs, resource boundaries, implicit commits and uncertain commit outcomes.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Define the operation that succeeds or fails together\n\nAtomicity means that a transaction's supported changes form one indivisible commit decision: either they are committed together, or a partial transaction is not left committed. The unit is the actual database transaction, rather than an application function, a screen submission or a group of nearby statements. Start by naming precisely which changes belong together and which resources participate in the guarantee.\n\nConsider transferring three laboratory seats between allocation buckets. The source loses three seats and the destination gains three. If only the subtraction remains committed, the database represents a transfer that never finished. Atomicity prevents that partial committed outcome when both updates belong to one transaction on transactional tables. It does not determine whether three was the correct quantity or whether the requester was permitted to transfer it.\n\n## Build a small transactional example\n\nUse a disposable practice database with InnoDB tables. Create the fixture before starting the transaction, because ordinary table creation has separate commit semantics in MySQL. Integer quantities make the expected state easy to inspect. A production design would also need appropriate authorization, constraints and concurrency handling; this example isolates the commit boundary rather than claiming to implement a complete booking service.\n\n```sql\nCREATE TABLE seat_allocations (\n  bucket_id INT PRIMARY KEY,\n  seats INT NOT NULL CHECK (seats >= 0)\n) ENGINE=InnoDB;\nINSERT INTO seat_allocations VALUES (1, 12), (2, 8);\nSTART TRANSACTION;\nUPDATE seat_allocations SET seats = seats - 3 WHERE bucket_id = 1;\nUPDATE seat_allocations SET seats = seats + 3 WHERE bucket_id = 2;\nSELECT bucket_id, seats FROM seat_allocations ORDER BY bucket_id;\nROLLBACK;\nSELECT bucket_id, seats FROM seat_allocations ORDER BY bucket_id;\n```\n\nThe first ordered result contains nine and eleven. Those values are visible to the transaction that performed the updates, even though it has not committed. After rollback, the ordered result contains twelve and eight again. The combined quantity remains twenty in both states, but observing that total alone would not prove atomicity: the test also needs to inspect the separate allocations and exercise a failure path.\n\n## Separate statement success from business success\n\nAn UPDATE that finds no matching row is not necessarily an SQL error. Change the destination identifier to ninety nine in the example. The source subtraction can succeed while the destination update affects no row. If the caller commits merely because no exception occurred, the operation remains atomic as a database transaction but violates its intended transfer contract. The database cannot infer the missing business requirement from the statement names.\n\nA trusted workflow must confirm required row existence and the meaning of affected rows before choosing commit. A conditional decrement can additionally reject an insufficient source quantity. Handle zero affected rows deliberately and perform any dependent checks within a concurrency strategy that prevents the checked state changing unexpectedly. Atomicity preserves the chosen set of changes; it does not supply missing validation or ownership checks.\n\n## Distinguish statement rollback and transaction rollback\n\nMySQL error behavior depends on the storage engine and error category. Some InnoDB errors undo only the failing statement while earlier statements remain pending. Deadlock handling can instead roll back the transaction. A caller must not treat every exception as proof that every preceding change was undone. Read the documented error contract and ensure the unsuccessful unit is explicitly closed or its connection discarded safely.\n\nFor a useful failure experiment, subtract seats and then attempt an insert with a duplicate primary key. Inspect the state from the same session before deciding the transaction outcome. The duplicate insert does not establish that the earlier subtraction vanished. Follow the application failure branch with a full rollback and check the original fixture again. Do not generalize this one error experiment to deadlocks, connection loss or engine crashes.\n\n## Keep the whole operation inside one boundary\n\nWith autocommit enabled, separate successful DML statements normally become separate transactions unless an explicit transaction groups them. Two updates in the same source file are therefore not automatically one atomic transfer. Likewise, beginning the transaction after the debit is too late: the earlier committed change lies outside the new rollback boundary. Draw the boundary before writing error handling so every required statement is accounted for.\n\nMySQL transactions do not become nested independent units when START TRANSACTION is repeated. Ordinary DDL and certain other statements can cause implicit commits. Mixing table maintenance with the transfer can therefore change the boundary unexpectedly. Keep fixture construction outside the demonstration transaction and inspect implicit commit rules before combining administrative SQL with transactional application work.\n\n## Understand rollback's resource limits\n\nThe guarantee requires participating transactional storage. A nontransactional table does not acquire rollback support just because START TRANSACTION appears nearby. Mixing InnoDB updates with nontransactional table writes can leave effects that a rollback does not reverse. Verify actual table engines and avoid teaching engine independent guarantees from one successful InnoDB demonstration. Temporary tables also have special transaction behavior that deserves separate testing.\n\nExternal effects have an equally important boundary. Sending a message, writing an unrelated file or calling another service during a transaction does not make that effect reversible by SQL rollback. A reviewed transactional outbox can record the intent to notify alongside the business change, with later delivery and duplicate handling. It introduces explicit delivery responsibilities instead of pretending the database transaction controls every network participant.\n\n## Use savepoints without confusing partial recovery\n\nA savepoint provides a named position inside an active transaction. Rolling back to it can discard a later optional attempt while preserving earlier pending changes. Those preserved changes are still uncommitted; the final transaction can subsequently commit or roll back. A savepoint is not a separate durable transaction and does not make an already committed operation reversible. Choose it only when the business contract permits a partial retry inside the larger unit.\n\nFor example, a transfer and an optional internal annotation might share a transaction. If the annotation is genuinely optional, a savepoint can isolate its failed attempt. If the annotation is mandatory evidence of authorization, discarding it and committing the transfer is a contract error. The correct boundary follows the requirements rather than whichever recovery path produces fewer visible errors.\n\n## Compare atomicity with visibility\n\nA second session's observations depend on isolation and locking, so seeing old values from another connection does not mean the first transaction performed no work. It may simply mean uncommitted writes are hidden under the reader's isolation contract. Conversely, the writer observing its own updates does not establish that other transactions can read them. State which session issued each query and whether its transaction had begun before interpreting a result.\n\nRecord the initial rows, every transaction command, the exact error and the final ordered rows in a lab notebook. Rebuild the fixture between experiments so an earlier committed transfer cannot disguise a failed cleanup. Use artificial identifiers and small quantities rather than real user data. A reproducible failure sequence is more educational than a success screenshot because it explains precisely what the recovery mechanism restores and what still requires application action.\n\n## Plan for uncertain commit outcomes\n\nA connection can fail while the server is processing a commit or returning its acknowledgement. The application may then be unable to tell whether the transaction committed. Atomicity does not turn that uncertainty into a confirmed rollback. Blindly repeating a transfer can duplicate an already completed business effect. Use an authorized stable request identity and reconciliation procedure appropriate to the operation before deciding whether another attempt is safe.\n\nKeep database atomicity distinct from exactly once application processing. Retries can still be necessary, bounded and carefully checked. A uniqueness constraint on a request identifier helps identify repeated requests, but a duplicate identifier should not automatically authorize any payload or reveal another user's result. Validate the request's ownership and intended meaning at the trusted boundary.\n\n## Apply failure reasoning and review the evidence\n\nBeginner exercise: run the two updates, deliberately take the failure branch, and predict both ordered rows after rollback. The solution is twelve and eight because neither update was committed. Repeat with two autocommitted updates and stop after the first; explain why a later rollback cannot undo that previously committed statement. These experiments compare actual boundaries rather than simply memorizing the word indivisible.\n\nAdvanced exercise: construct a test matrix for missing destination, insufficient source, duplicate annotation, deadlock and lost commit acknowledgement. For each case identify the expected business result, documented rollback scope and required caller action. A correct solution separates confirmed rollback from uncertain completion and records engine settings. Read [savepoints](/learning/dbms-sql-tutorial/savepoint), [rollback](/learning/dbms-sql-tutorial/rollback) and [ACID](/learning/dbms-sql-tutorial/acid) next. Single result SQL judging cannot establish every failure or concurrent session guarantee described here.",
+  "references": [
+    {
+      "title": "MySQL 8.4 InnoDB error handling",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/innodb-error-handling.html"
+    },
+    {
+      "title": "MySQL 8.4 implicit commit statements",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/implicit-commit.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-22-atomicity",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-22-atomicity-1",
+          "test_id": "pt-dbms-sql-22-atomicity",
+          "question_text": "What does Atomicity guarantee?",
+          "options": [
+            "Fast query execution",
+            "Supported transaction changes commit together, or partial supported work does not remain committed when the transaction aborts",
+            "Data is always encrypted",
+            "Only one user can access the database at a time"
+          ],
+          "correct_index": 1,
+          "explanation": "Atomicity concerns the transaction commit outcome. Some statement errors leave earlier work pending until the caller completes or abandons the transaction.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-22-atomicity-2",
+          "test_id": "pt-dbms-sql-22-atomicity",
+          "question_text": "When both required debit and credit writes participate in one correctly closed transactional operation, which commit outcome does atomicity exclude?",
+          "options": [
+            "The transfer from ever succeeding",
+            "Committing only one of those participating writes as a partial transaction",
+            "The need for a WHERE clause",
+            "Multiple transfers happening in the same session"
+          ],
+          "correct_index": 1,
+          "explanation": "Atomicity excludes a partial transaction commit. Required row existence, valid amounts and other business effect checks remain separate responsibilities.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-22-atomicity-3",
+          "test_id": "pt-dbms-sql-22-atomicity",
+          "question_text": "An InnoDB CHECK failure rolls back only its statement after an earlier transfer debit. What must the caller do if the business transfer failed?",
+          "options": [
+            "Only the violating statement is rolled back; earlier statements remain applied",
+            "Explicitly roll back the unsuccessful transaction and handle cleanup or outcome uncertainty",
+            "The constraint is temporarily disabled to let the transaction proceed",
+            "Nothing — constraints don't interact with atomicity"
+          ],
+          "correct_index": 1,
+          "explanation": "A statement-scope constraint error need not undo earlier pending statements; the caller must close the failed business operation deliberately.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-22-atomicity-4",
+          "test_id": "pt-dbms-sql-22-atomicity",
+          "question_text": "Does atomicity cover coordination with systems OUTSIDE the database, like an external payment API call?",
+          "options": [
+            "Yes, atomicity automatically covers any external system involved",
+            "No — atomicity only covers the database's own operations; external coordination needs additional patterns beyond plain ACID",
+            "Only if the external call is made from a stored procedure",
+            "This scenario is impossible in practice"
+          ],
+          "correct_index": 1,
+          "explanation": "Plain ACID atomicity is scoped to the database transaction itself, not external side effects.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-22-atomicity-5",
+          "test_id": "pt-dbms-sql-22-atomicity",
+          "question_text": "Does atomicity work on a MyISAM table?",
+          "options": [
+            "Yes, identically to InnoDB",
+            "No; MyISAM writes do not provide InnoDB-style multi-statement transactional rollback",
+            "Atomicity only matters for SELECT statements, so engine choice is irrelevant",
+            "MyISAM provides stronger atomicity than InnoDB"
+          ],
+          "correct_index": 1,
+          "explanation": "This is the documented engine distinction, not a claim of provider or course execution evidence.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-22-atomicity-6",
+          "test_id": "pt-dbms-sql-22-atomicity",
+          "question_text": "Which error-handling distinction is necessary for a MySQL transaction?",
+          "options": [
+            "Only an explicit ROLLBACK statement",
+            "Some errors undo only a statement, while others undo the whole transaction; use the documented scope and close failed work",
+            "Only a SELECT statement returning zero rows",
+            "Atomicity never triggers automatic rollback"
+          ],
+          "correct_index": 1,
+          "explanation": "Atomicity does not imply every precommit exception automatically rolls back the whole transaction.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-22-atomicity-7",
+          "test_id": "pt-dbms-sql-22-atomicity",
+          "question_text": "In a correctly handled explicit transfer transaction containing both required supported writes, what does atomicity say about its commit outcome?",
+          "options": [
+            "Yes, in rare edge cases",
+            "It does not partially commit the transaction; interim observations and validation are separate concerns",
+            "Only if the transaction is very long",
+            "Only on weekends, due to batch processing windows"
+          ],
+          "correct_index": 1,
+          "explanation": "Own-session pending reads and missing business validation must not be confused with a partial transaction commit.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-22-atomicity-8",
+          "test_id": "pt-dbms-sql-22-atomicity",
+          "question_text": "What real-world problem class extends beyond plain ACID atomicity when a transaction needs to coordinate with an external, non-database system?",
+          "options": [
+            "Normalization",
+            "Distributed transactions/sagas",
+            "Indexing strategy",
+            "Query optimization"
+          ],
+          "correct_index": 1,
+          "explanation": "Coordinating a database transaction with an external side effect is the domain of distributed transaction patterns, beyond single-database ACID.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-22-atomicity-new-9",
+          "test_id": "pt-dbms-sql-22-atomicity",
+          "question_text": "Two successful autocommitted updates run in one function. What is their atomic boundary?",
+          "options": [
+            "Each statement has its own transaction",
+            "The function name",
+            "The source file",
+            "The browser screen"
+          ],
+          "correct_index": 0,
+          "explanation": "Code proximity does not create a transaction.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-22-atomicity-new-10",
+          "test_id": "pt-dbms-sql-22-atomicity",
+          "question_text": "A destination UPDATE matches no row. What must the transfer workflow check?",
+          "options": [
+            "Only whether SQL parsed",
+            "Whether the required destination effect occurred",
+            "Whether the query used uppercase",
+            "Only the source table name"
+          ],
+          "correct_index": 1,
+          "explanation": "A successful statement can affect zero rows.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-22-atomicity-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-22-atomicity-application-new-1",
+          "test_id": "pt-dbms-sql-22-atomicity-application",
+          "question_text": "After ROLLBACK in the seat example, what are the source and destination quantities?",
+          "options": [
+            "9 and 11",
+            "9 and 8",
+            "12 and 8",
+            "12 and 11"
+          ],
+          "correct_index": 2,
+          "explanation": "Both pending changes are undone.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-22-atomicity-application-new-2",
+          "test_id": "pt-dbms-sql-22-atomicity-application",
+          "question_text": "Which claim is a business validation requirement rather than atomicity alone?",
+          "options": [
+            "All participating changes commit together",
+            "Partial supported changes do not remain committed",
+            "Rollback abandons pending supported changes",
+            "The requested transfer quantity is authorized"
+          ],
+          "correct_index": 3,
+          "explanation": "Authorization is a separate trusted decision.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-22-atomicity-application-new-3",
+          "test_id": "pt-dbms-sql-22-atomicity-application",
+          "question_text": "Why create the example table before START TRANSACTION?",
+          "options": [
+            "Ordinary CREATE TABLE has implicit commit semantics",
+            "DDL is impossible in MySQL",
+            "A SELECT cannot follow DDL",
+            "Tables always vanish at rollback"
+          ],
+          "correct_index": 0,
+          "explanation": "Setup must not unexpectedly change the transaction boundary.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-22-atomicity-application-new-4",
+          "test_id": "pt-dbms-sql-22-atomicity-application",
+          "question_text": "An ordinary duplicate-key error occurs after an earlier InnoDB update. What is unsafe to assume?",
+          "options": [
+            "The failed statement reported an error",
+            "The entire transaction was automatically rolled back",
+            "The transaction needs deliberate cleanup",
+            "Earlier pending work needs review"
+          ],
+          "correct_index": 1,
+          "explanation": "Some errors roll back only the failed statement.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-22-atomicity-application-new-5",
+          "test_id": "pt-dbms-sql-22-atomicity-application",
+          "question_text": "Which participant lies outside ordinary SQL rollback?",
+          "options": [
+            "An InnoDB row updated in the transaction",
+            "Another participating InnoDB row",
+            "An email already sent through an external service",
+            "An uncommitted InnoDB insert"
+          ],
+          "correct_index": 2,
+          "explanation": "External delivery does not join database rollback automatically.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-22-atomicity-application-new-6",
+          "test_id": "pt-dbms-sql-22-atomicity-application",
+          "question_text": "What does a savepoint provide?",
+          "options": [
+            "An independently durable nested transaction",
+            "A backup of the whole server",
+            "A new storage engine",
+            "A position for partial rollback inside an active transaction"
+          ],
+          "correct_index": 3,
+          "explanation": "Final commit or rollback still belongs to the outer transaction.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-22-atomicity-application-new-7",
+          "test_id": "pt-dbms-sql-22-atomicity-application",
+          "question_text": "The network fails while COMMIT acknowledgement is returning. What outcome should the client consider?",
+          "options": [
+            "The transaction outcome may be uncertain",
+            "Rollback is guaranteed",
+            "Commit is impossible",
+            "The debit must be repeated immediately"
+          ],
+          "correct_index": 0,
+          "explanation": "Loss of acknowledgement does not prove lack of commit.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-22-atomicity-application-new-8",
+          "test_id": "pt-dbms-sql-22-atomicity-application",
+          "question_text": "Why inspect table engines in an atomicity lab?",
+          "options": [
+            "Engine names determine column aliases",
+            "Rollback support depends on participating resources",
+            "All MySQL engines have identical rollback",
+            "InnoDB forbids transactions"
+          ],
+          "correct_index": 1,
+          "explanation": "Nontransactional writes can survive rollback.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-22-atomicity-application-new-9",
+          "test_id": "pt-dbms-sql-22-atomicity-application",
+          "question_text": "Does an atomic transfer necessarily preserve the intended total?",
+          "options": [
+            "Yes, atomicity repairs arithmetic",
+            "Yes, aliases enforce totals",
+            "No, incorrect arithmetic can commit atomically",
+            "Only if quantities are integers"
+          ],
+          "correct_index": 2,
+          "explanation": "Consistency requires the correct invariant and implementation.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-22-atomicity-application-new-10",
+          "test_id": "pt-dbms-sql-22-atomicity-application",
+          "question_text": "What is the strongest evidence supplied by a one-session rollback exercise?",
+          "options": [
+            "Every provider has identical semantics",
+            "All crash guarantees are proven",
+            "Concurrent behavior is fully verified",
+            "The tested pending changes were restored in that environment"
+          ],
+          "correct_index": 3,
+          "explanation": "Keep local experiment scope separate from broader guarantees.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [],
+  "coding_not_applicable": "Atomicity needs transaction failure, resource and connection outcome observations; the notes provide beginner and advanced executable lab instructions. A single deterministic query result cannot establish the required guarantees.",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-22-atomicity-1",
+      "test_id": "pt-dbms-sql-22-atomicity",
+      "question_text": "What does Atomicity guarantee?",
+      "options": [
+        "Fast query execution",
+        "All of a transaction's statements succeed together, or none do",
+        "Data is always encrypted",
+        "Only one user can access the database at a time"
+      ],
+      "correct_index": 1,
+      "explanation": "Atomicity is specifically the all-or-nothing guarantee.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-22-atomicity-2",
+      "test_id": "pt-dbms-sql-22-atomicity",
+      "question_text": "In the bank transfer example, what does atomicity prevent?",
+      "options": [
+        "The transfer from ever succeeding",
+        "A partial transfer — money debited from one account with no corresponding credit to the other",
+        "The need for a WHERE clause",
+        "Multiple transfers happening in the same session"
+      ],
+      "correct_index": 1,
+      "explanation": "This is exactly the scenario atomicity is designed to prevent.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-22-atomicity-3",
+      "test_id": "pt-dbms-sql-22-atomicity",
+      "question_text": "If a CHECK constraint is violated partway through a multi-statement transaction, what does atomicity guarantee?",
+      "options": [
+        "Only the violating statement is rolled back; earlier statements remain applied",
+        "The entire transaction rolls back, undoing everything already done in it",
+        "The constraint is temporarily disabled to let the transaction proceed",
+        "Nothing — constraints don't interact with atomicity"
+      ],
+      "correct_index": 1,
+      "explanation": "A constraint violation anywhere in the transaction triggers the same whole-transaction rollback atomicity guarantees.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-22-atomicity-4",
+      "test_id": "pt-dbms-sql-22-atomicity",
+      "question_text": "Does atomicity cover coordination with systems OUTSIDE the database, like an external payment API call?",
+      "options": [
+        "Yes, atomicity automatically covers any external system involved",
+        "No — atomicity only covers the database's own operations; external coordination needs additional patterns beyond plain ACID",
+        "Only if the external call is made from a stored procedure",
+        "This scenario is impossible in practice"
+      ],
+      "correct_index": 1,
+      "explanation": "Plain ACID atomicity is scoped to the database transaction itself, not external side effects.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-22-atomicity-5",
+      "test_id": "pt-dbms-sql-22-atomicity",
+      "question_text": "Does atomicity work on a MyISAM table?",
+      "options": [
+        "Yes, identically to InnoDB",
+        "No — MyISAM has no real atomicity guarantee across multiple statements, as verified practically in this course",
+        "Atomicity only matters for SELECT statements, so engine choice is irrelevant",
+        "MyISAM provides stronger atomicity than InnoDB"
+      ],
+      "correct_index": 1,
+      "explanation": "Atomicity requires actual transaction support from the storage engine, which MyISAM lacks.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-22-atomicity-6",
+      "test_id": "pt-dbms-sql-22-atomicity",
+      "question_text": "What triggers an automatic rollback under atomicity?",
+      "options": [
+        "Only an explicit ROLLBACK statement",
+        "Any failure occurring before COMMIT, such as a constraint violation or a crash",
+        "Only a SELECT statement returning zero rows",
+        "Atomicity never triggers automatic rollback"
+      ],
+      "correct_index": 1,
+      "explanation": "Various failure types before commit all trigger atomicity's automatic undo behavior.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-22-atomicity-7",
+      "test_id": "pt-dbms-sql-22-atomicity",
+      "question_text": "Is a 'partial transfer' (debit without credit) ever a valid, visible outcome under atomicity?",
+      "options": [
+        "Yes, in rare edge cases",
+        "No — atomicity specifically guarantees this can never be a real, visible outcome",
+        "Only if the transaction is very long",
+        "Only on weekends, due to batch processing windows"
+      ],
+      "correct_index": 1,
+      "explanation": "Preventing exactly this outcome is atomicity's defining purpose.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-22-atomicity-8",
+      "test_id": "pt-dbms-sql-22-atomicity",
+      "question_text": "What real-world problem class extends beyond plain ACID atomicity when a transaction needs to coordinate with an external, non-database system?",
+      "options": [
+        "Normalization",
+        "Distributed transactions/sagas",
+        "Indexing strategy",
+        "Query optimization"
+      ],
+      "correct_index": 1,
+      "explanation": "Coordinating a database transaction with an external side effect is the domain of distributed transaction patterns, beyond single-database ACID.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "/root/content_b",
+    "independent_review": "passed",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "canonical_answer_indices_preserved": true,
+    "independent_reviewer": "/root",
+    "independent_review_scope": "Full notes,20MCQs/options/explanations,diagram and worked failure matrix. Corrected inherited automatic-full-rollback,partial-visibility and fabricated-execution claims; supported commit boundary,error scope,external resources and unknown acknowledgment correctly separated. Manual editorial/fixture reasoning only; SQL engine,browser,originality and AdSense verification separate."
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-22-atomicity",
+    "original_note_sha256": "3bbd143e2a9885ec305255547ab7431a2b910558c40fdd23ef835ba55d75da34",
+    "status": "drafted; not included in prepared paired migrations"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Locate the commit boundary before choosing recovery",
+      "description": "Each failure leaves a different set of effects to inspect; SQL rollback controls only participating pending work.",
+      "columns": [
+        "Situation",
+        "Supported recovery scope"
+      ],
+      "rows": [
+        [
+          "One explicit InnoDB transaction",
+          "Rollback supported pending changes together"
+        ],
+        [
+          "Two autocommitted updates",
+          "Later rollback cannot undo the first committed update"
+        ],
+        [
+          "External message sent",
+          "Database rollback does not recall delivery"
+        ],
+        [
+          "Commit acknowledgement lost",
+          "Reconcile the uncertain business outcome"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "provided",
+    "technical_review": "author review; independent review pending",
+    "server_rendering": "unverified",
+    "browser_rendering": "unverified",
+    "independent_review": "pending"
+  },
+  "authoring_status": "drafted; verification pending",
+  "sql_verification": {
+    "scope": "not executed; exact MySQL/provider verification pending",
+    "all_passed": false,
+    "cases": []
+  }
+}

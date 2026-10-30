@@ -1,0 +1,518 @@
+{
+  "source_ref": "chapter-2-dbms-architecture/connection-pooling",
+  "slug": "connection-pooling",
+  "title": "Connection Pooling",
+  "description": "Follow connection acquisition, exclusive borrowing, transaction cleanup, release, queueing, and bounded capacity, while distinguishing user concurrency from active database work.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Reusing sessions instead of reconnecting for every request\n\nConnection pooling maintains reusable database connections so an application can borrow an existing session for a bounded period of work. Opening a connection can involve transport setup, authentication, and session initialization. Repeating those steps for every short request adds overhead. A pool manages a set of connections and the rules for obtaining, returning, checking, and replacing them.\n\nThe pool is not a collection of cached query results. A borrowed connection still performs database work, and the database still checks the operations under its applicable permissions and transaction rules. Reusing transport and session resources does not make an expensive query cheap or grant access to records the application is not allowed to read.\n\nPooling commonly runs in an application server or middleware used by many requests, but it is not exclusive to three-tier architecture. A desktop process can use a local pool, and a database proxy can pool or multiplex connections under its own semantics. The key questions are who owns the pool, what a borrowed handle represents, and which state and transaction guarantees that implementation supports.\n\n## Distinguishing users, requests, and connections\n\nImagine a college portal with five hundred concurrent users and a pool limited to twenty connections in one application instance. These are illustrative numbers, not a recommended configuration. Many users are reading a page, typing, or waiting between actions rather than actively executing SQL. A smaller set of reusable sessions can therefore serve their database work over time.\n\nTwenty ordinary exclusively borrowed connections do not mean five hundred independent transactions can execute simultaneously through them. Requests that need the database compete for available capacity. Some can finish quickly and release a session for the next request. Others may wait or receive a controlled failure when the configured queue or acquisition deadline is reached.\n\nThis distinction prevents a common sizing mistake: equating signed-in users with required database sessions. Measure how often requests reach the database and how long each keeps a connection. A request performing slow external work while holding a session can consume capacity even if it is not executing SQL during that interval.\n\n## Following the borrowing lifecycle\n\nA typical lifecycle begins when code asks the pool for a connection. The pool may supply an idle healthy session, open a new one within its limit, or wait for a busy borrower to release one. After acquisition, the request performs its database work using that handle. The request must then release it through the pool's supported mechanism.\n\nRelease usually means returning a resource for reuse rather than closing its physical transport immediately. The exact API depends on the client and pool library. Some provide a convenience query method that acquires and releases automatically. Others require an explicit borrow-and-release block, particularly for transactions. Inspect the actual API instead of treating every method named close as having identical behavior.\n\nCleanup belongs on success and failure paths. A query exception, validation failure, or early return must not strand a borrowed connection. A structured cleanup construct such as a finally block can ensure release, but transaction completion and session reset still require their own handling. Returning a resource is not proof that its previous work was correctly committed or rolled back.\n\n## Keeping transaction work on one session\n\nA database transaction is associated with a particular session under the ordinary session-based model. Its statements must remain on the appropriate borrowed connection until the transaction ends. Issuing several convenience queries through a pool may send them to different sessions. That does not establish one coherent transaction merely because the application called the statements consecutively.\n\nConsider a teaching transfer that debits one account and credits another. The request should acquire the appropriate connection, begin the transaction, execute both changes under the required integrity checks, and then commit or roll back. This description does not authorize a financial implementation; it illustrates why session ownership matters. The database must still enforce the actual trusted rules.\n\nIf an exception occurs, the application needs an explicit transaction policy. When the outcome is known to be uncommitted, rollback can end the failed unit of work before reuse. If the connection is lost around commit, the caller may not know whether the operation committed. Blindly repeating the whole operation can duplicate effects; retry safety requires a separate, defined strategy.\n\n## Preventing state from leaking between borrowers\n\nConnections can carry session state beyond a single query. An open transaction, changed session setting, selected database, temporary object, or user-defined variable may affect later work if the next borrower inherits it. The pool and application must have a documented policy for reset and cleanup appropriate to the driver and pooling mode.\n\nA particularly dangerous case returns a connection with an unfinished transaction. Another request may then run in an unexpected transaction context or encounter locks and visibility it did not intend. A healthy network socket does not prove a clean session. Transaction completion and supported reset behavior are part of correctness, not merely performance tuning.\n\nDo not assume every proxy or pool preserves every session feature. Transaction-oriented pooling can have different guarantees from session pooling. Applications using temporary tables or session variables must verify whether those features remain valid across operations. A generic pooling label is not enough evidence that a stateful workflow is supported.\n\n## Handling exhaustion and time limits\n\nPool exhaustion occurs when no usable connection is available for a new acquisition under the configured limits. The next request may wait, time out, or fail immediately depending on the implementation. A bounded wait and a useful failure path protect the service from accumulating unlimited pending work. Users should receive an appropriate response without raw connection diagnostics or secrets.\n\nDistinguish acquisition waiting from query execution time. A request can spend most of its latency waiting for a session even when its SQL is fast once acquired. Increasing the query timeout would not directly fix that bottleneck. Record separate measurements for waiting, active work, and total request duration so the diagnosis follows evidence.\n\nLong transactions, leaked connections, and slow queries are different causes of pressure. A larger pool can temporarily hide one problem while increasing load on the database. Inspect active borrowers and transaction duration before treating every acquisition failure as proof that the limit is too low. Correct cleanup can restore capacity without adding more sessions.\n\n## Sizing across instances and deployments\n\nThe database sees the combined demand from all application instances and other clients. If four instances can each open twenty connections, their configured potential is eighty, before administrative sessions and other services. Autoscaling can multiply that potential further. A safe budget must consider the whole deployment rather than a single process's convenient local limit.\n\nConnections consume server resources even while idle, and active work competes for CPU, memory, locks, and I/O. More sessions do not necessarily increase throughput. The useful capacity depends on the workload and the server, so tune against measurements and preserve headroom for operations. A teaching example with twenty sessions is not a universal capacity formula.\n\nServerless execution introduces another ownership question. Recreating a pool for every invocation can defeat reuse and multiply connection demand. Reuse behavior depends on process lifetimes and the supported platform/client design. Follow the existing application pattern and provider constraints rather than assuming that a module-level object is a shared pool across every deployed instance.\n\n## Checking health and shutdown behavior\n\nAn idle connection may become unusable after a server timeout, restart, or network failure. Pools can offer validation and replacement mechanisms, but their behavior needs configuration and testing. An automatic reconnect is not a transparent continuation of an interrupted transaction. The new session cannot recover an uncertain commit outcome just by reconnecting.\n\nA controlled shutdown should stop accepting new work, allow or cancel in-flight work under a defined policy, and close pool resources through the supported lifecycle. Abrupt termination can strand requests even when the database eventually cleans up sessions. Keep shutdown, retry, and transaction policies consistent so they do not make conflicting assumptions about who owns unfinished work.\n\n## Measuring whether pooling is working\n\nObserve active and idle connections, pending acquisitions, acquisition failures, borrow duration, query duration, and database load. Test the failure paths as carefully as the successful lookup: exceptions must release resources, transactions must end correctly, and a saturated pool must fail or wait in a bounded, understood way. Avoid logging credentials or private query values in these diagnostics.\n\nA well-managed pool reduces repeated setup costs while keeping ownership explicit. It serves many requests over time through bounded reusable capacity, preserves transaction boundaries, and returns clean sessions for later borrowers. Its value comes from correct lifecycle management and measured limits, not from pretending that a small number of connections can execute unlimited simultaneous database work.\n",
+  "references": [
+    {
+      "title": "MySQL Connector/J connection pooling concepts",
+      "url": "https://dev.mysql.com/doc/connector-j/en/connector-j-usagenotes-j2ee-concepts-connection-pooling.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-2-connection-pooling",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-2-connection-pooling-1",
+          "test_id": "pt-dbms-sql-2-connection-pooling",
+          "question_text": "What does Connection Pooling maintain to avoid opening a new database connection for every request?",
+          "options": [
+            "A cache of query results",
+            "A reusable pool of already-open database connections",
+            "A backup copy of the entire database",
+            "A list of all registered application users"
+          ],
+          "correct_index": 1,
+          "explanation": "Connection pooling keeps a set of open connections ready to be borrowed and reused, rather than opening a fresh one per request.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-2-connection-pooling-2",
+          "test_id": "pt-dbms-sql-2-connection-pooling",
+          "question_text": "In the illustrative portal, what configured pool capacity serves requests over time from 500 concurrent users?",
+          "options": [
+            "500, one per user",
+            "20 shared, reusable connections",
+            "1 single connection for everyone",
+            "5,000 pre-opened connections"
+          ],
+          "correct_index": 1,
+          "explanation": "The example uses twenty reusable sessions. It does not claim five hundred independent transactions run simultaneously on them.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-2-connection-pooling-3",
+          "test_id": "pt-dbms-sql-2-connection-pooling",
+          "question_text": "What costly steps does connection pooling help an application avoid repeating for every request?",
+          "options": [
+            "Running the SQL query itself",
+            "A fresh TCP handshake, database authentication, and session setup for each request",
+            "Rendering the user interface",
+            "Compiling the application code"
+          ],
+          "correct_index": 1,
+          "explanation": "Pooling avoids repeatedly paying the overhead of establishing a brand-new physical connection (handshake, auth, session setup) per request.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-2-connection-pooling-4",
+          "test_id": "pt-dbms-sql-2-connection-pooling",
+          "question_text": "Which capacity pressure can a shared pool reduce compared with opening a new database session for each request?",
+          "options": [
+            "The abstraction-leaking problem from Data Abstraction",
+            "The two-tier connection-scaling bottleneck, where each client opened its own direct connection to the database",
+            "The naming conflict problem between external schemas",
+            "The lack of a conceptual schema in file-server systems"
+          ],
+          "correct_index": 1,
+          "explanation": "A bounded reusable set can reduce repeated setup and direct session demand, while active work still needs capacity.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-2-connection-pooling-5",
+          "test_id": "pt-dbms-sql-2-connection-pooling",
+          "question_text": "Does connection pooling require a three-tier application with a shared middle tier?",
+          "options": [
+            "No; a local client process, an application server, or a supported proxy can manage pooling",
+            "Yes; pooling is impossible inside a desktop process",
+            "Yes; only browser interfaces can pool connections",
+            "No; pooling is merely caching SQL result rows"
+          ],
+          "correct_index": 0,
+          "explanation": "A shared middle tier is common but not necessary. Ownership, lifecycle, and supported semantics define the pool.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-2-connection-pooling-6",
+          "test_id": "pt-dbms-sql-2-connection-pooling",
+          "question_text": "What happens when all connections in the pool are currently busy and a new request arrives?",
+          "options": [
+            "The request is always immediately and silently dropped with no configuration options",
+            "The request must wait or fail depending on configuration — this is called pool exhaustion, requiring careful pool-size tuning",
+            "A brand-new unlimited number of connections is automatically created",
+            "The database server shuts down"
+          ],
+          "correct_index": 1,
+          "explanation": "Pool exhaustion occurs when no pooled connection is free; behavior (wait vs. fail) depends on configuration, and correct pool sizing helps avoid it.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-2-connection-pooling-7",
+          "test_id": "pt-dbms-sql-2-connection-pooling",
+          "question_text": "A connection is returned to the pool while it still has an uncommitted transaction open from the previous request. The next request borrows this same connection. What subtle bug can result?",
+          "options": [
+            "No bug is possible; pools always fully reset connections automatically",
+            "The leftover uncommitted transaction or session state can silently affect the next request's behavior",
+            "The database server automatically detects and blocks this scenario in all cases",
+            "The connection pool size automatically increases to compensate"
+          ],
+          "correct_index": 1,
+          "explanation": "An unfinished transaction or stale session setting can affect later borrowers unless cleanup/reset semantics prevent it.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-2-connection-pooling-8",
+          "test_id": "pt-dbms-sql-2-connection-pooling",
+          "question_text": "A team sets their connection pool size extremely high, assuming 'more connections is always better' for handling load. What real risk does this create?",
+          "options": [
+            "No risk; larger pools are always strictly better with no downside",
+            "Each pooled connection consumes real server-side resources even while idle, so an oversized pool can overwhelm the database server itself",
+            "It automatically fixes the leftover session state problem",
+            "It converts the architecture from two-tier back to a file-server model"
+          ],
+          "correct_index": 1,
+          "explanation": "Pooled connections still consume server memory and session resources even when idle, so oversized pools risk overwhelming the database server rather than only helping performance.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-2-connection-pooling-new-9",
+          "test_id": "pt-dbms-sql-2-connection-pooling",
+          "question_text": "What is reused by a connection pool rather than a result cache?",
+          "options": [
+            "Only the rows from the last SELECT",
+            "Database connection/session resources",
+            "Only application HTML",
+            "Only database backups"
+          ],
+          "correct_index": 1,
+          "explanation": "Pooling avoids repeated connection setup; it does not automatically cache query results.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-2-connection-pooling-new-10",
+          "test_id": "pt-dbms-sql-2-connection-pooling",
+          "question_text": "Why must ordinary transaction statements stay on the same borrowed connection?",
+          "options": [
+            "Every SQL statement must use a different user",
+            "Pooling disables all transactions",
+            "The transaction belongs to the session executing it",
+            "Consecutive application calls always use one session automatically"
+          ],
+          "correct_index": 2,
+          "explanation": "Independent pool convenience calls can select different sessions.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-2-connection-pooling-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-2-connection-pooling-application-new-1",
+          "test_id": "pt-dbms-sql-2-connection-pooling-application",
+          "question_text": "Four application instances each allow twenty pooled connections. What is their combined configured potential?",
+          "options": [
+            "Twenty connections in total",
+            "Five connections in total",
+            "Eighty connections before other clients",
+            "Five hundred connections per user"
+          ],
+          "correct_index": 2,
+          "explanation": "Per-instance limits add across the deployment.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-2-connection-pooling-application-new-2",
+          "test_id": "pt-dbms-sql-2-connection-pooling-application",
+          "question_text": "A request acquires a connection and throws before release. What failure path needs correction?",
+          "options": [
+            "Changing the user's display name",
+            "Adding a second SELECT projection",
+            "Deleting the database constraints",
+            "Guaranteed cleanup of the borrowed resource"
+          ],
+          "correct_index": 3,
+          "explanation": "Unreleased resources can exhaust the pool.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-2-connection-pooling-application-new-3",
+          "test_id": "pt-dbms-sql-2-connection-pooling-application",
+          "question_text": "A request spends 900 ms waiting for acquisition and 10 ms running SQL. What does query time alone miss?",
+          "options": [
+            "Pool waiting dominates its latency",
+            "The SQL necessarily took 910 ms",
+            "The database returned no rows",
+            "The connection must have been newly authenticated"
+          ],
+          "correct_index": 0,
+          "explanation": "Measure acquisition separately from active query execution.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-2-connection-pooling-application-new-4",
+          "test_id": "pt-dbms-sql-2-connection-pooling-application",
+          "question_text": "A transfer issues BEGIN and updates through independent pool.query calls. What must be verified?",
+          "options": [
+            "That each statement uses a new connection",
+            "That all transaction statements use the intended single session",
+            "That every account name is unique",
+            "That the pool has no upper limit"
+          ],
+          "correct_index": 1,
+          "explanation": "Sequential calls do not establish session affinity.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-2-connection-pooling-application-new-5",
+          "test_id": "pt-dbms-sql-2-connection-pooling-application",
+          "question_text": "All twenty connections are borrowed and a new acquisition arrives. What determines its behavior?",
+          "options": [
+            "The alphabetical order of table names",
+            "The account balance column type alone",
+            "The pool's queue, timeout, and failure policy",
+            "The browser's screen width"
+          ],
+          "correct_index": 2,
+          "explanation": "Exhaustion must have a configured, bounded handling policy.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-2-connection-pooling-application-new-6",
+          "test_id": "pt-dbms-sql-2-connection-pooling-application",
+          "question_text": "A larger pool reduces waiting but overloads database CPU. What assumption failed?",
+          "options": [
+            "Idle connections can be reused",
+            "Transactions have boundaries",
+            "Queries consume server resources",
+            "More concurrent sessions always improve throughput"
+          ],
+          "correct_index": 3,
+          "explanation": "Concurrency competes for finite resources; tune total workload capacity.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-2-connection-pooling-application-new-7",
+          "test_id": "pt-dbms-sql-2-connection-pooling-application",
+          "question_text": "A connection is lost around COMMIT. Why is blind retry unsafe?",
+          "options": [
+            "The caller may not know whether the first operation committed",
+            "The new connection automatically restores the exact old session",
+            "Every lost connection proves rollback",
+            "A pool permanently disables commits"
+          ],
+          "correct_index": 0,
+          "explanation": "Uncertain outcomes need a separate retry and deduplication strategy.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-2-connection-pooling-application-new-8",
+          "test_id": "pt-dbms-sql-2-connection-pooling-application",
+          "question_text": "A previous borrower changed a session variable. What does the next borrower require?",
+          "options": [
+            "The same variable value by coincidence",
+            "Documented cleanup or reset behavior for the session",
+            "A larger result table",
+            "A different SQL dialect for each query"
+          ],
+          "correct_index": 1,
+          "explanation": "State can outlive one request unless the lifecycle removes or controls it.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-2-connection-pooling-application-new-9",
+          "test_id": "pt-dbms-sql-2-connection-pooling-application",
+          "question_text": "A pool is created afresh for every invocation. What should be investigated?",
+          "options": [
+            "Whether all invocations share one physical session automatically",
+            "Whether SQL now needs no authentication",
+            "Whether this defeats reuse and multiplies connection demand",
+            "Whether user count is exactly pool size"
+          ],
+          "correct_index": 2,
+          "explanation": "Pool ownership and runtime lifecycle determine actual reuse.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-2-connection-pooling-application-new-10",
+          "test_id": "pt-dbms-sql-2-connection-pooling-application",
+          "question_text": "A pool replaces a dead connection with a healthy new one. What is not automatically restored?",
+          "options": [
+            "The ability to send a new supported query",
+            "The configured pool limit",
+            "The existence of the database endpoint",
+            "The old transaction and knowledge of an uncertain commit outcome"
+          ],
+          "correct_index": 3,
+          "explanation": "A reconnect creates a new session; it does not resume arbitrary interrupted work.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [],
+  "coding_not_applicable": "This topic requires application/driver lifecycle and concurrency tests, not SQL-output problems. The shared tutorial SQL judge cannot validate connection acquisition, release, reset, queue limits, or deployment-wide capacity; transaction SQL exercises are owned by dedicated transaction topics.",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-2-connection-pooling-1",
+      "test_id": "pt-dbms-sql-2-connection-pooling",
+      "question_text": "What does Connection Pooling maintain to avoid opening a new database connection for every request?",
+      "options": [
+        "A cache of query results",
+        "A reusable pool of already-open database connections",
+        "A backup copy of the entire database",
+        "A list of all registered application users"
+      ],
+      "correct_index": 1,
+      "explanation": "Connection pooling keeps a set of open connections ready to be borrowed and reused, rather than opening a fresh one per request.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-2-connection-pooling-2",
+      "test_id": "pt-dbms-sql-2-connection-pooling",
+      "question_text": "In the example, how many pooled connections serve 500 concurrent users?",
+      "options": [
+        "500, one per user",
+        "20 shared, reusable connections",
+        "1 single connection for everyone",
+        "5,000 pre-opened connections"
+      ],
+      "correct_index": 1,
+      "explanation": "The example describes a pool of 20 connections serving 500 concurrent users by reuse rather than one-per-user allocation.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-2-connection-pooling-3",
+      "test_id": "pt-dbms-sql-2-connection-pooling",
+      "question_text": "What costly steps does connection pooling help an application avoid repeating for every request?",
+      "options": [
+        "Running the SQL query itself",
+        "A fresh TCP handshake, database authentication, and session setup for each request",
+        "Rendering the user interface",
+        "Compiling the application code"
+      ],
+      "correct_index": 1,
+      "explanation": "Pooling avoids repeatedly paying the overhead of establishing a brand-new physical connection (handshake, auth, session setup) per request.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-2-connection-pooling-4",
+      "test_id": "pt-dbms-sql-2-connection-pooling",
+      "question_text": "Which earlier architectural problem does connection pooling directly solve?",
+      "options": [
+        "The abstraction-leaking problem from Data Abstraction",
+        "The two-tier connection-scaling bottleneck, where each client opened its own direct connection to the database",
+        "The naming conflict problem between external schemas",
+        "The lack of a conceptual schema in file-server systems"
+      ],
+      "correct_index": 1,
+      "explanation": "Connection pooling is presented as the concrete mechanism that resolves the linear connection growth problem inherent to two-tier architecture.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-2-connection-pooling-5",
+      "test_id": "pt-dbms-sql-2-connection-pooling",
+      "question_text": "Why is connection pooling only possible in an architecture with a shared middle tier or middleware layer?",
+      "options": [
+        "Because pooling requires a shared layer to hold and manage connections on behalf of many clients, which two-tier's direct client-to-database model lacks",
+        "Because pooling has nothing to do with architecture at all",
+        "Because only database servers can implement pooling, never middleware",
+        "Because pooling requires each client to manage its own private pool"
+      ],
+      "correct_index": 0,
+      "explanation": "The pool must be held somewhere shared by multiple requests; a middle tier or middleware layer provides that shared point, which direct two-tier connections do not have.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-2-connection-pooling-6",
+      "test_id": "pt-dbms-sql-2-connection-pooling",
+      "question_text": "What happens when all connections in the pool are currently busy and a new request arrives?",
+      "options": [
+        "The request is always immediately and silently dropped with no configuration options",
+        "The request must wait or fail depending on configuration — this is called pool exhaustion, requiring careful pool-size tuning",
+        "A brand-new unlimited number of connections is automatically created",
+        "The database server shuts down"
+      ],
+      "correct_index": 1,
+      "explanation": "Pool exhaustion occurs when no pooled connection is free; behavior (wait vs. fail) depends on configuration, and correct pool sizing helps avoid it.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-2-connection-pooling-7",
+      "test_id": "pt-dbms-sql-2-connection-pooling",
+      "question_text": "A connection is returned to the pool while it still has an uncommitted transaction open from the previous request. The next request borrows this same connection. What subtle bug can result?",
+      "options": [
+        "No bug is possible; pools always fully reset connections automatically",
+        "The leftover uncommitted transaction or session state can silently affect the next request's behavior",
+        "The database server automatically detects and blocks this scenario in all cases",
+        "The connection pool size automatically increases to compensate"
+      ],
+      "correct_index": 1,
+      "explanation": "This is exactly the leftover-session-state pitfall described: an improperly reset pooled connection can leak state into the next unrelated request.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-2-connection-pooling-8",
+      "test_id": "pt-dbms-sql-2-connection-pooling",
+      "question_text": "A team sets their connection pool size extremely high, assuming 'more connections is always better' for handling load. What real risk does this create?",
+      "options": [
+        "No risk; larger pools are always strictly better with no downside",
+        "Each pooled connection consumes real server-side resources even while idle, so an oversized pool can overwhelm the database server itself",
+        "It automatically fixes the leftover session state problem",
+        "It converts the architecture from two-tier back to a file-server model"
+      ],
+      "correct_index": 1,
+      "explanation": "Pooled connections still consume server memory and session resources even when idle, so oversized pools risk overwhelming the database server rather than only helping performance.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "coordinator",
+    "independent_review": "unavailable; no agent tools",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Definitions and examples checked against questions; no plagiarism certification.",
+    "existing_question_corrections": [
+      "tq-dbms-sql-2-connection-pooling-2",
+      "tq-dbms-sql-2-connection-pooling-4",
+      "tq-dbms-sql-2-connection-pooling-5",
+      "tq-dbms-sql-2-connection-pooling-7"
+    ],
+    "canonical_answer_indices_preserved": true
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-2-connection-pooling",
+    "original_note_sha256": "d6c73e862d43adadd111933d4c0400ca6811c7c11ef58f9659c9376cce63991f",
+    "status": "paired migration prepared; not applied"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "A bounded connection borrowing lifecycle",
+      "description": "A borrower owns its session for the intended unit of work. Transaction completion and clean session state are required before safe reuse; a lost commit outcome requires separate handling.",
+      "columns": [
+        "Stage",
+        "Owner action",
+        "Failure to handle"
+      ],
+      "rows": [
+        [
+          "Acquire",
+          "Borrow within configured limits",
+          "Bound waiting or fail when exhausted"
+        ],
+        [
+          "Use",
+          "Keep transaction statements on the same handle",
+          "Do not scatter one transaction across sessions"
+        ],
+        [
+          "Finish",
+          "Commit or roll back under an explicit policy",
+          "Do not assume a lost commit response means rollback"
+        ],
+        [
+          "Release",
+          "Return a clean resource through the pool API",
+          "Prevent leaks and stale session state"
+        ],
+        [
+          "Reuse",
+          "Validate or replace unusable sessions as supported",
+          "A reconnect does not resume the old transaction"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "coordinator review",
+    "server_rendering": "passed",
+    "browser_rendering": "unverified",
+    "independent_review": "unavailable; no agent tools",
+    "rendering_check": "2026-10-28: actual LessonBlock/TopicDiagrams server rendering; 30 authored-package tests passed. Desktop/mobile browser rendering unverified."
+  }
+}

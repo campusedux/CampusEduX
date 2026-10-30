@@ -1,0 +1,517 @@
+{
+  "slug": "non-repeatable-read",
+  "source_ref": "chapter-23-concurrency-control/non-repeatable-read",
+  "title": "Nonrepeatable Read",
+  "description": "Trace two committed observations of one row, run a controlled READ COMMITTED versus REPEATABLE READ lab, and distinguish snapshot stability from writer blocking.",
+  "dialect": "MySQL 8.4; engine-specific behavior labeled",
+  "references": [
+    {
+      "title": "MySQL8.4 consistent nonlocking reads",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/innodb-consistent-read.html"
+    },
+    {
+      "title": "MySQL8.4 isolation levels",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/innodb-transaction-isolation-levels.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-23-non-repeatable-read",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-23-non-repeatable-read-1",
+          "test_id": "pt-dbms-sql-23-non-repeatable-read",
+          "question_text": "What is the defining condition of a non-repeatable read?",
+          "options": [
+            "A transaction reads uncommitted data from another transaction",
+            "A transaction reads the same data item twice within its own lifetime and gets two different values, because another transaction committed a change to that item in between",
+            "A transaction inserts a duplicate row",
+            "A transaction reads a row that was deleted"
+          ],
+          "correct_index": 1,
+          "explanation": "Non-repeatable read specifically requires two reads of the SAME item within one transaction returning different values due to an intervening committed change from another transaction.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-23-non-repeatable-read-2",
+          "test_id": "pt-dbms-sql-23-non-repeatable-read",
+          "question_text": "In the worked example, what two values does T1 read for A across its two reads, and why do they differ?",
+          "options": [
+            "1000 both times, because T2 didn't affect T1",
+            "1000 then 1500, because T2 deposited 500 and COMMITTED in between T1's two reads",
+            "1500 then 1000, because T1's own write reduced the balance",
+            "0 then 1000, because T1's first read failed"
+          ],
+          "correct_index": 1,
+          "explanation": "T1 first reads 1000, then T2 deposits 500 and commits, and T1's second read sees the new, committed value 1500 — two different values for the same item within one transaction.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-23-non-repeatable-read-3",
+          "test_id": "pt-dbms-sql-23-non-repeatable-read",
+          "question_text": "Why is the example in this topic NOT classified as a dirty read?",
+          "options": [
+            "Because T1 never actually commits",
+            "Because T2's write to A was fully committed BEFORE T1's second read — T1 never observed an uncommitted (dirty) value at any point",
+            "Because dirty reads only apply to DELETE statements",
+            "Because T1 only read A once"
+          ],
+          "correct_index": 1,
+          "explanation": "The key distinguishing fact is that T2 committed cleanly before T1's second read; T1 never saw data that might later be rolled back, which is what would make it a dirty read.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-23-non-repeatable-read-4",
+          "test_id": "pt-dbms-sql-23-non-repeatable-read",
+          "question_text": "Can a non-repeatable read occur if a transaction reads a given data item only ONCE during its lifetime?",
+          "options": [
+            "Yes, a single read is enough to trigger it",
+            "No — by definition, non-repeatable read requires the SAME transaction to read the same item at least twice, with the values differing between reads",
+            "Yes, if the item was inserted after the transaction started",
+            "Only if the transaction is read-only"
+          ],
+          "correct_index": 1,
+          "explanation": "The anomaly is inherently about disagreement BETWEEN two reads of the same item in one transaction; with only one read, there is nothing to compare, so it cannot occur.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-23-non-repeatable-read-5",
+          "test_id": "pt-dbms-sql-23-non-repeatable-read",
+          "question_text": "Which mechanisms can prevent the stated nonrepeatable ordinary read, depending on the engine?",
+          "options": [
+            "Only a full database shutdown",
+            "A suitable repeatable committed snapshot or an appropriate held read-lock protocol",
+            "Disabling every transaction",
+            "Removing all primary keys"
+          ],
+          "correct_index": 1,
+          "explanation": "InnoDB ordinary REPEATABLE READ commonly uses version visibility. Lock retention is another mechanism; not every committed reader must block every writer.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-23-non-repeatable-read-6",
+          "test_id": "pt-dbms-sql-23-non-repeatable-read",
+          "question_text": "How does non-repeatable read differ from a lost update?",
+          "options": [
+            "They are the same anomaly under different names",
+            "A lost update involves TWO transactions both writing based on stale reads, with one write silently erasing the other; non-repeatable read involves ONE transaction reading the same item twice and observing a legitimately committed change made by another transaction",
+            "Non-repeatable read only occurs with INSERT statements",
+            "A lost update requires at least three transactions"
+          ],
+          "correct_index": 1,
+          "explanation": "A lost update concerns an overwritten intended effect. The nonrepeatable-read example requires only repeated committed observations and need not include any write by the reader.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-23-non-repeatable-read-7",
+          "test_id": "pt-dbms-sql-23-non-repeatable-read",
+          "question_text": "Which of these scenarios is explicitly distinguished from non-repeatable read, and covered separately in the next topic?",
+          "options": [
+            "Phantom read — where a NEW row appears (or an old one disappears) matching a query's WHERE condition between two executions of that query, rather than an existing row's value changing",
+            "Dirty read",
+            "Lost update",
+            "Serial schedule"
+          ],
+          "correct_index": 0,
+          "explanation": "A phantom concerns changed predicate membership, which can arise from insertions, deletions or updates moving rows into or out of the qualifying set. The worked example instead changes the observed value of one identified row.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-23-non-repeatable-read-8",
+          "test_id": "pt-dbms-sql-23-non-repeatable-read",
+          "question_text": "Why can a non-repeatable read cause problems even though every individual operation involved (T1's reads, T2's write, T2's commit) was itself perfectly valid?",
+          "options": [
+            "It cannot cause any real problem",
+            "Because T1's internal logic may assume the value is stable across its own two reads (e.g., a 'check, compute, re-check' pattern), and a silent mid-transaction change can break that assumption, producing an inconsistent result",
+            "Because SQL forbids reading the same column twice",
+            "Because T2's commit is technically invalid"
+          ],
+          "correct_index": 1,
+          "explanation": "Even with no rule violated by any single operation, a transaction relying on a stable snapshot across multiple reads can be led into an incorrect conclusion if that snapshot silently shifts underneath it.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "cx-non-repeatable-read-fundamentals-9",
+          "test_id": "pt-dbms-sql-23-non-repeatable-read",
+          "question_text": "How many reads by the same continuing transaction are needed in the worked definition?",
+          "options": [
+            "At least two observations of the same item",
+            "One read only",
+            "Two reads in unrelated transactions only",
+            "No reads"
+          ],
+          "correct_index": 0,
+          "explanation": "The anomaly compares repeated observations within one reader transaction.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "cx-non-repeatable-read-fundamentals-10",
+          "test_id": "pt-dbms-sql-23-non-repeatable-read",
+          "question_text": "Why is the stated 1000-to1500 history not dirty?",
+          "options": [
+            "1500 is positive",
+            "The writer committed before the second read",
+            "The reader committed first",
+            "The item has a primary key"
+          ],
+          "correct_index": 1,
+          "explanation": "Dirty status depends on the writer’s state at observation time.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "cx-non-repeatable-read-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "cx-non-repeatable-read-application-1",
+          "test_id": "cx-non-repeatable-read-application",
+          "question_text": "At InnoDB READ COMMITTED, what do successive ordinary consistent reads use?",
+          "options": [
+            "One compulsory permanent snapshot for the server",
+            "Fresh committed snapshots per statement",
+            "Other sessions’ uncommitted buffers",
+            "Only backup rows"
+          ],
+          "correct_index": 1,
+          "explanation": "A later statement may observe a newly committed value.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "cx-non-repeatable-read-application-2",
+          "test_id": "cx-non-repeatable-read-application",
+          "question_text": "What usually establishes A’s ordinary REPEATABLE READ snapshot in this lab?",
+          "options": [
+            "The table name",
+            "Any other session’s SELECT",
+            "Its first consistent read",
+            "The last application screenshot"
+          ],
+          "correct_index": 2,
+          "explanation": "Snapshot establishment timing must be explicit.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "cx-non-repeatable-read-application-3",
+          "test_id": "cx-non-repeatable-read-application",
+          "question_text": "Must snapshot repeatability block every concurrent writer?",
+          "options": [
+            "Yes, universally",
+            "Only if values are integers",
+            "Only before midnight",
+            "No"
+          ],
+          "correct_index": 3,
+          "explanation": "Version visibility can preserve A’s view while B commits.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "cx-non-repeatable-read-application-4",
+          "test_id": "cx-non-repeatable-read-application",
+          "question_text": "Can a changed display across two different reader transactions alone prove nonrepeatable read?",
+          "options": [
+            "No",
+            "Yes, always",
+            "Only with two accounts",
+            "Only on a replica"
+          ],
+          "correct_index": 0,
+          "explanation": "The repeated observations must belong to the same continuing reader transaction.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "cx-non-repeatable-read-application-5",
+          "test_id": "cx-non-repeatable-read-application",
+          "question_text": "Does a stable snapshot automatically protect a current stock-decrement decision?",
+          "options": [
+            "Yes, all current rows are locked",
+            "No, the write decision needs its actual concurrency mechanism",
+            "Only if a caption exists",
+            "Only if the snapshot is old"
+          ],
+          "correct_index": 1,
+          "explanation": "Observation stability and safe current mutation are different requirements.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "cx-non-repeatable-read-application-6",
+          "test_id": "cx-non-repeatable-read-application",
+          "question_text": "What if B commits before A’s first REPEATABLE READ consistent read?",
+          "options": [
+            "A must always see the original 1000",
+            "The database must abort both",
+            "A can establish a snapshot containing B’s new value",
+            "A sees an uncommitted value by definition"
+          ],
+          "correct_index": 2,
+          "explanation": "The snapshot can include changes committed before its establishment.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "cx-non-repeatable-read-application-7",
+          "test_id": "cx-non-repeatable-read-application",
+          "question_text": "Can a read-only transaction experience a nonrepeatable read?",
+          "options": [
+            "No, it must update",
+            "Only after a rollback",
+            "Only without a primary key",
+            "Yes"
+          ],
+          "correct_index": 3,
+          "explanation": "The anomaly concerns observations, not a required write by the reader.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "cx-non-repeatable-read-application-8",
+          "test_id": "cx-non-repeatable-read-application",
+          "question_text": "What distinguishes a phantom in this comparison?",
+          "options": [
+            "Changed membership of a predicate’s qualifying row set",
+            "Any repeated read of one unchanged row",
+            "A copied table name",
+            "Only an uncommitted value"
+          ],
+          "correct_index": 0,
+          "explanation": "The worked nonrepeatable example isolates one identified row’s changed value.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "cx-non-repeatable-read-application-9",
+          "test_id": "cx-non-repeatable-read-application",
+          "question_text": "What should a controlled concurrency test record?",
+          "options": [
+            "Only final row count",
+            "Connections, barriers, read values, commit outcomes and isolation",
+            "Only product name",
+            "Only elapsed application time"
+          ],
+          "correct_index": 1,
+          "explanation": "Those details establish the actual observation order.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "cx-non-repeatable-read-application-10",
+          "test_id": "cx-non-repeatable-read-application",
+          "question_text": "Is a stale committed replica value necessarily a dirty read?",
+          "options": [
+            "Yes, every old value is dirty",
+            "Only if numeric",
+            "No",
+            "Only if it differs from a screenshot"
+          ],
+          "correct_index": 2,
+          "explanation": "Freshness and uncommitted visibility are separate guarantees.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-23-non-repeatable-read-1",
+      "test_id": "pt-dbms-sql-23-non-repeatable-read",
+      "question_text": "What is the defining condition of a non-repeatable read?",
+      "options": [
+        "A transaction reads uncommitted data from another transaction",
+        "A transaction reads the same data item twice within its own lifetime and gets two different values, because another transaction committed a change to that item in between",
+        "A transaction inserts a duplicate row",
+        "A transaction reads a row that was deleted"
+      ],
+      "correct_index": 1,
+      "explanation": "Non-repeatable read specifically requires two reads of the SAME item within one transaction returning different values due to an intervening committed change from another transaction.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-23-non-repeatable-read-2",
+      "test_id": "pt-dbms-sql-23-non-repeatable-read",
+      "question_text": "In the worked example, what two values does T1 read for A across its two reads, and why do they differ?",
+      "options": [
+        "1000 both times, because T2 didn't affect T1",
+        "1000 then 1500, because T2 deposited 500 and COMMITTED in between T1's two reads",
+        "1500 then 1000, because T1's own write reduced the balance",
+        "0 then 1000, because T1's first read failed"
+      ],
+      "correct_index": 1,
+      "explanation": "T1 first reads 1000, then T2 deposits 500 and commits, and T1's second read sees the new, committed value 1500 — two different values for the same item within one transaction.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-23-non-repeatable-read-3",
+      "test_id": "pt-dbms-sql-23-non-repeatable-read",
+      "question_text": "Why is the example in this topic NOT classified as a dirty read?",
+      "options": [
+        "Because T1 never actually commits",
+        "Because T2's write to A was fully committed BEFORE T1's second read — T1 never observed an uncommitted (dirty) value at any point",
+        "Because dirty reads only apply to DELETE statements",
+        "Because T1 only read A once"
+      ],
+      "correct_index": 1,
+      "explanation": "The key distinguishing fact is that T2 committed cleanly before T1's second read; T1 never saw data that might later be rolled back, which is what would make it a dirty read.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-23-non-repeatable-read-4",
+      "test_id": "pt-dbms-sql-23-non-repeatable-read",
+      "question_text": "Can a non-repeatable read occur if a transaction reads a given data item only ONCE during its lifetime?",
+      "options": [
+        "Yes, a single read is enough to trigger it",
+        "No — by definition, non-repeatable read requires the SAME transaction to read the same item at least twice, with the values differing between reads",
+        "Yes, if the item was inserted after the transaction started",
+        "Only if the transaction is read-only"
+      ],
+      "correct_index": 1,
+      "explanation": "The anomaly is inherently about disagreement BETWEEN two reads of the same item in one transaction; with only one read, there is nothing to compare, so it cannot occur.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-23-non-repeatable-read-5",
+      "test_id": "pt-dbms-sql-23-non-repeatable-read",
+      "question_text": "What isolation-level mechanism prevents non-repeatable reads?",
+      "options": [
+        "Disallowing all write operations globally",
+        "Holding read locks on a data item for the ENTIRE duration of the reading transaction, so no other transaction can commit a change to it until the reader finishes",
+        "Allowing dirty reads to compensate",
+        "Running every transaction serially with no exceptions"
+      ],
+      "correct_index": 1,
+      "explanation": "By holding the read lock beyond the individual read statement and through the whole transaction, other transactions are blocked from writing/committing changes to that item until the reader is done — this is the REPEATABLE READ guarantee.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-23-non-repeatable-read-6",
+      "test_id": "pt-dbms-sql-23-non-repeatable-read",
+      "question_text": "How does non-repeatable read differ from a lost update?",
+      "options": [
+        "They are the same anomaly under different names",
+        "A lost update involves TWO transactions both writing based on stale reads, with one write silently erasing the other; non-repeatable read involves ONE transaction reading the same item twice and observing a legitimately committed change made by another transaction",
+        "Non-repeatable read only occurs with INSERT statements",
+        "A lost update requires at least three transactions"
+      ],
+      "correct_index": 1,
+      "explanation": "These are distinct mechanisms: lost update is about a write being clobbered; non-repeatable read is about a reading transaction's own view of a value shifting between two of its own reads.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-23-non-repeatable-read-7",
+      "test_id": "pt-dbms-sql-23-non-repeatable-read",
+      "question_text": "Which of these scenarios is explicitly distinguished from non-repeatable read, and covered separately in the next topic?",
+      "options": [
+        "Phantom read — where a NEW row appears (or an old one disappears) matching a query's WHERE condition between two executions of that query, rather than an existing row's value changing",
+        "Dirty read",
+        "Lost update",
+        "Serial schedule"
+      ],
+      "correct_index": 0,
+      "explanation": "Phantom read (23.13) is about the SET of matching rows changing due to insert/delete, which is explicitly a different anomaly from an existing row's VALUE changing (non-repeatable read).",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-23-non-repeatable-read-8",
+      "test_id": "pt-dbms-sql-23-non-repeatable-read",
+      "question_text": "Why can a non-repeatable read cause problems even though every individual operation involved (T1's reads, T2's write, T2's commit) was itself perfectly valid?",
+      "options": [
+        "It cannot cause any real problem",
+        "Because T1's internal logic may assume the value is stable across its own two reads (e.g., a 'check, compute, re-check' pattern), and a silent mid-transaction change can break that assumption, producing an inconsistent result",
+        "Because SQL forbids reading the same column twice",
+        "Because T2's commit is technically invalid"
+      ],
+      "correct_index": 1,
+      "explanation": "Even with no rule violated by any single operation, a transaction relying on a stable snapshot across multiple reads can be led into an incorrect conclusion if that snapshot silently shifts underneath it.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "coding_problems": [],
+  "coding_not_applicable": "The topic requires two controlled connections and visibility/barrier evidence. Two solved observation exercises and an explicit SQL lab are included; a result-only single-session judge cannot establish the anomaly.",
+  "review": {
+    "reviewer": "/root",
+    "independent_review": "passed",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Independent manual content review passed within independent_review_scope; engine/browser/release gates separate.",
+    "editorial_record": "Original scenario-led prose and assessments. External originality and AdSense review unperformed.",
+    "canonical_answer_indices_preserved": true,
+    "independent_reviewer": "/root/finish_e_transactions",
+    "independent_review_scope": "Full notes,20MCQs/options/explanations,diagram and solved two-session labs. RC1000-to1500,establishedRR1000-to1000,pre-first-readcommit1500-to1500 correct;phantom explanation broadened to membership-changing updates. Manual reasoning only;engine,provider,browser,originality and AdSense evidence remain separate."
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-23-non-repeatable-read",
+    "original_note_sha256": "85edde8d1db4dca6440d6c29611c619ef4eca2330f43bf75dccff92573400711",
+    "status": "drafted; not included in prepared paired migrations"
+  },
+  "notes": "## Observe one row changing between committed reads\n\nA nonrepeatable read occurs when a transaction reads the same data item again and obtains a different value because another transaction committed a change between the observations. The important facts are one continuing reader transaction, the same item, two observations and an intervening committed change. This differs from a dirty read, where the observed value came from another transaction before that writer committed.\n\nImagine a workshop credit account beginning at one thousand. Transaction T1 reads that balance while preparing a decision. Transaction T2 adds five hundred and commits. T1 reads the same account again and sees fifteen hundred. Both values were committed when read, yet T1's internal reasoning can fail if it assumed the value would remain fixed across its own transaction. Decide whether freshness or repeatability is required before labeling the observed change a defect.\n\n## Trace the history with explicit source outcomes\n\nWrite r1(A=1000), w2(A=1500), c2, r1(A=1500), c1. The two T1 reads surround T2's committed update. There is no dirty read in this stated history because T1's second observation occurs after c2. Moving c2 after that observation would describe a different read-from risk rather than a harmless rearrangement of notation.\n\n| Step | Reader T1 | Writer T2 | Meaning |\n|---|---|---|---|\n| 1 | Reads 1000 | | First committed observation |\n| 2 | | Writes 1500 | Writer change still pending |\n| 3 | | Commits | New value becomes committed |\n| 4 | Reads 1500 | | Nonrepeatable second observation |\n\nTwo different transactions reading different values at different times do not by themselves demonstrate this anomaly. A new transaction may appropriately observe a newer committed state. Likewise, two different rows having different balances are ordinary data differences. Record the reader's transaction boundaries and row identity rather than inferring nonrepeatability from two screenshots that happen to show different numbers.\n\n## Prepare a two-connection InnoDB lab\n\nCreate the synthetic fixture in an isolated practice schema before opening either experiment transaction. Use two independently controlled connections called A and B. The row has an explicit primary key, making the repeated lookup unambiguous. Record the actual engine and isolation level; an application framework or connection pool can establish transactions or session settings that differ from a command-line default.\n\n```sql\nCREATE TABLE repeat_read_lab (\n  account_id INT PRIMARY KEY,\n  balance INT NOT NULL\n) ENGINE=InnoDB;\nINSERT INTO repeat_read_lab VALUES(1,1000);\n```\n\nOn A, choose READ COMMITTED for the next transaction, begin and issue the first ordinary SELECT. Then pause at an explicit barrier. On B, update the known row and commit its transaction. Only after that confirmation should A issue its second ordinary SELECT. These operator-controlled stages are more informative than launching two scripts and hoping a short delay produces the intended order.\n\n```sql\n-- A: first stage\nSET TRANSACTION ISOLATION LEVEL READ COMMITTED;\nSTART TRANSACTION;\nSELECT balance FROM repeat_read_lab WHERE account_id=1;\n-- B: between A's two reads\nSTART TRANSACTION;\nUPDATE repeat_read_lab SET balance=balance+500 WHERE account_id=1;\nCOMMIT;\n-- A: after B confirms COMMIT\nSELECT balance FROM repeat_read_lab WHERE account_id=1;\nCOMMIT;\n```\n\nFor the stated initial fixture, A's ordinary READ COMMITTED observations should be1000 then 1500. InnoDB gives each such statement a fresh committed snapshot. If B rolls back instead, A must not consume B's uncommitted replacement through this ordinary committed read. Reset the fixture between experiments and verify that A remains in the same intended transaction until its final completion.\n\n## Compare an established REPEATABLE READ snapshot\n\nRepeat the sequence after resetting the balance to one thousand, this time using InnoDB REPEATABLE READ on A. A's first ordinary consistent read establishes the snapshot used by its subsequent ordinary consistent reads in that transaction. If B commits afterward, A's second such read normally continues to observe one thousand. Ending A and beginning a fresh eligible transaction allows observation of the newer committed state.\n\nStarting a transaction alone does not necessarily establish that ordinary consistent-read snapshot. If B commits before A's first consistent read, that first read can establish a view containing the newer value. The lab must therefore record the first-read barrier rather than merely the time START TRANSACTION appeared. Own writes and locking reads have additional semantics, so do not generalize ordinary snapshot repeatability to every statement A could issue.\n\n## Distinguish version stability from locking protection\n\nA suitable committed snapshot can preserve repeated ordinary reads without preventing B from committing its update. A lock-based design can instead hold appropriate read protection until the reader finishes, causing a competing writer to wait. These are different mechanisms with different latency and freshness behavior. Preventing nonrepeatable observations does not require every engine to block every writer behind every ordinary reader.\n\nInnoDB locking reads such as FOR UPDATE inspect current state and request relevant locks. Mixing them with earlier snapshot reads can produce observations from different contexts. A stable ordinary snapshot alone is not permission to make an unsafe read-modify-write decision from stale eligibility. If the operation must act on the current row, design the conditional update, locking protocol or other trusted mechanism around that actual decision requirement.\n\n## Separate neighboring concurrency problems\n\nA lost update concerns an intended effect being overwritten, often after two clients compute replacements from a stale read. A nonrepeatable read can occur in a transaction that never writes anything. Preventing one therefore does not automatically demonstrate that the other is addressed. A phantom concerns changes to the set of rows satisfying a predicate, while this worked example isolates a changed value for one identified row.\n\nFreshness and staleness are different concepts again. An older committed replica result can be stale without being dirty, and a retained repeatable snapshot can intentionally remain older while preventing nonrepeatable ordinary reads. A report must state whether it needs a consistent historical view, the newest committed value per statement or coordination with current writes. Increasing isolation by habit is not a substitute for choosing that contract.\n\n## Connect changing observations to business decisions\n\nSuppose a workflow reads the balance, calculates a proposed allowance, then reads it again as a check. If the code assumes the two values are identical, a committed concurrent deposit can invalidate its arithmetic or branching even though every SQL statement individually behaved correctly. Conversely, a dashboard explicitly showing fresh committed progress may welcome that new balance. The anomaly's business impact depends on the reader's purpose.\n\nA multirow report can have related consistency requirements. Issuing several separate READ COMMITTED statements does not guarantee that all of them share one historical snapshot. A result assembled from those statements can combine different committed moments. That is a broader report-design question and needs its own fixture and intended consistency model, rather than being reduced to a label attached to one account lookup.\n\n## Handle cleanup and failed interleavings deliberately\n\nEnd both lab transactions on every path. If an unexpected error occurs, inspect its documented scope before assuming the reader or writer has finished. A connection returned to a pool with an open transaction can retain a snapshot or lock state that changes later experiments. Reusing an unresolved session can therefore turn a clear visibility exercise into an accidental test of inherited state.\n\nAlso distinguish an attempted interleaving from an admitted one. A locking read can make B wait, so B's update may not have committed at the barrier where the original READ COMMITTED experiment assumed it had. Record the actual wait and outcome rather than forcing the transcript to match the predicted anomaly. A timeout, blocked update or transaction abort is useful evidence about that statement and engine contract; it is not the same observation as a second read returning a different committed value.\n\n## Solve two observation exercises\n\nFirst exercise: place B's commit before and after A's first consistent read under REPEATABLE READ. If the commit precedes snapshot establishment, A can read 1500 both times. If it follows the first read, A can read 1000 both times. Explain the snapshot timing and reset the starting fixture for each run. These are predicted observations for the described InnoDB lab, not provider execution evidence.\n\nSecond exercise: compare a held read lock with a committed snapshot strategy. The first can delay B's conflicting write while preserving A's protected observation; the second can let B commit while A continues to read its older committed view. State which mechanism the actual engine and statement use before predicting waits. Continue with [dirty reads](/learning/dbms-sql-tutorial/dirty-read), [isolation levels](/learning/dbms-sql-tutorial/isolation-level-lab) and [lost updates](/learning/dbms-sql-tutorial/lost-update) to keep observation, mutation and recovery claims precise.\n",
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "One committed deposit can produce different repeated-read contracts",
+      "description": "A reads 1000, B commits 1500, and A reads again. READ COMMITTED can see 1500; an established ordinary REPEATABLE READ snapshot retains 1000.",
+      "columns": [
+        "Stage",
+        "READ COMMITTED A",
+        "Established REPEATABLE READ A"
+      ],
+      "rows": [
+        [
+          "First ordinary read",
+          "1000",
+          "1000"
+        ],
+        [
+          "B commits new 1500",
+          "New committed current row",
+          "New committed current row"
+        ],
+        [
+          "Second ordinary read",
+          "1500",
+          "1000"
+        ],
+        [
+          "Fresh later transaction",
+          "Can see 1500",
+          "Can see 1500"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "technical_review": "author self-review only",
+    "server_rendering": "pending",
+    "browser_rendering": "unverified",
+    "independent_review": "pending"
+  },
+  "sql_verification": {
+    "scope": "not executed; concurrency/recovery/provider verification separate",
+    "all_passed": false,
+    "cases": []
+  }
+}

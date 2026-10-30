@@ -1,0 +1,603 @@
+{
+  "source_ref": "chapter-11-dml-and-data-modification/upsert-patterns",
+  "slug": "upsert-patterns",
+  "title": "UPSERT Patterns",
+  "description": "Learn MySQL UPSERT with unique keys, incoming row aliases, replacement versus increments, retry risks, and worked SQL exercises.",
+  "dialect": "MySQL 8.4",
+  "notes": "## One request with two possible outcomes\n\nAn upsert attempts to insert a fact and defines an update when an enforced unique identity already exists. Imagine a campus inventory table where each equipment code identifies one balance. A delivery for a new code creates a balance; a delivery for a known code changes its quantity. The operation needs an explicit meaning for identity and an explicit rule for changing the existing row.\n\nThe word upsert describes an intention, not a universally portable SQL keyword. This tutorial uses MySQL 8.4 and its duplicate-key update clause. Other engines provide different syntax and conflict-selection rules. Copying a PostgreSQL conflict clause into MySQL does not preserve a working operation. First understand the intended transition, then express it using the actual engine's supported statement.\n\n## A key determines whether a conflict exists\n\nA matching display label is not enough to trigger duplicate handling. MySQL reacts to a primary-key or unique-index collision. If equipment_code has neither protection, two requests bearing the same code can create separate rows. A [foreign key](/learning/dbms-sql-tutorial/foreign-key) establishes a permitted reference; it does not make the referencing value unique unless a separate uniqueness rule says so.\n\nChoose a stable business identity before choosing the write. A code supplied by a trusted inventory system might identify equipment, while a descriptive name can change or repeat. If identity includes both campus and equipment code, the [unique key](/learning/dbms-sql-tutorial/unique) needs both roles. A campus-local code should not accidentally merge balances belonging to different campuses merely because the visible strings match.\n\n## Distinguish replacement from accumulation\n\nSuppose code CAM has quantity seven and a request supplies three. A replacement policy sets the quantity to three. An accumulation policy raises it to ten. Both can be written as upserts, but they implement different requirements. An exercise that asks for a current supplier snapshot needs replacement; an exercise that records a delivery might need accumulation.\n\nThis difference also determines retry behaviour. Applying the same replacement twice can leave the same stored value. Applying the same increment twice adds twice. A statement that handles duplicate keys is therefore not automatically an idempotent business operation. Reliable delivery processing usually needs a protected delivery identity and a trusted policy that prevents processing one event more than once.\n\n## Refer to incoming values deliberately\n\nMySQL 8.4 supports an alias for the proposed row after a VALUES clause. The alias distinguishes incoming values from columns already stored in the target. In the example, incoming names the proposed quantity. On the duplicate branch, only quantity is assigned; unrelated properties retain their existing values. On the insert branch, ordinary defaults and acceptance rules still apply.\n\n```sql\nINSERT INTO equipment_balance (equipment_code, quantity)\nVALUES ('CAM', 3) AS incoming\nON DUPLICATE KEY UPDATE quantity = incoming.quantity;\n```\n\nOlder examples often use the VALUES function inside the update expression. That usage is deprecated in MySQL 8.4; it is different from the VALUES clause that supplies new rows. Learn the distinction rather than assume every occurrence of the word is deprecated. MariaDB has its own syntax support, so compatibility execution cannot certify this MySQL alias form.\n\n## Multiple unique identities need special care\n\nA table can have more than one unique index. MySQL duplicate handling can be triggered by any applicable unique collision; it does not name one conflict target in the same way as PostgreSQL's familiar conflict-column form. If one proposed row collides with different existing rows under different keys, the intended business match becomes ambiguous and deserves redesign or explicit rejection.\n\nEven after one row is selected for update, the assigned values can violate another constraint. An upsert is not permission to bypass required values, checked domains or referential integrity. The update branch can fail. Explain both branches separately when reviewing a statement: identify the matching condition, calculate the new values, and then check the resulting row against all enforced rules.\n\n## A preliminary read does not reserve an identity\n\nA common application pattern first searches for a code and then chooses INSERT or UPDATE. Between those statements, another connection can insert the same code. The initial absence was an observation, not a reservation. An enforced unique key and a supported atomic write remove that particular application-level decision gap, although concurrent writes can still wait, conflict or require a retry.\n\nAtomicity does not choose the right business policy. Two concurrent snapshot updates can still overwrite each other's intended values under a last-writer policy. Increment operations, expected-version checks and event deduplication solve different problems. Keep transactions short, handle reported failures, and retry the complete intended operation only when its retry semantics have been designed rather than assumed.\n\n## Replacement commands have different consequences\n\nMySQL REPLACE has delete-and-insert semantics for conflicting rows. It is not a shorter spelling of an ordinary update branch. Defaults, generated identities, triggers and referencing data can therefore behave differently. A request to refresh one quantity should not casually remove and recreate the entire equipment row, especially when other facts depend on its identity or stored properties.\n\nSimilarly, INSERT IGNORE is not an upsert that automatically refreshes existing values. It can skip duplicate input and turn certain problems into warnings under its documented rules. If the requirement is to update a known balance, silently keeping the earlier balance is wrong. Select a statement because its success and failure behaviour matches the requirement, not because it suppresses an error message.\n\n## Batch input needs a duplicate policy\n\nWhen several proposed rows share one identity, their combined effect needs explanation. Replacing a balance repeatedly can make input ordering relevant; accumulating can add several events. A staging table should preserve the original event identity and establish whether duplicates are invalid, repeated observations or separate deliveries. Aggregate only when aggregation reflects the business meaning of those records.\n\nA multirow request can also encounter a later constraint violation. Engine, statement modifiers and transactional storage affect the failure outcome. Do not infer that every earlier proposed row was committed because it appeared first in the input. The exercises use simple protected identities and explicit expected final states; their fixtures do not claim to cover every trigger or concurrent-write scenario.\n\n## Observe state rather than guess from a counter\n\nMySQL's affected-row reporting distinguishes insert, changed-update and unchanged-update outcomes, and a client option can influence an unchanged update's count. A report of zero does not necessarily mean the request failed. Equally, an affected-row count is not a complete business receipt. Query the intended identity and verify the actual stored properties when those properties define the required outcome.\n\nFor a useful manual trace, record the starting row, incoming values, conflict key, selected branch and final row. Include a new identity, a known identity and an unchanged replacement. Preserve at least one unrelated row so accidental whole-table rewrites become visible. Negative cases should also cover invalid proposed values and collisions under any additional unique identities in a real design.\n\n## Keep classroom writes within their contract\n\nThe first exercise refreshes a single synthetic snapshot while preserving another item. The second applies an explicitly identified quantity increment in a single statement; it deliberately makes no promise that replaying that increment is safe. Both return deterministic ordered state and include alternative fixtures so the reference solution depends on the requested rule rather than only the displayed sample values.\n\nA useful extension is to distinguish a missing value from an explicit zero. An unknown stock count should not silently become a delivered quantity, and a default must not overwrite an existing descriptive property. Decide which inputs are mandatory before constructing the proposed row. Reject malformed quantities at the trusted write boundary and return a clear error instead of converting every invalid request into an accepted balance.\n\nFinally, make the result meaningful to the caller. Return the protected equipment identity and its resulting quantity after a successful transaction boundary. If an operation fails, preserve the error category needed for a controlled retry or correction. Logging that a request was received does not establish that its balance change committed. These distinctions keep the SQL transition aligned with what the inventory service actually promises.\n",
+  "references": [
+    {
+      "title": "MySQL 8.4 duplicate-key updates",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/insert-on-duplicate.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-11-upsert-patterns",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-11-upsert-patterns-1",
+          "test_id": "pt-dbms-sql-11-upsert-patterns",
+          "question_text": "What identifies an upsert operation?",
+          "options": [
+            "A read that always locks every row",
+            "An insert attempt with a defined update outcome on a protected identity conflict",
+            "A command that removes all duplicates",
+            "A transaction that can never fail"
+          ],
+          "correct_index": 1,
+          "explanation": "Both the matching identity and update rule must be specified.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-11-upsert-patterns-2",
+          "test_id": "pt-dbms-sql-11-upsert-patterns",
+          "question_text": "Which MySQL clause defines the duplicate branch?",
+          "options": [
+            "ON CONFLICT DO UPDATE",
+            "ON DUPLICATE KEY UPDATE",
+            "UPSERT TABLE",
+            "MERGE CONFLICT"
+          ],
+          "correct_index": 1,
+          "explanation": "This package follows MySQL syntax.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-11-upsert-patterns-3",
+          "test_id": "pt-dbms-sql-11-upsert-patterns",
+          "question_text": "Which PostgreSQL form must be rewritten for MySQL?",
+          "options": [
+            "ORDER BY code",
+            "ON CONFLICT (code) DO UPDATE",
+            "SELECT code FROM items",
+            "WHERE code = 4"
+          ],
+          "correct_index": 1,
+          "explanation": "Conflict syntax and matching rules differ across engines.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-11-upsert-patterns-4",
+          "test_id": "pt-dbms-sql-11-upsert-patterns",
+          "question_text": "What protects the intended equipment identity?",
+          "options": [
+            "A repeated label alone",
+            "A suitable PRIMARY KEY or UNIQUE index",
+            "A display ordering rule",
+            "An unrelated foreign key"
+          ],
+          "correct_index": 1,
+          "explanation": "Duplicate handling relies on an enforced unique collision.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-11-upsert-patterns-5",
+          "test_id": "pt-dbms-sql-11-upsert-patterns",
+          "question_text": "What does the proposed-row alias represent?",
+          "options": [
+            "Only the previous stored values",
+            "Values supplied for the attempted new row",
+            "The database owner",
+            "A sorted result cursor"
+          ],
+          "correct_index": 1,
+          "explanation": "The alias separates incoming values from target values.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-11-upsert-patterns-6",
+          "test_id": "pt-dbms-sql-11-upsert-patterns",
+          "question_text": "What is the status of VALUES(column) in MySQL 8.4 duplicate-update expressions?",
+          "options": [
+            "Required in all new SQL",
+            "Deprecated; prefer supported alias forms for new examples",
+            "Identical to deleting a row",
+            "The VALUES clause itself is forbidden"
+          ],
+          "correct_index": 1,
+          "explanation": "The deprecated function usage differs from the insertion clause.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-11-upsert-patterns-7",
+          "test_id": "pt-dbms-sql-11-upsert-patterns",
+          "question_text": "Why is upsert SQL not directly interchangeable across engines?",
+          "options": [
+            "All SQL engines lack keys",
+            "Conflict selection and supported statement forms differ",
+            "Only capitalization differs",
+            "Every engine uses the same conflict target"
+          ],
+          "correct_index": 1,
+          "explanation": "Preserve business semantics while rewriting the dialect.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-11-upsert-patterns-8",
+          "test_id": "pt-dbms-sql-11-upsert-patterns",
+          "question_text": "Without uniqueness on the intended identity, what can happen?",
+          "options": [
+            "MySQL invents a unique constraint",
+            "Repeated identity values can become separate rows",
+            "Every repeated value is updated automatically",
+            "The table must become read only"
+          ],
+          "correct_index": 1,
+          "explanation": "Another independent unique collision could still trigger handling; the intended key needs protection.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-11-upsert-patterns-new-9",
+          "test_id": "pt-dbms-sql-11-upsert-patterns",
+          "question_text": "Existing quantity is seven and incoming quantity is three. What does replacement produce?",
+          "options": [
+            "Three",
+            "Ten",
+            "Seven",
+            "Twenty-one"
+          ],
+          "correct_index": 0,
+          "explanation": "Replacement stores the submitted snapshot.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-11-upsert-patterns-new-10",
+          "test_id": "pt-dbms-sql-11-upsert-patterns",
+          "question_text": "Which duplicate policy is automatically retry safe for an increment request?",
+          "options": [
+            "Every increment",
+            "None solely because the statement is an upsert",
+            "Only increments of one",
+            "All batch increments"
+          ],
+          "correct_index": 1,
+          "explanation": "Event identity and processing policy determine retry safety.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-11-upsert-patterns-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-11-upsert-patterns-application-new-1",
+          "test_id": "pt-dbms-sql-11-upsert-patterns-application",
+          "question_text": "Why can SELECT-then-INSERT race?",
+          "options": [
+            "SELECT always deletes the key",
+            "Another connection can insert between the read and write",
+            "INSERT cannot use transactions",
+            "Unique indexes are invisible to writes"
+          ],
+          "correct_index": 1,
+          "explanation": "An absence observation does not reserve the identity.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-11-upsert-patterns-application-new-2",
+          "test_id": "pt-dbms-sql-11-upsert-patterns-application",
+          "question_text": "What does REPLACE mean on a conflicting MySQL row?",
+          "options": [
+            "An ordinary update of selected columns only",
+            "Always ignore the proposal",
+            "Delete-and-insert semantics",
+            "A SELECT with DISTINCT"
+          ],
+          "correct_index": 2,
+          "explanation": "Side effects and defaults can differ from an update branch.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-11-upsert-patterns-application-new-3",
+          "test_id": "pt-dbms-sql-11-upsert-patterns-application",
+          "question_text": "What must be reviewed when two unique indexes match different rows?",
+          "options": [
+            "Only column display order",
+            "Whether headings are uppercase",
+            "The output font",
+            "The ambiguous identity policy and collision handling"
+          ],
+          "correct_index": 3,
+          "explanation": "Do not assume one intended row is unambiguously selected.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-11-upsert-patterns-application-new-4",
+          "test_id": "pt-dbms-sql-11-upsert-patterns-application",
+          "question_text": "Can the update branch violate a different unique rule?",
+          "options": [
+            "Yes, the assigned row must still satisfy constraints",
+            "No, upsert disables uniqueness",
+            "Only if all indexes are removed",
+            "Only after a SELECT"
+          ],
+          "correct_index": 0,
+          "explanation": "Duplicate handling does not waive other constraints.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-11-upsert-patterns-application-new-5",
+          "test_id": "pt-dbms-sql-11-upsert-patterns-application",
+          "question_text": "What does INSERT IGNORE generally fail to provide for a repeated balance identity?",
+          "options": [
+            "A syntactically valid insert",
+            "The required refresh of existing values",
+            "The ability to name columns",
+            "Any interaction with uniqueness"
+          ],
+          "correct_index": 1,
+          "explanation": "Ignoring input is different from updating an existing fact.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-11-upsert-patterns-application-new-6",
+          "test_id": "pt-dbms-sql-11-upsert-patterns-application",
+          "question_text": "Why preserve an unrelated item in test fixtures?",
+          "options": [
+            "To force all balances to match",
+            "To remove the need for a key",
+            "To expose accidental changes outside the requested identity",
+            "To guarantee concurrency safety"
+          ],
+          "correct_index": 2,
+          "explanation": "Final-state assertions should detect collateral writes.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-11-upsert-patterns-application-new-7",
+          "test_id": "pt-dbms-sql-11-upsert-patterns-application",
+          "question_text": "A replacement submits the already stored quantity. Must zero affected rows prove failure?",
+          "options": [
+            "Yes, always",
+            "Yes, unless a new table is created",
+            "Only when the column is text",
+            "No, unchanged-update reporting can produce zero"
+          ],
+          "correct_index": 3,
+          "explanation": "Affected-row reporting depends on outcome and client settings.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-11-upsert-patterns-application-new-8",
+          "test_id": "pt-dbms-sql-11-upsert-patterns-application",
+          "question_text": "Two input rows carry the same item code. What needs definition before loading?",
+          "options": [
+            "Whether they are repeated snapshots, invalid duplicates or separate events",
+            "A random order only",
+            "A new password",
+            "An unconditional REPLACE policy"
+          ],
+          "correct_index": 0,
+          "explanation": "Input identity determines whether to reject, replace or aggregate.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-11-upsert-patterns-application-new-9",
+          "test_id": "pt-dbms-sql-11-upsert-patterns-application",
+          "question_text": "Existing quantity is seven and an accepted increment is three. What is the new quantity?",
+          "options": [
+            "Three",
+            "Ten",
+            "Seven",
+            "Four"
+          ],
+          "correct_index": 1,
+          "explanation": "Accumulation adds to the stored quantity.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-11-upsert-patterns-application-new-10",
+          "test_id": "pt-dbms-sql-11-upsert-patterns-application",
+          "question_text": "Does one atomic upsert certify an entire multi-step business workflow?",
+          "options": [
+            "Yes, including external notifications",
+            "Yes, even across unrelated databases",
+            "No, surrounding operations and external effects need their own guarantees",
+            "Only if the table name is short"
+          ],
+          "correct_index": 2,
+          "explanation": "The atomic statement covers a narrower boundary than the complete workflow.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cx-upsert-balance-snapshot",
+      "slug": "upsert-balance-snapshot",
+      "title": "Refresh a protected equipment snapshot",
+      "difficulty": "Easy",
+      "task": "Insert CAM with quantity 3, or set its existing quantity to 3. Preserve other equipment. Return equipment_code,quantity ordered by code.",
+      "schema_sql": "CREATE TABLE equipment_balance (equipment_code VARCHAR(12) PRIMARY KEY, quantity INT NOT NULL CHECK(quantity>=0));",
+      "seed_sql": "INSERT INTO equipment_balance VALUES ('CAM',7),('MIC',9);",
+      "expected": "equipment_code\tquantity\nCAM\t3\nMIC\t9",
+      "ordering": "As explicitly ordered in the result query.",
+      "constraints": [
+        "Use only the supplied synthetic tables and requested transition.",
+        "Preserve unrelated rows."
+      ],
+      "edge_cases": [
+        "CAM may be absent.",
+        "An unchanged replacement leaves the same state."
+      ],
+      "hints": [
+        "Use the MySQL 8.4 proposed-row alias.",
+        "Assign quantity rather than add it."
+      ],
+      "solution_sql": "INSERT INTO equipment_balance(equipment_code,quantity) VALUES ('CAM',3) AS incoming ON DUPLICATE KEY UPDATE quantity=incoming.quantity; SELECT equipment_code,quantity FROM equipment_balance ORDER BY equipment_code;",
+      "explanation": "The key selects the known identity; the alias supplies the replacement snapshot. New CAM rows are inserted and other items remain unchanged.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO equipment_balance VALUES ('MIC',2);",
+          "expected": "equipment_code\tquantity\nCAM\t3\nMIC\t2"
+        },
+        {
+          "seed_sql": "INSERT INTO equipment_balance VALUES ('CAM',3);",
+          "expected": "equipment_code\tquantity\nCAM\t3"
+        }
+      ]
+    },
+    {
+      "id": "cx-upsert-balance-increment",
+      "slug": "upsert-balance-increment",
+      "title": "Apply one inventory increment",
+      "difficulty": "Medium",
+      "task": "Apply one delivery of 4 units for CAM. Insert quantity 4 if CAM is absent; otherwise add 4. Preserve unrelated rows. Return equipment_code,quantity ordered by code. This task is a single accepted delivery, not a replay-safe event processor.",
+      "schema_sql": "CREATE TABLE equipment_balance (equipment_code VARCHAR(12) PRIMARY KEY, quantity INT NOT NULL CHECK(quantity>=0));",
+      "seed_sql": "INSERT INTO equipment_balance VALUES ('CAM',6),('MIC',8);",
+      "expected": "equipment_code\tquantity\nCAM\t10\nMIC\t8",
+      "ordering": "As explicitly ordered in the result query.",
+      "constraints": [
+        "Use only the supplied synthetic tables and requested transition.",
+        "Preserve unrelated rows."
+      ],
+      "edge_cases": [
+        "An absent code starts with the delivery quantity.",
+        "Zero starting stock remains a valid known row."
+      ],
+      "hints": [
+        "Separate the absent-code branch from the known-code branch.",
+        "Use both target and proposed quantities in the addition."
+      ],
+      "solution_sql": "INSERT INTO equipment_balance(equipment_code,quantity) VALUES ('CAM',4) AS incoming ON DUPLICATE KEY UPDATE quantity=equipment_balance.quantity+incoming.quantity; SELECT equipment_code,quantity FROM equipment_balance ORDER BY equipment_code;",
+      "explanation": "The insert starts at four while the conflict branch adds the incoming delivery to the stored balance. Replaying this operation adds four again.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO equipment_balance VALUES ('MIC',8);",
+          "expected": "equipment_code\tquantity\nCAM\t4\nMIC\t8"
+        },
+        {
+          "seed_sql": "INSERT INTO equipment_balance VALUES ('CAM',0);",
+          "expected": "equipment_code\tquantity\nCAM\t4"
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-11-upsert-patterns-1",
+      "test_id": "pt-dbms-sql-11-upsert-patterns",
+      "question_text": "What does 'upsert' mean?",
+      "options": [
+        "Update only, never insert",
+        "Insert a row, or update it if it already exists — combining both outcomes into one operation",
+        "A synonym for DELETE",
+        "Insert only, never update"
+      ],
+      "correct_index": 1,
+      "explanation": "Upsert is the general insert-or-update pattern.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-11-upsert-patterns-2",
+      "test_id": "pt-dbms-sql-11-upsert-patterns",
+      "question_text": "Which syntax does MySQL use for upsert?",
+      "options": [
+        "MERGE INTO",
+        "ON DUPLICATE KEY UPDATE",
+        "ON CONFLICT DO UPDATE",
+        "UPSERT INTO"
+      ],
+      "correct_index": 1,
+      "explanation": "MySQL's dialect-specific upsert syntax is INSERT ... ON DUPLICATE KEY UPDATE.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-11-upsert-patterns-3",
+      "test_id": "pt-dbms-sql-11-upsert-patterns",
+      "question_text": "Which syntax does PostgreSQL use for upsert?",
+      "options": [
+        "ON DUPLICATE KEY UPDATE",
+        "ON CONFLICT (column) DO UPDATE",
+        "MERGE ON DUPLICATE",
+        "REPLACE INTO"
+      ],
+      "correct_index": 1,
+      "explanation": "PostgreSQL's upsert syntax is INSERT ... ON CONFLICT ... DO UPDATE.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-11-upsert-patterns-4",
+      "test_id": "pt-dbms-sql-11-upsert-patterns",
+      "question_text": "What must exist on the matched column(s) for an upsert to detect a 'duplicate'?",
+      "options": [
+        "A CHECK constraint",
+        "A UNIQUE or PRIMARY KEY constraint",
+        "A DEFAULT value",
+        "A foreign key constraint"
+      ],
+      "correct_index": 1,
+      "explanation": "Without a uniqueness constraint, the database has no way to define what counts as a conflicting duplicate.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-11-upsert-patterns-5",
+      "test_id": "pt-dbms-sql-11-upsert-patterns",
+      "question_text": "In MySQL's ON DUPLICATE KEY UPDATE, what does VALUES(salary) refer to?",
+      "options": [
+        "The current salary already stored in the table",
+        "The salary value that would have been inserted by this statement",
+        "A random salary value",
+        "The average salary across all rows"
+      ],
+      "correct_index": 1,
+      "explanation": "VALUES(column) references the incoming row's value that the INSERT attempted to write.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-11-upsert-patterns-6",
+      "test_id": "pt-dbms-sql-11-upsert-patterns",
+      "question_text": "In PostgreSQL's ON CONFLICT ... DO UPDATE, what does EXCLUDED.salary refer to?",
+      "options": [
+        "The row that was excluded from the result entirely",
+        "The value that would have been inserted, analogous to MySQL's VALUES(salary)",
+        "A column that has been dropped from the table",
+        "The previous salary before any update"
+      ],
+      "correct_index": 1,
+      "explanation": "EXCLUDED is PostgreSQL's way of referencing the proposed-but-conflicting incoming row's data.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-11-upsert-patterns-7",
+      "test_id": "pt-dbms-sql-11-upsert-patterns",
+      "question_text": "Is upsert syntax portable across different SQL dialects with minimal changes?",
+      "options": [
+        "Yes, it's identical everywhere",
+        "No — this is one of the most dialect-fragmented areas of SQL, requiring real rewriting (not minor tweaks) to port between engines",
+        "Only the keyword capitalization differs",
+        "Upsert is standardized identically in every engine except SQLite"
+      ],
+      "correct_index": 1,
+      "explanation": "The genuinely different keywords and clause structures across MySQL/PostgreSQL/standard MERGE make upsert code non-trivial to port.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-11-upsert-patterns-8",
+      "test_id": "pt-dbms-sql-11-upsert-patterns",
+      "question_text": "What happens if you attempt an upsert-style INSERT on a table with no UNIQUE/PRIMARY KEY constraint on the relevant column?",
+      "options": [
+        "It always works exactly like a normal upsert",
+        "There's no defined 'duplicate' to detect, so the statement behaves like a plain INSERT (or fails depending on the dialect/exact syntax)",
+        "The database automatically adds the missing constraint",
+        "It silently deletes all existing rows first"
+      ],
+      "correct_index": 1,
+      "explanation": "Upsert fundamentally depends on a uniqueness constraint existing to define what a conflicting duplicate even means.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "coordinator",
+    "independent_review": "passed",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Independent manual review passed; native MySQL fixture evidence recorded separately; provider/browser/Supabase release gates remain separate.",
+    "existing_question_corrections": [
+      "tq-dbms-sql-11-upsert-patterns-1",
+      "tq-dbms-sql-11-upsert-patterns-2",
+      "tq-dbms-sql-11-upsert-patterns-3",
+      "tq-dbms-sql-11-upsert-patterns-4",
+      "tq-dbms-sql-11-upsert-patterns-5",
+      "tq-dbms-sql-11-upsert-patterns-6",
+      "tq-dbms-sql-11-upsert-patterns-7",
+      "tq-dbms-sql-11-upsert-patterns-8"
+    ],
+    "canonical_answer_indices_preserved": true,
+    "editorial_record": "Original snapshots retained. Questions rewritten for precise dialect and topic coverage while preserving identities and canonical answer positions; technical and independent review pending.",
+    "independent_reviewer": "Codex reviewer, current 2026-10-30 session",
+    "independent_review_scope": "Read full notes, all 640 MCQ stems/options/canonical answers/explanations, 64 exercise contracts/solutions/fixtures, and all 32 diagrams. Verified retained identities/answers through source-continuity tests; SQL execution evidence is recorded separately. No external originality, provider, live application or Supabase authorization clearance.",
+    "independent_review_record": "reports/independent-review-2026-10-30.json",
+    "content_sha256": "b71efabb739bf3e2d7b76f029d240582f4ef603881e2a61303c1fb190b6da5c9"
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-11-upsert-patterns",
+    "original_note_sha256": "75961cafff4e5207b292261066336366b155056808f08ade404c9fae896ae406",
+    "status": "drafted; not yet included in prepared paired migrations"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Replacement and accumulation share an identity but change values differently",
+      "description": "CAM is the only conflicting key. MIC remains unchanged in both policies.",
+      "columns": [
+        "Starting CAM quantity",
+        "Incoming quantity",
+        "Policy",
+        "Final CAM quantity"
+      ],
+      "rows": [
+        [
+          "7",
+          "3",
+          "Replacement",
+          "3"
+        ],
+        [
+          "7",
+          "3",
+          "Accumulation",
+          "10"
+        ],
+        [
+          "Absent",
+          "3",
+          "Either insert branch",
+          "3"
+        ],
+        [
+          "3",
+          "3",
+          "Repeated replacement",
+          "3"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "drafted — verification pending",
+    "server_rendering": "pending",
+    "browser_rendering": "unverified",
+    "independent_review": "pending"
+  },
+  "authoring_status": "drafted — verification pending",
+  "sql_verification": {
+    "scope": "not executed; exact MySQL/provider verification pending",
+    "all_passed": false,
+    "cases": []
+  }
+}

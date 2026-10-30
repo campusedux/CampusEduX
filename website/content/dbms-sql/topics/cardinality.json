@@ -1,0 +1,614 @@
+{
+  "source_ref": "chapter-4-relational-model/cardinality",
+  "slug": "cardinality",
+  "title": "Cardinality",
+  "description": "Count relation tuples and SQL result rows correctly, distinguish NULL and distinct-value counts, and avoid inflated totals after joins.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Cardinality counts the facts present\n\nThe cardinality of a relation is the number of tuples in its current instance. If Student contains facts for Asha, Ravi, Mira, and Dev, its cardinality is four. The measurement concerns the current population, not the number of attributes describing each student. A relation can have degree three and cardinality four, or any other permitted combination under its schema and constraints.\n\nBegin a counting problem by stating what one tuple represents. Student can contain one fact per student, while Enrollment can contain one fact per student-course registration or attempt. Counting Enrollment tuples therefore counts those relationship facts. It does not automatically count distinct students or courses. A correct number with the wrong interpretation is still an incorrect answer to the report requirement.\n\n## Empty relations retain their structure\n\nAn empty relation has cardinality zero. Its attribute list, domains, and integrity rules remain defined. A newly created Student table can have several columns while containing no rows. This is a valid distinction between the structural schema and its current contents. Do not infer degree from cardinality or assume that an empty relation has ceased to exist.\n\nThe same distinction applies to query results. A filtered listing can contain zero rows while still having two selected attributes. An ungrouped COUNT query behaves differently: it returns one aggregate row whose count value is zero. The cardinality of that aggregate result is one, while the cardinality being measured can be zero. Read the output contract carefully when comparing expected results.\n\n## Successful changes and attempted changes differ\n\nAdding one genuinely new tuple to a strict relation increases its cardinality by one. Removing one existing tuple decreases it by one. An update can change a tuple's values without changing the count. A deletion that matches nothing has no effect on cardinality. A rejected insert likewise does not establish a new accepted tuple, regardless of how many times the application attempted it.\n\nUnder mathematical set semantics, adding an already present complete tuple does not add another element. Ordinary SQL tables and results can permit duplicates unless an operation or constraint prevents them. In such a table, inserting another equal row can increase the row count. Keep the strict relational model and the practical SQL operation distinct rather than applying the same insertion rule to both without qualification.\n\n## COUNT has several meanings\n\nCOUNT(*) counts qualifying rows, including rows whose optional attributes are NULL. COUNT(score) counts qualifying rows where score is non-NULL. COUNT(DISTINCT score) counts distinct non-NULL score values. For three rows with scores seventy, seventy, and NULL, the results are three, two, and one respectively. Each expression answers a different question about the same population.\n\n```sql\nSELECT COUNT(*) AS submissions,\n       COUNT(score) AS recorded_scores,\n       COUNT(DISTINCT score) AS distinct_scores\nFROM submissions;\n```\n\nThe three output attributes make the intended measurements visible. DISTINCT score is not the number of distinct students unless score somehow identifies students under a separately established rule. Identical marks can belong to many legitimate students. A record identifier and a measured value serve different roles, even when both are represented numerically.\n\n## Filters define the counted population\n\nWHERE decides which input rows reach an aggregate. If a report asks for active students, count after applying the active-status predicate. Counting all students and labeling the result active_students does not make the population correct. A clear alias describes the result, but the actual predicate and source facts determine which objects were counted.\n\nNULL affects comparisons as well as COUNT expressions. A row with a missing score does not satisfy score >= 50 through ordinary SQL comparison. If missing scores need a separate count, test absence explicitly. A recorded zero is a value and should not be confused with a missing value. Include both in fixtures so that shortcuts based on truthiness or assumed defaults do not distort the totals.\n\n## Projection and duplicates change result counts\n\nThree students in one programme produce three programme rows under ordinary SELECT programme. SELECT DISTINCT programme produces one distinct selected value for that group. Adding student_id to the selected list can preserve three distinct pairs because the identities differ. Duplicate elimination compares complete selected rows, so its effect depends on the output attributes.\n\nIn pure relational algebra, projection follows set semantics. In SQL, a projection without DISTINCT commonly retains repeated result rows. This explains why counting a projected report can differ from counting a set of programme values. Before using DISTINCT as a correction, decide whether repeated output values represent separate facts that should remain. Removing legitimate repetitions can hide a counting problem rather than solve it.\n\n## Joins can multiply matching facts\n\nSuppose one student has three enrollment rows. Joining that student to the enrollments can produce three matching output rows. COUNT(*) over that join counts combinations at the joined grain. If the question asks how many students enrolled, COUNT(DISTINCT student_id) may express the requested identity count. If it asks how many enrollment attempts occurred, retaining all three can be correct.\n\nThe join predicate matters too. Joining on names can match several unrelated students sharing a label and inflate results. Joining through the modeled identifier connects the intended facts. Check one-to-many fixtures, repeated names, and multiple matches per parent before accepting aggregate totals. A dataset where every parent has exactly one child conceals many join-counting errors.\n\n## Preserve parents with no child facts\n\nA course report may need to include courses with no enrollments. Start from Course and use a preserving join to Enrollment. For an unmatched course, the joined output contains a preserved row with NULL child attributes. COUNT(*) would count that row as one. Counting a non-NULL child identity instead returns zero, which matches the number of actual enrollment facts.\n\nIf students can make repeated attempts, a course can have three enrollment rows but only two distinct student identifiers. Return separately named columns for attempt_count and student_count when both are required. Do not remove attempts before counting them merely to obtain the student total. Different aggregates over the same joined population can preserve both meanings in one report.\n\n## Domain sizes give a theoretical bound\n\nA strict relation is a subset of the Cartesian product of its attribute domains. If two finite domains contain three and four values, their product contains twelve possible pairs. Without additional restrictions, a relation over those domains cannot contain more than twelve distinct tuples. This is an upper bound, not a requirement that every possible combination be stored.\n\nKeys and other integrity rules can tighten the bound. If the first attribute is a key with three permitted values, at most three tuples can occur even though twelve domain-compatible pairs exist. With infinite domains, a finite numeric product bound is unavailable. State the finite-domain assumption when using a simple multiplication formula, and keep this theoretical bound separate from actual stored row counts or resource limits.\n\n## The word has other database uses\n\nIn entity-relationship diagrams, cardinality can describe relationship multiplicity, such as one-to-many. In query planning, estimated cardinality concerns predicted row counts at an operation. In an index discussion, the term can concern distinct key values. These uses are related to counting but should not be substituted silently for a relation's current tuple count.\n\nFor example, twenty registrations can belong to twelve students across five courses. These are three meaningful totals, and none is recoverable merely by counting the number of output columns. For exact reporting, identify the counted object, the qualifying population, and the treatment of duplicates and NULL. Test empty input, repeated values, multiple child facts, and parents with no children. A trustworthy cardinality explanation connects the number to the fact grain and operation that produced it, while making clear whether it is an exact query result, a distinct-value count, a theoretical bound, or a relationship multiplicity rule.\n",
+  "references": [],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-4-cardinality",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-4-cardinality-1",
+          "test_id": "pt-dbms-sql-4-cardinality",
+          "question_text": "What does the cardinality of a relation measure?",
+          "options": [
+            "The number of attributes in the schema",
+            "The number of tuples (rows) currently in the relation",
+            "The number of distinct relations in the database",
+            "The number of foreign keys pointing to it"
+          ],
+          "correct_index": 1,
+          "explanation": "Cardinality is the count of tuples (rows) currently present in the relation.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-4-cardinality-2",
+          "test_id": "pt-dbms-sql-4-cardinality",
+          "question_text": "If Students holds tuples for Asha, Ravi, Meera, and Karan, what is its current cardinality?",
+          "options": [
+            "1",
+            "4",
+            "It equals the degree",
+            "It cannot be determined"
+          ],
+          "correct_index": 1,
+          "explanation": "There are 4 tuples currently in the relation, so cardinality is 4.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-4-cardinality-3",
+          "test_id": "pt-dbms-sql-4-cardinality",
+          "question_text": "After a 5th student, Priya, is admitted and inserted into Students, what happens to the relation's degree?",
+          "options": [
+            "It increases by 1, to 5",
+            "It stays exactly the same, since inserting a row never changes degree",
+            "It becomes undefined",
+            "It doubles"
+          ],
+          "correct_index": 1,
+          "explanation": "Degree depends only on the number of attributes, which is unaffected by inserting a new row (which changes cardinality instead).",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-4-cardinality-4",
+          "test_id": "pt-dbms-sql-4-cardinality",
+          "question_text": "If exactly one new tuple is successfully added, or exactly one existing tuple removed, which measurement changes while the schema stays fixed?",
+          "options": [
+            "Degree",
+            "Cardinality",
+            "Both change equally",
+            "Neither changes"
+          ],
+          "correct_index": 1,
+          "explanation": "The successful addition or removal changes tuple cardinality by one. Rejected inserts, duplicate set additions and no-match deletes need not change it.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-4-cardinality-5",
+          "test_id": "pt-dbms-sql-4-cardinality",
+          "question_text": "Can a relation have cardinality 0 while still having a well-defined, non-zero degree?",
+          "options": [
+            "No, cardinality and degree must always be equal",
+            "Yes — an empty table (e.g., right after CREATE TABLE) has cardinality 0 but a fixed, non-zero degree",
+            "No, a relation with cardinality 0 has no schema",
+            "Yes, but only if the primary key is NULL"
+          ],
+          "correct_index": 1,
+          "explanation": "Degree and cardinality are independent measures; a freshly created empty table has 0 cardinality but its full degree from the schema.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-4-cardinality-6",
+          "test_id": "pt-dbms-sql-4-cardinality",
+          "question_text": "For a strict relation over finite attribute domains, which expression bounds its cardinality before other constraints are considered?",
+          "options": [
+            "There is no upper bound at all",
+            "It is bounded by the size of the Cartesian product of the attribute domains, |D1| x |D2| x ... x |Dn|",
+            "It equals the degree",
+            "It is always exactly 2^degree"
+          ],
+          "correct_index": 1,
+          "explanation": "The finite Cartesian product contains all domain-compatible tuples. Keys and other constraints can reduce the maximum further.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-4-cardinality-7",
+          "test_id": "pt-dbms-sql-4-cardinality",
+          "question_text": "In the pure mathematical relational model, does inserting an exact duplicate of an existing tuple increase cardinality?",
+          "options": [
+            "Yes, cardinality always increases by 1 on every insert attempt",
+            "No — since a relation is a set, an exact duplicate tuple does not add a new element, so cardinality is unchanged",
+            "Only if the primary key allows duplicates",
+            "Cardinality decreases instead"
+          ],
+          "correct_index": 1,
+          "explanation": "Because relations are sets, adding an already-present element does not change the set (though SQL without a uniqueness constraint would physically add a duplicate row).",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-4-cardinality-8",
+          "test_id": "pt-dbms-sql-4-cardinality",
+          "question_text": "The term 'cardinality' used in ER-diagram relationship notation (e.g., one-to-many) refers to:",
+          "options": [
+            "The exact same concept as relation cardinality (row count)",
+            "A related but distinct concept describing relationship multiplicity between entity sets, not a row count",
+            "The degree of the relation",
+            "A synonym for the primary key"
+          ],
+          "correct_index": 1,
+          "explanation": "ER-diagram cardinality describes multiplicity of relationships (1:1, 1:N, M:N), which is a different, though related, use of the term from a relation's row count.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-4-cardinality-new-9",
+          "test_id": "pt-dbms-sql-4-cardinality",
+          "question_text": "Scores are 70, 70 and NULL. What are COUNT(*), COUNT(score), COUNT(DISTINCT score)?",
+          "options": [
+            "3, 3, 2",
+            "3, 2, 1",
+            "2, 2, 1",
+            "1, 2, 3"
+          ],
+          "correct_index": 1,
+          "explanation": "Rows, recorded scores and distinct nonmissing scores are different populations.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-4-cardinality-new-10",
+          "test_id": "pt-dbms-sql-4-cardinality",
+          "question_text": "An ungrouped COUNT(*) has no qualifying input rows. What does it output?",
+          "options": [
+            "Zero rows",
+            "One row containing NULL",
+            "One row containing zero",
+            "A schema error"
+          ],
+          "correct_index": 2,
+          "explanation": "The aggregate result itself has one row.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-4-cardinality-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-4-cardinality-application-new-1",
+          "test_id": "pt-dbms-sql-4-cardinality-application",
+          "question_text": "What does counting enrollment attempts measure?",
+          "options": [
+            "Always unique students",
+            "The Student degree",
+            "Attempt facts, which can exceed distinct student count",
+            "Always unique courses"
+          ],
+          "correct_index": 2,
+          "explanation": "Tuple grain determines the counted objects.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-4-cardinality-application-new-2",
+          "test_id": "pt-dbms-sql-4-cardinality-application",
+          "question_text": "Why can COUNT(*) after a preserving course-enrollment join report one for an empty course?",
+          "options": [
+            "A fake enrollment is stored",
+            "COUNT ignores all NULLs",
+            "Course names are keys",
+            "The unmatched parent contributes a preserved row"
+          ],
+          "correct_index": 3,
+          "explanation": "Count a non-NULL child identifier to count real matches.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-4-cardinality-application-new-3",
+          "test_id": "pt-dbms-sql-4-cardinality-application",
+          "question_text": "Three attempts belong to two students. Which expression counts the students?",
+          "options": [
+            "COUNT(DISTINCT student_id)",
+            "COUNT(*) always",
+            "COUNT(score) always",
+            "COUNT(course_id) always"
+          ],
+          "correct_index": 0,
+          "explanation": "Distinct student identities differ from attempt rows.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-4-cardinality-application-new-4",
+          "test_id": "pt-dbms-sql-4-cardinality-application",
+          "question_text": "A student changes programme without adding or removing a row. What happens to cardinality?",
+          "options": [
+            "It must increase",
+            "It can remain unchanged",
+            "It becomes the degree",
+            "It must become zero"
+          ],
+          "correct_index": 1,
+          "explanation": "A value change does not necessarily change row count.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-4-cardinality-application-new-5",
+          "test_id": "pt-dbms-sql-4-cardinality-application",
+          "question_text": "Two finite domains contain three and four values. What is the unconstrained distinct-pair bound?",
+          "options": [
+            "7",
+            "3 always",
+            "12",
+            "4 always"
+          ],
+          "correct_index": 2,
+          "explanation": "The Cartesian product has three times four pairs.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-4-cardinality-application-new-6",
+          "test_id": "pt-dbms-sql-4-cardinality-application",
+          "question_text": "If the three-value first attribute is a key, what tighter row bound follows?",
+          "options": [
+            "12 must still occur",
+            "7",
+            "There is no bound",
+            "3"
+          ],
+          "correct_index": 3,
+          "explanation": "Each key value can identify at most one tuple.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-4-cardinality-application-new-7",
+          "test_id": "pt-dbms-sql-4-cardinality-application",
+          "question_text": "What does ER one-to-many cardinality describe?",
+          "options": [
+            "Relationship multiplicity",
+            "The exact current table row count",
+            "The count of columns",
+            "The number of SQL aliases"
+          ],
+          "correct_index": 0,
+          "explanation": "This use differs from relation tuple cardinality.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-4-cardinality-application-new-8",
+          "test_id": "pt-dbms-sql-4-cardinality-application",
+          "question_text": "Why can a name-based join inflate a count?",
+          "options": [
+            "Names always contain NULL",
+            "Several identities can share the same descriptive name",
+            "COUNT forbids text",
+            "Every name is a key"
+          ],
+          "correct_index": 1,
+          "explanation": "A non-key equality can match unrelated facts.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-4-cardinality-application-new-9",
+          "test_id": "pt-dbms-sql-4-cardinality-application",
+          "question_text": "Does adding an exact duplicate to a strict mathematical relation increase its size?",
+          "options": [
+            "Yes; every attempt increases it",
+            "Only when ordered",
+            "No; the set already contains that element",
+            "It changes degree instead"
+          ],
+          "correct_index": 2,
+          "explanation": "Set membership does not retain multiple copies.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-4-cardinality-application-new-10",
+          "test_id": "pt-dbms-sql-4-cardinality-application",
+          "question_text": "What must a report label make clear about a cardinality figure?",
+          "options": [
+            "Only the font used",
+            "Only the source file name",
+            "Only the length of its alias",
+            "Whether it counts rows, distinct values, or another specified population"
+          ],
+          "correct_index": 3,
+          "explanation": "The counted object determines how to interpret the number.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cx-cardinality-score-counts",
+      "slug": "cardinality-score-counts",
+      "title": "Separate rows, recorded scores and distinct scores",
+      "difficulty": "Easy",
+      "task": "Return one row with submissions, recorded_scores and distinct_scores using the appropriate COUNT expressions. NULL means no recorded score.",
+      "schema_sql": "CREATE TABLE submissions (submission_id INT PRIMARY KEY, score INT NULL);",
+      "seed_sql": "INSERT INTO submissions VALUES (1,70),(2,70),(3,NULL),(4,0);",
+      "expected": "submissions\trecorded_scores\tdistinct_scores\n4\t3\t2",
+      "ordering": "One aggregate row; columns in the requested order.",
+      "constraints": [
+        "Every row is a separate submission; score values can repeat."
+      ],
+      "edge_cases": [
+        "Zero is a recorded score.",
+        "An empty input produces three zero counts."
+      ],
+      "hints": [
+        "COUNT(*) and COUNT(score) have different absence rules.",
+        "Use DISTINCT only for the distinct-score measurement."
+      ],
+      "solution_sql": "SELECT COUNT(*) AS submissions, COUNT(score) AS recorded_scores, COUNT(DISTINCT score) AS distinct_scores FROM submissions;",
+      "explanation": "The aggregates count all rows, nonmissing score values, and distinct nonmissing score values respectively.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO submissions VALUES (1,NULL),(2,NULL);",
+          "expected": "submissions\trecorded_scores\tdistinct_scores\n2\t0\t0"
+        },
+        {
+          "seed_sql": "",
+          "expected": "submissions\trecorded_scores\tdistinct_scores\n0\t0\t0"
+        }
+      ]
+    },
+    {
+      "id": "cx-cardinality-course-counts",
+      "slug": "cardinality-course-counts",
+      "title": "Count attempts and students including empty courses",
+      "difficulty": "Medium",
+      "task": "For every course return course_id, attempt_count and student_count. Each enrollment row is an attempt; repeated attempts by one student count separately only in attempt_count. Include empty courses with zero counts.",
+      "schema_sql": "CREATE TABLE courses (course_id INT PRIMARY KEY);\nCREATE TABLE enrollments (enrollment_id INT PRIMARY KEY, course_id INT NOT NULL, student_id INT NOT NULL);",
+      "seed_sql": "INSERT INTO courses VALUES (10),(20),(30); INSERT INTO enrollments VALUES (1,10,1),(2,10,1),(3,10,2),(4,20,1);",
+      "expected": "course_id\tattempt_count\tstudent_count\n10\t3\t2\n20\t1\t1\n30\t0\t0",
+      "ordering": "Ascending course_id.",
+      "constraints": [
+        "Child identities are non-NULL and unique.",
+        "All supplied enrollments reference supplied courses; these temporary fixtures verify query behaviour, not FK enforcement."
+      ],
+      "edge_cases": [
+        "A student can have multiple attempt rows in one course.",
+        "A course can have no attempts."
+      ],
+      "hints": [
+        "Start with courses and preserve unmatched courses.",
+        "Count the non-NULL child identifier, and separately count distinct student identifiers."
+      ],
+      "solution_sql": "SELECT c.course_id, COUNT(e.enrollment_id) AS attempt_count, COUNT(DISTINCT e.student_id) AS student_count FROM courses c LEFT JOIN enrollments e ON e.course_id = c.course_id GROUP BY c.course_id ORDER BY c.course_id;",
+      "explanation": "The preserving join retains empty courses. A child identifier avoids counting the preserved unmatched row as an attempt, while DISTINCT counts student identities.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO courses VALUES (2),(1);",
+          "expected": "course_id\tattempt_count\tstudent_count\n1\t0\t0\n2\t0\t0"
+        },
+        {
+          "seed_sql": "",
+          "expected": ""
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-4-cardinality-1",
+      "test_id": "pt-dbms-sql-4-cardinality",
+      "question_text": "What does the cardinality of a relation measure?",
+      "options": [
+        "The number of attributes in the schema",
+        "The number of tuples (rows) currently in the relation",
+        "The number of distinct relations in the database",
+        "The number of foreign keys pointing to it"
+      ],
+      "correct_index": 1,
+      "explanation": "Cardinality is the count of tuples (rows) currently present in the relation.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-4-cardinality-2",
+      "test_id": "pt-dbms-sql-4-cardinality",
+      "question_text": "If Students holds tuples for Asha, Ravi, Meera, and Karan, what is its current cardinality?",
+      "options": [
+        "1",
+        "4",
+        "It equals the degree",
+        "It cannot be determined"
+      ],
+      "correct_index": 1,
+      "explanation": "There are 4 tuples currently in the relation, so cardinality is 4.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-4-cardinality-3",
+      "test_id": "pt-dbms-sql-4-cardinality",
+      "question_text": "After a 5th student, Priya, is admitted and inserted into Students, what happens to the relation's degree?",
+      "options": [
+        "It increases by 1, to 5",
+        "It stays exactly the same, since inserting a row never changes degree",
+        "It becomes undefined",
+        "It doubles"
+      ],
+      "correct_index": 1,
+      "explanation": "Degree depends only on the number of attributes, which is unaffected by inserting a new row (which changes cardinality instead).",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-4-cardinality-4",
+      "test_id": "pt-dbms-sql-4-cardinality",
+      "question_text": "Which value changes every time a row is inserted or deleted — Degree or Cardinality?",
+      "options": [
+        "Degree",
+        "Cardinality",
+        "Both change equally",
+        "Neither changes"
+      ],
+      "correct_index": 1,
+      "explanation": "Cardinality (row count) changes with every insert/delete, while degree (column count) stays fixed.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-4-cardinality-5",
+      "test_id": "pt-dbms-sql-4-cardinality",
+      "question_text": "Can a relation have cardinality 0 while still having a well-defined, non-zero degree?",
+      "options": [
+        "No, cardinality and degree must always be equal",
+        "Yes — an empty table (e.g., right after CREATE TABLE) has cardinality 0 but a fixed, non-zero degree",
+        "No, a relation with cardinality 0 has no schema",
+        "Yes, but only if the primary key is NULL"
+      ],
+      "correct_index": 1,
+      "explanation": "Degree and cardinality are independent measures; a freshly created empty table has 0 cardinality but its full degree from the schema.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-4-cardinality-6",
+      "test_id": "pt-dbms-sql-4-cardinality",
+      "question_text": "In pure relational-set semantics, what is the upper bound on a relation's cardinality?",
+      "options": [
+        "There is no upper bound at all",
+        "It is bounded by the size of the Cartesian product of the attribute domains, |D1| x |D2| x ... x |Dn|",
+        "It equals the degree",
+        "It is always exactly 2^degree"
+      ],
+      "correct_index": 1,
+      "explanation": "Since a relation is a subset of the Cartesian product of its attribute domains, its cardinality cannot exceed that product's size.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-4-cardinality-7",
+      "test_id": "pt-dbms-sql-4-cardinality",
+      "question_text": "In the pure mathematical relational model, does inserting an exact duplicate of an existing tuple increase cardinality?",
+      "options": [
+        "Yes, cardinality always increases by 1 on every insert attempt",
+        "No — since a relation is a set, an exact duplicate tuple does not add a new element, so cardinality is unchanged",
+        "Only if the primary key allows duplicates",
+        "Cardinality decreases instead"
+      ],
+      "correct_index": 1,
+      "explanation": "Because relations are sets, adding an already-present element does not change the set (though SQL without a uniqueness constraint would physically add a duplicate row).",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-4-cardinality-8",
+      "test_id": "pt-dbms-sql-4-cardinality",
+      "question_text": "The term 'cardinality' used in ER-diagram relationship notation (e.g., one-to-many) refers to:",
+      "options": [
+        "The exact same concept as relation cardinality (row count)",
+        "A related but distinct concept describing relationship multiplicity between entity sets, not a row count",
+        "The degree of the relation",
+        "A synonym for the primary key"
+      ],
+      "correct_index": 1,
+      "explanation": "ER-diagram cardinality describes multiplicity of relationships (1:1, 1:N, M:N), which is a different, though related, use of the term from a relation's row count.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "coordinator",
+    "independent_review": "unavailable; no agent tools",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Definitions and examples checked against questions; no plagiarism certification.",
+    "existing_question_corrections": [
+      "tq-dbms-sql-4-cardinality-4",
+      "tq-dbms-sql-4-cardinality-6"
+    ],
+    "canonical_answer_indices_preserved": true
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-4-cardinality",
+    "original_note_sha256": "e589b13a8f82a52811b31913497d68b34e524f5413a7b94ab0a7a9d18ea95dd8",
+    "status": "paired migration prepared; not applied"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "The same rows support different legitimate counts",
+      "description": "Two equal marks remain two submission facts. NULL is excluded by value-count aggregates but included in the row count.",
+      "columns": [
+        "Input or measurement",
+        "Meaning",
+        "Value"
+      ],
+      "rows": [
+        [
+          "Submission scores",
+          "70, 70, NULL",
+          "3 rows"
+        ],
+        [
+          "COUNT(*)",
+          "All submission rows",
+          "3"
+        ],
+        [
+          "COUNT(score)",
+          "Nonmissing recorded scores",
+          "2"
+        ],
+        [
+          "COUNT(DISTINCT score)",
+          "Distinct nonmissing score values",
+          "1"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "coordinator checked NULL counts, join multiplicity and finite-domain/key bounds",
+    "server_rendering": "passed",
+    "browser_rendering": "unverified",
+    "independent_review": "unavailable; no agent tools",
+    "server_rendering_evidence": "2026-10-29: all authored packages rendered through actual LessonBlock; focused Vitest suite passed."
+  },
+  "sql_verification": {
+    "engine": "11.8.6-MariaDB-0+deb13u1 from Debian",
+    "scope": "MariaDB compatibility execution; exact MySQL 8.4/provider execution unverified",
+    "fingerprint": "cf3427f3f3e09004c911ee5f74a8ad70c572da79481704b46fda0375c627cf6a",
+    "cases": [
+      {
+        "problem": "cardinality-score-counts",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "cardinality-score-counts",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "cardinality-score-counts",
+        "case": 2,
+        "passed": true
+      },
+      {
+        "problem": "cardinality-course-counts",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "cardinality-course-counts",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "cardinality-course-counts",
+        "case": 2,
+        "passed": true
+      }
+    ],
+    "all_passed": true
+  }
+}

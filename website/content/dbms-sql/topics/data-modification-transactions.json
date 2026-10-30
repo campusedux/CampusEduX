@@ -1,0 +1,613 @@
+{
+  "source_ref": "chapter-11-dml-and-data-modification/data-modification-transactions",
+  "slug": "data-modification-transactions",
+  "title": "Data Modification Transactions",
+  "description": "Group MySQL InnoDB writes with START TRANSACTION, COMMIT and ROLLBACK; understand failed statements, stock transfers, and retry boundaries.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Related writes need one decision boundary\n\nA data modification transaction groups related reads and writes under a commit decision. Imagine moving three cameras from a central store to a media lab. Subtracting from the source without adding to the destination leaves the inventory wrong. The two updates implement one movement, so the application must decide whether their combined result is accepted or rejected.\n\nAtomicity describes that combined commitment for transactional work; it does not prove the arithmetic or selected identities are correct. A transaction can faithfully commit a mistaken subtraction from the wrong store. Begin with the business invariant, such as preserving the total quantity while moving stock between two distinct known locations, then design the statements and checks that maintain it.\n\n## Autocommit separates ordinary statements\n\nMySQL normally enables autocommit. Outside an explicit transaction, a successful statement against a transactional table completes its own transaction. If the subtraction succeeds and commits, a later error during the addition does not let a subsequent ROLLBACK undo that earlier committed subtraction. The earlier success and later failure belong to different transaction boundaries.\n\nSTART TRANSACTION creates an explicit boundary for the related work. [COMMIT](/learning/dbms-sql-tutorial/commit) accepts its transactional changes, while ROLLBACK cancels them. Use the transaction API recommended by the actual database client when an application provides one. The transaction and its statements must use the same connection; two calls routed through separate pooled connections do not automatically share state because they appear together in application code.\n\n```sql\nSTART TRANSACTION;\nUPDATE store_stock SET quantity = quantity - 3 WHERE store_id = 1;\nUPDATE store_stock SET quantity = quantity + 3 WHERE store_id = 2;\nCOMMIT;\n```\n\n## A write matching nothing may still succeed\n\nThe simple transfer above assumes both stores exist, differ and satisfy the quantity requirement. SQL does not generally treat an [UPDATE](/learning/dbms-sql-tutorial/update) matching zero rows as an exception. If the destination is absent, its addition can do nothing while the earlier subtraction remains eligible for commit. The application must establish its preconditions and verify the outcomes before accepting the movement.\n\nFor a real transfer, protect the source and destination state with an appropriate locking or conditional-write design. Check sufficient stock at the authoritative write boundary, and verify the expected affected identities. If a required step fails or matches unexpectedly, end the operation through the documented rollback path. Merely placing COMMIT after the statements does not make those business checks happen automatically.\n\n## Statement failure and transaction failure differ\n\nInnoDB does not treat every error identically. Some errors roll back only the failing statement, leaving earlier transaction work pending. A deadlock victim, by contrast, has its entire transaction rolled back. Lock-wait timeout handling has documented settings and scope. An application should classify the error and use a deliberate recovery policy instead of assume that any exception canceled all preceding statements.\n\nThis distinction matters when a client continues executing a script after an error. If an earlier debit remains pending and a later COMMIT is still sent, the application can accept a partial business operation. Configure control flow so a required failure prevents the success path. Test the actual client or driver behaviour, including exception handling and connection cleanup, rather than only reading the SQL text.\n\n## Validate quantities before the first mutation\n\nA movement requires a positive amount, distinct stores and suitable source stock. A request for zero may represent a no-op, but the public contract should say so rather than silently record it as an ordinary transfer. A negative amount can reverse the intended arithmetic. Reject malformed amounts before acquiring locks, then validate changing stock conditions inside the protected transaction boundary.\n\nStatic input validation and state validation serve different purposes. Checking that three is a positive integer does not establish that three cameras are still available. Another transaction may have consumed them after a preliminary read. Conversely, a correct stock lock does not authorize the caller to move equipment between arbitrary stores. Trusted access checks, input checks and concurrency controls all contribute to the accepted transition.\n\n## Keep the protected interval short\n\nTransactions can hold locks that delay other writers. They can also retain older row versions and consume resources while open. Gather user input and perform unrelated preparation before starting the protected sequence. Once the transaction begins, perform the necessary database work and finish promptly. Do not leave it open while waiting for a person to confirm a dialog or for an unrelated remote service.\n\nShort does not mean incomplete. If a required check depends on the locked state, keep that check within the same boundary. Moving it outside merely to reduce elapsed time can reintroduce a race. Review the operation as a coherent interval: acquire the state needed for a valid decision, make the changes, verify outcomes and commit or roll back without unrelated delays.\n\n## Use consistent lock order for related identities\n\nWhen several operations touch the same stores in opposite directions, they can acquire locks in conflicting orders. One movement might lock store one then store two while another does the reverse. A consistent ordering, such as locking the lower store identifier first, reduces a common deadlock pattern. It does not guarantee that no deadlock is possible in a larger application.\n\nDeadlocks are expected conditions that robust transactional code can handle. When InnoDB rolls back a victim transaction, retry the complete intended operation under a bounded policy. Recheck state and preserve the request's identity. Retrying only the last SQL statement can omit earlier work that was rolled back, while retrying an already committed external effect can duplicate that effect.\n\n## Rollback has an explicit scope\n\nTransactional InnoDB row changes can be canceled before commit. Nontransactional storage changes are different, and many MySQL DDL statements cause implicit commits. Creating or altering tables inside an ordinary DML sequence can therefore break the expected boundary. Keep schema setup separate from the transaction being demonstrated and identify the storage engine that provides the promised row-change semantics.\n\nA rollback also does not recall a message already delivered to another system. Sending a notification before commit can announce a movement that never becomes authoritative. A durable post-commit processing design can coordinate external work using recorded intent, but that is an additional application protocol. Do not claim that a local SQL transaction includes arbitrary network services simply because the application called them inside one function.\n\n## Archive sequences require stable membership\n\nAn archive-and-remove operation has the same dependency problem as a stock movement. The archive copy and deletion must refer to the same intended identities and compatible state. Copying one population and then deleting a newly evaluated broader population can lose records even when both statements share a transaction. Define and protect the membership that the operation is accepting.\n\nUnique archive identities can help detect repeats, but their conflict policy needs design. Silently ignoring an archive collision and then deleting the source may remove a newer source version while preserving an older archived version. A correct transaction boundary cannot repair that semantic mismatch. Establish what version is archived and how conflicting previous work is recognized before choosing the final writes.\n\n## Observe commitment separately from intermediate state\n\nA connection can read its own uncommitted changes. That observation is useful when checking a transaction, but it does not mean the changes are durable or visible to every other connection. Isolation level and read type affect what other sessions observe. State clearly whether a displayed result is inside the transaction, after commit or after rollback.\n\nThe first exercise deliberately rolls back a synthetic update and returns the original values. The second commits a fixed movement under explicit fixture guarantees about identities and available stock. These tasks isolate boundary behaviour; they do not replace production authorization, concurrency and error-path tests. In both cases, deterministic final state and preserved unrelated rows make the intended transaction outcome explainable rather than inferred from the presence of a COMMIT keyword.\n",
+  "references": [
+    {
+      "title": "MySQL 8.4 transaction control",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/commit.html"
+    },
+    {
+      "title": "MySQL 8.4 InnoDB error handling",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/innodb-error-handling.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-11-data-modification-transactions",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-11-data-modification-transactions-1",
+          "test_id": "pt-dbms-sql-11-data-modification-transactions",
+          "question_text": "What does a correctly handled transaction provide for related InnoDB DML?",
+          "options": [
+            "Automatic correctness of every predicate",
+            "One commit-or-rollback boundary for the transactional changes",
+            "Automatic authorization",
+            "A guarantee that no statement can fail"
+          ],
+          "correct_index": 1,
+          "explanation": "Atomicity concerns acceptance of transactional work, not all business correctness.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-11-data-modification-transactions-2",
+          "test_id": "pt-dbms-sql-11-data-modification-transactions",
+          "question_text": "Why group subtraction and addition for a stock movement?",
+          "options": [
+            "To remove all WHERE clauses",
+            "A partial accepted result would violate the movement invariant",
+            "To avoid naming the stores",
+            "To guarantee parallel execution"
+          ],
+          "correct_index": 1,
+          "explanation": "Both changes represent one accepted business transition.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-11-data-modification-transactions-3",
+          "test_id": "pt-dbms-sql-11-data-modification-transactions",
+          "question_text": "What does enabled autocommit normally do outside an explicit transaction?",
+          "options": [
+            "Defers every write forever",
+            "Completes each successful transactional statement independently",
+            "Rolls back every SELECT",
+            "Combines unrelated connections"
+          ],
+          "correct_index": 1,
+          "explanation": "A later rollback cannot undo an earlier independently committed statement.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-11-data-modification-transactions-4",
+          "test_id": "pt-dbms-sql-11-data-modification-transactions",
+          "question_text": "Why avoid an idle open transaction?",
+          "options": [
+            "Every transaction must end within one second",
+            "It can hold locks and retain resources needed by others",
+            "SQL forbids any pause",
+            "It always deletes older rows"
+          ],
+          "correct_index": 1,
+          "explanation": "Keep protected work focused and promptly completed.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-11-data-modification-transactions-5",
+          "test_id": "pt-dbms-sql-11-data-modification-transactions",
+          "question_text": "Why does archive-then-delete need more than two individually valid statements?",
+          "options": [
+            "INSERT and DELETE can never share a transaction",
+            "Their dependency and matching membership must be accepted together",
+            "The SQL parser requires an archive keyword",
+            "Deleting always rolls back the archive"
+          ],
+          "correct_index": 1,
+          "explanation": "Both boundary and consistent membership matter.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-11-data-modification-transactions-6",
+          "test_id": "pt-dbms-sql-11-data-modification-transactions",
+          "question_text": "When should unrelated remote preparation occur?",
+          "options": [
+            "While every relevant row stays locked",
+            "Before opening the short protected database interval where possible",
+            "Only after a timeout",
+            "Inside an unlimited transaction"
+          ],
+          "correct_index": 1,
+          "explanation": "Avoid holding database resources for unrelated waits.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-11-data-modification-transactions-7",
+          "test_id": "pt-dbms-sql-11-data-modification-transactions",
+          "question_text": "Which commands express explicit transaction control in this package?",
+          "options": [
+            "CREATE, DROP and ALTER",
+            "START TRANSACTION, COMMIT and ROLLBACK",
+            "GRANT, REVOKE and DENY",
+            "SELECT, DISTINCT and ORDER BY"
+          ],
+          "correct_index": 1,
+          "explanation": "The examples keep schema setup outside their DML boundary.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-11-data-modification-transactions-8",
+          "test_id": "pt-dbms-sql-11-data-modification-transactions",
+          "question_text": "Does each statement being sensible alone establish a complete multi-step operation?",
+          "options": [
+            "Yes, atomicity follows from indentation",
+            "No, partial failure and dependencies still need handling",
+            "Yes, if comments mention a transaction",
+            "Only if every identifier is numeric"
+          ],
+          "correct_index": 1,
+          "explanation": "Business correctness spans the related sequence.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-11-data-modification-transactions-new-9",
+          "test_id": "pt-dbms-sql-11-data-modification-transactions",
+          "question_text": "Can an UPDATE matching no destination rows finish without a SQL exception?",
+          "options": [
+            "Yes, zero matches need explicit outcome handling",
+            "No, it always raises a foreign-key error",
+            "Only if the source was empty",
+            "Only outside a transaction"
+          ],
+          "correct_index": 0,
+          "explanation": "Do not infer required work occurred from statement success alone.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-11-data-modification-transactions-new-10",
+          "test_id": "pt-dbms-sql-11-data-modification-transactions",
+          "question_text": "Does every InnoDB error roll back the entire transaction?",
+          "options": [
+            "Yes, with no exceptions",
+            "No, some errors roll back only the statement",
+            "Only errors inside SELECT do",
+            "Errors never affect transactional work"
+          ],
+          "correct_index": 1,
+          "explanation": "The client must handle the documented error scope.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-11-data-modification-transactions-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-11-data-modification-transactions-application-new-1",
+          "test_id": "pt-dbms-sql-11-data-modification-transactions-application",
+          "question_text": "What does InnoDB do to a deadlock victim transaction?",
+          "options": [
+            "Commits only its first write",
+            "Rolls back the entire transaction",
+            "Keeps every write committed",
+            "Disables all keys"
+          ],
+          "correct_index": 1,
+          "explanation": "A retry must reconsider the full intended operation.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-11-data-modification-transactions-application-new-2",
+          "test_id": "pt-dbms-sql-11-data-modification-transactions-application",
+          "question_text": "What connection requirement applies to a transaction sequence?",
+          "options": [
+            "Every statement needs a new pooled connection",
+            "Only COMMIT needs a connection",
+            "Its statements must run on the same database connection",
+            "Connection identity is irrelevant"
+          ],
+          "correct_index": 2,
+          "explanation": "Transaction state is connection scoped.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-11-data-modification-transactions-application-new-3",
+          "test_id": "pt-dbms-sql-11-data-modification-transactions-application",
+          "question_text": "What should an error path prevent?",
+          "options": [
+            "All legitimate rollback calls",
+            "Any database diagnostics",
+            "Input validation before the write",
+            "Sending the normal success COMMIT after a required step failed"
+          ],
+          "correct_index": 3,
+          "explanation": "Otherwise earlier pending work could be partially accepted.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-11-data-modification-transactions-application-new-4",
+          "test_id": "pt-dbms-sql-11-data-modification-transactions-application",
+          "question_text": "Why validate available stock inside the protected decision boundary?",
+          "options": [
+            "Another writer can invalidate an earlier unprotected read",
+            "Integer types prevent all races",
+            "A form read reserves the stock",
+            "COMMIT automatically checks the requested stock"
+          ],
+          "correct_index": 0,
+          "explanation": "Changing state needs appropriate concurrency control.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-11-data-modification-transactions-application-new-5",
+          "test_id": "pt-dbms-sql-11-data-modification-transactions-application",
+          "question_text": "What does consistent lock ordering help reduce?",
+          "options": [
+            "All possible statement errors",
+            "A common deadlock pattern between competing multi-row operations",
+            "The need for authorization",
+            "Every transaction resource cost"
+          ],
+          "correct_index": 1,
+          "explanation": "It reduces risk without proving deadlock impossibility.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-11-data-modification-transactions-application-new-6",
+          "test_id": "pt-dbms-sql-11-data-modification-transactions-application",
+          "question_text": "Which action can invalidate an ordinary MySQL DML rollback assumption?",
+          "options": [
+            "A SELECT returning two rows",
+            "A SQL comment",
+            "An implicitly committing DDL statement",
+            "An explicit target column list"
+          ],
+          "correct_index": 2,
+          "explanation": "Schema setup should stay outside the demonstrated DML transaction.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-11-data-modification-transactions-application-new-7",
+          "test_id": "pt-dbms-sql-11-data-modification-transactions-application",
+          "question_text": "Can ROLLBACK recall an already sent external message?",
+          "options": [
+            "Yes, if the message mentioned the transaction",
+            "Yes, for all HTTP services",
+            "Only if two stores were changed",
+            "No, external delivery needs its own coordination protocol"
+          ],
+          "correct_index": 3,
+          "explanation": "Local row-change atomicity does not encompass arbitrary network effects.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-11-data-modification-transactions-application-new-8",
+          "test_id": "pt-dbms-sql-11-data-modification-transactions-application",
+          "question_text": "What does reading changed values inside the same transaction prove?",
+          "options": [
+            "The connection sees its own intermediate state",
+            "That COMMIT already succeeded",
+            "That every other connection sees the values",
+            "That the movement is authorized"
+          ],
+          "correct_index": 0,
+          "explanation": "Own-transaction visibility differs from durable commitment.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-11-data-modification-transactions-application-new-9",
+          "test_id": "pt-dbms-sql-11-data-modification-transactions-application",
+          "question_text": "Why can ignoring an archive conflict before deletion lose the intended version?",
+          "options": [
+            "An archive always has identical values",
+            "The archived row might be older than the source being removed",
+            "DELETE automatically refreshes every archive",
+            "Uniqueness guarantees version equality"
+          ],
+          "correct_index": 1,
+          "explanation": "Identity equality does not prove content or version equality.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-11-data-modification-transactions-application-new-10",
+          "test_id": "pt-dbms-sql-11-data-modification-transactions-application",
+          "question_text": "What is an appropriate deadlock retry boundary?",
+          "options": [
+            "Only the last update regardless of earlier rollback",
+            "Every external notification unconditionally",
+            "The complete operation under a bounded policy with state rechecks",
+            "All unrelated work in the request"
+          ],
+          "correct_index": 2,
+          "explanation": "The engine rolled back the whole transaction, so retry semantics must match.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cx-transaction-discard-stock-change",
+      "slug": "transaction-discard-stock-change",
+      "title": "Observe a rolled-back stock adjustment",
+      "difficulty": "Easy",
+      "task": "Within one explicit transaction, subtract 2 from store 1 and then roll back. Fixtures guarantee store 1 has at least 2. Return store_id,quantity after rollback, ordered by store_id. Preserve every initial row.",
+      "schema_sql": "CREATE TABLE store_stock(store_id INT PRIMARY KEY,quantity INT NOT NULL CHECK(quantity>=0)) ENGINE=InnoDB;",
+      "seed_sql": "INSERT INTO store_stock VALUES (1,8),(2,5);",
+      "expected": "store_id\tquantity\n1\t8\n2\t5",
+      "ordering": "As explicitly ordered in the result query.",
+      "constraints": [
+        "Use only the supplied synthetic tables and requested transition.",
+        "Preserve unrelated rows."
+      ],
+      "edge_cases": [
+        "A source exactly at the permitted lower fixture boundary still returns its original quantity.",
+        "Unrelated stores must remain intact."
+      ],
+      "hints": [
+        "Begin the transaction before the update.",
+        "Query only after rolling back."
+      ],
+      "solution_sql": "START TRANSACTION; UPDATE store_stock SET quantity=quantity-2 WHERE store_id=1; ROLLBACK; SELECT store_id,quantity FROM store_stock ORDER BY store_id;",
+      "explanation": "The update belongs to the explicit InnoDB transaction. ROLLBACK cancels it before the final query, so the original state reappears.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO store_stock VALUES (1,2),(7,9);",
+          "expected": "store_id\tquantity\n1\t2\n7\t9"
+        },
+        {
+          "seed_sql": "INSERT INTO store_stock VALUES (1,12);",
+          "expected": "store_id\tquantity\n1\t12"
+        }
+      ]
+    },
+    {
+      "id": "cx-transaction-commit-stock-movement",
+      "slug": "transaction-commit-stock-movement",
+      "title": "Commit a fixed two-store movement",
+      "difficulty": "Medium",
+      "task": "Move exactly 3 units from store 1 to store 2 in one explicit transaction, then return store_id,quantity ordered by store_id. Each fixture guarantees both distinct stores exist and store 1 has at least 3; there are no concurrent writers or triggers. Do not change other stores. Real applications must validate and lock changing state and handle statement outcomes before COMMIT.",
+      "schema_sql": "CREATE TABLE store_stock(store_id INT PRIMARY KEY,quantity INT NOT NULL CHECK(quantity>=0)) ENGINE=InnoDB;",
+      "seed_sql": "INSERT INTO store_stock VALUES (1,9),(2,4),(8,7);",
+      "expected": "store_id\tquantity\n1\t6\n2\t7\n8\t7",
+      "ordering": "As explicitly ordered in the result query.",
+      "constraints": [
+        "Use only the supplied synthetic tables and requested transition.",
+        "Preserve unrelated rows."
+      ],
+      "edge_cases": [
+        "The source may become exactly zero.",
+        "An unrelated store with a small balance must not change."
+      ],
+      "hints": [
+        "Place both updates between START TRANSACTION and COMMIT.",
+        "Subtract and add the same amount using stored quantities."
+      ],
+      "solution_sql": "START TRANSACTION; UPDATE store_stock SET quantity=quantity-3 WHERE store_id=1; UPDATE store_stock SET quantity=quantity+3 WHERE store_id=2; COMMIT; SELECT store_id,quantity FROM store_stock ORDER BY store_id;",
+      "explanation": "Under the stated valid-fixture preconditions, both updates are committed together and total stock is preserved. The exercise does not claim the script alone validates absent destinations or concurrent availability.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO store_stock VALUES (1,3),(2,0);",
+          "expected": "store_id\tquantity\n1\t0\n2\t3"
+        },
+        {
+          "seed_sql": "INSERT INTO store_stock VALUES (1,12),(2,10),(3,1);",
+          "expected": "store_id\tquantity\n1\t9\n2\t13\n3\t1"
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-11-data-modification-transactions-1",
+      "test_id": "pt-dbms-sql-11-data-modification-transactions",
+      "question_text": "What guarantee does wrapping multiple DML statements in a transaction provide?",
+      "options": [
+        "The statements will run faster",
+        "The statements succeed or fail together as a single atomic unit",
+        "The statements are automatically validated for correctness",
+        "The statements will run in a random order"
+      ],
+      "correct_index": 1,
+      "explanation": "Atomicity — all-or-nothing — is exactly what a transaction guarantees for its contained statements.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-11-data-modification-transactions-2",
+      "test_id": "pt-dbms-sql-11-data-modification-transactions",
+      "question_text": "In the classic bank-transfer example, why must the debit and credit UPDATEs be in one transaction?",
+      "options": [
+        "To make the two UPDATEs run in parallel",
+        "So that if only one UPDATE succeeds, the whole operation can be rolled back instead of leaving money debited from one account with nothing credited to the other",
+        "Transactions are required syntax for any UPDATE",
+        "To avoid needing a WHERE clause on either UPDATE"
+      ],
+      "correct_index": 1,
+      "explanation": "This is the canonical illustration of why atomicity matters for related data changes.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-11-data-modification-transactions-3",
+      "test_id": "pt-dbms-sql-11-data-modification-transactions",
+      "question_text": "What is 'auto-commit mode'?",
+      "options": [
+        "A mode where transactions never commit",
+        "The common default where each individual statement is implicitly committed on its own, unless an explicit transaction is started",
+        "A mode exclusive to read-only queries",
+        "A deprecated legacy feature no longer used"
+      ],
+      "correct_index": 1,
+      "explanation": "Auto-commit means each statement stands alone as its own transaction by default.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-11-data-modification-transactions-4",
+      "test_id": "pt-dbms-sql-11-data-modification-transactions",
+      "question_text": "Why should transactions generally be kept as short as possible?",
+      "options": [
+        "Short transactions are required by the SQL standard",
+        "A long-held open transaction can hold locks and block other users' work for as long as it stays open",
+        "Long transactions always fail automatically after a timeout",
+        "Transaction length has no practical effect on other users"
+      ],
+      "correct_index": 1,
+      "explanation": "Held locks from an open transaction can block concurrent work regardless of whether the transaction is actively doing anything.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-11-data-modification-transactions-5",
+      "test_id": "pt-dbms-sql-11-data-modification-transactions",
+      "question_text": "Should an archive-then-delete DML sequence (INSERT INTO archive SELECT ...; DELETE FROM original ...) be wrapped in a transaction?",
+      "options": [
+        "No, each statement is independently safe",
+        "Yes — a failure between the two steps could otherwise leave data duplicated or lost, exactly the kind of multi-statement dependency transactions protect against",
+        "Only if the tables are very large",
+        "Transactions cannot wrap an INSERT and a DELETE together"
+      ],
+      "correct_index": 1,
+      "explanation": "This is a direct real-world example of statements that depend on each other for overall correctness.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-11-data-modification-transactions-6",
+      "test_id": "pt-dbms-sql-11-data-modification-transactions",
+      "question_text": "What practice helps avoid a transaction holding locks longer than necessary?",
+      "options": [
+        "Opening the transaction as early as possible in the application, regardless of unrelated work in between",
+        "Opening the transaction right before the related statements and committing immediately after, avoiding slow unrelated work in the middle",
+        "Never using COMMIT at all",
+        "Running all application logic inside a single transaction for the entire session"
+      ],
+      "correct_index": 1,
+      "explanation": "Minimizing the time a transaction stays open reduces its potential to block other work.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-11-data-modification-transactions-7",
+      "test_id": "pt-dbms-sql-11-data-modification-transactions",
+      "question_text": "What SQL keywords does this topic tie back to from Chapter 8 (TCL)?",
+      "options": [
+        "CREATE and DROP",
+        "BEGIN, COMMIT, and ROLLBACK",
+        "GRANT and REVOKE",
+        "SELECT and WHERE"
+      ],
+      "correct_index": 1,
+      "explanation": "Data modification transactions apply TCL's BEGIN/COMMIT/ROLLBACK specifically to DML scenarios.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-11-data-modification-transactions-8",
+      "test_id": "pt-dbms-sql-11-data-modification-transactions",
+      "question_text": "If a multi-statement DML sequence is only 'fine on its own' for each individual statement, is that sufficient reasoning to skip a transaction?",
+      "options": [
+        "Yes, if each statement individually succeeds there's no risk",
+        "No — the real risk is a PARTIAL failure between statements, which per-statement soundness doesn't address at all",
+        "Transactions are only needed for single-statement operations",
+        "This reasoning is always correct for read-only statements"
+      ],
+      "correct_index": 1,
+      "explanation": "Evaluating each statement in isolation misses the actual risk transactions protect against: inconsistency from partial completion.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "coordinator",
+    "independent_review": "passed",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Independent manual review passed; native MySQL fixture evidence recorded separately; provider/browser/Supabase release gates remain separate.",
+    "existing_question_corrections": [
+      "tq-dbms-sql-11-data-modification-transactions-1",
+      "tq-dbms-sql-11-data-modification-transactions-2",
+      "tq-dbms-sql-11-data-modification-transactions-3",
+      "tq-dbms-sql-11-data-modification-transactions-4",
+      "tq-dbms-sql-11-data-modification-transactions-5",
+      "tq-dbms-sql-11-data-modification-transactions-6",
+      "tq-dbms-sql-11-data-modification-transactions-7",
+      "tq-dbms-sql-11-data-modification-transactions-8"
+    ],
+    "canonical_answer_indices_preserved": true,
+    "editorial_record": "Original snapshots retained. Questions rewritten for precise dialect and topic coverage while preserving identities and canonical answer positions; technical and independent review pending.",
+    "independent_reviewer": "Codex reviewer, current 2026-10-30 session",
+    "independent_review_scope": "Read full notes, all 640 MCQ stems/options/canonical answers/explanations, 64 exercise contracts/solutions/fixtures, and all 32 diagrams. Verified retained identities/answers through source-continuity tests; SQL execution evidence is recorded separately. No external originality, provider, live application or Supabase authorization clearance.",
+    "independent_review_record": "reports/independent-review-2026-10-30.json",
+    "content_sha256": "0895083347fb5a762071660ea492f34c5ec498ad926bd66dbab501fcf06b8dda"
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-11-data-modification-transactions",
+    "original_note_sha256": "0dff0dbdc4e8cb6d822f4ba9af2d5455145789eab0efb7dea6b571ba7053c24f",
+    "status": "drafted; not yet included in prepared paired migrations"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "A committed movement preserves the combined stock",
+      "description": "Both named stores exist and satisfy the exercise preconditions; other stores remain unchanged.",
+      "columns": [
+        "Stage",
+        "Store 1",
+        "Store 2",
+        "Combined quantity"
+      ],
+      "rows": [
+        [
+          "Starting committed state",
+          "9",
+          "4",
+          "13"
+        ],
+        [
+          "After debit inside transaction",
+          "6",
+          "4",
+          "10; intermediate only"
+        ],
+        [
+          "After credit inside transaction",
+          "6",
+          "7",
+          "13; pending"
+        ],
+        [
+          "After COMMIT",
+          "6",
+          "7",
+          "13; accepted"
+        ],
+        [
+          "If rolled back instead",
+          "9",
+          "4",
+          "13; original"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "drafted — verification pending",
+    "server_rendering": "pending",
+    "browser_rendering": "unverified",
+    "independent_review": "pending"
+  },
+  "authoring_status": "drafted — verification pending",
+  "sql_verification": {
+    "scope": "not executed; exact MySQL/provider verification pending",
+    "all_passed": false,
+    "cases": []
+  }
+}

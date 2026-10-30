@@ -1,0 +1,654 @@
+{
+  "source_ref": "chapter-5-keys-and-integrity/entity-integrity",
+  "slug": "entity-integrity",
+  "title": "Entity Integrity",
+  "description": "Understand definite primary identity, distinguish identity validity from factual accuracy, and test both simple and composite key enforcement on isolated SQL fixtures.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Every identified fact needs a definite identity\n\nEntity integrity concerns the primary identity of a relation. Each tuple must have a unique primary-key value or combination, and no component of that primary key may be NULL. In a Student relation whose primary key is student_id, every stored student row needs a definite student identifier and two rows cannot claim the same one. This supports unambiguous identification of the recorded fact.\n\nThe rule addresses a declared identity, not every descriptive property. Students can share a name or programme while remaining distinct through their identifiers. Optional non-key information can be absent where the schema permits it. Requiring primary-key components to be nonmissing does not imply that every attribute must always contain an ordinary value or that every value in every column must be unique.\n\n## Unique identification is not complete truth\n\nA stored student row can have a valid primary identity and an incorrect name or score. Entity integrity protects identification, not omniscient factual accuracy. Other domain and business rules can constrain additional properties, while real-world verification may require an appropriate external process. Keep the guarantee precise rather than presenting a primary key as proof that every accepted fact is correct.\n\nAuthorization is also separate. Knowing student_id seventeen does not authorize someone to change that student's programme. A primary key helps select the intended row, while trusted access checks determine whether the actor may perform the requested operation. A local exercise that rejects duplicate identifiers does not verify application permissions, even when its table resembles one used in the product.\n\n## SQL primary keys express the rule\n\nA supported PRIMARY KEY declaration combines unique identity with nonmissing key components. It can apply to one column or a combination. A plain integer primary key does not automatically allocate values; a generation feature such as an appropriate AUTO_INCREMENT definition is a separate design decision. Supplied-value fixtures make the identifying requirement straightforward to test without conflating it with allocation behaviour.\n\n```sql\nCREATE TABLE students (\n  student_id INT PRIMARY KEY,\n  student_name VARCHAR(80) NOT NULL,\n  score INT NULL\n);\n```\n\nThe definition allows two different identifiers to share a student name. It allows score to be missing. It rejects a repeated student_id even when the name or score differs. These examples connect each declaration to an observable acceptance rule, while leaving other policies such as score range or external institutional identity outside this particular definition.\n\n## Why a missing identifying component matters\n\nA primary key must provide the complete identifying value promised by the schema. A NULL component represents absence rather than an ordinary identifying value. Allowing missing components would undermine the required definite identity. This is a structural rule; it does not depend on whether a particular NULL happens to be the only absence currently visible in the sample.\n\nA row with another possible identifier could still be distinguishable through that alternative, but the declared primary identity would not satisfy its own contract. Avoid saying that every row with any missing field is impossible to distinguish by any conceivable method. The precise point is that the designated identifying mechanism must remain complete and reliable under its definition.\n\n## Composite primary identities need every component\n\nEnrollment can use student_id, course_id, and semester together as primary identity under a one-registration-per-triple policy. None of those components may be missing. A nonmissing student identifier does not compensate for an absent course or term, because the full combination describes which registration fact is being identified. Every component has its own required role.\n\nThe components can repeat individually across distinct valid combinations. One student can enroll in two courses, and a course can contain several students. Entity integrity protects the complete primary identity, not arbitrary single-column uniqueness. Test legitimate component reuse to ensure the implementation does not accidentally reject allowed participation while trying to enforce the combined key.\n\n## Duplicate primary identities create conflicts\n\nSuppose two proposals both claim student_id seven but record different names. They are different complete rows yet conflict on the intended primary identity. SELECT DISTINCT over all attributes does not solve the conflict because the names differ. Removing exact row duplicates is therefore weaker than enforcing the identity rule, and adding the name to the key changes the claimed identity rather than correcting the conflict.\n\nA diagnostic report should identify all repeated proposed identities and the number of records claiming each. A separate report can identify missing primary components. These are different failure categories. Retain enough proposal identity to investigate them deliberately instead of selecting a random surviving record or assuming the first displayed row is authoritative.\n\n## Audits precede a proposed enforcement change\n\nAn unconstrained staging table may intentionally hold invalid identity proposals so they can be reviewed. A grouped query can expose repeated nonmissing identifiers without pretending that the final table already accepts them legally. The staging record's own proposal_id identifies the submission, while the proposed student_id is the identity being tested. Those roles should remain distinct in the explanation.\n\nFinding no conflict in a sample does not prove all future allowed data is safe or that the full existing database can accept a new primary-key declaration. The proposed model, complete relevant data, direct callers, and supported transition need review. A real migration requires authorization; an isolated learning table is a controlled demonstration with a narrower claim.\n\n## Test accepted and rejected operations separately\n\nA good acceptance fixture includes different students sharing a name and optional scores that can be missing. Rejection cases include inserting an existing identifier, updating another row to that identifier, and supplying a prohibited missing identity. Use ordinary supplied identifiers for these tests because generated-column behaviour can interpret some inputs as requests for allocation rather than direct attempts to store an absent key.\n\nFor a composite primary key, challenge each missing component independently and challenge a repeated complete combination with different non-key values. The rejection should correspond to the intended constraint. An unrelated syntax error, absent table, or conflicting column type is not proof that entity integrity enforcement worked, even though the overall command failed.\n\n## Alternate and reference rules remain distinct\n\nA required alternate candidate identity can also be enforced with suitable uniqueness and nonmissing declarations. A nullable UNIQUE column follows a different absence policy and should not be presented as a definite identifier for every row merely because it is unique when present. Primary selection does not erase other independently justified business identities.\n\nA foreign key addresses whether a reference names an allowed parent, not whether the child has its own unique primary identity. A child can have a perfectly valid primary key and still contain an invalid parent reference. Conversely, several children can validly refer to one parent. Entity and referential integrity therefore need complementary checks rather than being treated as interchangeable descriptions of one constraint.\n\n## Stable identities support reliable operations\n\nQueries, updates, and references can use a primary identity without depending on screen order or disk position. A row can move physically or appear in another display order while retaining its logical identity. Request ORDER BY when presentation order matters. A primary-key declaration does not itself promise that every SELECT result arrives in identifying-value order.\n\nChanging an established identity has consequences for references and callers. A stable identity policy can reduce such changes, but corrections and migrations still need deliberate coordination. Local primary-key tests do not establish every related transition or production recovery property. State those limits when reporting verification instead of claiming the whole identity lifecycle has been proven.\n\n## Review the identity contract as a whole\n\nRead the fact grain, chosen primary attributes, allowed repeated descriptions, and missing-information policy together. Check that the key distinguishes intended facts while allowing legitimate separate rows. Then test targeted collisions and missing components, recording the engine and actual outcomes. Preserve the distinction between a staging audit and enforced final acceptance.\n\nEntity integrity is useful because it makes the designated identity dependable. It does not replace domain checks, reference rules, factual validation, or access control. Keeping those boundaries clear makes the examples easier to reason about and the evidence more trustworthy, whether the relation describes students, enrollments, attempts, or another kind of campus fact.\n",
+  "references": [],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-5-entity-integrity",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-5-entity-integrity-1",
+          "test_id": "pt-dbms-sql-5-entity-integrity",
+          "question_text": "What does entity integrity guarantee?",
+          "options": [
+            "That every column value is unique",
+            "That the primary key is always unique and never NULL",
+            "That every table has at least 10 rows",
+            "That foreign keys always match a parent row"
+          ],
+          "correct_index": 1,
+          "explanation": "Entity integrity is specifically about the primary key's uniqueness and non-nullability.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-5-entity-integrity-2",
+          "test_id": "pt-dbms-sql-5-entity-integrity",
+          "question_text": "How is entity integrity enforced in SQL?",
+          "options": [
+            "By writing a custom trigger for every table",
+            "Through a supported PRIMARY KEY declaration over the chosen identifying attributes",
+            "By adding a CHECK constraint manually",
+            "Entity integrity cannot be enforced by SQL"
+          ],
+          "correct_index": 1,
+          "explanation": "PRIMARY KEY bundles both the uniqueness and NOT NULL requirements automatically.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-5-entity-integrity-3",
+          "test_id": "pt-dbms-sql-5-entity-integrity",
+          "question_text": "Why is a NULL primary key value considered a serious problem?",
+          "options": [
+            "It merely wastes a small amount of storage",
+            "It violates the requirement that the designated primary identity be complete and definite",
+            "NULL values take longer to compare than other values",
+            "It is not actually a problem in modern databases"
+          ],
+          "correct_index": 1,
+          "explanation": "The primary identity must be nonmissing. Another identifier may exist, but that does not satisfy the declared primary-key contract.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-5-entity-integrity-4",
+          "test_id": "pt-dbms-sql-5-entity-integrity",
+          "question_text": "Does entity integrity apply to alternate keys enforced via UNIQUE?",
+          "options": [
+            "Yes, identically to primary keys",
+            "The primary-key rule is distinct; a required alternate identity needs its own appropriate uniqueness and nonmissing policy",
+            "Only if the alternate key is also composite",
+            "Entity integrity applies to every column in the table"
+          ],
+          "correct_index": 1,
+          "explanation": "Do not conflate nullable UNIQUE behaviour with a required alternate candidate identity.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-5-entity-integrity-5",
+          "test_id": "pt-dbms-sql-5-entity-integrity",
+          "question_text": "For a composite primary key, what does entity integrity require about its individual component columns?",
+          "options": [
+            "Only the first column needs to be NOT NULL",
+            "None of the component columns may be NULL — a NULL in any part breaks the row's overall identity guarantee",
+            "At least one component column must be NULL",
+            "Composite keys are exempt from entity integrity"
+          ],
+          "correct_index": 1,
+          "explanation": "Since the full combination defines the row's identity, every component column must be non-null for that identity to be complete and known.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-5-entity-integrity-6",
+          "test_id": "pt-dbms-sql-5-entity-integrity",
+          "question_text": "Does satisfying entity integrity guarantee that a row's data is otherwise correct?",
+          "options": [
+            "Yes, entity integrity guarantees full data correctness",
+            "No — entity integrity only guarantees the row has a valid, unique, non-null identity; other columns could still contain wrong or nonsensical values",
+            "Entity integrity guarantees correctness only for numeric columns",
+            "This question doesn't apply to entity integrity"
+          ],
+          "correct_index": 1,
+          "explanation": "Entity integrity is necessary but not sufficient — it says nothing about whether the rest of the row's data is accurate.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-5-entity-integrity-7",
+          "test_id": "pt-dbms-sql-5-entity-integrity",
+          "question_text": "What real ambiguity would arise from two rows both having primary key value 7?",
+          "options": [
+            "No ambiguity — the database would simply pick one at random consistently",
+            "Any query or foreign key referencing 'the row with id 7' would have no way to know which of the two rows was meant",
+            "SQL would automatically rename one of the rows",
+            "This scenario is impossible to describe in relational terms, but has no practical consequence"
+          ],
+          "correct_index": 1,
+          "explanation": "Duplicate primary key values destroy the ability to unambiguously reference a specific row, which is exactly what entity integrity prevents.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-5-entity-integrity-8",
+          "test_id": "pt-dbms-sql-5-entity-integrity",
+          "question_text": "Is entity integrity a relational-model concept, a SQL-specific feature, or both?",
+          "options": [
+            "A relational-model concept, which SQL happens to implement via the PRIMARY KEY constraint",
+            "A SQL-only feature with no theoretical basis",
+            "A NoSQL-only concept",
+            "A concept that applies only to foreign keys"
+          ],
+          "correct_index": 0,
+          "explanation": "Entity integrity is one of the relational model's foundational integrity rules; PRIMARY KEY is simply how SQL implements it.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-5-entity-integrity-new-9",
+          "test_id": "pt-dbms-sql-5-entity-integrity",
+          "question_text": "Can different students with valid distinct primary identifiers share a name?",
+          "options": [
+            "No; every column becomes unique",
+            "Yes, if no separate rule forbids it",
+            "Only if score is zero",
+            "Only if names are missing"
+          ],
+          "correct_index": 1,
+          "explanation": "Entity integrity constrains the chosen primary identity.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-5-entity-integrity-new-10",
+          "test_id": "pt-dbms-sql-5-entity-integrity",
+          "question_text": "Does a valid primary key prove every score is factually correct?",
+          "options": [
+            "Yes; the key verifies all facts",
+            "Only for numeric keys",
+            "No; identification and factual accuracy differ",
+            "Only for one-row tables"
+          ],
+          "correct_index": 2,
+          "explanation": "Other validity and external truth concerns need separate checks.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-5-entity-integrity-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-5-entity-integrity-application-new-1",
+          "test_id": "pt-dbms-sql-5-entity-integrity-application",
+          "question_text": "What must hold for every composite primary-key component?",
+          "options": [
+            "Only the first is required",
+            "Exactly one must be NULL",
+            "It is nonmissing",
+            "Every component is individually unique"
+          ],
+          "correct_index": 2,
+          "explanation": "The complete required identity needs all its components.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-5-entity-integrity-application-new-2",
+          "test_id": "pt-dbms-sql-5-entity-integrity-application",
+          "question_text": "Two rows share id 7 but differ in name. Does DISTINCT over all columns fix primary identity?",
+          "options": [
+            "Yes; DISTINCT enforces the primary key",
+            "Only if sorted",
+            "Only if names are long",
+            "No; both different rows can remain while claiming the same id"
+          ],
+          "correct_index": 3,
+          "explanation": "Complete-row equality differs from the identifying subset.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-5-entity-integrity-application-new-3",
+          "test_id": "pt-dbms-sql-5-entity-integrity-application",
+          "question_text": "What is a staging proposal_id’s role?",
+          "options": [
+            "It identifies the submission separately from the proposed business identity",
+            "It makes every proposed student id valid",
+            "It replaces the entire schema",
+            "It grants correction authority"
+          ],
+          "correct_index": 0,
+          "explanation": "Submission identity and proposed accepted identity are different roles.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-5-entity-integrity-application-new-4",
+          "test_id": "pt-dbms-sql-5-entity-integrity-application",
+          "question_text": "Why test an UPDATE to an already occupied primary identity?",
+          "options": [
+            "Updates never affect keys",
+            "Updates can create identity collisions too",
+            "Only inserts have constraints",
+            "A result alias can prevent duplicates"
+          ],
+          "correct_index": 1,
+          "explanation": "Mutation coverage should challenge the relevant identity-changing path.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-5-entity-integrity-application-new-5",
+          "test_id": "pt-dbms-sql-5-entity-integrity-application",
+          "question_text": "Does a primary key alone generate identifiers?",
+          "options": [
+            "Yes; all keys count rows",
+            "Only for text values",
+            "No; allocation is a separate supported feature",
+            "Only with ORDER BY"
+          ],
+          "correct_index": 2,
+          "explanation": "Enforcement and generation are distinct.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-5-entity-integrity-application-new-6",
+          "test_id": "pt-dbms-sql-5-entity-integrity-application",
+          "question_text": "Why avoid an auto-generated identity for a direct prohibited-NULL test?",
+          "options": [
+            "Generated identities have no uniqueness",
+            "Only foreign keys can be tested",
+            "All NULL tests require production data",
+            "NULL may request generation under the actual rules"
+          ],
+          "correct_index": 3,
+          "explanation": "The test should isolate storing absence rather than allocation semantics.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-5-entity-integrity-application-new-7",
+          "test_id": "pt-dbms-sql-5-entity-integrity-application",
+          "question_text": "Can a row satisfy entity integrity yet violate a parent-reference rule?",
+          "options": [
+            "Yes; its own identity can be valid while its reference is invalid",
+            "No; primary keys prove every parent exists",
+            "Only if there are no attributes",
+            "Only if sorted descending"
+          ],
+          "correct_index": 0,
+          "explanation": "Entity and referential integrity address different conditions.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-5-entity-integrity-application-new-8",
+          "test_id": "pt-dbms-sql-5-entity-integrity-application",
+          "question_text": "Does entity integrity guarantee authorization to update the identified student?",
+          "options": [
+            "Yes; knowing the identifier grants control",
+            "No; trusted access rules remain necessary",
+            "Only for UUIDs",
+            "Only if the identifier is secret"
+          ],
+          "correct_index": 1,
+          "explanation": "Identity is not authority.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-5-entity-integrity-application-new-9",
+          "test_id": "pt-dbms-sql-5-entity-integrity-application",
+          "question_text": "What does an empty primary-key audit establish?",
+          "options": [
+            "The full production migration has succeeded",
+            "Every future caller is correct",
+            "No observed conflict in the tested population",
+            "All non-key values are true"
+          ],
+          "correct_index": 2,
+          "explanation": "Evidence remains limited to the checked data and rules.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-5-entity-integrity-application-new-10",
+          "test_id": "pt-dbms-sql-5-entity-integrity-application",
+          "question_text": "Does physical row movement change a student’s declared identity?",
+          "options": [
+            "Yes; disk position defines identity",
+            "Only when names repeat",
+            "Only if scores are NULL",
+            "No; logical identity follows the key values"
+          ],
+          "correct_index": 3,
+          "explanation": "Identity is independent of storage location and display position.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cx-entity-integrity-audit",
+      "slug": "entity-integrity-audit",
+      "title": "Find repeated proposed student identities",
+      "difficulty": "Easy",
+      "task": "Return student_id and occurrences for repeated nonmissing proposed student ids. NULL proposals need a separate completeness audit and must not appear here.",
+      "schema_sql": "CREATE TABLE proposals (proposal_id INT PRIMARY KEY, student_id INT NULL, student_name VARCHAR(80) NOT NULL);",
+      "seed_sql": "INSERT INTO proposals VALUES (1,7,'Asha'),(2,7,'Ravi'),(3,NULL,'Mira'),(4,NULL,'Dev'),(5,8,'Asha');",
+      "expected": "student_id\toccurrences\n7\t2",
+      "ordering": "Ascending student_id.",
+      "constraints": [
+        "proposal_id identifies each staging submission, not the proposed student identity."
+      ],
+      "edge_cases": [
+        "Different names can still conflict on one identity.",
+        "Several missing proposals do not form a nonmissing collision group."
+      ],
+      "hints": [
+        "Exclude missing proposed identities explicitly.",
+        "Group by student_id rather than the unique proposal_id."
+      ],
+      "solution_sql": "SELECT student_id, COUNT(*) AS occurrences FROM proposals WHERE student_id IS NOT NULL GROUP BY student_id HAVING COUNT(*) > 1 ORDER BY student_id;",
+      "explanation": "The audit isolates duplicate definite identity proposals without claiming every other completeness or factual rule has passed.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO proposals VALUES (1,NULL,'A'),(2,NULL,'B');",
+          "expected": ""
+        },
+        {
+          "seed_sql": "INSERT INTO proposals VALUES (1,2,'A'),(2,2,'B'),(3,2,'C');",
+          "expected": "student_id\toccurrences\n2\t3"
+        }
+      ]
+    },
+    {
+      "id": "cx-entity-integrity-enforce",
+      "slug": "entity-integrity-enforce",
+      "title": "Enforce definite identity while permitting optional scores",
+      "difficulty": "Medium",
+      "task": "Add PRIMARY KEY(student_id) to students and return student_id, student_name and score. The identifier has no generation feature. Repeated names and NULL non-key scores remain permitted.",
+      "starter_sql": "-- Add the primary key and return the student facts.",
+      "schema_sql": "CREATE TABLE students (student_id INT NULL, student_name VARCHAR(80) NOT NULL, score INT NULL);",
+      "seed_sql": "INSERT INTO students VALUES (1,'Asha',NULL),(2,'Asha',80);",
+      "expected": "student_id\tstudent_name\tscore\n1\tAsha\tNULL\n2\tAsha\t80",
+      "ordering": "Ascending student_id.",
+      "constraints": [
+        "Initial identifiers are unique and nonmissing.",
+        "No automatic generation can reinterpret a NULL input."
+      ],
+      "edge_cases": [
+        "A changed name does not make a duplicate identity valid.",
+        "An update collision must be rejected as well as an insert collision."
+      ],
+      "hints": [
+        "Keep non-key score nullability unchanged.",
+        "Use one primary constraint on the actual identity attribute."
+      ],
+      "solution_sql": "ALTER TABLE students ADD PRIMARY KEY (student_id);\nSELECT student_id, student_name, score FROM students ORDER BY student_id;",
+      "explanation": "The declaration enforces a unique required student identity while allowing the independent descriptive and optional-value policies.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO students VALUES (7,'Mira',NULL);",
+          "expected": "student_id\tstudent_name\tscore\n7\tMira\tNULL"
+        },
+        {
+          "seed_sql": "",
+          "expected": ""
+        }
+      ],
+      "negative_validation_cases": [
+        {
+          "sql": "INSERT INTO students VALUES (1,'Other',50);",
+          "error_codes": [
+            1062
+          ]
+        },
+        {
+          "sql": "UPDATE students SET student_id = 1 WHERE student_id = 2;",
+          "error_codes": [
+            1062
+          ]
+        },
+        {
+          "sql": "INSERT INTO students VALUES (NULL,'Other',50);",
+          "error_codes": [
+            1048
+          ]
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-5-entity-integrity-1",
+      "test_id": "pt-dbms-sql-5-entity-integrity",
+      "question_text": "What does entity integrity guarantee?",
+      "options": [
+        "That every column value is unique",
+        "That the primary key is always unique and never NULL",
+        "That every table has at least 10 rows",
+        "That foreign keys always match a parent row"
+      ],
+      "correct_index": 1,
+      "explanation": "Entity integrity is specifically about the primary key's uniqueness and non-nullability.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-5-entity-integrity-2",
+      "test_id": "pt-dbms-sql-5-entity-integrity",
+      "question_text": "How is entity integrity enforced in SQL?",
+      "options": [
+        "By writing a custom trigger for every table",
+        "Automatically, simply by declaring a column PRIMARY KEY",
+        "By adding a CHECK constraint manually",
+        "Entity integrity cannot be enforced by SQL"
+      ],
+      "correct_index": 1,
+      "explanation": "PRIMARY KEY bundles both the uniqueness and NOT NULL requirements automatically.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-5-entity-integrity-3",
+      "test_id": "pt-dbms-sql-5-entity-integrity",
+      "question_text": "Why is a NULL primary key value considered a serious problem?",
+      "options": [
+        "It merely wastes a small amount of storage",
+        "It would create a row with no well-defined identity, making it impossible to reliably reference or distinguish from other rows",
+        "NULL values take longer to compare than other values",
+        "It is not actually a problem in modern databases"
+      ],
+      "correct_index": 1,
+      "explanation": "A NULL identity breaks the fundamental guarantee that every row can be uniquely and unambiguously referred to.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-5-entity-integrity-4",
+      "test_id": "pt-dbms-sql-5-entity-integrity",
+      "question_text": "Does entity integrity apply to alternate keys enforced via UNIQUE?",
+      "options": [
+        "Yes, identically to primary keys",
+        "No — entity integrity specifically concerns the PRIMARY KEY; a UNIQUE alternate key can still permit NULLs",
+        "Only if the alternate key is also composite",
+        "Entity integrity applies to every column in the table"
+      ],
+      "correct_index": 1,
+      "explanation": "Entity integrity is a primary-key-specific rule; UNIQUE alone doesn't carry the same NOT-NULL guarantee.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-5-entity-integrity-5",
+      "test_id": "pt-dbms-sql-5-entity-integrity",
+      "question_text": "For a composite primary key, what does entity integrity require about its individual component columns?",
+      "options": [
+        "Only the first column needs to be NOT NULL",
+        "None of the component columns may be NULL — a NULL in any part breaks the row's overall identity guarantee",
+        "At least one component column must be NULL",
+        "Composite keys are exempt from entity integrity"
+      ],
+      "correct_index": 1,
+      "explanation": "Since the full combination defines the row's identity, every component column must be non-null for that identity to be complete and known.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-5-entity-integrity-6",
+      "test_id": "pt-dbms-sql-5-entity-integrity",
+      "question_text": "Does satisfying entity integrity guarantee that a row's data is otherwise correct?",
+      "options": [
+        "Yes, entity integrity guarantees full data correctness",
+        "No — entity integrity only guarantees the row has a valid, unique, non-null identity; other columns could still contain wrong or nonsensical values",
+        "Entity integrity guarantees correctness only for numeric columns",
+        "This question doesn't apply to entity integrity"
+      ],
+      "correct_index": 1,
+      "explanation": "Entity integrity is necessary but not sufficient — it says nothing about whether the rest of the row's data is accurate.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-5-entity-integrity-7",
+      "test_id": "pt-dbms-sql-5-entity-integrity",
+      "question_text": "What real ambiguity would arise from two rows both having primary key value 7?",
+      "options": [
+        "No ambiguity — the database would simply pick one at random consistently",
+        "Any query or foreign key referencing 'the row with id 7' would have no way to know which of the two rows was meant",
+        "SQL would automatically rename one of the rows",
+        "This scenario is impossible to describe in relational terms, but has no practical consequence"
+      ],
+      "correct_index": 1,
+      "explanation": "Duplicate primary key values destroy the ability to unambiguously reference a specific row, which is exactly what entity integrity prevents.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-5-entity-integrity-8",
+      "test_id": "pt-dbms-sql-5-entity-integrity",
+      "question_text": "Is entity integrity a relational-model concept, a SQL-specific feature, or both?",
+      "options": [
+        "A relational-model concept, which SQL happens to implement via the PRIMARY KEY constraint",
+        "A SQL-only feature with no theoretical basis",
+        "A NoSQL-only concept",
+        "A concept that applies only to foreign keys"
+      ],
+      "correct_index": 0,
+      "explanation": "Entity integrity is one of the relational model's foundational integrity rules; PRIMARY KEY is simply how SQL implements it.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "coordinator",
+    "independent_review": "unavailable; no agent tools",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Definitions and examples checked against questions; no plagiarism certification.",
+    "existing_question_corrections": [
+      "tq-dbms-sql-5-entity-integrity-2",
+      "tq-dbms-sql-5-entity-integrity-3",
+      "tq-dbms-sql-5-entity-integrity-4"
+    ],
+    "canonical_answer_indices_preserved": true
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-5-entity-integrity",
+    "original_note_sha256": "14c1da40e7a59eeb305b39d1157c8eea51771e839e2e79d72f7cab3a548d794b",
+    "status": "paired migration prepared; not applied"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Identity rules and non-key data rules answer different questions",
+      "description": "The designated identifier must remain unique and nonmissing. Repeated names and permitted absent scores do not violate that identity contract.",
+      "columns": [
+        "Proposed change",
+        "Entity-identity result",
+        "Separate issue"
+      ],
+      "rows": [
+        [
+          "New id, repeated name",
+          "Permitted by primary identity",
+          "Check other applicable rules"
+        ],
+        [
+          "Existing id, different name",
+          "Reject duplicate identity",
+          "Name difference does not create a new student id"
+        ],
+        [
+          "Missing id",
+          "Reject incomplete primary identity",
+          "Generation is excluded in these fixtures"
+        ],
+        [
+          "New id, missing optional score",
+          "Permitted by primary identity",
+          "Score absence follows its own policy"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "coordinator checked designated identity scope, duplicate updates and permitted non-key NULLs",
+    "server_rendering": "passed",
+    "browser_rendering": "unverified",
+    "independent_review": "unavailable; no agent tools",
+    "server_rendering_evidence": "2026-10-29: all 83 authored packages rendered through actual LessonBlock; 91 focused Vitest checks passed."
+  },
+  "sql_verification": {
+    "engine": "11.8.6-MariaDB-0+deb13u1 from Debian",
+    "scope": "MariaDB compatibility execution; exact MySQL 8.4/provider execution unverified",
+    "fingerprint": "f92754d111f065a511ca255cecc0b7b52c967c21e79caaaaf346f61a9ce13257",
+    "cases": [
+      {
+        "problem": "entity-integrity-audit",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "entity-integrity-audit",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "entity-integrity-audit",
+        "case": 2,
+        "passed": true
+      },
+      {
+        "problem": "entity-integrity-enforce",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "entity-integrity-enforce",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "entity-integrity-enforce",
+        "case": 2,
+        "passed": true
+      },
+      {
+        "problem": "entity-integrity-enforce",
+        "negative_case": 0,
+        "error_code": 1062,
+        "passed": true
+      },
+      {
+        "problem": "entity-integrity-enforce",
+        "negative_case": 1,
+        "error_code": 1062,
+        "passed": true
+      },
+      {
+        "problem": "entity-integrity-enforce",
+        "negative_case": 2,
+        "error_code": 1048,
+        "passed": true
+      }
+    ],
+    "all_passed": true
+  }
+}

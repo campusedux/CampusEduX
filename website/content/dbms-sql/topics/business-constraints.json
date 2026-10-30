@@ -1,0 +1,717 @@
+{
+  "source_ref": "chapter-5-keys-and-integrity/business-constraints",
+  "slug": "business-constraints",
+  "title": "Business Constraints",
+  "description": "Translate explicit campus policies into scoped validity rules, distinguish row checks from aggregate invariants, and test both allowed boundaries and rejected writes.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Domain policy supplies the requirement\n\nBusiness constraints are validity rules arising from the domain being modeled. A campus booking can require a positive duration, a reservation can limit the requested quantity, and a recorded assessment can restrict marks to a defined scale. The relational model does not impose those particular numbers or policies. They must come from an explicit requirement that explains which states are acceptable.\n\nThe domain can also require uniqueness or a relationship, so business constraints are not synonymous with CHECK syntax. A policy forbidding duplicate registrations can use a suitable unique combination. A rule requiring an allowed catalogue course can use a compatible reference constraint. Choose an enforcement mechanism from the rule's scope and meaning rather than assuming every business requirement belongs in one kind of declaration.\n\n## Define the rule precisely before writing SQL\n\nA requirement such as bookings must be valid is too vague to implement. A useful version states that start_minute is a nonnegative integer, end_minute is no greater than the documented daily boundary, and end_minute must be strictly greater than start_minute. It should specify whether touching intervals are allowed, whether overnight bookings exist, and which reference time or calendar applies when relevant.\n\nThe exercise here uses minute offsets within one abstract day and excludes overnight bookings. That simplification makes the rule concrete without pretending to solve real timezone and calendar scheduling. Zero is a valid start at the beginning of the day, while a zero-length interval is invalid because its end equals its start. Such examples prevent a broad slogan from hiding incompatible boundary assumptions.\n\n## Row-local checks compare values in one fact\n\nAn enforced CHECK can express supported conditions over the row's values, such as an end following a start. NOT NULL can require the inputs needed for that rule. In MySQL 8.4, an unknown CHECK result is accepted, so a comparison condition alone need not reject missing inputs. A required-value policy must therefore be represented explicitly as well.\n\n```sql\nCREATE TABLE bookings (\n  booking_id INT PRIMARY KEY,\n  start_minute INT NOT NULL,\n  end_minute INT NOT NULL,\n  CHECK (start_minute >= 0\n         AND end_minute <= 1440\n         AND end_minute > start_minute)\n);\n```\n\nThe condition describes a positive interval inside the stated day. It does not prove the room exists, the student may reserve it, or another booking does not overlap. Those are separate requirements with different scopes. A clear explanation names both what the condition guarantees and which relevant rules remain elsewhere.\n\n## Bounds and relationships are separate ingredients\n\nChecking start_minute and end_minute individually against broad ranges does not establish their order. Both can lie between zero and fourteen hundred forty while the end precedes the start. A cross-attribute condition supplies the missing relationship. Conversely, checking only end greater than start can allow values outside the documented day. The complete rule needs all intended ingredients together.\n\nUse counterexamples for each ingredient: a negative start, an end beyond the boundary, equal endpoints, and reversed endpoints. Then include accepted boundary intervals such as zero to one and fourteen hundred thirty-nine to fourteen hundred forty. An implementation that rejects every proposed booking is not correct merely because all invalid examples fail. Acceptance evidence matters too.\n\n## Aggregate rules span several facts\n\nA course capacity rule concerns the sum of accepted reservations, not merely one row's requested quantity. A local CHECK that quantity is between one and four does not prove total requests fit the course. Similarly, an order total matching its line items requires reasoning about multiple records. The enforcement strategy must match that wider scope and the engine's supported capabilities.\n\nA query that reports current totals is useful evidence about one observed state. It does not by itself protect the invariant against a later concurrent write. Two requests can both observe remaining capacity and together exceed it. A trusted accepted operation needs an appropriate transaction and coordination design. Do not present a client-side precheck or an ordinary aggregate SELECT as complete concurrency-safe enforcement.\n\n## Match enforcement ownership to the boundary\n\nApplication validation helps users understand mistakes before a write is attempted. A database constraint protects supported invariants across permitted callers at the trusted data boundary. The layers should express compatible policy so that an import cannot silently accept states rejected by the ordinary form. A duplicated validation message is not a substitute for central enforcement where the rule can be declared correctly.\n\nSome requirements need trusted service logic, supported procedures, triggers, or other transactional mechanisms rather than a simple row CHECK. The right choice depends on scope, concurrency, and the repository's established design. Do not add a complex parallel mechanism merely because the rule sounds important. First locate the authoritative owner, direct callers, and existing enforcement contract.\n\n## Policy changes affect existing data\n\nA maximum booking duration can change, and a new academic policy can introduce exceptions. Tightening a rule may make current records invalid under the new condition. Widening it may allow values that downstream reports or consumers were not designed to interpret. Review existing facts and callers before preparing an authorized transition, rather than treating a changed CHECK expression as isolated text.\n\nStructural identity rules also depend on the represented fact grain and can evolve with a redesign. It is too simplistic to claim business constraints change while every primary-key choice is timeless. The general need for reliable identity is stable, but the particular identity and validity definitions must still reflect the domain. Explain the actual changed contract and compatibility impact.\n\n## Exceptions need deliberate modeling\n\nA rule that seems universal can exclude legitimate cases. If overnight bookings are allowed later, the single-day minute-offset model may no longer express them adequately. Removing the end-after-start condition without replacing the model can admit ambiguous intervals. Revisit the representation and intended semantics rather than merely weakening enforcement until a problematic example is accepted.\n\nExceptions can sometimes be represented explicitly through a status or a separate authorized process. That does not mean a caller-controlled flag should bypass trusted rules. The system must decide who may create the exceptional state and which invariants still hold. A business requirement should identify these decisions before implementation claims that every edge case has been addressed.\n\n## Staging audits support investigation\n\nAn unconstrained proposal table can hold invalid booking inputs for diagnosis. A SELECT can return missing values, negative starts, out-of-bound ends, equal endpoints, and reversed intervals. Preserve proposal identifiers so each submission can be traced. The audit population differs from a final table that rejects those states, and it should remain clear which role the exercise fixture serves.\n\nA report can classify several independent failures in one proposal if useful. An exclusive CASE that returns only the first issue may be acceptable for a stated contract, but it should not claim to enumerate all failures. Likewise, an empty audit means no observed problem among the checks actually implemented; it does not prove room existence, nonoverlap, authorization, or every possible business invariant.\n\n## Rejected writes need targeted verification\n\nFor an enforcement exercise, start with valid data, add the intended rule, and challenge each invalid boundary in a fresh isolated setup. Check the expected error category rather than treating any failure as success. A missing table or malformed statement does not exercise the booking policy. Include an update that creates an invalid interval as well as invalid inserts when that mutation path is part of the contract.\n\nKeep required-value failures distinct from predicate failures. A prohibited NULL can be rejected by NOT NULL, while a reversed complete interval is rejected by the ordering CHECK. Both are useful, but they establish different properties. Record the actual engine and fixture scope so local MariaDB compatibility is not presented as exact MySQL or hosted-provider verification.\n\n## Connect policy, mechanism and evidence\n\nA trustworthy business-constraint explanation states the rule, its scope, its required inputs, and the enforcement owner. It distinguishes local row conditions from multi-row or cross-relation invariants and explains which accepted and rejected examples were tested. Current-state reporting, concurrency control, authorization, and migration safety each need the evidence appropriate to their own boundary.\n\nThe exercises demonstrate one deliberately bounded booking policy rather than a complete room-reservation product. They are useful because the meaning and limits are explicit. Carry that habit into other domains: turn vague validity language into concrete allowed states, select a supported mechanism, preserve legitimate exceptions through deliberate design, and report exactly which part of the contract the verification establishes.\n",
+  "references": [
+    {
+      "title": "MySQL 8.4 CHECK constraints",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/create-table-check-constraints.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-5-business-constraints",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-5-business-constraints-1",
+          "test_id": "pt-dbms-sql-5-business-constraints",
+          "question_text": "What are business constraints?",
+          "options": [
+            "Rules automatically generated by the SQL standard",
+            "Integrity rules coming from the real-world domain/business rather than the structural relational model",
+            "A synonym for foreign key constraints",
+            "Constraints that only apply to financial data"
+          ],
+          "correct_index": 1,
+          "explanation": "Business policies can require ranges, relationships, uniqueness or other invariants; the domain supplies the particular requirement.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-5-business-constraints-2",
+          "test_id": "pt-dbms-sql-5-business-constraints",
+          "question_text": "Which SQL mechanism is primarily used to enforce single-row business constraints?",
+          "options": [
+            "FOREIGN KEY",
+            "An enforced CHECK for supported row-local predicates, with separate required-value declarations where needed",
+            "UNIQUE",
+            "PRIMARY KEY"
+          ],
+          "correct_index": 1,
+          "explanation": "CHECK has supported-expression limits and an absence policy; it is not an unrestricted arbitrary-code facility.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-5-business-constraints-3",
+          "test_id": "pt-dbms-sql-5-business-constraints",
+          "question_text": "Why is `CHECK (salary > 0)` considered a business constraint rather than a structural one?",
+          "options": [
+            "Because CHECK constraints are always structural",
+            "Because nothing about the relational model itself requires salary to be positive — this rule comes from real-world business logic",
+            "Because it references another table",
+            "Because it involves a NULL comparison"
+          ],
+          "correct_index": 1,
+          "explanation": "Positivity is an explicit policy in this example, not an inherent rule of relational theory or every possible compensation model.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-5-business-constraints-4",
+          "test_id": "pt-dbms-sql-5-business-constraints",
+          "question_text": "Why might a CHECK constraint need to be revisited over time more often than a PRIMARY KEY constraint?",
+          "options": [
+            "CHECK constraints expire automatically after a year",
+            "Policy can evolve, so existing facts, exceptions and callers must be reviewed before changing the enforced contract",
+            "PRIMARY KEY constraints are also frequently revised for the same reasons",
+            "CHECK constraints are deprecated and always being phased out"
+          ],
+          "correct_index": 1,
+          "explanation": "Business rules can change, and particular schema identities can also evolve; neither should be revised without dependency review.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-5-business-constraints-5",
+          "test_id": "pt-dbms-sql-5-business-constraints",
+          "question_text": "Can a simple single-table CHECK constraint enforce a rule like 'the sum of an order's line items must equal the order's total'?",
+          "options": [
+            "Yes, easily, with a single CHECK clause",
+            "No in the stated MySQL row-CHECK model; the wider invariant needs a supported trusted mechanism and transaction/concurrency design",
+            "Only if the order has exactly one line item",
+            "CHECK constraints can only be used on numeric columns"
+          ],
+          "correct_index": 1,
+          "explanation": "A multi-row total is not enforced by a simple row predicate or a client-side preliminary query.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-5-business-constraints-6",
+          "test_id": "pt-dbms-sql-5-business-constraints",
+          "question_text": "What is a real risk of an overly strict CHECK constraint?",
+          "options": [
+            "It has no risk if written correctly",
+            "It can block legitimate real-world edge cases the designer didn't originally anticipate",
+            "CHECK constraints can never be too strict",
+            "It will automatically loosen itself over time"
+          ],
+          "correct_index": 1,
+          "explanation": "A rule that seemed universally true at design time can turn out to have legitimate exceptions later, requiring the constraint to be revisited.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-5-business-constraints-7",
+          "test_id": "pt-dbms-sql-5-business-constraints",
+          "question_text": "Why is relying only on application code (and not a database CHECK constraint) to enforce a business rule considered risky?",
+          "options": [
+            "Application code is always slower than CHECK constraints",
+            "Every application/service that writes to the table would need to correctly duplicate and maintain the same validation logic, and any one that misses it can insert bad data",
+            "Application code cannot access business rules at all",
+            "This is not actually risky in any way"
+          ],
+          "correct_index": 1,
+          "explanation": "A database-level constraint is enforced centrally for every writer, whereas application-only validation must be correctly replicated everywhere data is written.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-5-business-constraints-8",
+          "test_id": "pt-dbms-sql-5-business-constraints",
+          "question_text": "Which of these is a structural (relational-model) rule rather than a business constraint?",
+          "options": [
+            "Salary must be positive",
+            "Entity integrity (primary key uniqueness and non-nullability)",
+            "Termination date must be after hire date",
+            "A discount code must not exceed 50%"
+          ],
+          "correct_index": 1,
+          "explanation": "Entity integrity is a foundational relational-model rule, independent of any specific business domain — unlike the other, domain-specific examples.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-5-business-constraints-new-9",
+          "test_id": "pt-dbms-sql-5-business-constraints",
+          "question_text": "What is missing from the requirement bookings must be valid?",
+          "options": [
+            "Only a shorter table name",
+            "Concrete allowed states, boundaries and scope",
+            "Only a display colour",
+            "Only a font choice"
+          ],
+          "correct_index": 1,
+          "explanation": "The policy must be precise before implementation.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-5-business-constraints-new-10",
+          "test_id": "pt-dbms-sql-5-business-constraints",
+          "question_text": "Can end > start alone enforce an interval entirely inside the stated day?",
+          "options": [
+            "Yes; order implies every bound",
+            "Only if sorted",
+            "No; range boundaries are also needed",
+            "Only if identifiers are unique"
+          ],
+          "correct_index": 2,
+          "explanation": "Ordering and allowed range are distinct ingredients.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-5-business-constraints-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-5-business-constraints-application-new-1",
+          "test_id": "pt-dbms-sql-5-business-constraints-application",
+          "question_text": "For the stated positive single-day interval policy, is start=end allowed?",
+          "options": [
+            "Yes; every endpoint equality is valid",
+            "Only if id is odd",
+            "No; the duration is zero",
+            "Only if no other bookings exist"
+          ],
+          "correct_index": 2,
+          "explanation": "The contract requires a strict positive duration.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-5-business-constraints-application-new-2",
+          "test_id": "pt-dbms-sql-5-business-constraints-application",
+          "question_text": "Why does a required booking need NOT NULL as well as its MySQL CHECK?",
+          "options": [
+            "CHECK always treats NULL as zero",
+            "NOT NULL generates the end value",
+            "Every missing value is a separate row",
+            "UNKNOWN CHECK results can be accepted"
+          ],
+          "correct_index": 3,
+          "explanation": "Required inputs need an explicit absence policy.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-5-business-constraints-application-new-3",
+          "test_id": "pt-dbms-sql-5-business-constraints-application",
+          "question_text": "Does a row quantity range ensure summed reservations fit course capacity?",
+          "options": [
+            "No; aggregate capacity spans multiple facts",
+            "Yes; every row validates the total",
+            "Only if each row is indexed",
+            "Only if a label says capacity"
+          ],
+          "correct_index": 0,
+          "explanation": "The global invariant needs a mechanism appropriate to its scope.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-5-business-constraints-application-new-4",
+          "test_id": "pt-dbms-sql-5-business-constraints-application",
+          "question_text": "Why can two preliminary availability checks both pass yet lead to overbooking?",
+          "options": [
+            "SELECT always adds seats",
+            "Concurrent writes can change the combined state before acceptance",
+            "Only empty courses have concurrency",
+            "The screen order changes capacity"
+          ],
+          "correct_index": 1,
+          "explanation": "The trusted accepted operation must protect the invariant under concurrency.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-5-business-constraints-application-new-5",
+          "test_id": "pt-dbms-sql-5-business-constraints-application",
+          "question_text": "What should happen when overnight bookings become legitimate?",
+          "options": [
+            "Remove every check without replacement",
+            "Claim all reversed intervals are valid",
+            "Review the representation and policy before an authorized change",
+            "Ignore existing callers"
+          ],
+          "correct_index": 2,
+          "explanation": "A new legitimate case may require a different interval model.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-5-business-constraints-application-new-6",
+          "test_id": "pt-dbms-sql-5-business-constraints-application",
+          "question_text": "Why keep proposal_id in a booking audit?",
+          "options": [
+            "To authorize acceptance",
+            "To generate a room automatically",
+            "To make all endpoints valid",
+            "To trace each invalid submission"
+          ],
+          "correct_index": 3,
+          "explanation": "Diagnostics need a stable submission identity.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-5-business-constraints-application-new-7",
+          "test_id": "pt-dbms-sql-5-business-constraints-application",
+          "question_text": "Does an empty row-policy audit prove no overlapping bookings exist?",
+          "options": [
+            "No; that separate rule was not checked",
+            "Yes; all business rules are equivalent",
+            "Only if sorted",
+            "Only if all ids differ"
+          ],
+          "correct_index": 0,
+          "explanation": "The claim must match the implemented checks.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-5-business-constraints-application-new-8",
+          "test_id": "pt-dbms-sql-5-business-constraints-application",
+          "question_text": "What does an unrelated syntax error establish about a CHECK rule?",
+          "options": [
+            "It proves the rule works",
+            "Nothing about the intended rejection boundary",
+            "It proves every future write fails correctly",
+            "It proves the provider is compatible"
+          ],
+          "correct_index": 1,
+          "explanation": "A useful failure test must exercise the actual rule.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-5-business-constraints-application-new-9",
+          "test_id": "pt-dbms-sql-5-business-constraints-application",
+          "question_text": "Why test accepted boundary intervals too?",
+          "options": [
+            "Only rejected examples matter",
+            "Accepted values disable constraints",
+            "A rule rejecting all data is not a correct implementation",
+            "Boundaries never matter"
+          ],
+          "correct_index": 2,
+          "explanation": "Correctness includes preserving intended valid states.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-5-business-constraints-application-new-10",
+          "test_id": "pt-dbms-sql-5-business-constraints-application",
+          "question_text": "Who should decide an authorized exception state?",
+          "options": [
+            "Any caller-controlled bypass flag alone",
+            "The first screen row",
+            "A display alias",
+            "The trusted enforcement design under the documented policy"
+          ],
+          "correct_index": 3,
+          "explanation": "Exceptions still require authority and retained invariants.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cx-business-constraints-audit",
+      "slug": "business-constraints-audit",
+      "title": "Audit single-day booking interval proposals",
+      "difficulty": "Easy",
+      "task": "Return proposal_id for invalid single-day intervals: either endpoint missing, start_minute < 0, end_minute > 1440, or end_minute <= start_minute. Positive intervals within the day are valid.",
+      "schema_sql": "CREATE TABLE proposals (proposal_id INT PRIMARY KEY, start_minute INT NULL, end_minute INT NULL);",
+      "seed_sql": "INSERT INTO proposals VALUES (1,0,1),(2,1439,1440),(3,10,10),(4,20,10),(5,-1,10),(6,10,1441),(7,NULL,10),(8,10,NULL);",
+      "expected": "proposal_id\n3\n4\n5\n6\n7\n8",
+      "ordering": "Ascending proposal_id.",
+      "constraints": [
+        "Minute offsets describe one abstract day; overnight bookings are outside this exercise."
+      ],
+      "edge_cases": [
+        "Equal endpoints are invalid.",
+        "Both ends of the documented day support valid positive intervals."
+      ],
+      "hints": [
+        "Test missing endpoints explicitly.",
+        "Combine the invalid conditions with OR."
+      ],
+      "solution_sql": "SELECT proposal_id FROM proposals WHERE start_minute IS NULL OR end_minute IS NULL OR start_minute < 0 OR end_minute > 1440 OR end_minute <= start_minute ORDER BY proposal_id;",
+      "explanation": "The audit diagnoses the specified row-local rule only. It does not check overlap, room existence or caller authority.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO proposals VALUES (1,0,1440),(2,100,101);",
+          "expected": ""
+        },
+        {
+          "seed_sql": "INSERT INTO proposals VALUES (2,1440,1440),(1,NULL,NULL);",
+          "expected": "proposal_id\n1\n2"
+        }
+      ]
+    },
+    {
+      "id": "cx-business-constraints-enforce",
+      "slug": "business-constraints-enforce",
+      "title": "Enforce a positive bounded booking interval",
+      "difficulty": "Medium",
+      "task": "Add an enforced CHECK named valid_interval to bookings requiring start_minute >= 0, end_minute <= 1440 and end_minute > start_minute. Both endpoints are already NOT NULL. Return booking_id, start_minute and end_minute.",
+      "starter_sql": "-- Add valid_interval and return the booking facts.",
+      "schema_sql": "CREATE TABLE bookings (booking_id INT PRIMARY KEY, start_minute INT NOT NULL, end_minute INT NOT NULL);",
+      "seed_sql": "INSERT INTO bookings VALUES (1,0,1),(2,1439,1440),(3,100,200);",
+      "expected": "booking_id\tstart_minute\tend_minute\n1\t0\t1\n2\t1439\t1440\n3\t100\t200",
+      "ordering": "Ascending booking_id.",
+      "constraints": [
+        "Initial fixture intervals satisfy the proposed rule.",
+        "No overlap, parent-reference or authorization guarantee is claimed."
+      ],
+      "edge_cases": [
+        "Negative starts, excessive ends and equal or reversed intervals must fail.",
+        "A valid row updated to a zero-length interval must also fail."
+      ],
+      "hints": [
+        "Use one supported CHECK combining all three requirements.",
+        "Retain the separate required-value column declarations."
+      ],
+      "solution_sql": "ALTER TABLE bookings ADD CONSTRAINT valid_interval CHECK (start_minute >= 0 AND end_minute <= 1440 AND end_minute > start_minute);\nSELECT booking_id, start_minute, end_minute FROM bookings ORDER BY booking_id;",
+      "explanation": "The constraint enforces the deliberately defined single-row interval policy. Wider booking-system invariants need their own trusted design.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO bookings VALUES (7,0,1440);",
+          "expected": "booking_id\tstart_minute\tend_minute\n7\t0\t1440"
+        },
+        {
+          "seed_sql": "",
+          "expected": ""
+        }
+      ],
+      "negative_validation_cases": [
+        {
+          "sql": "INSERT INTO bookings VALUES (99,-1,10);",
+          "error_codes": [
+            4025,
+            3819
+          ]
+        },
+        {
+          "sql": "INSERT INTO bookings VALUES (99,10,1441);",
+          "error_codes": [
+            4025,
+            3819
+          ]
+        },
+        {
+          "sql": "INSERT INTO bookings VALUES (99,10,10);",
+          "error_codes": [
+            4025,
+            3819
+          ]
+        },
+        {
+          "sql": "INSERT INTO bookings VALUES (99,20,10);",
+          "error_codes": [
+            4025,
+            3819
+          ]
+        },
+        {
+          "sql": "UPDATE bookings SET end_minute = start_minute WHERE booking_id = 1;",
+          "error_codes": [
+            4025,
+            3819
+          ]
+        },
+        {
+          "sql": "INSERT INTO bookings VALUES (99,NULL,10);",
+          "error_codes": [
+            1048
+          ]
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-5-business-constraints-1",
+      "test_id": "pt-dbms-sql-5-business-constraints",
+      "question_text": "What are business constraints?",
+      "options": [
+        "Rules automatically generated by the SQL standard",
+        "Integrity rules coming from the real-world domain/business rather than the structural relational model",
+        "A synonym for foreign key constraints",
+        "Constraints that only apply to financial data"
+      ],
+      "correct_index": 1,
+      "explanation": "Business constraints encode domain-specific rules like 'salary must be positive,' not structural rules like uniqueness.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-5-business-constraints-2",
+      "test_id": "pt-dbms-sql-5-business-constraints",
+      "question_text": "Which SQL mechanism is primarily used to enforce single-row business constraints?",
+      "options": [
+        "FOREIGN KEY",
+        "CHECK",
+        "UNIQUE",
+        "PRIMARY KEY"
+      ],
+      "correct_index": 1,
+      "explanation": "CHECK constraints directly express arbitrary boolean conditions a row's data must satisfy.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-5-business-constraints-3",
+      "test_id": "pt-dbms-sql-5-business-constraints",
+      "question_text": "Why is `CHECK (salary > 0)` considered a business constraint rather than a structural one?",
+      "options": [
+        "Because CHECK constraints are always structural",
+        "Because nothing about the relational model itself requires salary to be positive — this rule comes from real-world business logic",
+        "Because it references another table",
+        "Because it involves a NULL comparison"
+      ],
+      "correct_index": 1,
+      "explanation": "The rule reflects a domain fact (salaries can't be negative), not a requirement of relational theory.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-5-business-constraints-4",
+      "test_id": "pt-dbms-sql-5-business-constraints",
+      "question_text": "Why might a CHECK constraint need to be revisited over time more often than a PRIMARY KEY constraint?",
+      "options": [
+        "CHECK constraints expire automatically after a year",
+        "Business rules change as the actual business changes, while structural integrity rules like entity integrity are stable and timeless",
+        "PRIMARY KEY constraints are also frequently revised for the same reasons",
+        "CHECK constraints are deprecated and always being phased out"
+      ],
+      "correct_index": 1,
+      "explanation": "Business logic evolves with real-world policy/regulation changes, unlike the timeless structural rules of the relational model.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-5-business-constraints-5",
+      "test_id": "pt-dbms-sql-5-business-constraints",
+      "question_text": "Can a simple single-table CHECK constraint enforce a rule like 'the sum of an order's line items must equal the order's total'?",
+      "options": [
+        "Yes, easily, with a single CHECK clause",
+        "Generally no — multi-row/multi-table rules like this typically require triggers or application-level enforcement instead",
+        "Only if the order has exactly one line item",
+        "CHECK constraints can only be used on numeric columns"
+      ],
+      "correct_index": 1,
+      "explanation": "CHECK constraints evaluate a single row's own columns; enforcing a rule that spans multiple rows needs a trigger or equivalent mechanism.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-5-business-constraints-6",
+      "test_id": "pt-dbms-sql-5-business-constraints",
+      "question_text": "What is a real risk of an overly strict CHECK constraint?",
+      "options": [
+        "It has no risk if written correctly",
+        "It can block legitimate real-world edge cases the designer didn't originally anticipate",
+        "CHECK constraints can never be too strict",
+        "It will automatically loosen itself over time"
+      ],
+      "correct_index": 1,
+      "explanation": "A rule that seemed universally true at design time can turn out to have legitimate exceptions later, requiring the constraint to be revisited.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-5-business-constraints-7",
+      "test_id": "pt-dbms-sql-5-business-constraints",
+      "question_text": "Why is relying only on application code (and not a database CHECK constraint) to enforce a business rule considered risky?",
+      "options": [
+        "Application code is always slower than CHECK constraints",
+        "Every application/service that writes to the table would need to correctly duplicate and maintain the same validation logic, and any one that misses it can insert bad data",
+        "Application code cannot access business rules at all",
+        "This is not actually risky in any way"
+      ],
+      "correct_index": 1,
+      "explanation": "A database-level constraint is enforced centrally for every writer, whereas application-only validation must be correctly replicated everywhere data is written.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-5-business-constraints-8",
+      "test_id": "pt-dbms-sql-5-business-constraints",
+      "question_text": "Which of these is a structural (relational-model) rule rather than a business constraint?",
+      "options": [
+        "Salary must be positive",
+        "Entity integrity (primary key uniqueness and non-nullability)",
+        "Termination date must be after hire date",
+        "A discount code must not exceed 50%"
+      ],
+      "correct_index": 1,
+      "explanation": "Entity integrity is a foundational relational-model rule, independent of any specific business domain — unlike the other, domain-specific examples.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "coordinator",
+    "independent_review": "unavailable; no agent tools",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Definitions and examples checked against questions; no plagiarism certification.",
+    "existing_question_corrections": [
+      "tq-dbms-sql-5-business-constraints-1",
+      "tq-dbms-sql-5-business-constraints-2",
+      "tq-dbms-sql-5-business-constraints-3",
+      "tq-dbms-sql-5-business-constraints-4",
+      "tq-dbms-sql-5-business-constraints-5"
+    ],
+    "canonical_answer_indices_preserved": true
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-5-business-constraints",
+    "original_note_sha256": "9ee08a359609ff15ae43d6a68f99c30f6f3f1f4f60c37bff3205a1a8ba6a96c1",
+    "status": "paired migration prepared; not applied"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "A positive single-day interval needs bounds and ordering",
+      "description": "The policy accepts positive intervals inside the day and separately rejects range, ordering and required-input failures. It does not address overlapping bookings.",
+      "columns": [
+        "Start",
+        "End",
+        "Outcome under the stated policy"
+      ],
+      "rows": [
+        [
+          "0",
+          "1",
+          "Accept lower-bound interval"
+        ],
+        [
+          "1439",
+          "1440",
+          "Accept upper-bound interval"
+        ],
+        [
+          "10",
+          "10",
+          "Reject zero duration"
+        ],
+        [
+          "20",
+          "10",
+          "Reject reversed interval"
+        ],
+        [
+          "-1",
+          "10",
+          "Reject out-of-range start"
+        ],
+        [
+          "10",
+          "1441",
+          "Reject out-of-range end"
+        ],
+        [
+          "NULL",
+          "10",
+          "Reject required-input absence"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "coordinator checked row-local policy sufficiency, accepted endpoints, missing inputs and limits of aggregate enforcement",
+    "server_rendering": "passed",
+    "browser_rendering": "unverified",
+    "independent_review": "unavailable; no agent tools",
+    "server_rendering_evidence": "2026-10-29: all 83 authored packages rendered through actual LessonBlock; 91 focused Vitest checks passed."
+  },
+  "sql_verification": {
+    "engine": "11.8.6-MariaDB-0+deb13u1 from Debian",
+    "scope": "MariaDB compatibility execution; exact MySQL 8.4/provider execution unverified",
+    "fingerprint": "5411280216959052f6dc9f04ad29cb5d6adc2d258120d49cb8e6617f9ee3e2f1",
+    "cases": [
+      {
+        "problem": "business-constraints-audit",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "business-constraints-audit",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "business-constraints-audit",
+        "case": 2,
+        "passed": true
+      },
+      {
+        "problem": "business-constraints-enforce",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "business-constraints-enforce",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "business-constraints-enforce",
+        "case": 2,
+        "passed": true
+      },
+      {
+        "problem": "business-constraints-enforce",
+        "negative_case": 0,
+        "error_code": 4025,
+        "passed": true
+      },
+      {
+        "problem": "business-constraints-enforce",
+        "negative_case": 1,
+        "error_code": 4025,
+        "passed": true
+      },
+      {
+        "problem": "business-constraints-enforce",
+        "negative_case": 2,
+        "error_code": 4025,
+        "passed": true
+      },
+      {
+        "problem": "business-constraints-enforce",
+        "negative_case": 3,
+        "error_code": 4025,
+        "passed": true
+      },
+      {
+        "problem": "business-constraints-enforce",
+        "negative_case": 4,
+        "error_code": 4025,
+        "passed": true
+      },
+      {
+        "problem": "business-constraints-enforce",
+        "negative_case": 5,
+        "error_code": 1048,
+        "passed": true
+      }
+    ],
+    "all_passed": true
+  }
+}

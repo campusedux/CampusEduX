@@ -1,0 +1,619 @@
+{
+  "source_ref": "chapter-5-keys-and-integrity/super-key",
+  "slug": "super-key",
+  "title": "Super Key",
+  "description": "Recognize identifying attribute sets, reason about supersets and functional dependencies, and audit current uniqueness without claiming a sample proves a schema guarantee.",
+  "dialect": "MySQL 8.4",
+  "notes": "## A superkey is an identifying attribute set\n\nA superkey is a set of attributes whose combined values uniquely identify tuples in a relation. It can contain attributes that are unnecessary for identification. If Student.student_id is guaranteed to identify a student, the set containing student_id and student_name also identifies that student. The additional name does not remove the identifying power already supplied by the identifier.\n\nThe definition concerns the relation's allowed states under its intended rules. It is not merely a description of whatever values happen to appear in one small example. Three students might currently have different programme labels, but another student can legitimately join an existing programme. That possibility means programme is not a guaranteed identifying set under an ordinary campus model, despite current sample uniqueness.\n\n## Uniqueness applies to the entire combination\n\nFor a proposed set containing campus_code and local_number, compare the complete pair. Students at different campuses can share a local number, and students within one campus can have different local numbers. A rule that the pair identifies each student does not require either component to identify students independently. Each component contributes to the combined condition.\n\nSuppose North, 17 identifies Asha and South, 17 identifies Ravi. These pairs differ even though the local numbers match. North, 24 can identify Mira. A second North, 17 with another name conflicts with the pair identity. Adding that other name to a query can make the complete displayed rows different while leaving the proposed campus-number identification rule violated.\n\n## Supersets preserve identifying power\n\nIf K is a superkey and L contains every attribute of K, then L is also a superkey. Two tuples agreeing on L must agree on K. Since K identifies the tuple, the agreement already establishes that they cannot be different tuples under the key guarantee. Additional attributes cannot invalidate that logical implication in the classical attribute-value model.\n\nFor Student(student_id, student_name, programme), an identifying student_id makes several sets superkeys: the identifier alone, identifier with name, identifier with programme, and all three attributes. These are different attribute sets, but they do not represent four independently necessary identities. They inherit identification from the same smaller set. This is why counting every superkey is different from identifying the candidate keys.\n\n## Minimal superkeys are candidate keys\n\nA candidate key is a superkey with no removable attribute that preserves the identifying guarantee. If student_id alone works, student_id with name is not a candidate key. The name can be removed. Minimality is about removing attributes, rather than about choosing the smallest string, the lowest numeric value, or the set that happens to be displayed first.\n\nA composite set can be minimal. If neither campus_code nor local_number alone identifies students, but their combination is guaranteed to do so, the pair can be a candidate key. It is also a superkey. Every candidate key belongs to the broader superkey category, while a superkey with redundant attributes does not qualify as a candidate key.\n\n## Multiple identities create overlapping families\n\nSuppose both student_id and institutional_number are separately guaranteed nonmissing identifiers. Every set containing student_id is a superkey, and every set containing institutional_number is a superkey. Some sets contain both and therefore appear in both descriptions. If asked to enumerate superkeys, list each attribute set once rather than counting it twice because it contains two different identifying subsets.\n\nFor four attributes containing those two single-attribute candidate keys, there are eight subsets containing the first identifier and eight containing the second. Four subsets contain both. Their union therefore contains twelve sets. This calculation assumes those are the complete identifying guarantees; additional dependencies could create more superkeys. State the relation and assumptions before presenting a numerical answer.\n\n## Dependencies offer another reasoning tool\n\nFunctional dependencies describe when agreement on one attribute set determines agreement on another. If student_id determines student_name and programme, then knowing student_id determines those roles for the fact. An attribute closure collects what follows from a proposed starting set under the stated dependencies. A set determining every attribute in the relation is a superkey under those dependencies.\n\nFor R(A, B, C, D), suppose A determines B, B determines C, and C determines D. Starting from A reaches B, then C, then D, so A determines the complete heading. Starting from B reaches C and D but does not reach A under these assumptions. Do not invent an inverse dependency: knowing a programme or name does not generally determine a student identifier merely because the identifier determines it.\n\n## Full rows and SQL duplicates require care\n\nIn a strict relation, the complete attribute set distinguishes tuples because the relation is a set with no duplicate elements. This does not imply every SQL table automatically enforces complete-row uniqueness. A bag-like SQL table without a suitable constraint can store repeated complete rows. Its observed behaviour must be assessed using its actual definition and supported operations.\n\nAn audit table can include a separate proposal_id so individual imported proposals remain traceable even when their proposed identifying values repeat. The proposal identifier distinguishes staging records; it does not make the proposed campus-number pair valid as an identity. Keep the staging row identity separate from the business identity being audited, especially when reviewing apparently duplicate facts.\n\n## Audits can disprove current uniqueness\n\nA GROUP BY query over the proposed key attributes can find groups containing more than one record. Such a group is a counterexample to current uniqueness of that combination. It gives concrete identities to investigate. By contrast, finding no duplicates establishes only that the tested dataset has no observed conflict; it does not establish the business guarantee for every future allowed state.\n\n```sql\nSELECT campus_code, local_number, COUNT(*) AS occurrences\nFROM proposals\nGROUP BY campus_code, local_number\nHAVING COUNT(*) > 1\nORDER BY campus_code, local_number;\n```\n\nThis query intentionally groups on both proposed identity components. Grouping only by local_number would report cross-campus reuse as a conflict even though the pair rule permits it. Grouping by proposal_id instead would hide every proposed-identity conflict because that staging key already distinguishes individual submissions.\n\nA summary can also count excess submissions beyond one per proposed pair. A group of three contributes two excess records, not three and not one. This differs from counting conflicting groups: two groups of size three represent two conflicting pairs but four excess submissions. Keep those measures separately named so a cleanup estimate is not mistaken for the number of affected identity combinations.\n\n## Missing values need an explicit policy\n\nClassical key reasoning assumes the identifying values required by the model. SQL NULL adds practical behaviour that must be specified separately. A nullable UNIQUE declaration is not automatically equivalent to a nonmissing classical identifier. MySQL can permit multiple NULLs under a nullable unique constraint, so do not infer definite identification from that declaration alone.\n\nThe exercises here require non-NULL campus codes and local numbers to keep the audit contract unambiguous. Real optional identifiers need their own absence and acceptance policy. Avoid silently excluding missing components from a report and then claiming every submitted row has a valid identifying combination. The counted population and treatment of absence must match the intended statement.\n\n## Review superkeys without overinterpreting them\n\nExtra attributes can make a superkey wider without improving its essential identifying guarantee. That can matter for human readability, stored references, and later dependency analysis. It does not mean every wider index is necessarily slower in every workload, or that a logical superkey must always be declared as a separate SQL constraint. Logical classification and physical implementation remain distinct questions.\n\nTo review an answer, write the stated guarantees, test the proposed set's closure or identity implication, and then check minimality only if a candidate key is required. Use audits as evidence about current data, not a substitute for the model. These steps make superkeys a precise tool for reasoning about identity rather than a vague synonym for whichever column appears important on a screen.\n",
+  "references": [],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-5-super-key",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-5-super-key-1",
+          "test_id": "pt-dbms-sql-5-super-key",
+          "question_text": "What is a super key?",
+          "options": [
+            "An attribute set whose combined values identify tuples across the allowed states of a relation",
+            "A key that is always exactly one column",
+            "A key used only for foreign key relationships",
+            "A key that can never be a primary key"
+          ],
+          "correct_index": 0,
+          "explanation": "A super key is any attribute set — however large — that uniquely identifies each tuple.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-5-super-key-2",
+          "test_id": "pt-dbms-sql-5-super-key",
+          "question_text": "Given a guaranteed student key {id}, is {id, name} a superkey?",
+          "options": [
+            "No, because it contains two columns",
+            "Yes — since {id} alone is already unique, adding name keeps it unique",
+            "Only if name is also unique on its own",
+            "It is a super key but never a candidate key... this is undecidable"
+          ],
+          "correct_index": 1,
+          "explanation": "Adding any attribute to an already-unique set cannot break uniqueness, so {id, name} remains a super key.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-5-super-key-3",
+          "test_id": "pt-dbms-sql-5-super-key",
+          "question_text": "Given that {id} alone is a key, why is {id, name} not minimal?",
+          "options": [
+            "Because id is redundant",
+            "Because name is redundant — {id} alone is already sufficient to uniquely identify rows",
+            "Because it has too few attributes",
+            "Minimality doesn't apply to super keys"
+          ],
+          "correct_index": 1,
+          "explanation": "Since id alone uniquely identifies rows, including name adds nothing — making the set non-minimal.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-5-super-key-4",
+          "test_id": "pt-dbms-sql-5-super-key",
+          "question_text": "Does every strict set-based relation have a superkey consisting of its full attribute set?",
+          "options": [
+            "No, some relations have none",
+            "Yes — in the worst case, the set of all attributes qualifies",
+            "Only relations with a declared PRIMARY KEY have one",
+            "Only relations with fewer than 5 columns have one"
+          ],
+          "correct_index": 1,
+          "explanation": "The full heading distinguishes tuples in the duplicate-free set model; unconstrained SQL bags are a separate case.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-5-super-key-5",
+          "test_id": "pt-dbms-sql-5-super-key",
+          "question_text": "How many super keys can a single relation have?",
+          "options": [
+            "Always exactly one",
+            "Always exactly two",
+            "Potentially many — any superset of an existing super key is also one",
+            "Zero, unless a PRIMARY KEY is declared"
+          ],
+          "correct_index": 2,
+          "explanation": "Because adding attributes to a super key produces another super key, relations generally have many possible super keys.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-5-super-key-6",
+          "test_id": "pt-dbms-sql-5-super-key",
+          "question_text": "What is the relationship between a candidate key and a super key?",
+          "options": [
+            "They are unrelated concepts",
+            "Every candidate key is a super key, but not every super key is a candidate key (it may not be minimal)",
+            "Every super key is a candidate key",
+            "Candidate keys can never be super keys"
+          ],
+          "correct_index": 1,
+          "explanation": "A candidate key is specifically a MINIMAL super key — so the candidate-key set is a subset of the super-key set.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-5-super-key-7",
+          "test_id": "pt-dbms-sql-5-super-key",
+          "question_text": "If a requirement casually says use the key without naming the intended identity, what is the precise response?",
+          "options": [
+            "A super key",
+            "Resolve which identifying constraint is intended; the phrase alone does not specify every key role",
+            "They always mean every possible super key at once",
+            "They mean a foreign key"
+          ],
+          "correct_index": 1,
+          "explanation": "Key terminology should name the intended identifying set instead of relying on a generalization about casual language.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-5-super-key-8",
+          "test_id": "pt-dbms-sql-5-super-key",
+          "question_text": "If {email} is guaranteed to be a nonmissing identifier, is {email, department_id} a superkey?",
+          "options": [
+            "No, adding department_id breaks uniqueness",
+            "Yes, since {email} alone is already unique, any superset of it is also a super key",
+            "Only if department_id is also independently unique",
+            "This cannot be determined without seeing the data"
+          ],
+          "correct_index": 1,
+          "explanation": "Once a set is unique, any superset remains unique — a direct consequence of the super key definition.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-5-super-key-new-9",
+          "test_id": "pt-dbms-sql-5-super-key",
+          "question_text": "Why does adding attributes to a superkey preserve its identifying power?",
+          "options": [
+            "New attributes delete old dependencies",
+            "Agreement on the larger set implies agreement on the existing superkey",
+            "Every added attribute is independently unique",
+            "A larger name always identifies"
+          ],
+          "correct_index": 1,
+          "explanation": "The original identifying subset still distinguishes facts.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-5-super-key-new-10",
+          "test_id": "pt-dbms-sql-5-super-key",
+          "question_text": "Can a composite minimal identifying pair also be a superkey?",
+          "options": [
+            "No; superkeys are single columns",
+            "Only if both components are individual keys",
+            "Yes; every candidate key is a superkey",
+            "Only if the table has one row"
+          ],
+          "correct_index": 2,
+          "explanation": "Minimality is an additional property within the superkey category.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-5-super-key-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-5-super-key-application-new-1",
+          "test_id": "pt-dbms-sql-5-super-key-application",
+          "question_text": "A sample has unique programmes. Does that prove programme is a schema-level superkey?",
+          "options": [
+            "Yes; one sample establishes every state",
+            "Only if alphabetical",
+            "No; future allowed states may repeat a programme",
+            "Only if there are three rows"
+          ],
+          "correct_index": 2,
+          "explanation": "The model needs a guaranteed identification rule.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-5-super-key-application-new-2",
+          "test_id": "pt-dbms-sql-5-super-key-application",
+          "question_text": "Under A determines B, B determines C and C determines D, what is the closure of A in R(A,B,C,D)?",
+          "options": [
+            "{A} only",
+            "{A, B} only",
+            "{B, C, D} without A",
+            "{A, B, C, D}"
+          ],
+          "correct_index": 3,
+          "explanation": "Repeated dependency application reaches the full heading.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-5-super-key-application-new-3",
+          "test_id": "pt-dbms-sql-5-super-key-application",
+          "question_text": "Under the same dependencies only, does B determine A?",
+          "options": [
+            "Not established",
+            "Yes; dependencies always reverse",
+            "Only if D is numeric",
+            "Yes; every attribute determines every other"
+          ],
+          "correct_index": 0,
+          "explanation": "A dependency cannot be inverted without an additional guarantee.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-5-super-key-application-new-4",
+          "test_id": "pt-dbms-sql-5-super-key-application",
+          "question_text": "What does a duplicate proposed campus-number pair demonstrate?",
+          "options": [
+            "A violation by every possible schema",
+            "A current counterexample to pair uniqueness",
+            "That the staging row identifier also repeats",
+            "That names must be keys"
+          ],
+          "correct_index": 1,
+          "explanation": "An audit gives evidence about the tested data.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-5-super-key-application-new-5",
+          "test_id": "pt-dbms-sql-5-super-key-application",
+          "question_text": "Why should a pair-identity audit group on both campus_code and local_number?",
+          "options": [
+            "Campus never repeats",
+            "Local numbers are globally unique by definition",
+            "Each component participates in the combined identity",
+            "Grouping on proposal_id would find more conflicts"
+          ],
+          "correct_index": 2,
+          "explanation": "Cross-campus reuse can be valid while repeated full pairs conflict.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-5-super-key-application-new-6",
+          "test_id": "pt-dbms-sql-5-super-key-application",
+          "question_text": "Why does grouping by unique proposal_id hide pair conflicts?",
+          "options": [
+            "It changes stored campus values",
+            "It removes NOT NULL",
+            "It turns counts into indexes",
+            "It separates every staging submission before counting"
+          ],
+          "correct_index": 3,
+          "explanation": "The grouping must match the identity being tested.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-5-super-key-application-new-7",
+          "test_id": "pt-dbms-sql-5-super-key-application",
+          "question_text": "If id and institutional_number are the only single-attribute candidate keys in a four-attribute schema, how many supersets contain either?",
+          "options": [
+            "12",
+            "16",
+            "8",
+            "2"
+          ],
+          "correct_index": 0,
+          "explanation": "Eight contain each identifier and four contain both, so inclusion-exclusion gives twelve.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-5-super-key-application-new-8",
+          "test_id": "pt-dbms-sql-5-super-key-application",
+          "question_text": "What does no duplicate group in one audit establish?",
+          "options": [
+            "A universal future identity guarantee",
+            "No observed conflict in that dataset",
+            "A primary-key declaration",
+            "Every dependency in the model"
+          ],
+          "correct_index": 1,
+          "explanation": "Absence of a sample counterexample is weaker than an enforced rule.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-5-super-key-application-new-9",
+          "test_id": "pt-dbms-sql-5-super-key-application",
+          "question_text": "Why specify non-NULL components in these pair-audit fixtures?",
+          "options": [
+            "NULL always equals zero",
+            "Superkeys require text values",
+            "To keep the identifying and counting policy explicit",
+            "It makes all names unique"
+          ],
+          "correct_index": 2,
+          "explanation": "SQL absence handling needs a separate contract.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-5-super-key-application-new-10",
+          "test_id": "pt-dbms-sql-5-super-key-application",
+          "question_text": "Does every logical superkey need its own SQL constraint declaration?",
+          "options": [
+            "Yes; every superset needs another index",
+            "Only on empty tables",
+            "All superkeys are automatically foreign keys",
+            "No; supersets may inherit identification from an already enforced smaller key"
+          ],
+          "correct_index": 3,
+          "explanation": "Logical classification does not require redundant declarations.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cx-super-key-pair-conflicts",
+      "slug": "super-key-pair-conflicts",
+      "title": "Find counterexamples to proposed pair uniqueness",
+      "difficulty": "Easy",
+      "task": "Return campus_code, local_number and occurrences for proposed pairs appearing more than once.",
+      "schema_sql": "CREATE TABLE proposals (proposal_id INT PRIMARY KEY, campus_code VARCHAR(20) NOT NULL, local_number INT NOT NULL);",
+      "seed_sql": "INSERT INTO proposals VALUES (1,'NORTH',17),(2,'SOUTH',17),(3,'NORTH',17),(4,'NORTH',24);",
+      "expected": "campus_code\tlocal_number\toccurrences\nNORTH\t17\t2",
+      "ordering": "Pair groups sort by campus_code then local_number; the summary returns one row.",
+      "constraints": [
+        "Codes use canonical uppercase strings; key components are non-NULL.",
+        "These are audits of a recorded dataset, not proof of all future allowed states."
+      ],
+      "edge_cases": [
+        "The same local number at different campuses is permitted.",
+        "Repeated complete proposed pairs create conflicts."
+      ],
+      "hints": [
+        "Group on both proposed identity components.",
+        "A grouped count records how many submissions occupy each proposed pair."
+      ],
+      "solution_sql": "SELECT campus_code, local_number, COUNT(*) AS occurrences FROM proposals GROUP BY campus_code, local_number HAVING COUNT(*) > 1 ORDER BY campus_code, local_number;",
+      "explanation": "The grouping matches the proposed identity. The staging identifier preserves individual submissions but does not make conflicting proposed identities unique.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO proposals VALUES (1,'NORTH',17),(2,'SOUTH',17);",
+          "expected": ""
+        },
+        {
+          "seed_sql": "INSERT INTO proposals VALUES (1,'NORTH',17),(2,'NORTH',17),(3,'NORTH',17);",
+          "expected": "campus_code\tlocal_number\toccurrences\nNORTH\t17\t3"
+        }
+      ]
+    },
+    {
+      "id": "cx-super-key-pair-summary",
+      "slug": "super-key-pair-summary",
+      "title": "Measure the excess submissions beyond distinct pairs",
+      "difficulty": "Medium",
+      "task": "Return one row: proposal_count, distinct_pairs and duplicate_excess. Duplicate excess is the number of submissions beyond one per distinct campus-number pair. Return zero for all three on empty input.",
+      "schema_sql": "CREATE TABLE proposals (proposal_id INT PRIMARY KEY, campus_code VARCHAR(20) NOT NULL, local_number INT NOT NULL);",
+      "seed_sql": "INSERT INTO proposals VALUES (1,'NORTH',17),(2,'NORTH',17),(3,'NORTH',17),(4,'SOUTH',17),(5,'SOUTH',17),(6,'NORTH',24);",
+      "expected": "proposal_count\tdistinct_pairs\tduplicate_excess\n6\t3\t3",
+      "ordering": "Pair groups sort by campus_code then local_number; the summary returns one row.",
+      "constraints": [
+        "Codes use canonical uppercase strings; key components are non-NULL.",
+        "These are audits of a recorded dataset, not proof of all future allowed states."
+      ],
+      "edge_cases": [
+        "The same local number at different campuses is permitted.",
+        "Repeated complete proposed pairs create conflicts."
+      ],
+      "hints": [
+        "Group on both proposed identity components.",
+        "A grouped count records how many submissions occupy each proposed pair."
+      ],
+      "solution_sql": "SELECT COALESCE(SUM(occurrences), 0) AS proposal_count, COUNT(*) AS distinct_pairs, COALESCE(SUM(occurrences - 1), 0) AS duplicate_excess FROM (SELECT campus_code, local_number, COUNT(*) AS occurrences FROM proposals GROUP BY campus_code, local_number) AS pair_groups;",
+      "explanation": "The grouping matches the proposed identity. The staging identifier preserves individual submissions but does not make conflicting proposed identities unique.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO proposals VALUES (1,'NORTH',17),(2,'SOUTH',17);",
+          "expected": "proposal_count\tdistinct_pairs\tduplicate_excess\n2\t2\t0"
+        },
+        {
+          "seed_sql": "",
+          "expected": "proposal_count\tdistinct_pairs\tduplicate_excess\n0\t0\t0"
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-5-super-key-1",
+      "test_id": "pt-dbms-sql-5-super-key",
+      "question_text": "What is a super key?",
+      "options": [
+        "Any set of attributes that uniquely identifies every row in a relation",
+        "A key that is always exactly one column",
+        "A key used only for foreign key relationships",
+        "A key that can never be a primary key"
+      ],
+      "correct_index": 0,
+      "explanation": "A super key is any attribute set — however large — that uniquely identifies each tuple.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-5-super-key-2",
+      "test_id": "pt-dbms-sql-5-super-key",
+      "question_text": "In students(id, name, email, department_id), is {id, name} a super key?",
+      "options": [
+        "No, because it contains two columns",
+        "Yes — since {id} alone is already unique, adding name keeps it unique",
+        "Only if name is also unique on its own",
+        "It is a super key but never a candidate key... this is undecidable"
+      ],
+      "correct_index": 1,
+      "explanation": "Adding any attribute to an already-unique set cannot break uniqueness, so {id, name} remains a super key.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-5-super-key-3",
+      "test_id": "pt-dbms-sql-5-super-key",
+      "question_text": "Why is {id, name} NOT considered minimal?",
+      "options": [
+        "Because id is redundant",
+        "Because name is redundant — {id} alone is already sufficient to uniquely identify rows",
+        "Because it has too few attributes",
+        "Minimality doesn't apply to super keys"
+      ],
+      "correct_index": 1,
+      "explanation": "Since id alone uniquely identifies rows, including name adds nothing — making the set non-minimal.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-5-super-key-4",
+      "test_id": "pt-dbms-sql-5-super-key",
+      "question_text": "Does every relation have at least one super key?",
+      "options": [
+        "No, some relations have none",
+        "Yes — in the worst case, the set of all attributes qualifies",
+        "Only relations with a declared PRIMARY KEY have one",
+        "Only relations with fewer than 5 columns have one"
+      ],
+      "correct_index": 1,
+      "explanation": "The full attribute set is always a valid (if not minimal) super key, assuming no duplicate rows.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-5-super-key-5",
+      "test_id": "pt-dbms-sql-5-super-key",
+      "question_text": "How many super keys can a single relation have?",
+      "options": [
+        "Always exactly one",
+        "Always exactly two",
+        "Potentially many — any superset of an existing super key is also one",
+        "Zero, unless a PRIMARY KEY is declared"
+      ],
+      "correct_index": 2,
+      "explanation": "Because adding attributes to a super key produces another super key, relations generally have many possible super keys.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-5-super-key-6",
+      "test_id": "pt-dbms-sql-5-super-key",
+      "question_text": "What is the relationship between a candidate key and a super key?",
+      "options": [
+        "They are unrelated concepts",
+        "Every candidate key is a super key, but not every super key is a candidate key (it may not be minimal)",
+        "Every super key is a candidate key",
+        "Candidate keys can never be super keys"
+      ],
+      "correct_index": 1,
+      "explanation": "A candidate key is specifically a MINIMAL super key — so the candidate-key set is a subset of the super-key set.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-5-super-key-7",
+      "test_id": "pt-dbms-sql-5-super-key",
+      "question_text": "In casual conversation, when someone says 'the key' of a table, what do they usually mean?",
+      "options": [
+        "A super key",
+        "Formally this is ambiguous, but they usually mean the primary key specifically, not the broader super key concept",
+        "They always mean every possible super key at once",
+        "They mean a foreign key"
+      ],
+      "correct_index": 1,
+      "explanation": "Casual usage of 'key' almost always refers to the primary key, even though formally 'key' concepts are broader (super key is the widest category).",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-5-super-key-8",
+      "test_id": "pt-dbms-sql-5-super-key",
+      "question_text": "If {email} uniquely identifies every row in students, is {email, department_id} also a super key?",
+      "options": [
+        "No, adding department_id breaks uniqueness",
+        "Yes, since {email} alone is already unique, any superset of it is also a super key",
+        "Only if department_id is also independently unique",
+        "This cannot be determined without seeing the data"
+      ],
+      "correct_index": 1,
+      "explanation": "Once a set is unique, any superset remains unique — a direct consequence of the super key definition.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "coordinator",
+    "independent_review": "unavailable; no agent tools",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Definitions and examples checked against questions; no plagiarism certification.",
+    "existing_question_corrections": [
+      "tq-dbms-sql-5-super-key-1",
+      "tq-dbms-sql-5-super-key-2",
+      "tq-dbms-sql-5-super-key-3",
+      "tq-dbms-sql-5-super-key-4",
+      "tq-dbms-sql-5-super-key-7",
+      "tq-dbms-sql-5-super-key-8"
+    ],
+    "canonical_answer_indices_preserved": true
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-5-super-key",
+    "original_note_sha256": "f0abb4ae1431c8e6322e71d44364cb245a24231d1f8d56229306ef85a3e21016",
+    "status": "paired migration prepared; not applied"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Supersets inherit identification from an existing student key",
+      "description": "Assume {student_id} is a guaranteed candidate key. Every listed superset still identifies, but the added descriptive attributes are redundant.",
+      "columns": [
+        "Attribute set",
+        "Superkey?",
+        "Minimal under the assumption?"
+      ],
+      "rows": [
+        [
+          "{student_id}",
+          "Yes",
+          "Yes"
+        ],
+        [
+          "{student_id, student_name}",
+          "Yes",
+          "No; remove student_name"
+        ],
+        [
+          "{student_id, programme}",
+          "Yes",
+          "No; remove programme"
+        ],
+        [
+          "{student_name, programme}",
+          "Not guaranteed",
+          "Cannot claim a candidate key"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "coordinator checked superset implication, inclusion-exclusion example and audit limits",
+    "server_rendering": "passed",
+    "browser_rendering": "unverified",
+    "independent_review": "unavailable; no agent tools",
+    "server_rendering_evidence": "2026-10-29: every authored package rendered through LessonBlock; focused Vitest suite passed."
+  },
+  "sql_verification": {
+    "engine": "11.8.6-MariaDB-0+deb13u1 from Debian",
+    "scope": "MariaDB compatibility execution; exact MySQL 8.4/provider execution unverified",
+    "fingerprint": "a5b2339510966c90e9dfeb75c0aa244e83b395a041a804df93d767a5b737907a",
+    "cases": [
+      {
+        "problem": "super-key-pair-conflicts",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "super-key-pair-conflicts",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "super-key-pair-conflicts",
+        "case": 2,
+        "passed": true
+      },
+      {
+        "problem": "super-key-pair-summary",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "super-key-pair-summary",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "super-key-pair-summary",
+        "case": 2,
+        "passed": true
+      }
+    ],
+    "all_passed": true
+  }
+}

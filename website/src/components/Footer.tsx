@@ -114,7 +114,7 @@ export default function Footer() {
   const supportEmail = "campusedux@gmail.com";
 
   return (
-    <footer className="mt-8 border-t border-line bg-card">
+    <footer className="mobile-scroll-content mt-8 border-t border-line bg-card">
       <div className="container-page pt-10 sm:pt-14">
         {/* Call-to-action band — same for every visitor, so the footer stays static. */}
         <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-primary via-primary to-accent-violet px-6 py-8 text-white sm:px-10 sm:py-10">

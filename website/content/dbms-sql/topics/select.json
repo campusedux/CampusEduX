@@ -1,0 +1,585 @@
+{
+  "source_ref": "chapter-12-select-and-filtering/select",
+  "slug": "select",
+  "title": "SELECT",
+  "description": "Write MySQL SELECT queries with explicit columns, expressions, aliases, filters, decimal calculations, and deterministic ordering using a small product catalog.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Asking for a result without rewriting the stored rows\n\nSELECT retrieves a result from a database. In its simplest form, you identify the values you want and the table that supplies them. Think of the result as a new view of existing facts, not as a second permanent copy that you have edited into the table. A plain query that reads columns and computes ordinary expressions does not change those stored column values. Updates require a suitable data-changing statement.\n\nThis topic uses MySQL 8.4 syntax. The basic ideas transfer to other relational systems, but details such as identifier quoting, available functions, and conversion rules can differ. In MySQL, SELECT can also evaluate an expression without a FROM clause. For example, selecting two plus two returns a single result value. A table is needed when the result depends on records stored in that table, not for every possible expression.\n\n## Building a useful output shape\n\nA SELECT list names the output expressions. FROM identifies their source. The order of expressions in the list determines the order of output columns. It does not have to match the order in which columns were declared in the table. This distinction matters when an application expects a specific result shape or an export must match a documented format.\n\nImagine a small stationery catalog with a product identifier, a product name, a unit price, and a quantity in stock. The following setup is deliberately small enough to reason about without a large database. Prices use a decimal type, and an unknown price is represented by NULL. Stock is a nonnegative integer. Two different products may share the same displayed name because the identifier, rather than the name, distinguishes their records.\n\n```sql\nCREATE TABLE products (\n  product_id INT PRIMARY KEY,\n  product_name VARCHAR(40) NOT NULL,\n  unit_price DECIMAL(8,2) NULL,\n  stock INT NOT NULL CHECK (stock >= 0)\n);\nINSERT INTO products VALUES\n  (1, 'Notebook', 40.00, 3),\n  (2, 'Pen', 10.00, 0),\n  (3, 'Folder', NULL, 2),\n  (4, 'Pen', 10.00, 5);\nSELECT product_name, product_id\nFROM products\nORDER BY product_id;\n```\n\nThis query returns four rows. Its first output column is the name and its second is the identifier, because that is the list we requested. The two Pen rows both remain. Retrieving values does not automatically remove duplicates or combine records. Nor does the missing price exclude Folder, because price is not being tested by any condition in this query.\n\n## Reading all columns versus naming the ones you need\n\nAn asterisk in a simple query requests all columns from the source. It is convenient while exploring a table, but application code usually benefits from an explicit list. If someone later adds a column, an asterisk can change the returned shape without any edit to the query text. It can also return data that the caller does not need or should not have included in an export.\n\nDo not turn that advice into a false performance rule. An explicit list is not always faster by a fixed amount, and an asterisk is valid SQL. The practical reasons are clarity, stable contracts, and control over the requested data. Actual performance depends on the selected columns, access plan, indexes, row counts, and other conditions. Measure a real workload before making a numerical performance claim.\n\n## Computing values and giving them readable names\n\nA SELECT expression can calculate a value from each source row. Multiplying unit price by stock produces a stock value for that product. The calculation appears in the result; it does not replace the stored price or quantity. Similarly, an expression such as price multiplied by 1.18 can present a tax-adjusted value without modifying the original price column. Choose names that make the meaning and units of calculated values clear.\n\nAS assigns an output alias. An alias such as stock_value is a label for the expression's result, not a command to rename a stored column. A clear alias makes exports and application code easier to understand. MySQL permits some aliases in ORDER BY, where the result can be sorted by its computed value. Do not assume an alias is available everywhere: a SELECT-list alias is generally not available in WHERE at the same query level.\n\n```sql\nSELECT product_id,\n       product_name,\n       CAST(unit_price * stock AS DECIMAL(10,2)) AS stock_value\nFROM products\nWHERE unit_price IS NOT NULL AND stock > 0\nORDER BY stock_value DESC, product_id ASC;\n```\n\nFor the supplied data, Notebook has a value of 120.00 and the in-stock Pen has a value of 50.00. The other Pen is excluded because its stock is zero. Folder is excluded because its price is unknown. The explicit cast supplies the requested decimal scale. These decisions express a reporting policy: unknown value is not silently presented as known zero value.\n\n## Separating row filtering from column selection\n\nWHERE determines which source rows qualify. The SELECT list determines which values are returned for those rows. A filter can use a column that is absent from the output, as our price and stock conditions demonstrate. Conversely, returning a column does not automatically filter out its NULL values. These are independent choices, and confusing them often produces reports with missing or unexpected rows.\n\nA useful reasoning order for a simple query is to identify the source, apply the row condition, calculate the requested outputs, and then apply the requested result ordering. This is a logical explanation, not a promise about the engine's physical execution order. The optimizer can choose a different implementation while preserving the query's meaning. That freedom is one reason SQL describes wanted results rather than a step-by-step file-reading algorithm.\n\n## Making result order deliberate\n\nWithout ORDER BY, do not depend on a particular row order. Records may appear in primary-key order during one test and a different order after data grows or the execution plan changes. A stable-looking result is not a documented guarantee. If an exercise or application needs an order, state it in the query and include all necessary tie-breakers.\n\nSorting only by stock value does not fully order products with equal values. Adding the unique product identifier resolves that ambiguity. For example, two products with a value of 120.00 can consistently appear in ascending identifier order. This makes automated comparisons, exports, and repeated user views easier to reason about. A tie-breaker should be chosen intentionally rather than inferred from whichever order the server happened to return first.\n\n## Checking numbers as well as labels\n\nA useful output contract includes value meanings and types, not just column labels. A decimal stock value is a number that can be compared and sorted numerically. Formatting it as a currency string is a separate presentation decision. For example, text values containing currency symbols should not be used as substitutes for numeric values in calculations. Keep the numeric result available and let the presentation layer add its chosen currency label.\n\nCalculations also need sensible bounds. Casting an expression to a decimal type does not make an arbitrarily large result fit that type. Exercise constraints should bound both the unit price and stock so that their product fits the requested precision. When you adapt a worked example to larger real data, check those bounds rather than copying the cast without considering overflow or conversion behavior.\n\n## Checking empty results and ordinary mistakes\n\nAn empty result is not automatically an error. An empty catalog or a filter that matches no products should return no matching rows. A SELECT expression without FROM is different: it can still return a single calculated value even when there are no tables containing relevant records. Understand which source drives the number of rows before diagnosing a missing or unexpected result.\n\nOther common mistakes include leaving a comma before FROM, referring to a nonexistent column, using an output alias too early, and relying on displayed row order without requesting it. Check the source names, requested expressions, filter, and ordering separately. This is usually more effective than changing several clauses at once and hoping that the resulting query happens to match a sample.\n\nFinally, read the actual statement when deciding whether it is safe. This topic's plain SELECT examples only read table data, but SQL systems can support functions with side effects, locking reads, and output-to-file features. The word SELECT alone is not a universal guarantee that an arbitrary statement has no operational effects. For these exercises, use only the requested retrieval expressions, verify their results, and keep stored data unchanged.",
+  "references": [
+    {
+      "title": "MySQL SELECT statement",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/select.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-12-select",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-12-select-1",
+          "test_id": "pt-dbms-sql-12-select",
+          "question_text": "What does SELECT do?",
+          "options": [
+            "Modifies data",
+            "Retrieves data from one or more tables",
+            "Deletes a table",
+            "Creates an index"
+          ],
+          "correct_index": 1,
+          "explanation": "SELECT is the read/retrieval statement in SQL.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-12-select-2",
+          "test_id": "pt-dbms-sql-12-select",
+          "question_text": "What does SELECT * FROM products return?",
+          "options": [
+            "Only the first column",
+            "Every column of every row in products",
+            "Only distinct rows",
+            "A count of rows"
+          ],
+          "correct_index": 1,
+          "explanation": "The asterisk requests all columns.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-12-select-3",
+          "test_id": "pt-dbms-sql-12-select",
+          "question_text": "Can a SELECT column list include a computed expression, not just raw columns?",
+          "options": [
+            "No, only column names are allowed",
+            "Yes — expressions like price * 1.18 AS price_with_tax are valid and common",
+            "Only in the WHERE clause, never SELECT",
+            "Only aggregate functions can appear in SELECT"
+          ],
+          "correct_index": 1,
+          "explanation": "SELECT can compute values, not just retrieve stored ones, as long as one value per row results.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-12-select-4",
+          "test_id": "pt-dbms-sql-12-select",
+          "question_text": "What determines the ORDER of columns in a SELECT's output?",
+          "options": [
+            "The table's physical column storage order, always",
+            "The order the columns are written in the SELECT list",
+            "Alphabetical order automatically",
+            "It is randomized each time"
+          ],
+          "correct_index": 1,
+          "explanation": "Output column order follows the SELECT list, independent of the table's underlying column order.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-12-select-5",
+          "test_id": "pt-dbms-sql-12-select",
+          "question_text": "Why is SELECT * considered risky in production application code?",
+          "options": [
+            "It is always slower than naming columns by a large fixed amount",
+            "It silently changes shape if the table's columns change later, and returns unnecessary data",
+            "SELECT * is not valid SQL",
+            "It can only be used with exactly one table"
+          ],
+          "correct_index": 1,
+          "explanation": "Implicit dependence on the table's current shape is the core risk of SELECT * in real code.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-12-select-6",
+          "test_id": "pt-dbms-sql-12-select",
+          "question_text": "Is `SELECT 2 + 2;` (no FROM clause) valid in some dialects?",
+          "options": [
+            "No, FROM is always mandatory",
+            "Yes, in dialects that support it — useful for evaluating a plain expression",
+            "Only if a table named 'dual' exists",
+            "This always returns an error in every dialect"
+          ],
+          "correct_index": 1,
+          "explanation": "Several dialects (e.g. MySQL, PostgreSQL) allow SELECT without FROM for expression-only queries.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-12-select-7",
+          "test_id": "pt-dbms-sql-12-select",
+          "question_text": "Can an alias given with AS be used to rename a SELECT column in the output?",
+          "options": [
+            "No, aliases only apply to tables",
+            "Yes — AS renames the output column, purely for display/readability",
+            "Aliases change the underlying stored column name",
+            "AS is required for every column"
+          ],
+          "correct_index": 1,
+          "explanation": "AS provides a friendlier or clearer name for the result column without touching the schema.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-12-select-8",
+          "test_id": "pt-dbms-sql-12-select",
+          "question_text": "Does a plain SELECT that only reads table columns and uses ordinary expressions change their stored values?",
+          "options": [
+            "Yes, it must update every returned row",
+            "No; this retrieval query only reads the stored data",
+            "Only if ORDER BY is included",
+            "Only for aggregate queries"
+          ],
+          "correct_index": 1,
+          "explanation": "These ordinary retrieval expressions do not assign new stored values. Do not generalize this to side-effecting functions, locking clauses, or output-to-file features.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "question_text": "Can a WHERE condition use a source column that is absent from the SELECT list?",
+          "options": [
+            "No; every filter column must be displayed",
+            "Only if SELECT * is used",
+            "Only when the table is empty",
+            "Yes; the filter and output list serve different purposes"
+          ],
+          "correct_index": 3,
+          "explanation": "WHERE chooses rows; the SELECT list chooses returned values. A stock condition can be used without returning stock.",
+          "marks": 1,
+          "id": "tq-dbx2-select-1-9",
+          "test_id": "pt-dbms-sql-12-select",
+          "sort_order": 8
+        },
+        {
+          "question_text": "Why add a unique identifier after a computed value in ORDER BY?",
+          "options": [
+            "It changes the stored primary key",
+            "It gives a deterministic order when computed values tie",
+            "It removes every duplicate product name",
+            "It replaces the WHERE condition"
+          ],
+          "correct_index": 1,
+          "explanation": "A unique secondary sort key resolves ties in the first sort expression.",
+          "marks": 1,
+          "id": "tq-dbx2-select-1-10",
+          "test_id": "pt-dbms-sql-12-select",
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbx2-select-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "question_text": "Using the notes' catalog, how many rows does SELECT product_name FROM products return without DISTINCT?",
+          "options": [
+            "Four",
+            "Two",
+            "Three",
+            "One"
+          ],
+          "correct_index": 0,
+          "explanation": "There are four source rows and no filter or duplicate-removal clause. Both Pen values remain.",
+          "marks": 1,
+          "id": "tq-dbx2-select-2-1",
+          "test_id": "pt-dbx2-select-application",
+          "sort_order": 0
+        },
+        {
+          "question_text": "What is the output column order for SELECT product_name, product_id FROM products?",
+          "options": [
+            "Identifier first, name second",
+            "Name first, identifier second",
+            "Alphabetical column-name order",
+            "The order changes randomly each run"
+          ],
+          "correct_index": 1,
+          "explanation": "The SELECT list defines the output order independently of the table definition.",
+          "marks": 1,
+          "id": "tq-dbx2-select-2-2",
+          "test_id": "pt-dbx2-select-application",
+          "sort_order": 1
+        },
+        {
+          "question_text": "Which products remain after WHERE unit_price IS NOT NULL AND stock > 0 in the notes' data?",
+          "options": [
+            "Every product",
+            "Only Folder 3",
+            "Notebook 1 and Pen 4",
+            "Pen 2 and Folder 3"
+          ],
+          "correct_index": 2,
+          "explanation": "Notebook and Pen 4 have known prices and positive stock. Pen 2 has zero stock, and Folder has an unknown price.",
+          "marks": 1,
+          "id": "tq-dbx2-select-2-3",
+          "test_id": "pt-dbx2-select-application",
+          "sort_order": 2
+        },
+        {
+          "question_text": "What stock_value is calculated for Notebook with price 40.00 and stock 3?",
+          "options": [
+            "120.00",
+            "43.00",
+            "13.33",
+            "40.00"
+          ],
+          "correct_index": 0,
+          "explanation": "The expression multiplies price by quantity: 40.00 times 3 equals 120.00.",
+          "marks": 1,
+          "id": "tq-dbx2-select-2-4",
+          "test_id": "pt-dbx2-select-application",
+          "sort_order": 3
+        },
+        {
+          "question_text": "A query calculates unit_price * stock AS stock_value. What happens to the stored unit_price?",
+          "options": [
+            "It is replaced by stock_value",
+            "It becomes NULL automatically",
+            "It remains unchanged by this plain retrieval query",
+            "It is renamed to stock_value"
+          ],
+          "correct_index": 2,
+          "explanation": "The expression computes a result value; it does not assign a new value to the source column.",
+          "marks": 1,
+          "id": "tq-dbx2-select-2-5",
+          "test_id": "pt-dbx2-select-application",
+          "sort_order": 4
+        },
+        {
+          "question_text": "An application uses SELECT * and a new table column is later added. What contract risk arises?",
+          "options": [
+            "The query must always become syntactically invalid",
+            "The result can contain an additional column without a query-text change",
+            "Every row is automatically deleted",
+            "The added column is guaranteed to be hidden"
+          ],
+          "correct_index": 1,
+          "explanation": "An asterisk depends on the table's current column set. Explicit lists make the requested shape deliberate.",
+          "marks": 1,
+          "id": "tq-dbx2-select-2-6",
+          "test_id": "pt-dbx2-select-application",
+          "sort_order": 5
+        },
+        {
+          "question_text": "Two products have stock_value 120.00. Which ordering makes their relative order deterministic?",
+          "options": [
+            "No ORDER BY",
+            "ORDER BY stock_value DESC alone",
+            "An assumption that insertion order is preserved",
+            "ORDER BY stock_value DESC, product_id ASC"
+          ],
+          "correct_index": 3,
+          "explanation": "The unique product identifier breaks the tie in computed stock value.",
+          "marks": 1,
+          "id": "tq-dbx2-select-2-7",
+          "test_id": "pt-dbx2-select-application",
+          "sort_order": 6
+        },
+        {
+          "question_text": "A filter matches no rows in products. What should the plain table query return?",
+          "options": [
+            "A fabricated default product",
+            "Exactly one row of zero values",
+            "A deleted products table",
+            "An empty result set"
+          ],
+          "correct_index": 3,
+          "explanation": "Retrieval returns matching rows. No matches is a valid outcome rather than a reason to invent data.",
+          "marks": 1,
+          "id": "tq-dbx2-select-2-8",
+          "test_id": "pt-dbx2-select-application",
+          "sort_order": 7
+        },
+        {
+          "question_text": "Is SELECT 2 + 2; valid in the MySQL dialect used here?",
+          "options": [
+            "Yes; it returns a single expression result without FROM",
+            "No; every SELECT requires a table",
+            "No; arithmetic is forbidden",
+            "Only after creating a table named 2"
+          ],
+          "correct_index": 0,
+          "explanation": "MySQL allows expression-only SELECT statements. Two plus two evaluates to four.",
+          "marks": 1,
+          "id": "tq-dbx2-select-2-9",
+          "test_id": "pt-dbx2-select-application",
+          "sort_order": 8
+        },
+        {
+          "question_text": "Why does the stock-value query test unit_price IS NOT NULL instead of replacing unknown prices with zero?",
+          "options": [
+            "It proves all prices are positive",
+            "It keeps unknown value distinct from a known zero price",
+            "It renames the price column",
+            "It orders the table permanently"
+          ],
+          "correct_index": 1,
+          "explanation": "Treating an unknown price as zero would communicate certainty that the stored data does not provide.",
+          "marks": 1,
+          "id": "tq-dbx2-select-2-10",
+          "test_id": "pt-dbx2-select-application",
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cp-dbx2-select-catalog",
+      "slug": "dbx2-select-catalog",
+      "title": "Read a Product Catalog",
+      "difficulty": "Easy",
+      "task": "Return product_id and product_name for every product. Preserve duplicate names and return the two columns in that order.",
+      "schema_sql": "CREATE TABLE products (product_id INT PRIMARY KEY, product_name VARCHAR(40) NOT NULL, unit_price DECIMAL(8,2) NULL CHECK (unit_price BETWEEN 0 AND 10000), stock INT NOT NULL CHECK (stock BETWEEN 0 AND 1000));",
+      "seed_sql": "INSERT INTO products VALUES (1,'Notebook',40.00,3),(2,'Pen',10.00,0),(3,'Folder',NULL,2),(4,'Pen',10.00,5);",
+      "expected": "product_id\tproduct_name\n1\tNotebook\n2\tPen\n3\tFolder\n4\tPen",
+      "ordering": "Ascending product_id.",
+      "edge_cases": [
+        "Duplicate product names are separate products.",
+        "A NULL price does not exclude a product.",
+        "An empty catalog has no result rows."
+      ],
+      "hints": [
+        "Name the two output columns explicitly.",
+        "Order by the unique product identifier."
+      ],
+      "solution_sql": "SELECT product_id, product_name FROM products ORDER BY product_id;",
+      "explanation": "The SELECT list fixes the result shape. No filter is needed, so both products named Pen and the product with an unknown price remain. The primary key provides deterministic ordering.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO products VALUES (8,'Case',NULL,0),(2,'Case',2.50,1);",
+          "expected": "product_id\tproduct_name\n2\tCase\n8\tCase"
+        },
+        {
+          "seed_sql": "",
+          "expected": ""
+        }
+      ],
+      "constraints": [
+        "product_id is unique and non-NULL.",
+        "product_name is non-NULL; duplicates are allowed.",
+        "Known unit_price is between 0 and 10000 inclusive; NULL is allowed.",
+        "stock is between 0 and 1000 inclusive."
+      ]
+    },
+    {
+      "id": "cp-dbx2-select-stock-value",
+      "slug": "dbx2-select-stock-value",
+      "title": "Calculate Known Stock Values",
+      "difficulty": "Medium",
+      "task": "Return product_id, product_name, and stock_value for products with positive stock and a known price. Compute stock_value as price times stock and cast it to DECIMAL(10,2).",
+      "schema_sql": "CREATE TABLE products (product_id INT PRIMARY KEY, product_name VARCHAR(40) NOT NULL, unit_price DECIMAL(8,2) NULL CHECK (unit_price BETWEEN 0 AND 10000), stock INT NOT NULL CHECK (stock BETWEEN 0 AND 1000));",
+      "seed_sql": "INSERT INTO products VALUES (1,'Notebook',40.00,3),(2,'Pen',10.00,0),(3,'Folder',NULL,2),(4,'Pen',10.00,5);",
+      "expected": "product_id\tproduct_name\tstock_value\n1\tNotebook\t120.00\n4\tPen\t50.00",
+      "ordering": "Descending stock_value, then ascending product_id to break ties.",
+      "edge_cases": [
+        "Exclude unknown prices rather than treating them as zero.",
+        "Exclude stock zero.",
+        "A known zero price with positive stock is included.",
+        "Equal values require the product_id tie-breaker."
+      ],
+      "hints": [
+        "Filter with IS NOT NULL and stock > 0.",
+        "Use AS stock_value and CAST(... AS DECIMAL(10,2))."
+      ],
+      "solution_sql": "SELECT product_id, product_name, CAST(unit_price * stock AS DECIMAL(10,2)) AS stock_value FROM products WHERE unit_price IS NOT NULL AND stock > 0 ORDER BY stock_value DESC, product_id ASC;",
+      "explanation": "The filter retains only rows whose value is known and whose quantity is positive. The expression computes one value for each retained row without updating stored prices. Casting fixes the result scale and the second sort key resolves ties.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO products VALUES (5,'Pad',20.00,6),(1,'Notebook',40.00,3),(7,'Gift',0.00,1),(3,'Folder',NULL,2);",
+          "expected": "product_id\tproduct_name\tstock_value\n1\tNotebook\t120.00\n5\tPad\t120.00\n7\tGift\t0.00"
+        },
+        {
+          "seed_sql": "INSERT INTO products VALUES (1,'Unknown',NULL,3),(2,'Sold out',4.00,0);",
+          "expected": ""
+        }
+      ],
+      "constraints": [
+        "product_id is unique and non-NULL.",
+        "product_name is non-NULL; duplicates are allowed.",
+        "Known unit_price is between 0 and 10000 inclusive; NULL is allowed.",
+        "stock is between 0 and 1000 inclusive."
+      ]
+    }
+  ],
+  "coding_not_applicable": null,
+  "review": {
+    "reviewer": "coordinator",
+    "independent_review": "unavailable; no agent tools",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "definitions, worked examples and question coverage checked; no external plagiarism certification",
+    "existing_question_corrections": [
+      "tq-dbms-sql-12-select-8"
+    ],
+    "canonical_answer_indices_preserved": true,
+    "answer_position_policy": "Original eight canonical indices retained for saved attempts; new questions use shuffled positions; the website shuffles displayed positions separately for each inline attempt."
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-12-select",
+    "original_note_sha256": "a7793fd5b9d5ffa5d9b02732acb3984e14f1469033bea98a0d16aa415020d782",
+    "status": "paired migration prepared; not applied"
+  },
+  "sql_verification": {
+    "engine": "11.8.6-MariaDB-0+deb13u1 from Debian",
+    "scope": "MariaDB compatibility execution; exact MySQL 8.4/provider execution unverified",
+    "fingerprint": "2f17bed25953ff481828fe16799356c848544e608a8dc506b51881fae136e31d",
+    "cases": [
+      {
+        "problem": "dbx2-select-catalog",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "dbx2-select-catalog",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "dbx2-select-catalog",
+        "case": 2,
+        "passed": true
+      },
+      {
+        "problem": "dbx2-select-stock-value",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "dbx2-select-stock-value",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "dbx2-select-stock-value",
+        "case": 2,
+        "passed": true
+      }
+    ],
+    "all_passed": true
+  },
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-12-select-1",
+      "test_id": "pt-dbms-sql-12-select",
+      "question_text": "What does SELECT do?",
+      "options": [
+        "Modifies data",
+        "Retrieves data from one or more tables",
+        "Deletes a table",
+        "Creates an index"
+      ],
+      "correct_index": 1,
+      "explanation": "SELECT is the read/retrieval statement in SQL.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-12-select-2",
+      "test_id": "pt-dbms-sql-12-select",
+      "question_text": "What does SELECT * FROM products return?",
+      "options": [
+        "Only the first column",
+        "Every column of every row in products",
+        "Only distinct rows",
+        "A count of rows"
+      ],
+      "correct_index": 1,
+      "explanation": "The asterisk requests all columns.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-12-select-3",
+      "test_id": "pt-dbms-sql-12-select",
+      "question_text": "Can a SELECT column list include a computed expression, not just raw columns?",
+      "options": [
+        "No, only column names are allowed",
+        "Yes — expressions like price * 1.18 AS price_with_tax are valid and common",
+        "Only in the WHERE clause, never SELECT",
+        "Only aggregate functions can appear in SELECT"
+      ],
+      "correct_index": 1,
+      "explanation": "SELECT can compute values, not just retrieve stored ones, as long as one value per row results.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-12-select-4",
+      "test_id": "pt-dbms-sql-12-select",
+      "question_text": "What determines the ORDER of columns in a SELECT's output?",
+      "options": [
+        "The table's physical column storage order, always",
+        "The order the columns are written in the SELECT list",
+        "Alphabetical order automatically",
+        "It is randomized each time"
+      ],
+      "correct_index": 1,
+      "explanation": "Output column order follows the SELECT list, independent of the table's underlying column order.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-12-select-5",
+      "test_id": "pt-dbms-sql-12-select",
+      "question_text": "Why is SELECT * considered risky in production application code?",
+      "options": [
+        "It is always slower than naming columns by a large fixed amount",
+        "It silently changes shape if the table's columns change later, and returns unnecessary data",
+        "SELECT * is not valid SQL",
+        "It can only be used with exactly one table"
+      ],
+      "correct_index": 1,
+      "explanation": "Implicit dependence on the table's current shape is the core risk of SELECT * in real code.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-12-select-6",
+      "test_id": "pt-dbms-sql-12-select",
+      "question_text": "Is `SELECT 2 + 2;` (no FROM clause) valid in some dialects?",
+      "options": [
+        "No, FROM is always mandatory",
+        "Yes, in dialects that support it — useful for evaluating a plain expression",
+        "Only if a table named 'dual' exists",
+        "This always returns an error in every dialect"
+      ],
+      "correct_index": 1,
+      "explanation": "Several dialects (e.g. MySQL, PostgreSQL) allow SELECT without FROM for expression-only queries.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-12-select-7",
+      "test_id": "pt-dbms-sql-12-select",
+      "question_text": "Can an alias given with AS be used to rename a SELECT column in the output?",
+      "options": [
+        "No, aliases only apply to tables",
+        "Yes — AS renames the output column, purely for display/readability",
+        "Aliases change the underlying stored column name",
+        "AS is required for every column"
+      ],
+      "correct_index": 1,
+      "explanation": "AS provides a friendlier or clearer name for the result column without touching the schema.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-12-select-8",
+      "test_id": "pt-dbms-sql-12-select",
+      "question_text": "Does SELECT modify any data in the underlying table?",
+      "options": [
+        "Yes, it can update rows as a side effect",
+        "No — SELECT is purely read-only",
+        "Only if ORDER BY is included",
+        "Only for aggregate queries"
+      ],
+      "correct_index": 1,
+      "explanation": "SELECT never changes stored data — it's the read-only counterpart to INSERT/UPDATE/DELETE.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ]
+}

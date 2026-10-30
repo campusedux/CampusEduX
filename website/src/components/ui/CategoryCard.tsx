@@ -28,15 +28,15 @@ export function CategoryCard({
     <Link
       href={href}
       className={cn(
-        "card card-hover group flex flex-col items-center p-4 text-center",
+        "card card-hover card-pad group flex min-w-0 flex-col items-center text-center",
         className,
       )}
     >
       <span
-        className="flex h-14 w-14 items-center justify-center rounded-2xl transition-transform duration-200 group-hover:scale-110 motion-reduce:transform-none"
+        className="icon-box transition-transform duration-200 group-hover:scale-110 motion-reduce:transform-none"
         style={{ backgroundColor: bg }}
       >
-        <Icon className="h-6 w-6" style={{ color: tint }} aria-hidden />
+        <Icon style={{ color: tint }} aria-hidden />
       </span>
       <span className="mt-2 line-clamp-2 text-[0.8rem] font-semibold text-ink">{label}</span>
       {typeof count === "number" && <span className="mt-0.5 text-xs text-ink-faint">{count} projects</span>}

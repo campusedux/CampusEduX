@@ -1,0 +1,642 @@
+{
+  "source_ref": "chapter-7-relational-algebra/relational-algebra-expressions",
+  "slug": "relational-algebra-expressions",
+  "title": "Relational Algebra Expressions",
+  "description": "Compose selections, projections and joins from a precise result contract, trace intermediate relation shapes, and distinguish safe logical rewrites from physical execution.",
+  "dialect": "MySQL 8.4",
+  "notes": "## An expression composes operations into a result\n\nA relational algebra expression describes a result by applying operators to input relations. Each operator produces another relation that can become an input to a later operator. This closure property lets a complicated question be built from understandable steps. The purpose is to state the requested facts precisely, rather than prescribing the exact machine instructions a database must execute.\n\nConsider students(student_id, name, department, gpa). The question asks for names of Engineering students whose GPA is at least 3.5. Selection first identifies qualifying student tuples. Projection then keeps name. In classical set algebra, projection removes duplicate resulting tuples. Ordinary SQL SELECT does not automatically remove repeated names, so translating the expression requires deciding whether the output represents people or distinct name values.\n\n## Begin with the output grain and population\n\nWrite what one result row means before choosing operators. One row per qualifying student needs student_id if different students can share a name. One row per distinct displayed name intentionally collapses those different identities. The English word names can hide that difference, so make the contract explicit instead of treating DISTINCT as a harmless formatting preference.\n\nNext identify the candidate population. An Engineering student report starts from students, whereas a report of enrollment occurrences can start from enrollments and attach student properties. These choices affect students without enrollments, repeated occurrences, and the keys carried through intermediate results. A recognizable final column label does not compensate for choosing the wrong initial population.\n\n## Read nested notation from its inputs outward\n\nAn expression such as project name of select department equals Engineering from students is evaluated logically from the base students relation outward. The selection's input is students; its output still has the student attributes. The projection's input is that selected relation, and its output has only name. Parentheses show composition in the same way nested function calls do.\n\nFor a conjunction of department and GPA predicates, both properties must be available where the selection applies. Projecting only name before testing GPA loses a required attribute. Projection can move earlier only when it retains everything later operations need, including join attributes, predicate attributes, and final output attributes. Reason about available roles, not merely about whether a shorter expression looks tidy.\n\n## Trace intermediate headings and membership\n\nSuppose Student 1 is Asha in Engineering with GPA 3.8, Student 2 is Asha in Engineering with GPA 3.6, and Student 3 is Ben in Science with GPA 3.9. Selecting Engineering and GPA at least 3.5 leaves the two Asha identities. Projecting only name under set semantics leaves one Asha value. A student-grain report still has two rows.\n\nA useful trace records each intermediate heading, the identity represented, and the membership rule. This makes mistakes visible before optimizing anything. If an intermediate result no longer contains department_id, it cannot later match Departments by that role. If an operator changes the grain from students to enrollment occurrences, later counts need to reflect that changed population.\n\n## Joins introduce relationships and multiplicity\n\nTo report department names with qualifying students, combine students.department_id with departments.department_id using the intended identity predicate. The join attaches a matching department fact. It does not independently authorize access, create a foreign key, or guarantee every student has a corresponding department. Those properties require their own source constraints and application boundaries.\n\nAdding enrollments changes multiplicity. One student with three qualifying enrollments can appear three times in an ordinary inner join result. If the output asks only which students have at least one qualifying enrollment, an existence predicate can express that membership directly. Adding DISTINCT afterward may yield the desired set, but first understand why the join generated repeated student rows.\n\n## Three inputs need explicit association roles\n\nA report of Engineering students enrolled in open courses can combine students, enrollments and courses. The first association connects enrollments.student_id to students.student_id. The second connects enrollments.course_id to courses.course_id. Filtering students.department and courses.is_open then restricts the intended rows. Selecting the final columns determines whether the report shows participation occurrences or distinct students.\n\nA shared column name is not enough evidence for a valid association. Several tables may expose status with unrelated meanings, and course identifiers may have program-local scope. Name each actual relationship and include its complete key. Aliases distinguish roles, especially when the same relation is used twice for relationships such as student and mentor.\n\n## Translate the intended set to SQL deliberately\n\nThe first exercise requests distinct name values rather than distinct student identities. Its SQL therefore includes DISTINCT after the selection. This is a deliberate bridge from classical projection semantics to SQL's default duplicate-preserving result behaviour. Changing the selected columns to student_id and name answers a different, equally legitimate question that the task would have to request.\n\n```sql\nSELECT DISTINCT name\nFROM students\nWHERE department = 'Engineering' AND gpa >= 3.5\nORDER BY name;\n```\n\nORDER BY gives the report a deterministic presentation under its stated comparison rules. Classical relations are unordered. LIMIT, top-N selection, or pagination introduces additional considerations beyond merely displaying the same relation in a chosen order. Do not move filters across row limits while assuming the membership remains unchanged.\n\n## Logical equivalence needs stated conditions\n\nSplitting an AND selection into successive selections over the same available attributes can preserve the intended relation. Pushing a student-only predicate below an inner join can also preserve matching results under the appropriate conditions. These are semantic observations, not a promise that every textually similar rewrite works across all SQL features.\n\nOuter joins require particular care. A predicate applied after unmatched rows are padded can eliminate them, whereas placing that predicate in the matching condition can preserve left candidates. Volatile expressions, aggregates, row limits, and SQL duplicate semantics can introduce further differences. Before applying an algebraic identity to SQL, check the actual operator variant and result contract.\n\n## Logical description differs from physical execution\n\nThe optimizer may choose a different join order, access path, or algorithm while preserving the query's defined result. Writing an inner join after a filter does not force a literal execution sequence through those textual clauses. Conversely, a compact expression is not automatically faster than a longer equivalent expression. Physical cost depends on data distribution, indexes, statistics and engine behaviour.\n\nAn algebra trace helps explain correctness; an execution plan helps inspect the chosen strategy. Neither alone proves production performance. A small fixture can reveal a wrong match or duplicate, but it cannot establish workload latency for large tables. Keep semantic tests, engine-specific plan inspection, and production performance measurements as separate forms of evidence.\n\n## Validate composition with counterexamples\n\nUse repeated names with different student identities, several enrollments per student, a student with no enrollment, and a closed course. Those cases expose whether the report returns names, students or enrollment occurrences. Add an unmatched proposal when the exercise schema permits it, so the effect of an inner match is visible rather than assumed from perfectly clean samples.\n\nFor predicates, test a GPA exactly at 3.5 and a nearby lower value. If GPA is nullable, an ordinary comparison to 3.5 is not TRUE for the missing value; the policy for unknown GPA must be explicit. The introductory fixture uses a required GPA field to keep its boundary simple. A different nullable model would need its own cases and explanation.\n\n## Build a readable expression before considering rewrites\n\nStart with a clear population, identify required relationships, apply the intended predicates, and retain the exact output roles. Trace at least one included and one excluded candidate. Then ask whether any intermediate step discards information or multiplies occurrences unexpectedly. This sequence turns a long expression into a chain of checkable contracts rather than a string of unfamiliar symbols.\n\nOnly after membership and grain are correct should equivalent formulations be compared for clarity or measured performance. Preserve the empty-input behaviour, duplicate handling and identifier scope while rewriting. The exercises focus on those observable result contracts; their reference fixtures do not prove that an arbitrary submitted query used a particular algebraic transformation or that a hosted provider chose the same execution plan.\n",
+  "references": [
+    {
+      "title": "MySQL 8.4 SELECT syntax",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/select.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-7-relational-algebra-expressions",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-7-relational-algebra-expressions-1",
+          "test_id": "pt-dbms-sql-7-relational-algebra-expressions",
+          "question_text": "What does a composed relational algebra expression describe?",
+          "options": [
+            "A single, atomic operation like Selection alone",
+            "A relational result formed by operators whose outputs can feed later operators",
+            "A special SQL keyword",
+            "A type of database index"
+          ],
+          "correct_index": 1,
+          "explanation": "A simple base or operator expression is also valid; composition builds larger expressions through closure.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-7-relational-algebra-expressions-2",
+          "test_id": "pt-dbms-sql-7-relational-algebra-expressions",
+          "question_text": "In π(name)(σ(department = 'Engineering')(Students)), which operation is applied FIRST?",
+          "options": [
+            "Projection (π), since it's written first",
+            "Selection (σ), since algebra notation nests inside-out like function calls",
+            "Both are applied simultaneously",
+            "Neither — this notation is invalid"
+          ],
+          "correct_index": 1,
+          "explanation": "Just like nested function calls, the innermost operation (Selection here) executes first, feeding its result to the outer operation (Projection).",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-7-relational-algebra-expressions-3",
+          "test_id": "pt-dbms-sql-7-relational-algebra-expressions",
+          "question_text": "Does the order operations are conceptually written in an algebra expression always match the order a real database engine executes them?",
+          "options": [
+            "Yes, always, exactly",
+            "Not necessarily — a query optimizer can reorder operations (e.g. applying Selection before a Join) to improve performance while preserving the same correct result",
+            "Real engines always execute right-to-left, opposite to the written order",
+            "Execution order has no bearing on correctness or performance"
+          ],
+          "correct_index": 1,
+          "explanation": "Query optimizers routinely reorder logically-equivalent operations for efficiency — this is covered further in Chapter 35.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-7-relational-algebra-expressions-4",
+          "test_id": "pt-dbms-sql-7-relational-algebra-expressions",
+          "question_text": "How would you build the expression for 'names of Engineering students with GPA >= 3.5'?",
+          "options": [
+            "A single Projection alone is sufficient",
+            "Select the qualifying rows first, then project onto just the name column",
+            "Project first, then select",
+            "Use only a Join operation"
+          ],
+          "correct_index": 1,
+          "explanation": "Filtering to the right rows (Selection) before narrowing to the desired column (Projection) is the natural composition here.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-7-relational-algebra-expressions-5",
+          "test_id": "pt-dbms-sql-7-relational-algebra-expressions",
+          "question_text": "Can the same real-world question be expressed by more than one equivalent relational algebra expression?",
+          "options": [
+            "No, there is always exactly one correct expression",
+            "Yes — multiple equivalent expressions can answer the same question, and recognizing which is more efficient is a query-optimization skill",
+            "Only if the question involves exactly one table",
+            "Equivalent expressions always have identical performance"
+          ],
+          "correct_index": 1,
+          "explanation": "Equivalent expressions preserve the defined result; performance still needs engine and workload evidence.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-7-relational-algebra-expressions-6",
+          "test_id": "pt-dbms-sql-7-relational-algebra-expressions",
+          "question_text": "What is a reliable strategy for constructing a complex relational algebra expression (or SQL query)?",
+          "options": [
+            "Always write the entire expression in one attempt with no intermediate checks",
+            "Build it incrementally from the base relations, adding one operation at a time and checking each intermediate result",
+            "Only ever use a single operation, no matter how complex the question",
+            "Memorize a fixed template for every possible question"
+          ],
+          "correct_index": 1,
+          "explanation": "Incremental construction with intermediate verification is a much more reliable method than attempting the full expression at once.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-7-relational-algebra-expressions-7",
+          "test_id": "pt-dbms-sql-7-relational-algebra-expressions",
+          "question_text": "How does a question needing data from three related tables typically get expressed?",
+          "options": [
+            "It cannot be expressed in relational algebra at all",
+            "By chaining Joins between the tables (matching on shared keys), then applying Selection/Projection as needed on the combined result",
+            "By using only Projection three times",
+            "By using three separate, unrelated queries with no way to combine them"
+          ],
+          "correct_index": 1,
+          "explanation": "Multi-table questions typically chain Joins to combine the data, then filter/narrow with Selection/Projection.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-7-relational-algebra-expressions-8",
+          "test_id": "pt-dbms-sql-7-relational-algebra-expressions",
+          "question_text": "Why does SQL's clause-based syntax feel more 'linear' than algebra's inside-out nested notation, despite expressing the same composition?",
+          "options": [
+            "SQL doesn't actually compose multiple operations the way algebra does",
+            "SQL clauses (FROM/JOIN, WHERE, SELECT) are written in a fixed sequential order rather than as nested function-call-style notation, even though the underlying composition of operations is equivalent",
+            "Algebra and SQL are unrelated concepts with no correspondence",
+            "SQL only ever supports a single operation per query"
+          ],
+          "correct_index": 1,
+          "explanation": "SQL clause syntax differs from nested notation; SQL bags, NULL and ordering need explicit treatment rather than blanket equivalence to classical set algebra.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-7-relational-algebra-expressions-new-9",
+          "test_id": "pt-dbms-sql-7-relational-algebra-expressions",
+          "question_text": "Which property allows one algebra result to become another operator’s input?",
+          "options": [
+            "Permanent disk ordering",
+            "Closure over relations",
+            "Automatic foreign keys",
+            "Unique display names"
+          ],
+          "correct_index": 1,
+          "explanation": "The intermediate result remains a relation with a defined heading.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-7-relational-algebra-expressions-new-10",
+          "test_id": "pt-dbms-sql-7-relational-algebra-expressions",
+          "question_text": "When does projecting only names lose information needed by a later GPA filter?",
+          "options": [
+            "Only after ORDER BY",
+            "Never",
+            "When GPA is removed before that filter",
+            "Only if all names differ"
+          ],
+          "correct_index": 2,
+          "explanation": "Later predicates require their referenced roles to remain available.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-7-relational-algebra-expressions-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-7-relational-algebra-expressions-application-new-1",
+          "test_id": "pt-dbms-sql-7-relational-algebra-expressions-application",
+          "question_text": "Two qualifying students share a name. What does set projection onto name return?",
+          "options": [
+            "Two student identities automatically",
+            "No values",
+            "One distinct name value",
+            "One arbitrary student record"
+          ],
+          "correct_index": 2,
+          "explanation": "Projection grain differs from person identity.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-7-relational-algebra-expressions-application-new-2",
+          "test_id": "pt-dbms-sql-7-relational-algebra-expressions-application",
+          "question_text": "Which SQL feature mirrors duplicate-eliminating projection for selected name values?",
+          "options": [
+            "SELECT name alone always",
+            "ORDER BY alone",
+            "An alias alone",
+            "SELECT DISTINCT name"
+          ],
+          "correct_index": 3,
+          "explanation": "Ordinary SELECT is duplicate preserving.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-7-relational-algebra-expressions-application-new-3",
+          "test_id": "pt-dbms-sql-7-relational-algebra-expressions-application",
+          "question_text": "A student has three matching enrollments. What can a SQL inner join produce?",
+          "options": [
+            "Three student-enrollment occurrences",
+            "Always one student row",
+            "Always no row",
+            "A uniqueness constraint automatically"
+          ],
+          "correct_index": 0,
+          "explanation": "Multiplicity follows the matching facts.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-7-relational-algebra-expressions-application-new-4",
+          "test_id": "pt-dbms-sql-7-relational-algebra-expressions-application",
+          "question_text": "What must an early projection retain?",
+          "options": [
+            "Only whichever label looks shortest",
+            "Attributes required by later predicates, joins and output",
+            "Only the final display name in every query",
+            "No identifiers"
+          ],
+          "correct_index": 1,
+          "explanation": "Projection movement must preserve information needed downstream.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-7-relational-algebra-expressions-application-new-5",
+          "test_id": "pt-dbms-sql-7-relational-algebra-expressions-application",
+          "question_text": "Does an algebra trace prove the physical join algorithm?",
+          "options": [
+            "Yes; nested notation forces nested loops",
+            "Only when DISTINCT appears",
+            "No",
+            "Only with three tables"
+          ],
+          "correct_index": 2,
+          "explanation": "Logical meaning and physical execution are separate.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-7-relational-algebra-expressions-application-new-6",
+          "test_id": "pt-dbms-sql-7-relational-algebra-expressions-application",
+          "question_text": "Which movement is unsafe without further analysis?",
+          "options": [
+            "Renaming a local table alias consistently",
+            "Keeping every required output role",
+            "Tracing a base relation",
+            "Moving a right-side filter across an outer join"
+          ],
+          "correct_index": 3,
+          "explanation": "Unmatched row preservation can change.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-7-relational-algebra-expressions-application-new-7",
+          "test_id": "pt-dbms-sql-7-relational-algebra-expressions-application",
+          "question_text": "Which sample best reveals name-value versus student-identity grain?",
+          "options": [
+            "Two different students with the same displayed name",
+            "One student with a unique name",
+            "Only empty courses",
+            "A different page title"
+          ],
+          "correct_index": 0,
+          "explanation": "The two contracts produce visibly different cardinalities.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-7-relational-algebra-expressions-application-new-8",
+          "test_id": "pt-dbms-sql-7-relational-algebra-expressions-application",
+          "question_text": "Why include complete keys in a three-input expression?",
+          "options": [
+            "To force one specific query plan",
+            "To match the intended scoped identities",
+            "To authorize every caller",
+            "To sort names automatically"
+          ],
+          "correct_index": 1,
+          "explanation": "Local identifiers can collide across scopes.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-7-relational-algebra-expressions-application-new-9",
+          "test_id": "pt-dbms-sql-7-relational-algebra-expressions-application",
+          "question_text": "What does ORDER BY add to a set-style report?",
+          "options": [
+            "A new foreign key",
+            "Automatic duplicate elimination",
+            "A presentation order under the selected comparison rules",
+            "A guarantee of one row per person"
+          ],
+          "correct_index": 2,
+          "explanation": "Classical relation membership has no inherent display order.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-7-relational-algebra-expressions-application-new-10",
+          "test_id": "pt-dbms-sql-7-relational-algebra-expressions-application",
+          "question_text": "When should performance claims be made?",
+          "options": [
+            "Whenever an expression has fewer symbols",
+            "After only a diagram",
+            "Whenever an alias is shorter",
+            "After relevant engine and workload evidence"
+          ],
+          "correct_index": 3,
+          "explanation": "Correctness reasoning alone does not measure physical cost.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cx-expression-filter-project",
+      "slug": "expression-filter-project",
+      "title": "Select qualifying students and project distinct name values",
+      "difficulty": "Easy",
+      "task": "Return distinct name values of Engineering students with gpa >= 3.5. This is a name-value set, not one row per student.",
+      "schema_sql": "CREATE TABLE students (student_id INT PRIMARY KEY, name VARCHAR(80) NOT NULL, department VARCHAR(40) NOT NULL, gpa DECIMAL(3,2) NOT NULL);",
+      "seed_sql": "INSERT INTO students VALUES (1,'Asha','Engineering',3.80),(2,'Asha','Engineering',3.60),(3,'Ben','Science',3.90),(4,'Chen','Engineering',3.40);",
+      "expected": "name\nAsha",
+      "ordering": "Ascending name. Fixtures use canonical labels without collation ambiguity.",
+      "constraints": [
+        "Filter on department and GPA before projecting the name-value set."
+      ],
+      "edge_cases": [
+        "Two qualifying students can share a name.",
+        "The GPA boundary is inclusive."
+      ],
+      "hints": [
+        "Keep GPA available for selection.",
+        "Use DISTINCT for the requested name-value set."
+      ],
+      "solution_sql": "SELECT DISTINCT name FROM students WHERE department='Engineering' AND gpa>=3.5 ORDER BY name;",
+      "explanation": "Selection chooses qualifying facts and duplicate-eliminating projection produces the requested name values.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO students VALUES (1,'Asha','Engineering',3.50),(2,'Ben','Engineering',3.49),(3,'Chen','Science',3.90);",
+          "expected": "name\nAsha"
+        },
+        {
+          "seed_sql": "",
+          "expected": ""
+        }
+      ]
+    },
+    {
+      "id": "cx-expression-three-inputs",
+      "slug": "expression-three-inputs",
+      "title": "Compose two associations into a distinct student report",
+      "difficulty": "Medium",
+      "task": "Return student_id and name once per Engineering student with at least one enrollment in an open course (is_open=1). Multiple qualifying enrollments must not duplicate the student.",
+      "schema_sql": "CREATE TABLE students (student_id INT PRIMARY KEY, name VARCHAR(80) NOT NULL, department VARCHAR(40) NOT NULL);\nCREATE TABLE courses (course_id INT PRIMARY KEY, is_open INT NOT NULL);\nCREATE TABLE enrollments (student_id INT NOT NULL, course_id INT NOT NULL);",
+      "seed_sql": "INSERT INTO students VALUES (1,'Asha','Engineering'),(2,'Asha','Engineering'),(3,'Ben','Science'),(4,'Chen','Engineering'); INSERT INTO courses VALUES (10,1),(20,1),(30,0); INSERT INTO enrollments VALUES (1,10),(1,20),(2,30),(3,10);",
+      "expected": "student_id\tname\n1\tAsha",
+      "ordering": "Ascending student_id.",
+      "constraints": [
+        "Return student identity, not distinct display-name values.",
+        "Both relationship predicates are required."
+      ],
+      "edge_cases": [
+        "Several matching enrollments do not duplicate one student.",
+        "A closed course does not qualify a student.",
+        "An unmatched course proposal supplies no open course."
+      ],
+      "hints": [
+        "Match enrollment to both its student and course.",
+        "Project the requested distinct student identity."
+      ],
+      "solution_sql": "SELECT DISTINCT s.student_id,s.name FROM students s JOIN enrollments e ON e.student_id=s.student_id JOIN courses c ON c.course_id=e.course_id WHERE s.department='Engineering' AND c.is_open=1 ORDER BY s.student_id;",
+      "explanation": "The associations and selections produce qualifying participation facts, then distinct student identity sets the final grain.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO students VALUES (1,'Asha','Engineering'),(2,'Asha','Engineering'); INSERT INTO courses VALUES (10,1); INSERT INTO enrollments VALUES (1,10),(1,10),(2,10);",
+          "expected": "student_id\tname\n1\tAsha\n2\tAsha"
+        },
+        {
+          "seed_sql": "INSERT INTO students VALUES (1,'Asha','Engineering'); INSERT INTO enrollments VALUES (1,99);",
+          "expected": ""
+        },
+        {
+          "seed_sql": "",
+          "expected": ""
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-7-relational-algebra-expressions-1",
+      "test_id": "pt-dbms-sql-7-relational-algebra-expressions",
+      "question_text": "What is a relational algebra expression?",
+      "options": [
+        "A single, atomic operation like Selection alone",
+        "A combination of multiple basic operations chained together, where one operation's output feeds the next's input",
+        "A special SQL keyword",
+        "A type of database index"
+      ],
+      "correct_index": 1,
+      "explanation": "Expressions compose several operations to answer more complex questions than any single operation could alone.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-7-relational-algebra-expressions-2",
+      "test_id": "pt-dbms-sql-7-relational-algebra-expressions",
+      "question_text": "In π(name)(σ(department = 'Engineering')(Students)), which operation is applied FIRST?",
+      "options": [
+        "Projection (π), since it's written first",
+        "Selection (σ), since algebra notation nests inside-out like function calls",
+        "Both are applied simultaneously",
+        "Neither — this notation is invalid"
+      ],
+      "correct_index": 1,
+      "explanation": "Just like nested function calls, the innermost operation (Selection here) executes first, feeding its result to the outer operation (Projection).",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-7-relational-algebra-expressions-3",
+      "test_id": "pt-dbms-sql-7-relational-algebra-expressions",
+      "question_text": "Does the order operations are conceptually written in an algebra expression always match the order a real database engine executes them?",
+      "options": [
+        "Yes, always, exactly",
+        "Not necessarily — a query optimizer can reorder operations (e.g. applying Selection before a Join) to improve performance while preserving the same correct result",
+        "Real engines always execute right-to-left, opposite to the written order",
+        "Execution order has no bearing on correctness or performance"
+      ],
+      "correct_index": 1,
+      "explanation": "Query optimizers routinely reorder logically-equivalent operations for efficiency — this is covered further in Chapter 35.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-7-relational-algebra-expressions-4",
+      "test_id": "pt-dbms-sql-7-relational-algebra-expressions",
+      "question_text": "How would you build the expression for 'names of Engineering students with GPA >= 3.5'?",
+      "options": [
+        "A single Projection alone is sufficient",
+        "Select the qualifying rows first, then project onto just the name column",
+        "Project first, then select",
+        "Use only a Join operation"
+      ],
+      "correct_index": 1,
+      "explanation": "Filtering to the right rows (Selection) before narrowing to the desired column (Projection) is the natural composition here.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-7-relational-algebra-expressions-5",
+      "test_id": "pt-dbms-sql-7-relational-algebra-expressions",
+      "question_text": "Can the same real-world question be expressed by more than one equivalent relational algebra expression?",
+      "options": [
+        "No, there is always exactly one correct expression",
+        "Yes — multiple equivalent expressions can answer the same question, and recognizing which is more efficient is a query-optimization skill",
+        "Only if the question involves exactly one table",
+        "Equivalent expressions always have identical performance"
+      ],
+      "correct_index": 1,
+      "explanation": "Logically equivalent but differently-ordered/structured expressions are common, and choosing an efficient one matters in practice.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-7-relational-algebra-expressions-6",
+      "test_id": "pt-dbms-sql-7-relational-algebra-expressions",
+      "question_text": "What is a reliable strategy for constructing a complex relational algebra expression (or SQL query)?",
+      "options": [
+        "Always write the entire expression in one attempt with no intermediate checks",
+        "Build it incrementally from the base relations, adding one operation at a time and checking each intermediate result",
+        "Only ever use a single operation, no matter how complex the question",
+        "Memorize a fixed template for every possible question"
+      ],
+      "correct_index": 1,
+      "explanation": "Incremental construction with intermediate verification is a much more reliable method than attempting the full expression at once.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-7-relational-algebra-expressions-7",
+      "test_id": "pt-dbms-sql-7-relational-algebra-expressions",
+      "question_text": "How does a question needing data from three related tables typically get expressed?",
+      "options": [
+        "It cannot be expressed in relational algebra at all",
+        "By chaining Joins between the tables (matching on shared keys), then applying Selection/Projection as needed on the combined result",
+        "By using only Projection three times",
+        "By using three separate, unrelated queries with no way to combine them"
+      ],
+      "correct_index": 1,
+      "explanation": "Multi-table questions typically chain Joins to combine the data, then filter/narrow with Selection/Projection.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-7-relational-algebra-expressions-8",
+      "test_id": "pt-dbms-sql-7-relational-algebra-expressions",
+      "question_text": "Why does SQL's clause-based syntax feel more 'linear' than algebra's inside-out nested notation, despite expressing the same composition?",
+      "options": [
+        "SQL doesn't actually compose multiple operations the way algebra does",
+        "SQL clauses (FROM/JOIN, WHERE, SELECT) are written in a fixed sequential order rather than as nested function-call-style notation, even though the underlying composition of operations is equivalent",
+        "Algebra and SQL are unrelated concepts with no correspondence",
+        "SQL only ever supports a single operation per query"
+      ],
+      "correct_index": 1,
+      "explanation": "SQL's clause ordering is a different but equally expressive way of specifying the same sequence of composed operations.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "coordinator",
+    "independent_review": "unavailable; no agent tools",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Definitions and examples checked against questions; no plagiarism certification.",
+    "existing_question_corrections": [
+      "tq-dbms-sql-7-relational-algebra-expressions-1",
+      "tq-dbms-sql-7-relational-algebra-expressions-5",
+      "tq-dbms-sql-7-relational-algebra-expressions-8"
+    ],
+    "canonical_answer_indices_preserved": true,
+    "batch_review": {
+      "reviewer": "coordinator",
+      "independent": false,
+      "scope": "New package only: notes, keyed examples, original question identities and canonical indices, every correct answer, exercises and recorded fixture outputs, diagram trace, content-only paired integration.",
+      "findings_resolved": "Outer Join retained absence question clarified: missing parent is a violation only when the modeled relationship requires it. Division retains its original Hard exercise; validator permits retained Hard alongside Easy while rejecting a new Hard substitute.",
+      "remaining": "Exact MySQL/provider execution, browser QA, independent review and applied-migration behavior unverified; output fixtures do not prove required source technique."
+    }
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-7-relational-algebra-expressions",
+    "original_note_sha256": "106468f869733ad1e06b32077ef5b27683ac09a20d7ff04c1151f7d522321b16",
+    "status": "paired migration prepared; not applied"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Intermediate heading and grain determine which operations remain possible",
+      "description": "Selection retains all source roles, while projecting only name changes the result to a name-value set and removes GPA and student identity.",
+      "columns": [
+        "Logical stage",
+        "Available roles",
+        "Example result",
+        "Grain"
+      ],
+      "rows": [
+        [
+          "Students",
+          "student_id, name, department, gpa",
+          "1 Asha 3.8; 2 Asha 3.6; 3 Ben 3.9",
+          "Student identity"
+        ],
+        [
+          "Select Engineering and gpa >= 3.5",
+          "All student roles retained",
+          "1 Asha; 2 Asha",
+          "Qualifying student identity"
+        ],
+        [
+          "Project name as a set",
+          "name only",
+          "Asha",
+          "Distinct name value"
+        ],
+        [
+          "Later GPA filter?",
+          "GPA no longer available",
+          "Cannot test it from this projection alone",
+          "Required information was removed"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "coordinator traced intermediate headings, duplicate name collapse, student identity and required predicate roles",
+    "server_rendering": "passed",
+    "browser_rendering": "unverified",
+    "independent_review": "unavailable; no agent tools",
+    "server_rendering_evidence": "Actual LessonBlock rendering passed in selected Vitest checks for relational-algebra-expressions and relational-algebra-practice; no browser QA."
+  },
+  "sql_verification": {
+    "engine": "11.8.6-MariaDB-0+deb13u1 from Debian",
+    "scope": "MariaDB compatibility execution; exact MySQL 8.4/provider execution unverified",
+    "fingerprint": "a6a4bd1a88f4f1a8c821e0a03ba836b36cb6ea2acf6abe175cc698c12fb903fd",
+    "cases": [
+      {
+        "problem": "expression-filter-project",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "expression-filter-project",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "expression-filter-project",
+        "case": 2,
+        "passed": true
+      },
+      {
+        "problem": "expression-three-inputs",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "expression-three-inputs",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "expression-three-inputs",
+        "case": 2,
+        "passed": true
+      },
+      {
+        "problem": "expression-three-inputs",
+        "case": 3,
+        "passed": true
+      }
+    ],
+    "all_passed": true
+  }
+}

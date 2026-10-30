@@ -1,0 +1,654 @@
+{
+  "source_ref": "chapter-9-ddl-and-schema-design/alter-table",
+  "slug": "alter-table",
+  "title": "ALTER TABLE",
+  "description": "Change an existing definition while preserving intended rows, distinguish nullable expansion from required-state enforcement, and assess dialect-specific rewrite and locking behaviour.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Alter the definition that already exists\n\nALTER TABLE changes an existing table's structure rather than creating an unrelated replacement. A campus store may need an optional contact email for customers whose records already contain id and name. The requirement is to extend those records without discarding their identifiers or inventing email addresses. The retained exercise teaches exactly that change and preserves its existing post-submission checker.\n\nCommon actions include adding a column, changing an allowed type, introducing a constraint and removing a no-longer-required definition. They have different consequences. Adding an optional field can preserve existing row meanings, whereas narrowing a type can reject or transform data. Treat ALTER TABLE as a family of operations whose safety depends on the specific action and current state.\n\n## Read the current contract before choosing an action\n\nInspect the existing column definition, relevant constraints, indexes and direct consumers. A customer name might be used in a report while id participates in application references. Changing one of those roles can affect callers differently. An operation that succeeds in the database can still break an application that expects a particular column name or accepted input range.\n\nFor the introductory exercise, the current structure and intended extension are small and explicit. The more advanced task keeps the original customers schema and sample rows unchanged. Neither asks for replacing the table, changing identities or adding mandatory email to old records. A precise requirement prevents the common mistake of solving a nearby but different redesign problem.\n\n## Nullable additions preserve an honest unknown state\n\nA new nullable email field can represent that no email has been recorded for an existing customer. It should not be filled with an invented address merely to make every cell look populated. NULL is different from an empty string and different from a known valid email. The table definition and application should agree on what each state means.\n\nAfter adding the column, existing customer identities and names remain observable. The retained checker inserts a new customer with an email and reads all rows in identifier order. This establishes both backward compatibility for the old rows and acceptance of the new property. It does not prove the text is a valid deliverable email address unless a separate validation policy actually checks that.\n\n```sql\nALTER TABLE customers ADD COLUMN email TEXT NULL;\n```\n\n## Defaults describe supplied values under a policy\n\nA DEFAULT value can supply a value for qualifying future inserts that omit a column. It does not automatically mean that a fact was observed about every old row. For example, a default notification preference might reflect an explicit onboarding policy; an invented date of inspection would falsely claim a real event. Choose defaults from the domain rather than from a desire to avoid missing cells.\n\nThe effect and cost of adding a defaulted column depend on the product, version and expression. Some supported cases can avoid rewriting every row, while others cannot. Distinguish the logical value old queries observe from the physical method the engine uses to represent it. A metadata optimization does not change the application's responsibility to choose a semantically valid value.\n\n## Required additions can need a staged transition\n\nA live table may contain rows that cannot immediately satisfy a new NOT NULL rule. One possible transition is to add the new field as nullable, update applications to supply it correctly, backfill accepted values, verify no missing values remain, and then enforce the required rule. The sequence separates expansion, data repair and final enforcement.\n\nThat sequence is a strategy, not a universal guarantee of minimal locking or compatibility. Concurrent writers can introduce new missing values during a poorly coordinated backfill. A final scan can find rows added after an earlier validation. The actual transition needs a defined writer policy and engine-specific execution plan. The small lab does not claim to demonstrate every concurrency requirement of a large production rollout.\n\n## Changing types needs data-domain evidence\n\nWidening a character column can allow longer values, while narrowing it can encounter existing values that no longer fit. Numeric changes may alter range, precision or conversion behaviour. Check existing values against the proposed domain and review how the actual engine handles conversions and SQL modes. Do not assume every incompatible change simply fails without any possibility of conversion effects.\n\nIn MySQL, MODIFY COLUMN commonly restates the desired column definition. Omitted properties can matter, so write the intended nullability and other relevant attributes explicitly. PostgreSQL uses different ALTER COLUMN syntax for several actions. A statement copied from another product is not a portable recipe merely because both commands begin with ALTER TABLE.\n\n## Constraints validate a rule over table state\n\nAdding a uniqueness or check constraint makes an explicit claim about accepted state. Existing duplicate or out-of-domain rows can prevent the change from succeeding. A successful initial scan is not a reason to omit the actual ongoing constraint: new writes still need enforcement at the trusted database boundary when that is the chosen design.\n\nPostgreSQL supports NOT VALID for applicable CHECK and foreign-key additions, followed by later validation. That separates aspects of accepting the definition and validating existing rows under that product's rules. Do not describe it as a universal option for every constraint or as MySQL syntax. Native enforcement and locking behaviour need evidence from the actual target rather than a compatible engine's unrelated feature.\n\n## Cost and concurrency depend on the exact operation\n\nA table change can involve metadata work, an index rebuild, data copying or other engine-specific activity. A small empty fixture cannot establish production duration for millions of rows. Table size, indexes, ongoing traffic, storage and the chosen operation can all affect the result. Claims such as ALTER always rewrites everything or ALTER is always instant are both too broad.\n\nMySQL exposes algorithm and locking options for supported operations. Requesting an option does not make every alteration support it, nor does a low-blocking option guarantee the complete absence of metadata-lock waits. Online schema-change tools introduce their own prerequisites and operational behaviour. Explain their purpose without treating their names as proof that an arbitrary migration is safe to execute.\n\n## Removing a column is a data-loss decision\n\nDROP COLUMN removes a property from the table's accessible definition and can destroy the associated stored values. Reintroducing a column with the same name does not reconstruct the original facts. A recovery plan needs a valid source of those facts and a compatible restoration process. Renaming a field or backing up unrelated columns is not sufficient.\n\nReview consumers before removal. A report, import job or older application version may still reference the field. An expand-and-contract transition can give callers time to move, but merely waiting a fixed interval does not prove every caller has migrated. Evidence of usage and compatibility matters more than a ritualized delay. The exercises intentionally focus on additive changes rather than hiding destructive effects.\n\n## Preserve the checker-based assessment contract\n\nThe retained customers task supplies its starting schema and rows before the student statement. After submission, its checker inserts customer 99 with an email and selects the result. Keeping that order verifies the new column actually exists. Running the checker first would fail, while replacing the checker with a query that never uses email would weaken what the assessment observes.\n\nA hidden fixture changes the starting customer identities and names while preserving the definition requirement. The original sample setup and checker remain unchanged in the prepared content. Additional fixtures include no old customers and an alternate old identity, so the solution cannot rely on a particular row count. The reference statement performs the structural addition without changing existing data deliberately.\n\n## Check compatibility at the boundary you changed\n\nThe introductory task adds an optional inspection date, records it only for positive stock and shows unknown dates for zero stock. It tests that the new field is available and that old values remain intact. The retained medium task checks email extension through the original trailing insert. Together they exercise definition changes and meaningful row preservation without pretending to benchmark online alteration.\n\nRecorded local fixtures verify these specific accepted results. They do not prove production locking, arbitrary submitted technique, exact MySQL/provider execution or deployment rollback. Keep those limits separate from the package's explanatory completeness. A good ALTER TABLE solution states the starting contract, intended final definition, existing-data treatment and actual validation evidence so both students and reviewers can assess what changed.\n",
+  "references": [
+    {
+      "title": "MySQL 8.4 ALTER TABLE",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/alter-table.html"
+    },
+    {
+      "title": "PostgreSQL 18 ALTER TABLE",
+      "url": "https://www.postgresql.org/docs/18/sql-altertable.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-9-alter-table",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-9-alter-table-1",
+          "test_id": "pt-dbms-sql-9-alter-table",
+          "question_text": "What does ALTER TABLE allow you to do?",
+          "options": [
+            "Only rename a table",
+            "Modify an existing table's structure — add/drop columns, change types, add/drop constraints",
+            "Only delete rows from a table",
+            "Create a brand new table"
+          ],
+          "correct_index": 1,
+          "explanation": "ALTER TABLE modifies an existing table's structure without recreating it.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-9-alter-table-2",
+          "test_id": "pt-dbms-sql-9-alter-table",
+          "question_text": "Why can a type-changing ALTER be expensive?",
+          "options": [
+            "It always requires dropping the whole database",
+            "The exact engine and change can require rewriting data or indexes and restrictive locking",
+            "It only works on empty tables",
+            "It automatically creates a backup first"
+          ],
+          "correct_index": 1,
+          "explanation": "Not every change rewrites the table or uses an identical lock.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-9-alter-table-3",
+          "test_id": "pt-dbms-sql-9-alter-table",
+          "question_text": "Which is a possible staged strategy for a new required property on populated live data?",
+          "options": [
+            "Add the column as NOT NULL directly in one statement",
+            "Add a nullable field, coordinate writers and backfill, verify completeness, then enforce the requirement",
+            "Drop and recreate the table",
+            "Only possible during scheduled downtime"
+          ],
+          "correct_index": 1,
+          "explanation": "This strategy still requires concurrency, compatibility and locking analysis.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-9-alter-table-4",
+          "test_id": "pt-dbms-sql-9-alter-table",
+          "question_text": "Why must adding a required column to populated data be evaluated against engine rules and existing values?",
+          "options": [
+            "It succeeds silently, leaving nulls in old rows",
+            "Existing rows need a valid defined value; outcomes depend on defaults, engine behaviour and modes",
+            "It automatically deletes all existing rows",
+            "It converts the column to nullable automatically"
+          ],
+          "correct_index": 1,
+          "explanation": "It is inaccurate to promise the same unconditional failure behaviour on every engine.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-9-alter-table-5",
+          "test_id": "pt-dbms-sql-9-alter-table",
+          "question_text": "What is the purpose of supported online schema-change approaches?",
+          "options": [
+            "To back up a database",
+            "To reduce disruption for supported changes under their documented prerequisites",
+            "To convert MySQL databases to PostgreSQL",
+            "To generate sample data"
+          ],
+          "correct_index": 1,
+          "explanation": "They do not guarantee zero locking or support every operation.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-9-alter-table-6",
+          "test_id": "pt-dbms-sql-9-alter-table",
+          "question_text": "In PostgreSQL, what technique lets you add a new CHECK or FOREIGN KEY constraint on a large table without an immediate full validation scan under lock?",
+          "options": [
+            "ADD CONSTRAINT ... NOT VALID, followed later by a separate VALIDATE CONSTRAINT",
+            "There is no such technique",
+            "Using TRUNCATE first",
+            "Renaming the table first"
+          ],
+          "correct_index": 0,
+          "explanation": "NOT VALID skips the initial validation scan, which can then be run separately with VALIDATE CONSTRAINT, splitting the work into lighter steps.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-9-alter-table-7",
+          "test_id": "pt-dbms-sql-9-alter-table",
+          "question_text": "Is dropping a column with ALTER TABLE ... DROP COLUMN typically recoverable?",
+          "options": [
+            "Yes, columns are always recoverable via UNDO",
+            "No, in practice the data is gone unless restored from a backup, even though the table itself remains",
+            "It only removes the column name, keeping the data",
+            "It automatically archives the dropped column elsewhere"
+          ],
+          "correct_index": 1,
+          "explanation": "Dropping a column removes its data; recovery requires a backup, similar in spirit to other irreversible DDL operations.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-9-alter-table-8",
+          "test_id": "pt-dbms-sql-9-alter-table",
+          "question_text": "Does a fast metadata-based addition prove every ALTER TABLE avoids row rewrites?",
+          "options": [
+            "Because it deletes the table and recreates it instantly",
+            "No; optimization applies only to supported operations and definitions",
+            "Because PostgreSQL disables constraints permanently",
+            "Because it only works on temporary tables"
+          ],
+          "correct_index": 1,
+          "explanation": "Cost follows the exact change, product, version and table state.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-9-alter-table-new-9",
+          "test_id": "pt-dbms-sql-9-alter-table",
+          "question_text": "What does NULL email mean in the stated additive exercise?",
+          "options": [
+            "A valid address was verified",
+            "No email has been recorded for that row",
+            "The customer identity was deleted",
+            "The string NULL was typed"
+          ],
+          "correct_index": 1,
+          "explanation": "Absence is distinct from a supplied text value.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-9-alter-table-new-10",
+          "test_id": "pt-dbms-sql-9-alter-table",
+          "question_text": "Does recreating a dropped column name restore its earlier values?",
+          "options": [
+            "Yes, automatically",
+            "Only if sorted",
+            "No",
+            "Only when names match"
+          ],
+          "correct_index": 2,
+          "explanation": "Definition recovery and fact recovery differ.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-9-alter-table-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-9-alter-table-application-new-1",
+          "test_id": "pt-dbms-sql-9-alter-table-application",
+          "question_text": "Why coordinate writers during a staged required-field backfill?",
+          "options": [
+            "To rename every customer",
+            "To bypass constraints",
+            "New writes can otherwise introduce missing values during the transition",
+            "To remove metadata"
+          ],
+          "correct_index": 2,
+          "explanation": "A scan and ongoing write policy must agree.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-9-alter-table-application-new-2",
+          "test_id": "pt-dbms-sql-9-alter-table-application",
+          "question_text": "What should be checked before narrowing a type?",
+          "options": [
+            "Only the column alias",
+            "Only the table name length",
+            "Nothing if a sample worked",
+            "Whether existing values fit the intended domain and how conversions behave"
+          ],
+          "correct_index": 3,
+          "explanation": "Domain and engine conversion rules matter.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-9-alter-table-application-new-3",
+          "test_id": "pt-dbms-sql-9-alter-table-application",
+          "question_text": "Does a DEFAULT prove an inspection actually occurred?",
+          "options": [
+            "No",
+            "Yes, on every old row",
+            "Only with a DATE type",
+            "Only if a row has stock"
+          ],
+          "correct_index": 0,
+          "explanation": "A default cannot invent observed events.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-9-alter-table-application-new-4",
+          "test_id": "pt-dbms-sql-9-alter-table-application",
+          "question_text": "What order does the retained email task require?",
+          "options": [
+            "Checker before table definition",
+            "Starting schema and rows, submitted ALTER, then checker",
+            "Drop before every insert",
+            "Read email before it exists"
+          ],
+          "correct_index": 1,
+          "explanation": "The checker depends on the changed structure.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-9-alter-table-application-new-5",
+          "test_id": "pt-dbms-sql-9-alter-table-application",
+          "question_text": "Does NOT VALID apply universally to every MySQL constraint?",
+          "options": [
+            "Yes",
+            "Only with DISTINCT",
+            "No",
+            "Only for TEXT"
+          ],
+          "correct_index": 2,
+          "explanation": "It is a scoped PostgreSQL feature in this comparison.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-9-alter-table-application-new-6",
+          "test_id": "pt-dbms-sql-9-alter-table-application",
+          "question_text": "What can invalidate a low-disruption claim from an empty fixture?",
+          "options": [
+            "The fixture has an output alias",
+            "The notes use headings",
+            "The SELECT is ordered",
+            "Production size, indexes and concurrent traffic were not exercised"
+          ],
+          "correct_index": 3,
+          "explanation": "A tiny correctness case is not a production cost test.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-9-alter-table-application-new-7",
+          "test_id": "pt-dbms-sql-9-alter-table-application",
+          "question_text": "When should a nullable date remain absent in the introductory task?",
+          "options": [
+            "When the task supplies no inspection for zero stock",
+            "Whenever stock is positive",
+            "For every new column forever",
+            "Only for the first id"
+          ],
+          "correct_index": 0,
+          "explanation": "Recorded facts follow the stated event policy.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-9-alter-table-application-new-8",
+          "test_id": "pt-dbms-sql-9-alter-table-application",
+          "question_text": "What must a MySQL MODIFY COLUMN definition preserve deliberately?",
+          "options": [
+            "Every old query alias",
+            "Relevant attributes such as intended type and nullability",
+            "Only the spelling of SELECT",
+            "An arbitrary default address"
+          ],
+          "correct_index": 1,
+          "explanation": "Restating an incomplete definition can change properties.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-9-alter-table-application-new-9",
+          "test_id": "pt-dbms-sql-9-alter-table-application",
+          "question_text": "Does successful DDL guarantee every existing caller remains compatible?",
+          "options": [
+            "Yes",
+            "Only when no default is given",
+            "No",
+            "Only for small tables"
+          ],
+          "correct_index": 2,
+          "explanation": "Application contracts need their own review.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-9-alter-table-application-new-10",
+          "test_id": "pt-dbms-sql-9-alter-table-application",
+          "question_text": "Why preserve the original checker and setup?",
+          "options": [
+            "To force a production deployment",
+            "To skip testing the new column",
+            "To change saved identities",
+            "To retain the assessment’s observable structural contract"
+          ],
+          "correct_index": 3,
+          "explanation": "Existing assessment semantics must not be silently weakened.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cx-alter-inspection-date",
+      "slug": "alter-inspection-date",
+      "title": "Add an optional inspection date without replacing stock rows",
+      "difficulty": "Easy",
+      "task": "Add inspected_on DATE NULL to stock. Set it to 2026-09-01 only for rows with quantity > 0. Return item_id, quantity, inspected_on without replacing stock or changing existing identifiers.",
+      "schema_sql": "CREATE TABLE stock (item_id INT PRIMARY KEY, quantity INT NOT NULL);",
+      "seed_sql": "INSERT INTO stock VALUES (2,0),(1,3);",
+      "expected": "item_id\tquantity\tinspected_on\n1\t3\t2026-09-01\n2\t0\tNULL",
+      "ordering": "Ascending item_id.",
+      "constraints": [
+        "Preserve existing table and quantities.",
+        "Missing inspection is represented as NULL."
+      ],
+      "edge_cases": [
+        "Zero stock keeps NULL.",
+        "Empty stock still requires the definition change."
+      ],
+      "hints": [
+        "Add the column before using it in UPDATE.",
+        "Use the stated positive-quantity predicate only."
+      ],
+      "solution_sql": "ALTER TABLE stock ADD COLUMN inspected_on DATE NULL; UPDATE stock SET inspected_on='2026-09-01' WHERE quantity>0; SELECT item_id,quantity,inspected_on FROM stock ORDER BY item_id;",
+      "explanation": "The optional addition preserves rows while the subsequent write records only the stated inspection cases.",
+      "validation_cases": [
+        {
+          "seed_sql": "",
+          "expected": ""
+        },
+        {
+          "seed_sql": "INSERT INTO stock VALUES (7,0),(8,1);",
+          "expected": "item_id\tquantity\tinspected_on\n7\t0\tNULL\n8\t1\t2026-09-01"
+        }
+      ]
+    },
+    {
+      "id": "cp-dbms-sql-add-an-email-column",
+      "slug": "add-an-email-column",
+      "title": "Add an Email Column",
+      "difficulty": "Medium",
+      "existing_problem": true,
+      "original_description_md5": "6d010b75107cc7c2280ceb52bf3db071",
+      "original_check_sql": "INSERT INTO customers (id, name, email) VALUES (99, 'Placeholder', 'test@x.com'); SELECT id, name, email FROM customers ORDER BY id;",
+      "check_sql": "INSERT INTO customers (id, name, email) VALUES (99, 'Placeholder', 'test@x.com'); SELECT id, name, email FROM customers ORDER BY id;",
+      "task": "Add a nullable email TEXT column to the existing customers table using ALTER TABLE. Preserve all existing ids and names. The original trailing checker inserts customer 99 with a supplied email and reads the table in id order. Do not add a fake address to existing rows or recreate customers.",
+      "schema_sql": "CREATE TABLE customers (\n  id INTEGER PRIMARY KEY,\n  name TEXT NOT NULL\n);",
+      "seed_sql": "INSERT INTO customers (id, name) VALUES (1, 'Asha'), (2, 'Rohan');",
+      "expected": "id\tname\temail\n1\tAsha\tNULL\n2\tRohan\tNULL\n99\tPlaceholder\ttest@x.com",
+      "ordering": "The retained checker orders all rows by id.",
+      "constraints": [
+        "Original identity, schema, sample rows and checker retained.",
+        "The new email property permits NULL."
+      ],
+      "edge_cases": [
+        "Existing customers have NULL email.",
+        "A new checker row can supply email.",
+        "No original customers still permits the checker insert."
+      ],
+      "hints": [
+        "Add the optional column before the trailing checker executes.",
+        "No UPDATE is needed for existing unknown email values."
+      ],
+      "solution_sql": "ALTER TABLE customers ADD COLUMN email TEXT NULL;",
+      "explanation": "The additive definition leaves old identities and names intact and permits the original checker’s new property.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO customers (id, name) VALUES (5, 'Zara'), (6, 'Omar');",
+          "expected": "id\tname\temail\n5\tZara\tNULL\n6\tOmar\tNULL\n99\tPlaceholder\ttest@x.com"
+        },
+        {
+          "seed_sql": "",
+          "expected": "id\tname\temail\n99\tPlaceholder\ttest@x.com"
+        },
+        {
+          "seed_sql": "INSERT INTO customers VALUES (7,'Mira');",
+          "expected": "id\tname\temail\n7\tMira\tNULL\n99\tPlaceholder\ttest@x.com"
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-9-alter-table-1",
+      "test_id": "pt-dbms-sql-9-alter-table",
+      "question_text": "What does ALTER TABLE allow you to do?",
+      "options": [
+        "Only rename a table",
+        "Modify an existing table's structure — add/drop columns, change types, add/drop constraints",
+        "Only delete rows from a table",
+        "Create a brand new table"
+      ],
+      "correct_index": 1,
+      "explanation": "ALTER TABLE modifies an existing table's structure without recreating it.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-9-alter-table-2",
+      "test_id": "pt-dbms-sql-9-alter-table",
+      "question_text": "Why can ALTER TABLE ... ALTER COLUMN ... TYPE be expensive on a huge table?",
+      "options": [
+        "It always requires dropping the whole database",
+        "It can require a full-table rewrite under an exclusive lock",
+        "It only works on empty tables",
+        "It automatically creates a backup first"
+      ],
+      "correct_index": 1,
+      "explanation": "Changing a column's data type commonly rewrites every row, holding a lock for the duration.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-9-alter-table-3",
+      "test_id": "pt-dbms-sql-9-alter-table",
+      "question_text": "What is the recommended sequence to add a required (NOT NULL) column to a huge, live, already-populated table with minimal locking?",
+      "options": [
+        "Add the column as NOT NULL directly in one statement",
+        "Add it nullable, backfill values in batches, then set NOT NULL once fully populated",
+        "Drop and recreate the table",
+        "Only possible during scheduled downtime"
+      ],
+      "correct_index": 1,
+      "explanation": "Adding nullable first, backfilling in batches, then constraining afterward avoids one long table-locking rewrite.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-9-alter-table-4",
+      "test_id": "pt-dbms-sql-9-alter-table",
+      "question_text": "What happens if you try to add a NOT NULL column with no DEFAULT to a table that already has rows?",
+      "options": [
+        "It succeeds silently, leaving nulls in old rows",
+        "It fails, since existing rows would violate the NOT NULL constraint",
+        "It automatically deletes all existing rows",
+        "It converts the column to nullable automatically"
+      ],
+      "correct_index": 1,
+      "explanation": "Existing rows have no value to put in the new NOT NULL column, so the operation fails unless a default is supplied or the column starts nullable.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-9-alter-table-5",
+      "test_id": "pt-dbms-sql-9-alter-table",
+      "question_text": "What is the purpose of tools like pt-online-schema-change or gh-ost, or MySQL's ALGORITHM=INPLACE, LOCK=NONE?",
+      "options": [
+        "To back up a database",
+        "To perform schema changes on large live tables while minimizing locking/blocking",
+        "To convert MySQL databases to PostgreSQL",
+        "To generate sample data"
+      ],
+      "correct_index": 1,
+      "explanation": "These tools/options exist specifically to avoid long blocking locks when altering large production tables.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-9-alter-table-6",
+      "test_id": "pt-dbms-sql-9-alter-table",
+      "question_text": "In PostgreSQL, what technique lets you add a new CHECK or FOREIGN KEY constraint on a large table without an immediate full validation scan under lock?",
+      "options": [
+        "ADD CONSTRAINT ... NOT VALID, followed later by a separate VALIDATE CONSTRAINT",
+        "There is no such technique",
+        "Using TRUNCATE first",
+        "Renaming the table first"
+      ],
+      "correct_index": 0,
+      "explanation": "NOT VALID skips the initial validation scan, which can then be run separately with VALIDATE CONSTRAINT, splitting the work into lighter steps.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-9-alter-table-7",
+      "test_id": "pt-dbms-sql-9-alter-table",
+      "question_text": "Is dropping a column with ALTER TABLE ... DROP COLUMN typically recoverable?",
+      "options": [
+        "Yes, columns are always recoverable via UNDO",
+        "No, in practice the data is gone unless restored from a backup, even though the table itself remains",
+        "It only removes the column name, keeping the data",
+        "It automatically archives the dropped column elsewhere"
+      ],
+      "correct_index": 1,
+      "explanation": "Dropping a column removes its data; recovery requires a backup, similar in spirit to other irreversible DDL operations.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-9-alter-table-8",
+      "test_id": "pt-dbms-sql-9-alter-table",
+      "question_text": "Since PostgreSQL 11, why is ALTER TABLE ADD COLUMN with no default often described as 'metadata-only' and fast?",
+      "options": [
+        "Because it deletes the table and recreates it instantly",
+        "Because it doesn't need to rewrite existing rows — the new column is treated as unset until touched",
+        "Because PostgreSQL disables constraints permanently",
+        "Because it only works on temporary tables"
+      ],
+      "correct_index": 1,
+      "explanation": "PostgreSQL can add such columns without rewriting existing rows, making the operation a fast metadata change rather than a full table rewrite.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "coordinator",
+    "independent_review": "unavailable; no agent tools",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Definitions and examples checked against questions; no plagiarism certification.",
+    "existing_question_corrections": [
+      "tq-dbms-sql-9-alter-table-2",
+      "tq-dbms-sql-9-alter-table-3",
+      "tq-dbms-sql-9-alter-table-4",
+      "tq-dbms-sql-9-alter-table-5",
+      "tq-dbms-sql-9-alter-table-8"
+    ],
+    "canonical_answer_indices_preserved": true,
+    "batch_review": {
+      "reviewer": "coordinator",
+      "independent": false,
+      "scope": "This new package: explained definitions and boundaries, retained source question identities/canonical indices, new correct answers and explanations, exercise solutions and recorded fixtures, diagram trace and prepared integration.",
+      "execution_evidence": "Focused MariaDB reference cases and selected actual LessonBlock rendering passed; no browser QA or exact MySQL/provider execution.",
+      "source_preservation": "Original snapshots retained; eight retained exercises across this continuation matched source identity, difficulty, schema, seed and trailing checker.",
+      "limits": "No independent worker available. Output fixtures do not prove arbitrary student submissions used a requested technique. Native PostgreSQL/other-engine concepts remain documented or explicitly mirrored, not verified by MariaDB."
+    }
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-9-alter-table",
+    "original_note_sha256": "454661c4213fe78f581bc8e00315741d82d4d91d5a51d8b7d0f21b3b5ac7805d",
+    "status": "paired migration prepared; not applied"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "An additive nullable column preserves existing facts and accepts a new property",
+      "description": "Existing identities and names stay intact; the new optional email is unknown until supplied. The checker runs after the ALTER.",
+      "columns": [
+        "Stage",
+        "Columns",
+        "Existing customer",
+        "Checker customer"
+      ],
+      "rows": [
+        [
+          "Before ALTER",
+          "id, name",
+          "1, Asha",
+          "Not inserted"
+        ],
+        [
+          "After nullable addition",
+          "id, name, email",
+          "1, Asha, NULL",
+          "Not inserted"
+        ],
+        [
+          "After checker insert",
+          "id, name, email",
+          "1, Asha, NULL",
+          "99, Placeholder, test@x.com"
+        ],
+        [
+          "Required-field redesign?",
+          "A separate transition",
+          "Needs valid data policy",
+          "Not requested by this task"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "coordinator checked nullable addition, unchanged original checker, preservation and distinction from live locking guarantees",
+    "server_rendering": "passed",
+    "browser_rendering": "unverified",
+    "independent_review": "unavailable; no agent tools",
+    "server_rendering_evidence": "Selected actual LessonBlock Vitest rendering passed for this batch; no browser QA."
+  },
+  "sql_verification": {
+    "engine": "11.8.6-MariaDB-0+deb13u1 from Debian",
+    "scope": "MariaDB compatibility execution; exact MySQL 8.4/provider execution unverified",
+    "fingerprint": "8a7827d2f762701db18b52fc3fac09975a434371aaf57f3890bfc17d7637ef46",
+    "cases": [
+      {
+        "problem": "alter-inspection-date",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "alter-inspection-date",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "alter-inspection-date",
+        "case": 2,
+        "passed": true
+      },
+      {
+        "problem": "add-an-email-column",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "add-an-email-column",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "add-an-email-column",
+        "case": 2,
+        "passed": true
+      },
+      {
+        "problem": "add-an-email-column",
+        "case": 3,
+        "passed": true
+      }
+    ],
+    "all_passed": true
+  }
+}

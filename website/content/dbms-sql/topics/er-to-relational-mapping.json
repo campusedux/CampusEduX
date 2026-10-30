@@ -1,0 +1,660 @@
+{
+  "source_ref": "chapter-6-er-and-eer-modeling/er-to-relational-mapping",
+  "slug": "er-to-relational-mapping",
+  "title": "ER to Relational Mapping",
+  "description": "Translate conceptual identities, attribute collections and relationships into explicit relational contracts, distinguishing conventional mapping patterns from complete constraint enforcement.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Preserve meaning while changing representation\n\nER-to-relational mapping translates a conceptual model into relations, attributes, keys, and supported integrity mechanisms. The goal is to preserve the intended occurrences and relationships, not merely turn every diagram shape into an independent table. A good mapping explains which tuples represent entities, which represent participation facts, and how each complete identity survives the translation.\n\nStart with the actual requirements. Student can mean a person role or a separately identified institutional record. Enrollment can mean a current pair, one offering, or a historical attempt. Room can be identified within a building. Those meanings determine keys and references. A mapping recipe applied without the occurrence grain can produce valid SQL that stores the wrong facts or rejects legitimate ones.\n\n## Strong entities commonly become keyed relations\n\nA straightforward strong-entity mapping creates a relation for the entity type, with suitable columns for its properties and a primary or other appropriate identifying constraint. Student(student_id, student_name) can represent independently identified students. Descriptive names remain nonunique if different students may share them. The key comes from the model's guarantee rather than from whichever column happens to be first.\n\nAttribute domains require appropriate SQL types and supported constraints. Required values need an absence policy, and a broad integer or string type may not express the complete business rule. The mapping should identify those remaining obligations explicitly. A table definition with a primary key is not proof that every stored descriptive value is true or that every actor may access the entity.\n\n## Composite properties map through meaningful roles\n\nA single-valued Address can expose street_line, city, region, and postal_code as component columns under a chosen mapping. Nested conceptual components can be flattened into clearly named leaf roles. The grouping may no longer appear as one SQL column, but its meaning and component validity policy must remain consistent in the content and callers.\n\nMultiple component columns do not imply multiple addresses. If a student may have several complete addresses, multiplicity needs an occurrence relation or another deliberate representation. Do not confuse a composite attribute with a composite key: a structured address need not identify the student, while an identifying pair need not represent one composite descriptive property.\n\n## Collections commonly become owner-value relations\n\nA multivalued phone property can map to StudentPhone(student_id, phone_number), with one current membership per tuple. A combined key can prevent repeated identical memberships while permitting several phones per student and a shared phone across students if the domain allows it. Parent existence needs an appropriate supported reference rule separately.\n\nAn empty collection can be represented by no child rows rather than one artificial NULL token. Modern SQL products can support structured collection values, but that is another design choice with its own constraint and query trade-offs. The conventional relation here makes independent membership explicit and avoids informal delimiter parsing. Its suitability follows the actual requirements rather than a blanket claim that collections can never occur inside supported SQL types.\n\n## Weak identities include the owner context\n\nIn the Building-Room example, Room uses building_id and room_number together because the local number is unique only within an owner. The conventional mapping includes both in the Room primary key and uses building_id as a required reference to Building. Capacity remains descriptive. Two buildings can legitimately contain a room numbered 101.\n\nA physical surrogate room_id can coexist with the required unique owner-number combination if the implementation needs that reference convenience. It does not make duplicate business room identities acceptable. The mapping must preserve the documented identifying dependency and lifecycle. Weakness does not automatically mandate cascade deletion; a supported restriction can preserve valid states while dependent rooms remain.\n\n## One-to-many places the reference carefully\n\nFor Department offers Course, a common mapping puts department_id on the many-side Course relation. Each course can then store one current department assignment. A required valid assignment needs both required-value policy and supported parent-reference enforcement. The department identifier is normally allowed to repeat across different courses when one department can offer many courses.\n\nAdding UNIQUE on Course.department_id would impose a different maximum. Likewise, requiring a valid department for each course does not require every department to offer a course. The parent-side minimum is a separate rule. Read the diagram's upper and lower participation bounds independently before choosing scalar references, uniqueness declarations, or additional trusted enforcement.\n\n## One-to-one also needs the second maximum\n\nA department-keyed HeadAssignment relation can ensure at most one head per department. If each faculty member may head at most one department, faculty_id needs an independent uniqueness guarantee in that population. Parent references and total head assignment for every department remain separate obligations. The two maximums do not automatically establish either side's minimum.\n\nA nullable foreign reference can be useful for an optional one-to-one role under actual engine rules. It is not interchangeable with a required candidate identity without an appropriate absence policy. Explain the selected representation and exact permitted states rather than assuming all uniqueness declarations treat NULL identically across every database product or provider.\n\n## Many-to-many requires explicit participation facts\n\nA conventional Student-Course mapping uses an Enrollment relation containing participant references and relationship-specific properties. A combined key can identify one current enrollment per pair under that policy. If repeated attempts or offerings must coexist, the identity must distinguish them. The relationship's score belongs to that participation, not to a universal single Student score.\n\n```sql\nSELECT s.student_id, s.student_name, e.course_id\nFROM students s\nJOIN enrollments e ON e.student_id = s.student_id\nORDER BY s.student_id, e.course_id;\n```\n\nThis returns relationship-grain rows, so a student's name can appear several times correctly. The mapping does not justify adding arbitrary DISTINCT to suppress real participation. A separate association relation preserves independently manageable links on both sides without relying on an informal list string or a fixed number of unrelated slots.\n\n## Higher-level abstractions need complete references\n\nAn aggregated enrollment monitored by Faculty can map to a Monitoring relation referencing the existing enrollment identity. If the policy allows only one monitor, a scalar reference on Enrollment may fit instead. The conceptual aggregation does not select the multiplicity automatically. The mapping must preserve that monitoring names a specific existing association occurrence.\n\nSubtype hierarchies also have several mapping strategies. Separate common and role tables can preserve shared Person identity and overlapping memberships. A single-table discriminator can fit some disjoint classifications. Neither automatically proves every completeness or exclusivity rule. Record the particular hierarchy constraints and where they are enforced, especially when rules span relations.\n\n## Derived values need an authority contract\n\nA derived age or total can be calculated in a query or view from authoritative inputs. It can also be cached or recorded as a deliberate snapshot with a defined consistency policy. Omitting an independently edited duplicate often avoids drift, but the word derived does not universally forbid stored results. The chosen implementation must explain reference time, source grain, and refresh semantics.\n\nA stored cached total needs coverage of relevant source changes, not just one successful update example. A historical award may need its original recorded amount instead of a changed current catalogue value. Mapping is therefore partly about identifying authority: which facts are sources, which are calculations, and what exactly the stored or displayed result means.\n\n## Validate the mapping with allowed and rejected states\n\nUse repeated names, an empty parent category, several child links, duplicated proposed identities, missing optional values, and absent references. Test that legitimate individual-component reuse remains possible under combined keys and that invalid complete collisions fail. A fixture with one fully connected row cannot expose many incorrect maximums or missing owner components.\n\nThe exercises verify a student-course participation query and a local composite uniqueness declaration on synthetic SQL fixtures. Native reference behaviour, aggregate minimums, hierarchy transitions, exact MySQL/provider execution, and production authorization require their own evidence. A dependable mapping keeps conceptual identity, multiplicity, property ownership, and enforcement responsibilities consistent, making the resulting relations a faithful implementation contract rather than a mechanical inventory of diagram shapes.\n",
+  "references": [],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-6-er-to-relational-mapping",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-6-er-to-relational-mapping-1",
+          "test_id": "pt-dbms-sql-6-er-to-relational-mapping",
+          "question_text": "What is ER-to-Relational Mapping?",
+          "options": [
+            "The process of drawing an ER diagram from an existing database",
+            "The systematic process of converting a completed ER/EER diagram into relational tables following defined rules",
+            "A way to normalize an already-existing relational schema",
+            "A technique for writing SQL queries"
+          ],
+          "correct_index": 1,
+          "explanation": "This mapping bridges conceptual ER/EER design and the physical relational schema.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-6-er-to-relational-mapping-2",
+          "test_id": "pt-dbms-sql-6-er-to-relational-mapping",
+          "question_text": "How does a strong entity set typically map to a relational table?",
+          "options": [
+            "Its attributes become columns and its key becomes the table's primary key",
+            "It is discarded and merged into relationships",
+            "It always requires a junction table",
+            "It becomes a foreign key in another table"
+          ],
+          "correct_index": 0,
+          "explanation": "A strong entity set maps directly and simply to a table using its own attributes and key.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-6-er-to-relational-mapping-3",
+          "test_id": "pt-dbms-sql-6-er-to-relational-mapping",
+          "question_text": "In the conventional owner-plus-partial-key weak-entity mapping taught here, how is its complete identity represented?",
+          "options": [
+            "They are mapped identically",
+            "The weak entity's table must include the owner's primary key as a foreign key, and its own primary key is a composite of the owner's key plus its partial key",
+            "Weak entity tables never have any foreign keys",
+            "Weak entity tables cannot have a primary key at all"
+          ],
+          "correct_index": 1,
+          "explanation": "The mapped pair includes the owner key and discriminator with supported owner reference enforcement; alternative physical surrogates must preserve the business identity explicitly.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-6-er-to-relational-mapping-4",
+          "test_id": "pt-dbms-sql-6-er-to-relational-mapping",
+          "question_text": "How is a 1:N relationship (e.g., Department Offers Course) typically mapped, without needing a separate table?",
+          "options": [
+            "By adding a foreign key column (e.g., Dept_Code) into the table on the 'many' side (Course)",
+            "By creating a junction table regardless",
+            "By merging Department and Course into one table always",
+            "By making Course a multi-valued attribute of Department"
+          ],
+          "correct_index": 0,
+          "explanation": "For 1:N, a single foreign key on the many side is sufficient and standard.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-6-er-to-relational-mapping-5",
+          "test_id": "pt-dbms-sql-6-er-to-relational-mapping",
+          "question_text": "Why does the conventional normalized mapping use a separate association relation for an M:N enrollment?",
+          "options": [
+            "Because M:N relationships never have attributes",
+            "It represents each independently manageable participation with complete participant references, identity and relationship properties",
+            "Because M:N relationships are always weak entities",
+            "Because SQL forbids M:N relationships entirely"
+          ],
+          "correct_index": 1,
+          "explanation": "Structured SQL types exist, but an informal list is not equivalent to the explicit conventional relationship mapping and constraints.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-6-er-to-relational-mapping-6",
+          "test_id": "pt-dbms-sql-6-er-to-relational-mapping",
+          "question_text": "What generally happens to a derived attribute (like Age) during ER-to-relational mapping?",
+          "options": [
+            "It always gets its own dedicated column",
+            "It is typically NOT given a stored column; it is recomputed via queries or views from its source attributes",
+            "It becomes a foreign key",
+            "It becomes the primary key of a new table"
+          ],
+          "correct_index": 1,
+          "explanation": "Computing on demand can avoid independent drift. Deliberate caches or snapshots are also possible when authority and refresh or reference-state policies are defined.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-6-er-to-relational-mapping-7",
+          "test_id": "pt-dbms-sql-6-er-to-relational-mapping",
+          "question_text": "Which of these is NOT one of the standard strategies for mapping a generalization/specialization hierarchy to tables?",
+          "options": [
+            "Superclass table plus one table per subclass, linked by a shared key",
+            "One single combined table with nullable subclass-specific columns",
+            "One table per subclass only, duplicating superclass attributes into each",
+            "Always deleting the superclass and keeping only a multi-valued attribute"
+          ],
+          "correct_index": 3,
+          "explanation": "This is not a real mapping strategy; the three legitimate strategies are the other three options listed.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-6-er-to-relational-mapping-8",
+          "test_id": "pt-dbms-sql-6-er-to-relational-mapping",
+          "question_text": "When an enrollment can have several faculty monitors, which mapping preserves monitoring of its specific association occurrence?",
+          "options": [
+            "A separate Monitoring relation referencing the complete existing enrollment identity and the faculty identity",
+            "By creating an entirely new unrelated table with no foreign keys",
+            "Aggregation cannot be mapped to relational tables at all",
+            "By duplicating the Faculty table's data into Student and Course"
+          ],
+          "correct_index": 0,
+          "explanation": "A scalar Faculty_ID on Enrollment only fits an at-most-one-monitor policy; aggregation itself does not determine that multiplicity.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-6-er-to-relational-mapping-new-9",
+          "test_id": "pt-dbms-sql-6-er-to-relational-mapping",
+          "question_text": "What should a mapping preserve before choosing table shapes?",
+          "options": [
+            "Only the number of drawn ovals",
+            "Occurrence meaning, complete identity and relationships",
+            "Only the shortest column names",
+            "Only the current sample row count"
+          ],
+          "correct_index": 1,
+          "explanation": "Representation must preserve the intended facts.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-6-er-to-relational-mapping-new-10",
+          "test_id": "pt-dbms-sql-6-er-to-relational-mapping",
+          "question_text": "Why can UNIQUE on Course.department_id be wrong in a one-to-many mapping?",
+          "options": [
+            "It makes course_id nullable automatically",
+            "It creates all department rows",
+            "It forbids several courses sharing one department",
+            "It changes the course title"
+          ],
+          "correct_index": 2,
+          "explanation": "The many-side reference normally can repeat.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-6-er-to-relational-mapping-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-6-er-to-relational-mapping-application-new-1",
+          "test_id": "pt-dbms-sql-6-er-to-relational-mapping-application",
+          "question_text": "Does a child foreign key require at least one child for every parent?",
+          "options": [
+            "Yes; it inserts a child automatically",
+            "Only for integer keys",
+            "No; parent-side minimums are separate",
+            "Only if the table is empty"
+          ],
+          "correct_index": 2,
+          "explanation": "Existence of referenced parents differs from participation coverage.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-6-er-to-relational-mapping-application-new-2",
+          "test_id": "pt-dbms-sql-6-er-to-relational-mapping-application",
+          "question_text": "What identifies Room under the stated weak mapping?",
+          "options": [
+            "room_number globally",
+            "capacity alone",
+            "The row display offset",
+            "building_id and room_number together"
+          ],
+          "correct_index": 3,
+          "explanation": "The owner completes the discriminator.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-6-er-to-relational-mapping-application-new-3",
+          "test_id": "pt-dbms-sql-6-er-to-relational-mapping-application",
+          "question_text": "Does a composite Address imply several address occurrences?",
+          "options": [
+            "No; components and multiplicity differ",
+            "Yes; one component always means one address",
+            "Only if street is required",
+            "Only if city names repeat"
+          ],
+          "correct_index": 0,
+          "explanation": "The property can be composite and single-valued.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-6-er-to-relational-mapping-application-new-4",
+          "test_id": "pt-dbms-sql-6-er-to-relational-mapping-application",
+          "question_text": "What can represent an empty current phone collection?",
+          "options": [
+            "One compulsory zero phone",
+            "No owner-value membership rows",
+            "A different student identity",
+            "A missing Student definition"
+          ],
+          "correct_index": 1,
+          "explanation": "Absent membership differs from a stored missing token.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-6-er-to-relational-mapping-application-new-5",
+          "test_id": "pt-dbms-sql-6-er-to-relational-mapping-application",
+          "question_text": "Where should a course-specific enrollment score be stored conceptually?",
+          "options": [
+            "As a universal Student score",
+            "On the department name",
+            "On the participation occurrence",
+            "As the course primary identifier"
+          ],
+          "correct_index": 2,
+          "explanation": "Attribute ownership follows the correct grain.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-6-er-to-relational-mapping-application-new-6",
+          "test_id": "pt-dbms-sql-6-er-to-relational-mapping-application",
+          "question_text": "What changes if several historical attempts of one course must coexist?",
+          "options": [
+            "All scores must become keys",
+            "The student identity must change each time",
+            "A pair key is automatically sufficient",
+            "Enrollment identity must distinguish the intended occurrences"
+          ],
+          "correct_index": 3,
+          "explanation": "Fact grain determines complete identity.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-6-er-to-relational-mapping-application-new-7",
+          "test_id": "pt-dbms-sql-6-er-to-relational-mapping-application",
+          "question_text": "Does a separate subtype table automatically enforce total specialization?",
+          "options": [
+            "No; it need not create a role for every Person",
+            "Yes; every parent receives a subtype automatically",
+            "Only if names differ",
+            "Only if the role table is empty"
+          ],
+          "correct_index": 0,
+          "explanation": "Hierarchy coverage needs an explicit enforcement account.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-6-er-to-relational-mapping-application-new-8",
+          "test_id": "pt-dbms-sql-6-er-to-relational-mapping-application",
+          "question_text": "Can a derived result be stored deliberately?",
+          "options": [
+            "No; any storage makes derivation impossible",
+            "Yes, with an explicit authoritative calculation and consistency or snapshot policy",
+            "Only if every source is NULL",
+            "Only if it is a key"
+          ],
+          "correct_index": 1,
+          "explanation": "Conceptual source dependence and physical storage differ.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-6-er-to-relational-mapping-application-new-9",
+          "test_id": "pt-dbms-sql-6-er-to-relational-mapping-application",
+          "question_text": "Why test repeated individual components under a composite key?",
+          "options": [
+            "To force every row to duplicate",
+            "To remove references",
+            "To ensure legitimate combinations are not rejected by mistaken single-column uniqueness",
+            "To change relation degree"
+          ],
+          "correct_index": 2,
+          "explanation": "The complete combination, not each component, is identifying.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-6-er-to-relational-mapping-application-new-10",
+          "test_id": "pt-dbms-sql-6-er-to-relational-mapping-application",
+          "question_text": "What does a local uniqueness fixture not establish?",
+          "options": [
+            "The exercised duplicate error",
+            "The selected fixture output",
+            "The recorded composite identity",
+            "Every native reference, hierarchy and production access rule"
+          ],
+          "correct_index": 3,
+          "explanation": "Evidence must match the actual tested boundary.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cx-er-mapping-links",
+      "slug": "er-mapping-links",
+      "title": "Read the mapped student-course association",
+      "difficulty": "Easy",
+      "task": "Return student_id, student_name and course_id for every matching enrollment. Preserve students’ distinct course participation and repeated names.",
+      "schema_sql": "CREATE TABLE students (student_id INT PRIMARY KEY, student_name VARCHAR(80) NOT NULL);\nCREATE TABLE enrollments (student_id INT NOT NULL, course_id INT NOT NULL, PRIMARY KEY(student_id,course_id));",
+      "seed_sql": "INSERT INTO students VALUES (1,'Asha'),(2,'Asha'),(3,'Mira'); INSERT INTO enrollments VALUES (1,10),(1,20),(2,10);",
+      "expected": "student_id\tstudent_name\tcourse_id\n1\tAsha\t10\n1\tAsha\t20\n2\tAsha\t10",
+      "ordering": "Ascending student_id, course_id.",
+      "constraints": [
+        "All supplied enrollment parent references are valid; temporary mirrors do not verify native reference enforcement."
+      ],
+      "edge_cases": [
+        "A student can have several participation facts.",
+        "An unenrolled student is absent from this participation listing."
+      ],
+      "hints": [
+        "Join using the modeled student identity.",
+        "Retain course_id rather than collapsing the result to names."
+      ],
+      "solution_sql": "SELECT s.student_id, s.student_name, e.course_id FROM students s JOIN enrollments e ON e.student_id = s.student_id ORDER BY s.student_id, e.course_id;",
+      "explanation": "The mapping preserves independent entity identity and a separate relation for the stated participation grain.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO students VALUES (1,'Asha');",
+          "expected": ""
+        },
+        {
+          "seed_sql": "INSERT INTO students VALUES (7,'Mira'); INSERT INTO enrollments VALUES (7,10),(7,20);",
+          "expected": "student_id\tstudent_name\tcourse_id\n7\tMira\t10\n7\tMira\t20"
+        }
+      ]
+    },
+    {
+      "id": "cx-er-mapping-identity",
+      "slug": "er-mapping-identity",
+      "title": "Enforce the mapped current participation identity",
+      "difficulty": "Medium",
+      "task": "The policy permits one current enrollment per student-course pair. Add UNIQUE(student_id, course_id) named enrollment_pair to registrations, preserving its internal registration_id primary key. Return all three identifiers.",
+      "starter_sql": "-- Add the combined participation uniqueness rule and return registrations.",
+      "schema_sql": "CREATE TABLE registrations (registration_id INT PRIMARY KEY, student_id INT NOT NULL, course_id INT NOT NULL);",
+      "seed_sql": "INSERT INTO registrations VALUES (1,17,10),(2,17,20),(3,24,10);",
+      "expected": "registration_id\tstudent_id\tcourse_id\n1\t17\t10\n2\t17\t20\n3\t24\t10",
+      "ordering": "Ascending registration_id.",
+      "constraints": [
+        "Initial pairs satisfy the proposed rule.",
+        "The exercise does not model repeated attempts; native parent existence and production registration authority are separate."
+      ],
+      "edge_cases": [
+        "One student can take different courses.",
+        "A new internal id must not permit the same business pair."
+      ],
+      "hints": [
+        "Use one combined uniqueness declaration.",
+        "Do not constrain either participant independently as unique."
+      ],
+      "solution_sql": "ALTER TABLE registrations ADD CONSTRAINT enrollment_pair UNIQUE (student_id, course_id);\nSELECT registration_id, student_id, course_id FROM registrations ORDER BY registration_id;",
+      "explanation": "The independent business-pair rule preserves the conceptual current enrollment identity alongside the physical primary identifier.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO registrations VALUES (9,7,10),(1,7,20);",
+          "expected": "registration_id\tstudent_id\tcourse_id\n1\t7\t20\n9\t7\t10"
+        },
+        {
+          "seed_sql": "",
+          "expected": ""
+        }
+      ],
+      "negative_validation_cases": [
+        {
+          "sql": "INSERT INTO registrations VALUES (99,17,10);",
+          "error_codes": [
+            1062
+          ]
+        },
+        {
+          "sql": "UPDATE registrations SET course_id=10 WHERE registration_id=2;",
+          "error_codes": [
+            1062
+          ]
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-6-er-to-relational-mapping-1",
+      "test_id": "pt-dbms-sql-6-er-to-relational-mapping",
+      "question_text": "What is ER-to-Relational Mapping?",
+      "options": [
+        "The process of drawing an ER diagram from an existing database",
+        "The systematic process of converting a completed ER/EER diagram into relational tables following defined rules",
+        "A way to normalize an already-existing relational schema",
+        "A technique for writing SQL queries"
+      ],
+      "correct_index": 1,
+      "explanation": "This mapping bridges conceptual ER/EER design and the physical relational schema.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-6-er-to-relational-mapping-2",
+      "test_id": "pt-dbms-sql-6-er-to-relational-mapping",
+      "question_text": "How does a strong entity set typically map to a relational table?",
+      "options": [
+        "Its attributes become columns and its key becomes the table's primary key",
+        "It is discarded and merged into relationships",
+        "It always requires a junction table",
+        "It becomes a foreign key in another table"
+      ],
+      "correct_index": 0,
+      "explanation": "A strong entity set maps directly and simply to a table using its own attributes and key.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-6-er-to-relational-mapping-3",
+      "test_id": "pt-dbms-sql-6-er-to-relational-mapping",
+      "question_text": "How does a weak entity set's table differ from a strong entity set's table?",
+      "options": [
+        "They are mapped identically",
+        "The weak entity's table must include the owner's primary key as a foreign key, and its own primary key is a composite of the owner's key plus its partial key",
+        "Weak entity tables never have any foreign keys",
+        "Weak entity tables cannot have a primary key at all"
+      ],
+      "correct_index": 1,
+      "explanation": "This directly reflects the weak entity's dependence on its owner for full identification.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-6-er-to-relational-mapping-4",
+      "test_id": "pt-dbms-sql-6-er-to-relational-mapping",
+      "question_text": "How is a 1:N relationship (e.g., Department Offers Course) typically mapped, without needing a separate table?",
+      "options": [
+        "By adding a foreign key column (e.g., Dept_Code) into the table on the 'many' side (Course)",
+        "By creating a junction table regardless",
+        "By merging Department and Course into one table always",
+        "By making Course a multi-valued attribute of Department"
+      ],
+      "correct_index": 0,
+      "explanation": "For 1:N, a single foreign key on the many side is sufficient and standard.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-6-er-to-relational-mapping-5",
+      "test_id": "pt-dbms-sql-6-er-to-relational-mapping",
+      "question_text": "Why does an M:N relationship require its own separate junction table, unlike 1:N?",
+      "options": [
+        "Because M:N relationships never have attributes",
+        "Because neither side's table can hold a variable-length list of foreign keys to represent multiple simultaneous links on both sides",
+        "Because M:N relationships are always weak entities",
+        "Because SQL forbids M:N relationships entirely"
+      ],
+      "correct_index": 1,
+      "explanation": "A junction table with composite foreign keys is needed since both sides can have many corresponding rows.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-6-er-to-relational-mapping-6",
+      "test_id": "pt-dbms-sql-6-er-to-relational-mapping",
+      "question_text": "What generally happens to a derived attribute (like Age) during ER-to-relational mapping?",
+      "options": [
+        "It always gets its own dedicated column",
+        "It is typically NOT given a stored column; it is recomputed via queries or views from its source attributes",
+        "It becomes a foreign key",
+        "It becomes the primary key of a new table"
+      ],
+      "correct_index": 1,
+      "explanation": "Since derived attributes are computable from other stored data, they are usually left out of the physical schema to avoid redundancy.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-6-er-to-relational-mapping-7",
+      "test_id": "pt-dbms-sql-6-er-to-relational-mapping",
+      "question_text": "Which of these is NOT one of the standard strategies for mapping a generalization/specialization hierarchy to tables?",
+      "options": [
+        "Superclass table plus one table per subclass, linked by a shared key",
+        "One single combined table with nullable subclass-specific columns",
+        "One table per subclass only, duplicating superclass attributes into each",
+        "Always deleting the superclass and keeping only a multi-valued attribute"
+      ],
+      "correct_index": 3,
+      "explanation": "This is not a real mapping strategy; the three legitimate strategies are the other three options listed.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-6-er-to-relational-mapping-8",
+      "test_id": "pt-dbms-sql-6-er-to-relational-mapping",
+      "question_text": "How is an aggregation (e.g., Faculty Monitored_By the Student-Enrolls_In-Course pairing) typically mapped to tables?",
+      "options": [
+        "By adding a foreign key (e.g., Faculty_ID) directly into the junction table that already represents the aggregated relationship (e.g., Enrollment)",
+        "By creating an entirely new unrelated table with no foreign keys",
+        "Aggregation cannot be mapped to relational tables at all",
+        "By duplicating the Faculty table's data into Student and Course"
+      ],
+      "correct_index": 0,
+      "explanation": "Since the junction table (Enrollment) already represents the aggregated relationship as rows, adding a foreign key to it is the natural mapping.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "coordinator",
+    "independent_review": "unavailable; no agent tools",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Definitions and examples checked against questions; no plagiarism certification.",
+    "existing_question_corrections": [
+      "tq-dbms-sql-6-er-to-relational-mapping-3",
+      "tq-dbms-sql-6-er-to-relational-mapping-5",
+      "tq-dbms-sql-6-er-to-relational-mapping-6",
+      "tq-dbms-sql-6-er-to-relational-mapping-8"
+    ],
+    "canonical_answer_indices_preserved": true,
+    "batch_review": {
+      "reviewer": "coordinator",
+      "independent": false,
+      "scope": "New package only: notes, keyed examples, original question identities and canonical indices, every correct answer, exercises and recorded fixture outputs, diagram trace, content-only paired integration.",
+      "findings_resolved": "Outer Join retained absence question clarified: missing parent is a violation only when the modeled relationship requires it. Division retains its original Hard exercise; validator permits retained Hard alongside Easy while rejecting a new Hard substitute.",
+      "remaining": "Exact MySQL/provider execution, browser QA, independent review and applied-migration behavior unverified; output fixtures do not prove required source technique."
+    }
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-6-er-to-relational-mapping",
+    "original_note_sha256": "e73da299cc6abc050abb3f44059225273955d87df1875befda1304a9cda4540a",
+    "status": "paired migration prepared; not applied"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Different conceptual rules require different relational mechanisms",
+      "description": "The mapping separates identity, reference existence, multiplicity and derived authority rather than assuming one table declaration enforces the entire diagram.",
+      "columns": [
+        "Conceptual element",
+        "Conventional representation",
+        "Separate obligation"
+      ],
+      "rows": [
+        [
+          "Independent Student",
+          "Keyed Student relation",
+          "Domains and actor access"
+        ],
+        [
+          "Weak Room",
+          "Owner key + local discriminator",
+          "Required owner reference and lifecycle"
+        ],
+        [
+          "M:N Enrollment",
+          "Participant association relation",
+          "Complete occurrence identity and parent existence"
+        ],
+        [
+          "Multivalued phone",
+          "Owner-value membership relation",
+          "Duplicate and absence policy"
+        ],
+        [
+          "Person subtypes",
+          "Common identity and role-specific facts",
+          "Coverage and disjointness enforcement"
+        ],
+        [
+          "Derived total",
+          "Query or deliberate stored result",
+          "Source grain and consistency contract"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "coordinator checked conventional mapping boundaries, monitor multiplicity correction and combined participation identity",
+    "server_rendering": "passed",
+    "browser_rendering": "unverified",
+    "independent_review": "unavailable; no agent tools",
+    "server_rendering_evidence": "Focused Vitest actual LessonBlock rendering: 3 selected packages passed; other 102 packages intentionally skipped."
+  },
+  "sql_verification": {
+    "engine": "11.8.6-MariaDB-0+deb13u1 from Debian",
+    "scope": "MariaDB compatibility execution; exact MySQL 8.4/provider execution unverified",
+    "fingerprint": "f87a345a01ecd6cd7cd6063528e65ccd009c3fbdda99a145bc72b456a02db62b",
+    "cases": [
+      {
+        "problem": "er-mapping-links",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "er-mapping-links",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "er-mapping-links",
+        "case": 2,
+        "passed": true
+      },
+      {
+        "problem": "er-mapping-identity",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "er-mapping-identity",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "er-mapping-identity",
+        "case": 2,
+        "passed": true
+      },
+      {
+        "problem": "er-mapping-identity",
+        "negative_case": 0,
+        "error_code": 1062,
+        "passed": true
+      },
+      {
+        "problem": "er-mapping-identity",
+        "negative_case": 1,
+        "error_code": 1062,
+        "passed": true
+      }
+    ],
+    "all_passed": true
+  }
+}

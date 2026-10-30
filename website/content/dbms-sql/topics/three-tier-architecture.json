@@ -1,0 +1,504 @@
+{
+  "source_ref": "chapter-2-dbms-architecture/three-tier-architecture",
+  "slug": "three-tier-architecture",
+  "title": "Three Tier Architecture",
+  "description": "Trace presentation, application, and database responsibilities in a three-tier portal, including trusted validation, connection budgets, deployment compatibility, and failure handling.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Adding a shared application boundary\n\nThree-tier architecture separates presentation, application services, and database services. The presentation tier handles the user interaction. The application tier coordinates trusted product behavior and communicates with the database. The database tier stores shared facts and enforces its configured integrity, access, and transaction rules. This separation creates a common place for workflows that would otherwise be distributed across many directly connected clients.\n\nThe tiers describe responsibilities rather than a mandatory count of machines. Several application instances can belong to one application tier, and one development machine can host all three responsibilities. A browser may also render rich interactions without becoming the authoritative owner of a protected operation. The important question is where requests cross trusted boundaries and where their shared effects are decided.\n\nConsider a college enrollment portal. A student chooses an offering in the presentation tier. The application service checks the actor and request, coordinates the enrollment operation, and returns a defined response. The database verifies the applicable stored relationships and transactional rules. An architecture diagram is useful only if the real code and permissions follow the responsibilities it claims.\n\n## Defining the presentation tier honestly\n\nThe presentation tier displays choices, gathers input, and explains loading, success, empty, and error states. It can validate obvious input mistakes before sending a request. For example, it can require that an offering has been selected. Those checks improve usability but cannot authorize enrollment or guarantee capacity, because the client can be modified and its information can become stale.\n\nThe term thin client means that important shared responsibilities are located elsewhere; it does not require an interface with no logic or no local state. Modern clients may format results, manage forms, and support accessibility and responsive behavior. What should remain on a trusted path is the authority to accept protected operations and enforce their shared consequences.\n\nThe client should receive only the information its task and permissions require. Returning every student's private details and then hiding unwanted rows visually is not an authorization boundary. A carefully defined response can preserve useful identity and state distinctions without exposing unrelated data or internal diagnostic details.\n\n## Owning the application workflow\n\nThe application tier authenticates or verifies the caller through the established mechanism, validates untrusted input, checks operation-level access, and coordinates the requested workflow. These are responsibilities to implement explicitly. Merely inserting a server between the browser and database does not prove that the server performs any of them correctly.\n\nFor enrollment, the service must establish which student the actor may act for rather than trust a submitted StudentID. It must also enforce the defined enrollment requirements through a trusted operation. A browser can request an offering identifier, but the service and database must determine whether that request is valid for this actor and current state.\n\nCentralizing shared workflow can simplify rule changes. Updating an application-service implementation avoids distributing the same protected decision across thousands of client installations. Existing client contracts still matter: a response rename or newly required field can require coordinated compatibility work. Central deployment reduces some distribution costs but does not make every API change invisible.\n\n## Preserving database authority\n\nThe database remains essential. It stores authoritative records and enforces the constraints and transaction guarantees assigned to it. Foreign keys can preserve references, uniqueness can prevent prohibited duplicates, and transactions can group related changes. Moving orchestration into the middle tier is not a reason to remove these safeguards or accept inconsistent shared states.\n\nSuppose two enrollment requests compete for the final available seat. Both application instances can read the same earlier count and decide that a seat appears available. A correct trusted operation must coordinate the competing changes against current state. The middle tier's existence does not make a check-then-write sequence atomic, and running several application instances makes this especially important.\n\nThe actual enforcement mechanism must be verified in the repository and database. It might involve a supported transaction, conditional write, or existing procedure with the relevant checks. Architecture discussion cannot invent that contract. Trace the current operation and test denied, invalid, and concurrent cases at the place that actually enforces the rule.\n\n## Following a request and its response\n\nA request crosses from presentation to application using a defined interface. The application can then issue database operations through an established client, interpret the result, and return a task-facing response. Parameters, identifiers, error codes, and optional fields need explicit meanings so that each tier can handle them consistently.\n\nFor example, an already-enrolled response differs from an offering-not-found response and from a temporary inability to reach the database. The interface should preserve distinctions that help the user act without leaking raw database errors or private values. A generic success message after a failed database operation would be a correctness defect, not an acceptable simplification.\n\nA lost response can also create uncertainty. If enrollment committed but the client did not receive confirmation, repeating the request must follow the operation's defined duplicate-handling behavior. A unique enrollment rule can help prevent certain duplicates, but it is not a universal retry strategy for every side effect. The service must account for the whole operation, including any downstream work.\n\n## Sharing connections without inventing capacity\n\nA middle tier can maintain a bounded pool of database connections and reuse them across requests. This can avoid one persistent database session per end user. Many users are not executing SQL at the same instant, so serving their work over time through reusable capacity can reduce connection overhead and centralize lifecycle management.\n\nPooling is not automatic, and not every three-tier service uses the same pooling semantics. Each application instance may own a separate pool, and scaling the instance count can multiply total database demand. A pool with twenty sessions on each of four instances has a potential of eighty sessions before other clients are counted.\n\nDatabase work remains bounded by actual resources. Requests can wait for acquisition, queries can contend, and long transactions can occupy capacity. A middle tier helps manage those pressures but cannot make unlimited work execute instantly. Measure acquisition waits, query duration, transaction duration, and database load before claiming the arrangement has solved scaling.\n\n## Accounting for new latency and failure paths\n\nAn additional application boundary can add serialization, processing, queueing, and network overhead. A request now follows a client-to-application-to-database path rather than a direct client-to-database path. The total latency may rise or fall depending on caching, reduced data transfer, query design, connection reuse, and deployment placement. An extra hop is a possible cost, not a guarantee that every request becomes slower.\n\nThe application tier can also become a bottleneck or a point of failure. Multiple instances and appropriate load distribution can improve availability, but shared dependencies and incorrect state handling can still fail together. A load balancer does not repair a broken authorization check or a database operation that cannot safely handle concurrent requests.\n\nState placement needs deliberate design. If a workflow depends on local memory in one application instance, a later request routed elsewhere may not find it. Supported shared state or an appropriate affinity contract can address particular requirements. Do not assume adding more instances is sufficient without tracing the information and resources each operation depends on.\n\n## Deploying and reviewing the boundaries\n\nChanges can affect presentation, application, and database contracts at different times. A compatible application release should continue supporting existing callers during the intended transition. A database change must preserve the operations the service actually uses or include a reviewed migration plan. Treat deployment, local validation, and live verification as separate claims rather than calling the system ready because one tier builds.\n\nReview loading and error behavior in the client, invalid and denied requests in the application, and the actual data-integrity and authorization boundaries in the database. Check that secrets stay on approved trusted paths and are not embedded in browser code. A correct diagram cannot compensate for credentials or privileged operations exposed to an untrusted client.\n\nThree-tier architecture is valuable when a shared application boundary makes workflows and change easier to manage. Its success depends on explicit contracts, preserved database guarantees, bounded resources, and tested failure paths. The three responsibilities should reinforce each other: presentation communicates, application services coordinate, and the database preserves shared facts under the rules the system actually enforces.\n",
+  "references": [],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-2-three-tier-architecture",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-2-three-tier-architecture-1",
+          "test_id": "pt-dbms-sql-2-three-tier-architecture",
+          "question_text": "What are the three tiers in Three-Tier Architecture?",
+          "options": [
+            "Client, database, and network",
+            "Presentation/client (thin client), application server (business logic), and database server",
+            "Internal schema, conceptual schema, and external schema",
+            "Driver, middleware, and API"
+          ],
+          "correct_index": 1,
+          "explanation": "Three-tier architecture separates presentation, business logic, and data storage into three distinct tiers.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-2-three-tier-architecture-2",
+          "test_id": "pt-dbms-sql-2-three-tier-architecture",
+          "question_text": "In three-tier architecture, where does the business logic reside, in contrast to two-tier?",
+          "options": [
+            "On the client, same as two-tier",
+            "On the middle application-server tier, not the client",
+            "On the database server",
+            "Nowhere; three-tier has no business logic layer"
+          ],
+          "correct_index": 1,
+          "explanation": "The application tier owns shared orchestration, while the database retains its configured integrity and transaction rules and the client can still manage UI logic.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-2-three-tier-architecture-3",
+          "test_id": "pt-dbms-sql-2-three-tier-architecture",
+          "question_text": "What is the presentation client commonly called when shared protected workflows live in the application tier?",
+          "options": [
+            "A fat client",
+            "A thin client",
+            "A database driver",
+            "A middleware gateway"
+          ],
+          "correct_index": 1,
+          "explanation": "Thin client refers to the responsibility split; a rich interface can still have formatting, state, and usability logic.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-2-three-tier-architecture-4",
+          "test_id": "pt-dbms-sql-2-three-tier-architecture",
+          "question_text": "How can a three-tier application reduce persistent database-session demand from many end users?",
+          "options": [
+            "By requiring every client to still open its own direct database connection",
+            "By letting the middle tier pool and share database connections across many users instead of one connection per client",
+            "By removing the database server entirely",
+            "By moving business logic back onto the client"
+          ],
+          "correct_index": 1,
+          "explanation": "A configured middle-tier pool can reuse bounded sessions over time. It is not automatic and total demand includes every instance.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-2-three-tier-architecture-5",
+          "test_id": "pt-dbms-sql-2-three-tier-architecture",
+          "question_text": "What is the practical benefit of moving business logic off the client and into the application server tier?",
+          "options": [
+            "A business rule change only requires updating the application server once, not redeploying to every client machine",
+            "It makes the database server unnecessary",
+            "It increases the number of direct connections to the database",
+            "It removes the need for a presentation layer"
+          ],
+          "correct_index": 0,
+          "explanation": "Central service changes reduce fleet distribution work, but existing API compatibility and database contracts still need review.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-2-three-tier-architecture-6",
+          "test_id": "pt-dbms-sql-2-three-tier-architecture",
+          "question_text": "What new architectural risk does adding a middle application-server tier introduce, according to the notes?",
+          "options": [
+            "The database server no longer needs to enforce integrity",
+            "The application server itself can become a bottleneck or single point of failure, typically mitigated with load-balanced instances",
+            "Clients can no longer connect to any tier",
+            "Business logic can no longer be centralized"
+          ],
+          "correct_index": 1,
+          "explanation": "The middle tier, now handling logic and connections for many users, can itself become a bottleneck unless multiple load-balanced instances are used.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-2-three-tier-architecture-7",
+          "test_id": "pt-dbms-sql-2-three-tier-architecture",
+          "question_text": "A developer claims three-tier architecture makes the database server (Tier 3) unimportant since business logic has moved to Tier 2. Why is this claim incorrect?",
+          "options": [
+            "It is correct; Tier 3 becomes irrelevant in three-tier systems",
+            "Tier 3 still fully owns data storage and integrity enforcement; only business logic and connection management moved to Tier 2",
+            "Tier 3 is merged into Tier 2 in three-tier architecture",
+            "Three-tier architecture removes the need for any database at all"
+          ],
+          "correct_index": 1,
+          "explanation": "The database server continues to store data and enforce integrity in three-tier architecture; what changed is where business logic and connection handling live, not the database's role.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-2-three-tier-architecture-8",
+          "test_id": "pt-dbms-sql-2-three-tier-architecture",
+          "question_text": "In a portal whose measurements show higher per-request latency after adding the application tier, which added cost can help explain the difference?",
+          "options": [
+            "The extra network hop introduced between client and database (client to app server to database)",
+            "The removal of the database server",
+            "The elimination of business logic altogether",
+            "A reduction in the number of tiers"
+          ],
+          "correct_index": 0,
+          "explanation": "The added boundary can introduce hop and processing overhead. Actual latency depends on the full implementation and may improve in other workloads.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-2-three-tier-architecture-new-9",
+          "test_id": "pt-dbms-sql-2-three-tier-architecture",
+          "question_text": "Does a rich browser form with local state contradict three-tier architecture?",
+          "options": [
+            "Yes; a thin client can contain no code",
+            "No; protected shared authority can remain in the trusted application and database tiers",
+            "Yes; every form field is a database tier",
+            "Only if no validation is shown"
+          ],
+          "correct_index": 1,
+          "explanation": "The split concerns ownership and trust, not the absence of client-side behavior.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-2-three-tier-architecture-new-10",
+          "test_id": "pt-dbms-sql-2-three-tier-architecture",
+          "question_text": "What must a trusted enrollment service establish about a submitted StudentID?",
+          "options": [
+            "Only that it is present in the request",
+            "Only that its text is short",
+            "That the actor may perform this operation for that student",
+            "Only that the browser dropdown included it"
+          ],
+          "correct_index": 2,
+          "explanation": "A client-controlled identifier does not prove permission.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-2-three-tier-architecture-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-2-three-tier-architecture-application-new-1",
+          "test_id": "pt-dbms-sql-2-three-tier-architecture-application",
+          "question_text": "Two application instances read one remaining seat and both approve enrollment locally. What is still needed?",
+          "options": [
+            "A third application instance alone",
+            "A brighter success message",
+            "Trusted concurrent enforcement in the actual write operation",
+            "A larger dropdown"
+          ],
+          "correct_index": 2,
+          "explanation": "A check-then-write sequence is not made atomic by a middle tier.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-2-three-tier-architecture-application-new-2",
+          "test_id": "pt-dbms-sql-2-three-tier-architecture-application",
+          "question_text": "Four application instances each allow twenty pooled sessions. What capacity budget must include their combined potential?",
+          "options": [
+            "Twenty sessions regardless of instance count",
+            "Four sessions only",
+            "Exactly one session per signed-in user",
+            "Eighty sessions plus other database clients"
+          ],
+          "correct_index": 3,
+          "explanation": "Pools may be per instance, so their limits add.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-2-three-tier-architecture-application-new-3",
+          "test_id": "pt-dbms-sql-2-three-tier-architecture-application",
+          "question_text": "An application release changes an API field used by older clients. Does central deployment remove the compatibility obligation?",
+          "options": [
+            "No; older callers still rely on their contracts",
+            "Yes; all clients update automatically",
+            "Yes; the database rewrites every response",
+            "Only the number of tiers matters"
+          ],
+          "correct_index": 0,
+          "explanation": "Centralizing logic does not make response changes invisible to existing callers.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-2-three-tier-architecture-application-new-4",
+          "test_id": "pt-dbms-sql-2-three-tier-architecture-application",
+          "question_text": "A browser sends another student's ID, and the server trusts it without checking. Which tier boundary failed?",
+          "options": [
+            "Only page rendering",
+            "Trusted actor-to-operation authorization",
+            "Only connection-pool cleanup",
+            "Only the internal index choice"
+          ],
+          "correct_index": 1,
+          "explanation": "The application must not treat a caller-controlled identity reference as authority.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-2-three-tier-architecture-application-new-5",
+          "test_id": "pt-dbms-sql-2-three-tier-architecture-application",
+          "question_text": "A duplicate enrollment request arrives after the first response was lost. What should govern the outcome?",
+          "options": [
+            "An assumption that no commit happened",
+            "Blind repetition of every side effect",
+            "The operation's defined duplicate and retry behavior",
+            "The page title alone"
+          ],
+          "correct_index": 2,
+          "explanation": "Uncertain outcomes need an explicit contract across retries.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-2-three-tier-architecture-application-new-6",
+          "test_id": "pt-dbms-sql-2-three-tier-architecture-application",
+          "question_text": "A local-memory workflow is routed to a different application instance and disappears. What must be reviewed?",
+          "options": [
+            "Only the number of columns in Student",
+            "Only whether SQL is uppercase",
+            "Only the CSS display property",
+            "State placement and routing assumptions"
+          ],
+          "correct_index": 3,
+          "explanation": "Scaling changes where requests execute; instance-local state may not follow them.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-2-three-tier-architecture-application-new-7",
+          "test_id": "pt-dbms-sql-2-three-tier-architecture-application",
+          "question_text": "The application tier validates references. Why retain appropriate database foreign keys?",
+          "options": [
+            "They protect shared integrity across trusted write paths",
+            "They only affect page styling",
+            "They are unnecessary whenever a server exists",
+            "They automatically authenticate every browser"
+          ],
+          "correct_index": 0,
+          "explanation": "Application validation does not replace shared database integrity guarantees.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-2-three-tier-architecture-application-new-8",
+          "test_id": "pt-dbms-sql-2-three-tier-architecture-application",
+          "question_text": "An extra network hop is introduced, but measured latency falls because queries and transfer volume improve. Is that impossible?",
+          "options": [
+            "Yes; tier count alone fixes latency",
+            "No; total latency depends on all costs and savings",
+            "Yes; pooling never changes setup costs",
+            "Only the number of HTML tags matters"
+          ],
+          "correct_index": 1,
+          "explanation": "A hop is one cost among many in the implemented path.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-2-three-tier-architecture-application-new-9",
+          "test_id": "pt-dbms-sql-2-three-tier-architecture-application",
+          "question_text": "A load-balanced application has the same flawed access check on every instance. What does redundancy fail to solve?",
+          "options": [
+            "The ability to route a request",
+            "The existence of several processes",
+            "The shared authorization defect",
+            "The configured pool limit"
+          ],
+          "correct_index": 2,
+          "explanation": "Replicating incorrect logic does not make it correct.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-2-three-tier-architecture-application-new-10",
+          "test_id": "pt-dbms-sql-2-three-tier-architecture-application",
+          "question_text": "The application builds successfully. Which claim still requires separate evidence?",
+          "options": [
+            "The build command completed",
+            "The source contains application code",
+            "The tiers can have distinct responsibilities",
+            "Database behavior, live deployment, and end-to-end verification are correct"
+          ],
+          "correct_index": 3,
+          "explanation": "A build is not proof of enforcement, deployment, or live behavior.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [],
+  "coding_not_applicable": "The objective is architectural ownership and trusted request flow. SQL-output exercises cannot validate tier boundaries, API compatibility, or application authorization; concrete query and transaction topics own executable SQL practice.",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-2-three-tier-architecture-1",
+      "test_id": "pt-dbms-sql-2-three-tier-architecture",
+      "question_text": "What are the three tiers in Three-Tier Architecture?",
+      "options": [
+        "Client, database, and network",
+        "Presentation/client (thin client), application server (business logic), and database server",
+        "Internal schema, conceptual schema, and external schema",
+        "Driver, middleware, and API"
+      ],
+      "correct_index": 1,
+      "explanation": "Three-tier architecture separates presentation, business logic, and data storage into three distinct tiers.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-2-three-tier-architecture-2",
+      "test_id": "pt-dbms-sql-2-three-tier-architecture",
+      "question_text": "In three-tier architecture, where does the business logic reside, in contrast to two-tier?",
+      "options": [
+        "On the client, same as two-tier",
+        "On the middle application-server tier, not the client",
+        "On the database server",
+        "Nowhere; three-tier has no business logic layer"
+      ],
+      "correct_index": 1,
+      "explanation": "Three-tier architecture moves business logic off the client and into a dedicated middle tier, unlike two-tier's client-embedded logic.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-2-three-tier-architecture-3",
+      "test_id": "pt-dbms-sql-2-three-tier-architecture",
+      "question_text": "What is Tier 1 commonly called in three-tier architecture, since it contains only the UI?",
+      "options": [
+        "A fat client",
+        "A thin client",
+        "A database driver",
+        "A middleware gateway"
+      ],
+      "correct_index": 1,
+      "explanation": "Tier 1 is called a thin client because it holds only presentation logic, with business logic moved to Tier 2.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-2-three-tier-architecture-4",
+      "test_id": "pt-dbms-sql-2-three-tier-architecture",
+      "question_text": "How does three-tier architecture solve the two-tier connection-scaling problem?",
+      "options": [
+        "By requiring every client to still open its own direct database connection",
+        "By letting the middle tier pool and share database connections across many users instead of one connection per client",
+        "By removing the database server entirely",
+        "By moving business logic back onto the client"
+      ],
+      "correct_index": 1,
+      "explanation": "The middle tier's ability to pool and share connections across users directly addresses the linear connection-count growth problem of two-tier architecture.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-2-three-tier-architecture-5",
+      "test_id": "pt-dbms-sql-2-three-tier-architecture",
+      "question_text": "What is the practical benefit of moving business logic off the client and into the application server tier?",
+      "options": [
+        "A business rule change only requires updating the application server once, not redeploying to every client machine",
+        "It makes the database server unnecessary",
+        "It increases the number of direct connections to the database",
+        "It removes the need for a presentation layer"
+      ],
+      "correct_index": 0,
+      "explanation": "Centralizing business logic in the middle tier means rule changes are made in one place rather than redeployed across many client machines.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-2-three-tier-architecture-6",
+      "test_id": "pt-dbms-sql-2-three-tier-architecture",
+      "question_text": "What new architectural risk does adding a middle application-server tier introduce, according to the notes?",
+      "options": [
+        "The database server no longer needs to enforce integrity",
+        "The application server itself can become a bottleneck or single point of failure, typically mitigated with load-balanced instances",
+        "Clients can no longer connect to any tier",
+        "Business logic can no longer be centralized"
+      ],
+      "correct_index": 1,
+      "explanation": "The middle tier, now handling logic and connections for many users, can itself become a bottleneck unless multiple load-balanced instances are used.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-2-three-tier-architecture-7",
+      "test_id": "pt-dbms-sql-2-three-tier-architecture",
+      "question_text": "A developer claims three-tier architecture makes the database server (Tier 3) unimportant since business logic has moved to Tier 2. Why is this claim incorrect?",
+      "options": [
+        "It is correct; Tier 3 becomes irrelevant in three-tier systems",
+        "Tier 3 still fully owns data storage and integrity enforcement; only business logic and connection management moved to Tier 2",
+        "Tier 3 is merged into Tier 2 in three-tier architecture",
+        "Three-tier architecture removes the need for any database at all"
+      ],
+      "correct_index": 1,
+      "explanation": "The database server continues to store data and enforce integrity in three-tier architecture; what changed is where business logic and connection handling live, not the database's role.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-2-three-tier-architecture-8",
+      "test_id": "pt-dbms-sql-2-three-tier-architecture",
+      "question_text": "A college web portal experiences slightly higher latency per request after moving from two-tier to three-tier, despite better overall scalability. What causes this specific latency trade-off?",
+      "options": [
+        "The extra network hop introduced between client and database (client to app server to database)",
+        "The removal of the database server",
+        "The elimination of business logic altogether",
+        "A reduction in the number of tiers"
+      ],
+      "correct_index": 0,
+      "explanation": "The added hop through the middle application-server tier introduces extra latency compared to a two-tier client's direct connection, even though it typically improves scalability and maintainability overall.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "coordinator",
+    "independent_review": "unavailable; no agent tools",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Definitions and examples checked against questions; no plagiarism certification.",
+    "existing_question_corrections": [
+      "tq-dbms-sql-2-three-tier-architecture-2",
+      "tq-dbms-sql-2-three-tier-architecture-3",
+      "tq-dbms-sql-2-three-tier-architecture-4",
+      "tq-dbms-sql-2-three-tier-architecture-5",
+      "tq-dbms-sql-2-three-tier-architecture-8"
+    ],
+    "canonical_answer_indices_preserved": true
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-2-three-tier-architecture",
+    "original_note_sha256": "7fbd5a4fabe374369acb2c69724675f2732462411a3f1f85b2106ac1b78d6bfd",
+    "status": "paired migration prepared; not applied"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Enrollment work across three responsibilities",
+      "description": "The presentation client supplies a request, the application service establishes trusted workflow scope, and database rules protect shared state. Each boundary has distinct failure cases.",
+      "columns": [
+        "Tier",
+        "Enrollment responsibility",
+        "Failure to test"
+      ],
+      "rows": [
+        [
+          "Presentation",
+          "Gather offering choice and show an accurate result",
+          "Loading, rejected requests, lost responses"
+        ],
+        [
+          "Application",
+          "Verify actor and coordinate a valid operation",
+          "Untrusted student IDs, duplicate requests, state across instances"
+        ],
+        [
+          "Database",
+          "Enforce configured relationships and concurrent integrity",
+          "Competing requests, denied writes, invalid references"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "coordinator review",
+    "server_rendering": "passed",
+    "browser_rendering": "unverified",
+    "independent_review": "unavailable; no agent tools",
+    "rendering_check": "2026-10-28: actual LessonBlock/TopicDiagrams server rendering; 30 authored-package tests passed. Desktop/mobile browser rendering unverified."
+  }
+}

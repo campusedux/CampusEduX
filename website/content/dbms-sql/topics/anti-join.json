@@ -1,0 +1,597 @@
+{
+  "source_ref": "chapter-16-joins/anti-join",
+  "slug": "anti-join",
+  "title": "Anti Join",
+  "description": "Find entities with no qualifying related rows using NOT EXISTS or a reliable left-join marker, avoiding NULL traps and misplaced eligibility filters.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Ask which left-side identities lack a qualifying match\n\nAn anti join finds rows from one population for which no related row satisfies a specified relationship. A department with no employees, a reader with no overdue loans and an order with no successful payment are examples. The word no refers to a carefully defined matching condition. It does not mean that a selected right-side label happens to be blank.\n\nRead [LEFT JOIN](/learning/dbms-sql-tutorial/left-join), [NOT EXISTS](/learning/dbms-sql-tutorial/not-exists) and [null semantics](/learning/dbms-sql-tutorial/null-semantics) before comparing formulations. MySQL expresses the pattern through ordinary SQL constructs rather than a standalone ANTI JOIN keyword. An optimizer may implement a suitable formulation with an internal antijoin strategy, but that plan choice is separate from the result contract.\n\n## Define both the population and the absence condition\n\nSuppose departments contains one row per department and employees contains people with an optional department_id. The request is to list departments without assigned employees. The preserved population is departments. An employee counts as a match when their department_id equals that department's id. An employee whose department_id is null does not match every department or establish that all departments are staffed.\n\nThe retained exercise uses these department and employee tables. It asks for department identities and names, ordered by identity. Department names can repeat without making two departments identical. Keeping the key in the projection makes absence testing an identity-based operation rather than an ambiguous comparison of presentation labels.\n\n## Express the question directly with NOT EXISTS\n\n```sql\nSELECT d.id, d.name\nFROM departments AS d\nWHERE NOT EXISTS (\n  SELECT 1\n  FROM employees AS e\n  WHERE e.department_id = d.id\n)\nORDER BY d.id;\n```\n\nFor each candidate department, the subquery asks whether any employee satisfies the correlation. NOT EXISTS retains the department when the answer is no. The projected constant is conventional: the existence of a qualifying row matters, not the value projected from that row. One match and many matches both disqualify the department once.\n\nThis pattern avoids generating employee details that the task does not need. It also makes the absence rule easy to extend. If the task changes to departments without active employees, add the active condition inside the correlated subquery. A department with inactive employees can then qualify because those rows are not matches under the new definition.\n\n## Use a left join with a reliable unmatched marker\n\n```sql\nSELECT d.id, d.name\nFROM departments AS d\nLEFT JOIN employees AS e ON e.department_id = d.id\nWHERE e.id IS NULL\nORDER BY d.id;\n```\n\nThe left join preserves departments without matches by producing null-extended employee fields. Testing e.id is reliable when that identity is nonnull on every real employee row. A matched employee cannot accidentally satisfy the unmatched test. Thus the result agrees with the stated NOT EXISTS formulation on the supplied schema.\n\nTesting a nullable employee name would be unsafe. A real matching employee could have a missing name and make the department look unstaffed. The marker should distinguish an actual right-side row from the null extension. Review nullability from the schema rather than inferring it from a sample whose names happen to be complete.\n\n## Put qualifying right-side conditions in the match\n\nFor departments with no active employees, a left-join formulation should include active eligibility in ON before testing the unmatched identity. Filtering only for inactive employees in WHERE asks which matched rows are inactive; it does not prove that no active employee exists. A department containing both an active and an inactive employee exposes that mistake.\n\nThe same issue appears in payment reports. No successful payment differs from at least one failed payment. An order with a failed attempt followed by a successful attempt should not be reported as unpaid under a successful-payment definition. Build the full qualifying match first, then test its absence. Reversing those steps confuses a counterexample with proof of universal absence.\n\n## Understand the nullable NOT IN trap\n\nNOT IN can appear to ask the same question, but nulls can change the result. If a subquery returns a null reference alongside department identifiers, comparing a nonmatching identifier against that set can produce unknown. WHERE keeps true conditions only, so a department with no assigned employees may disappear unexpectedly.\n\nFiltering nulls out of the subquery can make NOT IN suitable under an explicit nonnull outer-key contract. Nevertheless, NOT EXISTS often communicates the relationship more directly and avoids accidental dependence on nullable subquery output. Do not memorize that one spelling is always faster; understand the truth conditions first and examine a representative plan later.\n\n## Treat duplicates according to existence semantics\n\nAdding another qualifying employee to an already staffed department should not change which departments are unstaffed. Existence ignores match multiplicity. A correct left-join anti pattern filters every matched row out, while NOT EXISTS makes the multiplicity irrelevant directly. An unrestricted join followed by DISTINCT on department names is not an equivalent substitute.\n\nThe preserved department population may itself contain duplicate-looking labels. Keep separate identities when the task asks for departments. If the left-side input is a derived relation containing repeated identities, decide whether those repeated appearances should remain. An anti condition does not independently guarantee uniqueness of the outer population.\n\n## Recognize empty and all-null right inputs\n\nWhen employees is empty, every department has no employee match and therefore qualifies. When departments is empty, there are no candidate departments and the result is empty. Employees whose department references are all null do not match known department keys under ordinary equality, so every department again qualifies for the stated relationship.\n\nThese are useful fixtures because a NOT IN query can behave differently on an all-null right side. Include a department with several employees as well, proving that multiplicity does not introduce an accidental survivor. A tiny dataset with every department staffed cannot distinguish a correct anti join from a query that simply returns no rows.\n\n## Use indexes and plans without altering meaning\n\nAn index on employees.department_id can support the search for a matching employee. Additional qualification fields may influence a composite index choice. The best order depends on the actual correlation, predicates and distribution. Do not add production indexes as part of a lesson draft, and do not assert an access path that has not been observed on the intended engine.\n\nAn existence-oriented plan can stop searching once a qualifying match is known, but the precise strategy belongs to the optimizer. The educational result can be checked independently of that strategy. A manually predicted fixture describes the intended result; an observed execution checks a particular query, dataset and engine. Neither a short query nor one passing example establishes that all alternate formulations behave equivalently.\n\n## Read absence as a scoped observation\n\nA query proves no qualifying match in the rows visible under its execution context. Access policies may hide employees, and concurrent writes may change staffing after the statement's view of data. A reporting result is not a permanent organizational fact or permission to create a department assignment without further validation.\n\nIf absence becomes a prerequisite for a write, review the transaction and constraint design at the trusted boundary. A check followed by an unrelated later write can race with another session. Keep this reporting lesson distinct from a claim of concurrency-safe enforcement. The central habit is precise: define the candidate population, define a match, and only then ask which candidates have none.\n\n## Keep relationship absence separate from data repair\n\nAn unassigned employee is not itself an empty department. Such a row belongs to the employee population but has no known department relationship. Reporting it can be useful in a separate data-quality task. Removing it to make NOT IN appear to work would change stored information and evade the actual null-semantics problem. Prefer a query whose truth conditions support the permitted schema.\n\nSimilarly, returning an empty department does not authorize deleting that department. It may be newly created, intentionally reserved or awaiting future staff. The retained coding exercise performs a read and preserves all records. A maintenance operation based on absence would need additional product requirements, access checks and concurrency protections. This distinction matters because learners often reuse a reporting predicate inside a DELETE without reconsidering whether the reporting definition is a safe deletion policy.\n",
+  "references": [
+    {
+      "title": "Primary reference",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/exists-and-not-exists-subqueries.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-16-anti-join",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-16-anti-join-1",
+          "test_id": "pt-dbms-sql-16-anti-join",
+          "question_text": "What does an anti join return?",
+          "options": [
+            "Every matching pair",
+            "Left rows without qualifying right matches",
+            "Only right labels",
+            "All duplicate values"
+          ],
+          "correct_index": 1,
+          "explanation": "The absence test is defined relative to a candidate left population.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-16-anti-join-2",
+          "test_id": "pt-dbms-sql-16-anti-join",
+          "question_text": "Which construct directly expresses lack of a match?",
+          "options": [
+            "COUNT(amount) alone",
+            "NOT EXISTS",
+            "ORDER BY",
+            "An unrestricted CROSS JOIN"
+          ],
+          "correct_index": 1,
+          "explanation": "The correlated subquery asks whether a qualifying related row exists.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-16-anti-join-3",
+          "test_id": "pt-dbms-sql-16-anti-join",
+          "question_text": "Why select1 inside an EXISTS subquery?",
+          "options": [
+            "It counts one row globally",
+            "Only row existence matters",
+            "It orders employees",
+            "It grants access"
+          ],
+          "correct_index": 1,
+          "explanation": "The selected value is not used as a relationship result.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-16-anti-join-4",
+          "test_id": "pt-dbms-sql-16-anti-join",
+          "question_text": "Which unmatched marker is safe here?",
+          "options": [
+            "A nullable employee name",
+            "A nonnull employee primary key",
+            "A department caption",
+            "The sort order"
+          ],
+          "correct_index": 1,
+          "explanation": "A real employee cannot have a null nonnull identity.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-16-anti-join-5",
+          "test_id": "pt-dbms-sql-16-anti-join",
+          "question_text": "What is wrong with testing nullable employee name?",
+          "options": [
+            "It always finds all matches",
+            "A real matching employee may have no name",
+            "It converts null to zero",
+            "It creates a primary key"
+          ],
+          "correct_index": 1,
+          "explanation": "A missing label does not establish absence of the related row.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-16-anti-join-6",
+          "test_id": "pt-dbms-sql-16-anti-join",
+          "question_text": "Where does active eligibility belong in a left anti join?",
+          "options": [
+            "Only ORDER BY",
+            "In the right-side ON condition",
+            "Only a caption",
+            "A filter selecting inactive rows alone"
+          ],
+          "correct_index": 1,
+          "explanation": "The absence test must concern active matches, not arbitrary other matches.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-16-anti-join-7",
+          "test_id": "pt-dbms-sql-16-anti-join",
+          "question_text": "Does one failed payment prove no successful payment exists?",
+          "options": [
+            "Yes",
+            "No",
+            "Only when ordered",
+            "Only if amounts repeat"
+          ],
+          "correct_index": 1,
+          "explanation": "An order may have both a failed attempt and a successful attempt.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-16-anti-join-8",
+          "test_id": "pt-dbms-sql-16-anti-join",
+          "question_text": "What can NULL in a NOT IN subquery cause?",
+          "options": [
+            "Guaranteed true results",
+            "Unknown comparisons that WHERE rejects",
+            "Automatic zero substitution",
+            "A syntax error in every query"
+          ],
+          "correct_index": 1,
+          "explanation": "Three-valued logic can prevent nonmatching outer keys from passing.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-16-anti-join-new-9",
+          "test_id": "pt-dbms-sql-16-anti-join",
+          "question_text": "What happens when the right relation is empty?",
+          "options": [
+            "Every candidate left row qualifies",
+            "No left row qualifies",
+            "Only null left rows qualify",
+            "The query must fail"
+          ],
+          "correct_index": 0,
+          "explanation": "There are no right matches for any candidate.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-16-anti-join-new-10",
+          "test_id": "pt-dbms-sql-16-anti-join",
+          "question_text": "What happens when the left relation is empty?",
+          "options": [
+            "Every right row appears",
+            "The result is empty",
+            "One null department appears",
+            "All employees are deleted"
+          ],
+          "correct_index": 1,
+          "explanation": "An anti condition cannot invent candidate rows.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-16-anti-join-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-16-anti-join-application-new-1",
+          "test_id": "pt-dbms-sql-16-anti-join-application",
+          "question_text": "Does an extra employee in an already staffed department change absence?",
+          "options": [
+            "Yes it makes the department unstaffed",
+            "Only with equal names",
+            "No",
+            "Only if id is even"
+          ],
+          "correct_index": 2,
+          "explanation": "One and many qualifying matches both refute absence.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-16-anti-join-application-new-2",
+          "test_id": "pt-dbms-sql-16-anti-join-application",
+          "question_text": "What does a null employee department_id match under ordinary equality?",
+          "options": [
+            "Every department",
+            "Only the first department",
+            "The largest key",
+            "No known department key"
+          ],
+          "correct_index": 3,
+          "explanation": "Equality involving a null reference does not establish a true match.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-16-anti-join-application-new-3",
+          "test_id": "pt-dbms-sql-16-anti-join-application",
+          "question_text": "Why retain department identity in output?",
+          "options": [
+            "Names can repeat across separate departments",
+            "Names are always null",
+            "Ids prevent all concurrency",
+            "Ids grant access"
+          ],
+          "correct_index": 0,
+          "explanation": "The task concerns department entities rather than deduplicated labels.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-16-anti-join-application-new-4",
+          "test_id": "pt-dbms-sql-16-anti-join-application",
+          "question_text": "What index may support matching employee searches?",
+          "options": [
+            "Only department name",
+            "employees.department_id",
+            "Only an output alias",
+            "No relational index"
+          ],
+          "correct_index": 1,
+          "explanation": "The correlated reference is searched by department equality.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-16-anti-join-application-new-5",
+          "test_id": "pt-dbms-sql-16-anti-join-application",
+          "question_text": "Does NOT EXISTS guarantee outer uniqueness?",
+          "options": [
+            "Yes in every input",
+            "Only if a caption is present",
+            "No",
+            "Only after sorting"
+          ],
+          "correct_index": 2,
+          "explanation": "Repeated outer appearances remain repeated unless the input or query removes them.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-16-anti-join-application-new-6",
+          "test_id": "pt-dbms-sql-16-anti-join-application",
+          "question_text": "Which fixture exposes an inactive-row mistake?",
+          "options": [
+            "Only empty departments",
+            "Only one inactive employee globally",
+            "Only repeated names",
+            "A department with both active and inactive employees"
+          ],
+          "correct_index": 3,
+          "explanation": "An inactive match does not exclude an active match in the same department.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-16-anti-join-application-new-7",
+          "test_id": "pt-dbms-sql-16-anti-join-application",
+          "question_text": "Does an absence report prove a permanent fact?",
+          "options": [
+            "No",
+            "Yes until restart",
+            "Only with DISTINCT",
+            "Only with a primary key"
+          ],
+          "correct_index": 0,
+          "explanation": "Visibility and concurrent changes limit the observation's scope.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-16-anti-join-application-new-8",
+          "test_id": "pt-dbms-sql-16-anti-join-application",
+          "question_text": "What can happen if absence is checked before a later independent write?",
+          "options": [
+            "Automatic serialization",
+            "A race with another session",
+            "An automatic foreign key",
+            "Guaranteed rollback"
+          ],
+          "correct_index": 1,
+          "explanation": "A separate session can change the condition between operations.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-16-anti-join-application-new-9",
+          "test_id": "pt-dbms-sql-16-anti-join-application",
+          "question_text": "What should precede a performance comparison?",
+          "options": [
+            "A shorter query caption",
+            "Removal of null handling",
+            "Equivalent absence semantics",
+            "A new production index"
+          ],
+          "correct_index": 2,
+          "explanation": "Different truth conditions cannot be compared as interchangeable optimizations.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-16-anti-join-application-new-10",
+          "test_id": "pt-dbms-sql-16-anti-join-application",
+          "question_text": "Which report correctly finds orders with no successful payment when failed attempts may exist?",
+          "options": [
+            "Keep orders with at least one failed payment",
+            "Test whether a nullable payment comment is NULL",
+            "Join all failed attempts and discard duplicates",
+            "Use NOT EXISTS over payments matching the order and successful status"
+          ],
+          "correct_index": 3,
+          "explanation": "An unsuccessful attempt does not rule out a successful attempt. Absence must be tested over the complete qualifying-success relationship.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cx-anti-join-unmatched-candidates",
+      "slug": "anti-join-unmatched-candidates",
+      "title": "Find departments without assigned employees",
+      "difficulty": "Easy",
+      "task": "Return id,name for departments without employees, ordered by id.",
+      "schema_sql": "CREATE TABLE departments(id INT PRIMARY KEY,name VARCHAR(30) NOT NULL); CREATE TABLE employees(id INT PRIMARY KEY,department_id INT NULL);",
+      "seed_sql": "INSERT INTO departments VALUES (1,'Arts'),(2,'Science'),(3,'Arts'); INSERT INTO employees VALUES (1,1),(2,1),(3,NULL);",
+      "solution_sql": "SELECT d.id,d.name FROM departments AS d WHERE NOT EXISTS (SELECT 1 FROM employees AS e WHERE e.department_id=d.id) ORDER BY d.id;",
+      "expected": "id\tname\n2\tScience\n3\tArts",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO departments VALUES (1,'A'); INSERT INTO employees VALUES (1,NULL);",
+          "expected": "id\tname\n1\tA"
+        },
+        {
+          "seed_sql": "",
+          "expected": ""
+        }
+      ],
+      "ordering": "Order by keys explicitly stated in the task.",
+      "constraints": [
+        "Use supplied synthetic data.",
+        "Return only requested columns."
+      ],
+      "edge_cases": [
+        "Nullable reference does not poison absence",
+        "Distinct departments may share a name"
+      ],
+      "hints": [
+        "Correlate each employee reference with the candidate department."
+      ],
+      "explanation": "Correlate each employee reference with the candidate department."
+    },
+    {
+      "id": "cp-dbms-sql-departments-with-no-employees",
+      "slug": "departments-with-no-employees",
+      "title": "Departments With No Employees",
+      "difficulty": "Medium",
+      "task": "Write an anti-join query returning `id`, `name` for every department that has NO employees, ordered by `id`.\n\n```sql\nCREATE TABLE departments (\n  id INTEGER PRIMARY KEY,\n  name TEXT NOT NULL\n);\nCREATE TABLE employees (\n  id INTEGER PRIMARY KEY,\n  name TEXT NOT NULL,\n  department_id INTEGER,\n  manager_id INTEGER,\n  salary INTEGER NOT NULL\n);\n```\n\n**Sample data**:\n\n```sql\nINSERT INTO departments (id, name) VALUES (1, 'Engineering'), (2, 'Sales'), (3, 'Marketing');\nINSERT INTO employees (id, name, department_id, manager_id, salary) VALUES\n(1, 'Asha', 1, NULL, 90000),\n(2, 'Rohan', 1, 1, 70000),\n(3, 'Neha', 2, 1, 65000),\n(4, 'Vikram', NULL, 1, 50000);\n```\n",
+      "schema_sql": "CREATE TABLE departments (\n  id INTEGER PRIMARY KEY,\n  name TEXT NOT NULL\n);\nCREATE TABLE employees (\n  id INTEGER PRIMARY KEY,\n  name TEXT NOT NULL,\n  department_id INTEGER,\n  manager_id INTEGER,\n  salary INTEGER NOT NULL\n);",
+      "seed_sql": "INSERT INTO departments (id, name) VALUES (1, 'Engineering'), (2, 'Sales'), (3, 'Marketing');\nINSERT INTO employees (id, name, department_id, manager_id, salary) VALUES\n(1, 'Asha', 1, NULL, 90000),\n(2, 'Rohan', 1, 1, 70000),\n(3, 'Neha', 2, 1, 65000),\n(4, 'Vikram', NULL, 1, 50000);",
+      "expected": "id\tname\n3\tMarketing",
+      "ordering": "Ordered by id ascending.",
+      "edge_cases": [
+        "Preserve unmatched identities.",
+        "Retain original hidden fixture."
+      ],
+      "hints": [
+        "Preserve each department and test the nonnull employee identity for an unmatched row."
+      ],
+      "solution_sql": "SELECT d.id,d.name FROM departments AS d LEFT JOIN employees AS e ON e.department_id=d.id WHERE e.id IS NULL ORDER BY d.id;",
+      "explanation": "Preserve each department and test the nonnull employee identity for an unmatched row.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO departments (id, name) VALUES (10, 'Finance'), (20, 'Legal'), (30, 'HR');\nINSERT INTO employees (id, name, department_id, manager_id, salary) VALUES\n(1, 'Zara', 10, NULL, 95000),\n(2, 'Omar', 10, 1, 60000),\n(3, 'Leo', NULL, 1, 40000);",
+          "expected": "id\tname\n20\tLegal\n30\tHR"
+        }
+      ],
+      "existing_problem": true,
+      "original_description_md5": "cf7d9ea662c4d37a4050d0a6874e434d",
+      "original_problem": {
+        "id": "cp-dbms-sql-departments-with-no-employees",
+        "topic_id": null,
+        "title": "Departments With No Employees",
+        "difficulty": "Medium",
+        "slug": "departments-with-no-employees",
+        "description": "Write an anti-join query returning `id`, `name` for every department that has NO employees, ordered by `id`.\n\n```sql\nCREATE TABLE departments (\n  id INTEGER PRIMARY KEY,\n  name TEXT NOT NULL\n);\nCREATE TABLE employees (\n  id INTEGER PRIMARY KEY,\n  name TEXT NOT NULL,\n  department_id INTEGER,\n  manager_id INTEGER,\n  salary INTEGER NOT NULL\n);\n```\n\n**Sample data**:\n\n```sql\nINSERT INTO departments (id, name) VALUES (1, 'Engineering'), (2, 'Sales'), (3, 'Marketing');\nINSERT INTO employees (id, name, department_id, manager_id, salary) VALUES\n(1, 'Asha', 1, NULL, 90000),\n(2, 'Rohan', 1, 1, 70000),\n(3, 'Neha', 2, 1, 65000),\n(4, 'Vikram', NULL, 1, 50000);\n```\n",
+        "examples": "[{\"input\": \"\", \"output\": \"id\\tname\\n3\\tMarketing\"}]",
+        "test_cases": "[{\"hidden\": true, \"seed_sql\": \"INSERT INTO departments (id, name) VALUES (10, 'Finance'), (20, 'Legal'), (30, 'HR');\\nINSERT INTO employees (id, name, department_id, manager_id, salary) VALUES\\n(1, 'Zara', 10, NULL, 95000),\\n(2, 'Omar', 10, 1, 60000),\\n(3, 'Leo', NULL, 1, 40000);\", \"expected\": \"id\\tname\\n20\\tLegal\\n30\\tHR\"}]",
+        "starter_code": null,
+        "editorial": "LEFT JOIN then filter to rows where the employee side is NULL. Reference: `SELECT d.id, d.name FROM departments d LEFT JOIN employees e ON e.department_id = d.id WHERE e.id IS NULL ORDER BY d.id;`",
+        "supported_languages": null,
+        "sql_schema_sql": "CREATE TABLE departments (\n  id INTEGER PRIMARY KEY,\n  name TEXT NOT NULL\n);\nCREATE TABLE employees (\n  id INTEGER PRIMARY KEY,\n  name TEXT NOT NULL,\n  department_id INTEGER,\n  manager_id INTEGER,\n  salary INTEGER NOT NULL\n);",
+        "sql_seed_sql": "INSERT INTO departments (id, name) VALUES (1, 'Engineering'), (2, 'Sales'), (3, 'Marketing');\nINSERT INTO employees (id, name, department_id, manager_id, salary) VALUES\n(1, 'Asha', 1, NULL, 90000),\n(2, 'Rohan', 1, 1, 70000),\n(3, 'Neha', 2, 1, 65000),\n(4, 'Vikram', NULL, 1, 50000);",
+        "sql_check_sql": "",
+        "learning_topic_id": null,
+        "status": "published",
+        "is_premium": null,
+        "show_on_website": null,
+        "show_on_mobile": null,
+        "sort_order": 1
+      },
+      "check_sql": "",
+      "original_check_sql": ""
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-16-anti-join-1",
+      "test_id": "pt-dbms-sql-16-anti-join",
+      "question_text": "What does an anti join return?",
+      "options": [
+        "Rows that match on both sides",
+        "Rows from one table that have NO matching row in another table",
+        "Every possible row combination",
+        "Only rows with NULL values"
+      ],
+      "correct_index": 1,
+      "explanation": "Anti join is specifically about finding unmatched rows.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-16-anti-join-2",
+      "test_id": "pt-dbms-sql-16-anti-join",
+      "question_text": "Which pattern implements an anti join using LEFT JOIN?",
+      "options": [
+        "LEFT JOIN ... WHERE right.key = left.key",
+        "LEFT JOIN ... WHERE right.key IS NULL",
+        "LEFT JOIN ... WHERE left.key IS NOT NULL",
+        "LEFT JOIN ... ORDER BY right.key"
+      ],
+      "correct_index": 1,
+      "explanation": "Filtering to rows where the right side's key is NULL after a LEFT JOIN finds exactly the unmatched rows.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-16-anti-join-3",
+      "test_id": "pt-dbms-sql-16-anti-join",
+      "question_text": "Why must the column checked with IS NULL be one that's guaranteed non-NULL when a match DOES exist (like a primary key)?",
+      "options": [
+        "It doesn't matter which column is checked",
+        "Using a column that could be NULL even in a matched row would incorrectly treat matched-but-NULL rows as unmatched",
+        "IS NULL only works on primary key columns",
+        "This is a syntax requirement, not a correctness one"
+      ],
+      "correct_index": 1,
+      "explanation": "The correctness of the anti-join pattern depends on the checked column reliably signaling 'no match' only when truly unmatched.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-16-anti-join-4",
+      "test_id": "pt-dbms-sql-16-anti-join",
+      "question_text": "Why is NOT EXISTS often preferred over LEFT JOIN + IS NULL or NOT IN for expressing an anti join?",
+      "options": [
+        "NOT EXISTS is not actually equivalent",
+        "It avoids NOT IN's NULL-poisoning gotcha and can be efficient since the engine can stop at the first potential match found",
+        "NOT EXISTS always returns more rows",
+        "NOT EXISTS cannot be used with correlated conditions"
+      ],
+      "correct_index": 1,
+      "explanation": "NOT EXISTS sidesteps the classic NULL-related NOT IN bug while remaining an efficient way to check for absence of a match.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-16-anti-join-5",
+      "test_id": "pt-dbms-sql-16-anti-join",
+      "question_text": "What is the conceptual opposite of an anti join?",
+      "options": [
+        "INNER JOIN",
+        "A semi join, which finds rows with AT LEAST ONE match",
+        "CROSS JOIN",
+        "A self join"
+      ],
+      "correct_index": 1,
+      "explanation": "Anti join (no matches) and semi join (at least one match) are direct conceptual opposites.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-16-anti-join-6",
+      "test_id": "pt-dbms-sql-16-anti-join",
+      "question_text": "In the running example, which department does the anti join query return?",
+      "options": [
+        "Engineering",
+        "Marketing — the department with zero employees",
+        "Sales",
+        "All three departments"
+      ],
+      "correct_index": 1,
+      "explanation": "Only Marketing has no matching employee rows.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-16-anti-join-7",
+      "test_id": "pt-dbms-sql-16-anti-join",
+      "question_text": "Why is NOT IN (subquery) considered risky compared to a proper anti join?",
+      "options": [
+        "NOT IN is always slower",
+        "If the subquery's result contains any NULL, the entire NOT IN condition can evaluate to UNKNOWN for every row, silently returning zero results",
+        "NOT IN cannot be used with SELECT statements",
+        "NOT IN is deprecated in modern SQL"
+      ],
+      "correct_index": 1,
+      "explanation": "This is the exact NULL-in-list gotcha from Chapter 7, which anti-join patterns (LEFT JOIN + IS NULL, or NOT EXISTS) avoid.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-16-anti-join-8",
+      "test_id": "pt-dbms-sql-16-anti-join",
+      "question_text": "Is 'anti join' a distinct SQL keyword, or a named pattern built from existing SQL features?",
+      "options": [
+        "A distinct SQL keyword (ANTI JOIN)",
+        "A named pattern, typically implemented via LEFT JOIN + IS NULL or NOT EXISTS — there's no dedicated ANTI JOIN keyword in standard SQL",
+        "Only available via a stored procedure",
+        "A NoSQL-only concept"
+      ],
+      "correct_index": 1,
+      "explanation": "Anti join describes a query PATTERN, not a specific SQL syntax keyword.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "/root/worker_2",
+    "independent_review": "passed",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "authored; independent review pending",
+    "canonical_answer_indices_preserved": true,
+    "editorial_record": "Original prose and assessments. Seed snapshots and canonical answer indices retained; external originality clearance pending.",
+    "independent_reviewer": "/root",
+    "independent_review_scope": "Full notes,20 MCQs with options/reasoning,both exercises including five predicted sample/alternative outputs, table diagram and links. NOT EXISTS and reliable LEFT JOIN marker, null NOT IN trap, optional relationships and multiplicity correct. Workflow-status MCQ replaced with meaningful successful-payment absence scenario. Engine/browser verification separate."
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-16-anti-join",
+    "original_note_sha256": "aed0e1f956fcdfb0c683477abc323cc4ea181c127d2528bbd6a44a826ff730a8",
+    "status": "drafted; not included in prepared paired migrations"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Absence depends on qualifying matches",
+      "description": "One or many matching employees both exclude a department; a null reference matches none.",
+      "columns": [
+        "Department",
+        "Matched employee IDs",
+        "Included?"
+      ],
+      "rows": [
+        [
+          "1",
+          "1,2",
+          "No"
+        ],
+        [
+          "2",
+          "None",
+          "Yes"
+        ],
+        [
+          "3",
+          "None",
+          "Yes"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "technical_review": "coordinator independent manual review passed",
+    "browser_rendering": "unverified",
+    "independent_review": "passed",
+    "server_rendering": "passed",
+    "server_rendering_evidence": "2026-10-29 full Vitest:1310 passed/12 skipped; actual LessonBlock/TopicDiagrams render over230 packages. Browser visual QA remains unverified."
+  },
+  "authoring_status": "drafted; verification pending",
+  "sql_verification": {
+    "scope": "not executed; exact MySQL/provider execution pending",
+    "all_passed": false,
+    "cases": []
+  }
+}

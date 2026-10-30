@@ -1,0 +1,607 @@
+{
+  "source_ref": "chapter-12-select-and-filtering/case",
+  "slug": "case",
+  "title": "CASE",
+  "description": "Write SQL CASE expressions with ordered conditions, explicit ELSE values, and NULL handling; practice price tiers and conditional classifications.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Conditional values belong inside expressions\n\nCASE computes a value by choosing among alternatives. A campus shop may display Budget, Mid or Premium beside each product according to its price. The query still returns the product row; the expression supplies an additional classification. CASE does not automatically filter out products, modify their stored price or create a new table merely because it names several possible outcomes.\n\nStart by listing the intended categories and their boundaries. For the retained price-tier task, prices below three hundred are Budget, prices from three hundred through one thousand are Mid, and greater prices are Premium. The price column is required in that fixture. This contract makes boundary reasoning concrete before the SQL expression is written.\n\n## Searched CASE tests conditions in order\n\nThe searched form contains WHEN conditions followed by their THEN values. The result is taken from the first condition that is TRUE. If no condition qualifies, ELSE supplies the fallback when present. Each condition can use comparisons, missing-value tests or logical combinations, provided the expression follows the actual dialect's syntax and compatible result-type rules.\n\nOrder matters when conditions overlap. A price of two hundred is below both three hundred and one thousand. If a broad at-most-one-thousand branch appears first, it can classify the product as Mid before the Budget branch is reached. SQL does not automatically choose the most specific condition. The author must arrange branches so the first accepted condition matches the policy's intended priority.\n\n```sql\nSELECT id, name,\n       CASE\n         WHEN price < 300 THEN 'Budget'\n         WHEN price <= 1000 THEN 'Mid'\n         ELSE 'Premium'\n       END AS tier\nFROM products\nORDER BY id;\n```\n\n## Earlier exclusions can simplify later branches\n\nIn the retained expression, the second branch checks only the upper Mid limit because the earlier branch already handled prices below three hundred. A known price reaching that second branch is not below three hundred, so the remaining upper-bound test describes the intended middle interval. This is a reasoned simplification rather than a missing lower bound.\n\nThat reasoning depends on the earlier conditions and input contract. If another developer moves, removes or broadens the Budget branch, the later condition's effective population can change. Read the complete ordered decision chain during review. A standalone WHEN fragment may look reasonable while producing a different classification when placed after a new higher-priority rule.\n\n## Simple CASE compares one expression with alternatives\n\nThe simple form places an expression immediately after CASE and lists comparison values in WHEN branches. It is useful for mapping a known request status to a descriptive caption. For example, pending can become Awaiting review and ready can become Ready for collection. This form expresses repeated equality choices on one tested expression more directly than several similar searched conditions.\n\nSimple CASE does not make ordinary [NULL](/learning/dbms-sql-tutorial/null-values) equality true. A WHEN NULL branch does not serve as a general missing-value test for a NULL expression. Use a searched condition with IS NULL when absence needs a distinct label. Choose the form according to the actual decision: equality mapping is different from ranges, compound conditions and explicit missingness.\n\n## A missing ELSE creates a nullable result\n\nIf no WHEN branch is true and ELSE is omitted, CASE returns NULL. That can be intentional when the consumer expects an absent classification. It can also create silent gaps when an unforeseen status appears. Decide whether the default should be a label, a numeric value or a deliberate NULL, then document that meaning through the query contract.\n\nA fallback called Other can prevent an empty display, but it can also conceal newly introduced states that deserve explicit handling. For an audit, a recognizable unexpected-state label may be useful. For a trusted mutation, unknown states may require rejection elsewhere. CASE produces a value; it does not automatically decide that every fallback is a valid business outcome.\n\n## UNKNOWN conditions do not qualify\n\nA WHEN condition involving NULL can evaluate to UNKNOWN, which does not count as TRUE. The expression proceeds to later branches or ELSE. If nullable price were added to the tier task without revising the expression, an unknown price could reach Premium simply because neither numeric condition was true. That would be a semantic defect for a policy requiring unknown prices to remain unclassified.\n\nAdd an explicit missing-price branch when the data contract permits NULL and the business meaning requires it. Alternatively, enforce required price at storage if absence is invalid. The retained exercise preserves its NOT NULL price schema, while other examples can deliberately introduce missing values. Keep the input guarantee visible instead of generalizing one fixture's classification to every nullable dataset.\n\n## Result branches need compatible meaning and types\n\nTHEN and ELSE values form one result expression, so their types interact under the engine's type-resolution rules. A classification returning text in one branch and an unrelated numeric amount in another can invite conversion or a confusing output contract. Prefer result values that belong to one coherent domain, such as all tier labels or all computed numeric quantities.\n\nThis does not mean every branch must be written with exactly identical literal syntax. It means the author should understand the resulting type and how clients receive it. A numeric calculation intended for later sorting should not quietly become formatted text. Apply display formatting at a deliberate boundary rather than mix presentation labels with measurements in the same CASE result.\n\n## CASE can support filtering and ordering\n\nCASE is an expression, so it can appear where a compatible value is expected, including a [SELECT](/learning/dbms-sql-tutorial/select) list, an ordering expression or some filtering conditions. It is not restricted to output labels. However, a conditional expression inside WHERE is not necessarily clearer than a direct Boolean condition. Choose the form that makes the policy easiest to verify without inventing unnecessary indirection.\n\nFor a custom display order, CASE can map statuses to priority numbers and ORDER BY can sort those numbers. Include a stable tie breaker for rows with the same priority. The mapping does not itself guarantee order without an actual ordering clause, and a displayed priority does not authorize a privileged transition. Classification, sorting and trusted action enforcement remain distinct responsibilities.\n\n## Conditional aggregation counts deliberate populations\n\nA searched CASE inside SUM can contribute one for a matching condition and zero otherwise, producing a conditional count. Another common shape uses COUNT over an expression returning a non-NULL value only for qualifying rows. These constructions depend on the aggregate's NULL behaviour, so explain how nonmatching rows contribute instead of treating every aggregate wrapper as interchangeable.\n\nThe empty-input result also matters. SUM can return NULL when there are no input rows, while COUNT returns zero. If the contract requires a numeric zero for an empty report, choose a suitable expression deliberately. Do not introduce a zero fallback if absence has a different meaning in the report. Test both nonmatching rows and no rows to reveal the difference.\n\n## A decision expression is not a procedural program\n\nThe CASE expression in a query returns one value per evaluated row context. It is different from the procedural CASE statement available inside some stored programs. The surrounding syntax and purpose differ, so do not paste stored-program control-flow syntax into a SELECT expression. This topic uses the expression form ending with END.\n\nAvoid using CASE as a blanket promise that every unsafe expression is protected from every planning or evaluation effect. Keep branch calculations valid under the engine's documented behaviour, especially when aggregates or conversions are involved. A visible branch priority explains the returned value but is not a universal error-handling mechanism for arbitrary SQL placed anywhere inside the query.\n\n## Test boundaries and overlapping decisions\n\nThe retained intermediate exercise preserves the original price-tier identity and setup, then adds exact values around three hundred and one thousand. The beginner exercise classifies missing, zero and positive stock with explicit missingness priority. Its known nonnegative stock contract avoids inventing an unsupported meaning for negative values.\n\nTrace each row through the ordered conditions and stop at the first true branch. Explain why later branches do not win, and identify what happens when no condition is true. This method exposes overlap, missing defaults and accidental NULL fallthrough. A clear CASE expression reads like an explicit decision contract whose boundaries can be checked without guessing which condition the database considers most important.\n",
+  "references": [
+    {
+      "title": "MySQL 8.4 CASE expression and result semantics",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/flow-control-functions.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-12-case",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-12-case-1",
+          "test_id": "pt-dbms-sql-12-case",
+          "question_text": "What does a searched CASE expression return?",
+          "options": [
+            "Every THEN value concatenated",
+            "The value associated with its first TRUE condition, or the fallback",
+            "Only rows satisfying all branches",
+            "A new table definition"
+          ],
+          "correct_index": 1,
+          "explanation": "It produces a value, not an automatic row filter.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-12-case-2",
+          "test_id": "pt-dbms-sql-12-case",
+          "question_text": "If two WHEN conditions are TRUE, which one supplies the result?",
+          "options": [
+            "The most specific automatically",
+            "The earlier one in the decision chain",
+            "The later one",
+            "A random branch"
+          ],
+          "correct_index": 1,
+          "explanation": "Branch order expresses priority.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-12-case-3",
+          "test_id": "pt-dbms-sql-12-case",
+          "question_text": "No WHEN is true and ELSE is omitted. What is returned?",
+          "options": [
+            "Zero automatically",
+            "NULL",
+            "An empty string automatically",
+            "A syntax error always"
+          ],
+          "correct_index": 1,
+          "explanation": "The implicit fallback is missing.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-12-case-4",
+          "test_id": "pt-dbms-sql-12-case",
+          "question_text": "Can a CASE expression be used in ORDER BY?",
+          "options": [
+            "No, only SELECT supports it",
+            "Yes, as a compatible value expression",
+            "Only in a stored procedure",
+            "Only if no THEN appears"
+          ],
+          "correct_index": 1,
+          "explanation": "An ordering clause can use computed priority values.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-12-case-5",
+          "test_id": "pt-dbms-sql-12-case",
+          "question_text": "What does simple CASE primarily express?",
+          "options": [
+            "Arbitrary procedural loops",
+            "Equality alternatives for one tested expression",
+            "A table schema",
+            "A guaranteed NULL-safe match"
+          ],
+          "correct_index": 1,
+          "explanation": "Use searched CASE for range and missingness conditions.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-12-case-6",
+          "test_id": "pt-dbms-sql-12-case",
+          "question_text": "At price 300, which retained tier applies?",
+          "options": [
+            "Budget",
+            "Mid",
+            "Premium",
+            "NULL"
+          ],
+          "correct_index": 1,
+          "explanation": "The Budget condition is strict and the next branch includes 300.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-12-case-7",
+          "test_id": "pt-dbms-sql-12-case",
+          "question_text": "Why choose ELSE deliberately?",
+          "options": [
+            "ELSE always speeds execution",
+            "Unanticipated inputs otherwise can silently produce NULL",
+            "ELSE is mandatory syntax",
+            "ELSE creates storage constraints"
+          ],
+          "correct_index": 1,
+          "explanation": "The default value is part of the output contract.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-12-case-8",
+          "test_id": "pt-dbms-sql-12-case",
+          "question_text": "What is CASE in the SELECT examples?",
+          "options": [
+            "A standalone data modification command",
+            "A value-producing expression",
+            "A permission grant",
+            "A comment"
+          ],
+          "correct_index": 1,
+          "explanation": "The stored-program statement form is a different construct.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-12-case-new-9",
+          "test_id": "pt-dbms-sql-12-case",
+          "question_text": "Why can a broad price<=1000 branch placed first be wrong?",
+          "options": [
+            "It can capture Budget prices before their narrower branch",
+            "It can never match",
+            "It automatically excludes low prices",
+            "SQL sorts branches by specificity"
+          ],
+          "correct_index": 0,
+          "explanation": "Overlapping conditions follow written priority.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-12-case-new-10",
+          "test_id": "pt-dbms-sql-12-case",
+          "question_text": "Why does the second retained tier branch need only price<=1000?",
+          "options": [
+            "CASE ignores lower limits universally",
+            "Earlier handling already removed known prices below 300",
+            "All prices are exactly 300",
+            "The upper check also tests category"
+          ],
+          "correct_index": 1,
+          "explanation": "Reason from the complete ordered chain and schema guarantees.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-12-case-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-12-case-application-new-1",
+          "test_id": "pt-dbms-sql-12-case-application",
+          "question_text": "Does simple CASE value WHEN NULL generally identify a NULL value?",
+          "options": [
+            "Yes, ordinary NULL equality is true there",
+            "No, use a searched IS NULL condition",
+            "Only with ORDER BY",
+            "Only with two branches"
+          ],
+          "correct_index": 1,
+          "explanation": "Simple CASE comparison is not a general missingness test.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-12-case-application-new-2",
+          "test_id": "pt-dbms-sql-12-case-application",
+          "question_text": "How is an UNKNOWN WHEN condition treated?",
+          "options": [
+            "It always wins",
+            "It becomes zero and wins",
+            "It does not qualify as TRUE",
+            "It terminates the query with an error"
+          ],
+          "correct_index": 2,
+          "explanation": "Later branches or the fallback determine the result.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-12-case-application-new-3",
+          "test_id": "pt-dbms-sql-12-case-application",
+          "question_text": "Why would nullable price need reconsideration in the retained tier expression?",
+          "options": [
+            "NULL is always below 300",
+            "Every NULL must be Budget",
+            "CASE automatically preserves the price domain",
+            "An unknown price could otherwise fall through to Premium"
+          ],
+          "correct_index": 3,
+          "explanation": "The current retained schema explicitly requires price.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-12-case-application-new-4",
+          "test_id": "pt-dbms-sql-12-case-application",
+          "question_text": "Why keep branch result types coherent?",
+          "options": [
+            "One result expression needs understood type and meaning",
+            "Every branch always has an independent output column",
+            "Types never interact",
+            "Text cannot appear in CASE"
+          ],
+          "correct_index": 0,
+          "explanation": "Avoid accidental mixed measurement and label contracts.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-12-case-application-new-5",
+          "test_id": "pt-dbms-sql-12-case-application",
+          "question_text": "What does a displayed priority number fail to do by itself?",
+          "options": [
+            "Return a value",
+            "Sort the rows without ORDER BY",
+            "Provide an expression alias",
+            "Distinguish mapped statuses"
+          ],
+          "correct_index": 1,
+          "explanation": "Computation and presentation order are separate.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-12-case-application-new-6",
+          "test_id": "pt-dbms-sql-12-case-application",
+          "question_text": "How can SUM(CASE WHEN condition THEN 1 ELSE 0 END) be used?",
+          "options": [
+            "As a uniqueness constraint",
+            "As a row deletion",
+            "As a conditional count over existing input rows",
+            "As an access grant"
+          ],
+          "correct_index": 2,
+          "explanation": "The contribution of each branch explains the total.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-12-case-application-new-7",
+          "test_id": "pt-dbms-sql-12-case-application",
+          "question_text": "What can SUM return on no input rows?",
+          "options": [
+            "Always zero",
+            "Always one",
+            "A list of all THEN labels",
+            "NULL"
+          ],
+          "correct_index": 3,
+          "explanation": "Choose any zero fallback according to the report contract.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-12-case-application-new-8",
+          "test_id": "pt-dbms-sql-12-case-application",
+          "question_text": "Which exact prices test retained tier boundaries?",
+          "options": [
+            "299, 300, 1000 and 1001",
+            "Only 500",
+            "Only 85000",
+            "Only unrelated stock values"
+          ],
+          "correct_index": 0,
+          "explanation": "These distinguish the adjacent tier transitions.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-12-case-application-new-9",
+          "test_id": "pt-dbms-sql-12-case-application",
+          "question_text": "Should a new unexpected status always be silently labeled Other?",
+          "options": [
+            "Yes, every unexpected state is valid",
+            "No, choose an explicit fallback or rejection policy suitable to the feature",
+            "Only if the label is short",
+            "Only if prices are numeric"
+          ],
+          "correct_index": 1,
+          "explanation": "A fallback can hide a state that requires attention.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-12-case-application-new-10",
+          "test_id": "pt-dbms-sql-12-case-application",
+          "question_text": "Does CASE automatically validate authority for a privileged action?",
+          "options": [
+            "Yes, if it returns allowed",
+            "Yes, if the UI hides the action",
+            "No, trusted authorization remains necessary",
+            "Only if ELSE is absent"
+          ],
+          "correct_index": 2,
+          "explanation": "A computed label is not an enforcement boundary.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cx-case-stock-observation",
+      "slug": "case-stock-observation",
+      "title": "Classify an explicit nonnegative stock observation",
+      "difficulty": "Easy",
+      "task": "Return equipment_id,state with unknown for NULL stock, empty for zero, and available for positive stock. Fixtures contain only NULL or nonnegative integers. Order by equipment_id.",
+      "schema_sql": "CREATE TABLE equipment_stock(equipment_id INT PRIMARY KEY,stock INT);",
+      "seed_sql": "INSERT INTO equipment_stock VALUES (1,NULL),(2,0),(3,4);",
+      "expected": "equipment_id\tstate\n1\tunknown\n2\tempty\n3\tavailable",
+      "ordering": "As explicitly ordered in the result query.",
+      "constraints": [
+        "Use only the supplied synthetic tables and requested transition.",
+        "Preserve unrelated rows."
+      ],
+      "edge_cases": [
+        "Unknown must not fall into the available label.",
+        "Zero is a known state."
+      ],
+      "hints": [
+        "Test IS NULL explicitly.",
+        "Keep known zero distinct from missing stock."
+      ],
+      "solution_sql": "SELECT equipment_id,CASE WHEN stock IS NULL THEN 'unknown' WHEN stock=0 THEN 'empty' ELSE 'available' END AS state FROM equipment_stock ORDER BY equipment_id;",
+      "explanation": "Explicit missingness is handled first. Under the stated nonnegative contract, known nonzero stock is positive.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO equipment_stock VALUES (7,0),(8,NULL);",
+          "expected": "equipment_id\tstate\n7\tempty\n8\tunknown"
+        },
+        {
+          "seed_sql": "INSERT INTO equipment_stock VALUES (1,1);",
+          "expected": "equipment_id\tstate\n1\tavailable"
+        }
+      ]
+    },
+    {
+      "id": "cp-dbms-sql-price-tiers",
+      "slug": "price-tiers",
+      "title": "Price Tiers",
+      "difficulty": "Medium",
+      "task": "Return id,name,tier using Budget for price<300, Mid for 300 through 1000 inclusive, and Premium otherwise. The retained price column is NOT NULL. Order by id. Preserve every product.",
+      "schema_sql": "CREATE TABLE products (\n  id INTEGER PRIMARY KEY,\n  name TEXT NOT NULL,\n  category TEXT NOT NULL,\n  price INTEGER NOT NULL,\n  stock INTEGER\n);",
+      "seed_sql": "INSERT INTO products (id, name, category, price, stock) VALUES\n(1, 'ProLaptop', 'Electronics', 85000, 12),\n(2, 'Notebook', 'Stationery', 40, NULL),\n(3, 'Python Basics', 'Books', 350, 5),\n(4, 'ProPhone', 'Electronics', 45000, 0),\n(5, 'Novel', 'Books', 220, NULL),\n(6, 'Desk Lamp', 'Home', 900, 8);",
+      "expected": "id\tname\ttier\n1\tProLaptop\tPremium\n2\tNotebook\tBudget\n3\tPython Basics\tMid\n4\tProPhone\tPremium\n5\tNovel\tBudget\n6\tDesk Lamp\tMid",
+      "ordering": "As explicitly ordered in the result query.",
+      "constraints": [
+        "Use only the supplied synthetic tables and requested transition.",
+        "Preserve unrelated rows."
+      ],
+      "edge_cases": [
+        "Price 300 is Mid.",
+        "Price 1000 is Mid and 1001 is Premium."
+      ],
+      "hints": [
+        "Put the narrower low-price condition first.",
+        "Verify exact boundaries 300 and 1000."
+      ],
+      "solution_sql": "SELECT id,name,CASE WHEN price<300 THEN 'Budget' WHEN price<=1000 THEN 'Mid' ELSE 'Premium' END AS tier FROM products ORDER BY id;",
+      "explanation": "The first true branch supplies the label. Earlier Budget handling lets the next upper-bound condition represent the remaining middle interval.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO products (id, name, category, price, stock) VALUES\n(1, 'ProTablet', 'Electronics', 32000, 4),\n(2, 'Pencil Set', 'Stationery', 60, NULL),\n(3, 'SQL Guide', 'Books', 500, 10),\n(4, 'ProSpeaker', 'Electronics', 6000, 0);",
+          "expected": "id\tname\ttier\n1\tProTablet\tPremium\n2\tPencil Set\tBudget\n3\tSQL Guide\tMid\n4\tProSpeaker\tPremium"
+        },
+        {
+          "seed_sql": "INSERT INTO products VALUES (1,'A','Books',299,0),(2,'B','Books',300,0),(3,'C','Books',1000,0),(4,'D','Books',1001,0);",
+          "expected": "id\tname\ttier\n1\tA\tBudget\n2\tB\tMid\n3\tC\tMid\n4\tD\tPremium"
+        }
+      ],
+      "existing_problem": true,
+      "original_description_md5": "b3bc447807cac5d6eca75b03f5dfeea2",
+      "original_check_sql": "",
+      "check_sql": ""
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-12-case-1",
+      "test_id": "pt-dbms-sql-12-case",
+      "question_text": "What does CASE WHEN...THEN...ELSE...END do?",
+      "options": [
+        "Filters rows",
+        "Evaluates conditions in order and returns the value tied to the first TRUE one (or ELSE if none match)",
+        "Sorts rows by a condition",
+        "Groups rows by a condition"
+      ],
+      "correct_index": 1,
+      "explanation": "CASE is SQL's conditional expression, producing a value based on the first matching condition.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-12-case-2",
+      "test_id": "pt-dbms-sql-12-case",
+      "question_text": "In what order are CASE's WHEN conditions evaluated?",
+      "options": [
+        "In random order",
+        "Top to bottom, with the FIRST TRUE condition's value being returned",
+        "Bottom to top",
+        "All conditions simultaneously, picking the most specific"
+      ],
+      "correct_index": 1,
+      "explanation": "Order matters — evaluation proceeds top-to-bottom and stops at the first match.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-12-case-3",
+      "test_id": "pt-dbms-sql-12-case",
+      "question_text": "What does CASE return if no WHEN condition matches and there's no ELSE clause?",
+      "options": [
+        "An error is raised",
+        "NULL",
+        "The value 0",
+        "An empty string"
+      ],
+      "correct_index": 1,
+      "explanation": "Without ELSE, an unmatched row's CASE expression silently evaluates to NULL.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-12-case-4",
+      "test_id": "pt-dbms-sql-12-case",
+      "question_text": "Can CASE be used inside a WHERE clause, not just SELECT?",
+      "options": [
+        "No, CASE can only appear in SELECT",
+        "Yes — CASE is an expression usable almost anywhere a value is expected, including WHERE, ORDER BY, and inside function calls",
+        "CASE can only appear in ORDER BY",
+        "CASE requires its own separate statement"
+      ],
+      "correct_index": 1,
+      "explanation": "As an expression rather than a statement, CASE is broadly usable throughout a query.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-12-case-5",
+      "test_id": "pt-dbms-sql-12-case",
+      "question_text": "What is the 'simple CASE' form?",
+      "options": [
+        "A CASE with no WHEN branches at all",
+        "CASE column WHEN val1 THEN ... WHEN val2 THEN ... END, which tests equality against one column, more concisely than the full WHEN-condition form",
+        "A CASE that can only return TRUE or FALSE",
+        "A deprecated, no-longer-supported CASE syntax"
+      ],
+      "correct_index": 1,
+      "explanation": "The simple form is a shorthand specifically for equality-only branches against a single column.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-12-case-6",
+      "test_id": "pt-dbms-sql-12-case",
+      "question_text": "For price = 300 with WHEN price < 300 THEN 'Budget' WHEN price <= 1000 THEN 'Mid', what tier results?",
+      "options": [
+        "'Budget'",
+        "'Mid'",
+        "NULL",
+        "An error, since 300 matches no exact condition"
+      ],
+      "correct_index": 1,
+      "explanation": "300 fails the first (strictly less than) condition but satisfies the second (<=), so 'Mid' is returned.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-12-case-7",
+      "test_id": "pt-dbms-sql-12-case",
+      "question_text": "Why is including an explicit ELSE generally good defensive practice?",
+      "options": [
+        "ELSE is required by SQL syntax",
+        "It avoids silently producing unexpected NULLs for cases the WHEN branches didn't anticipate",
+        "ELSE makes the query run faster",
+        "ELSE is only needed for numeric CASE expressions"
+      ],
+      "correct_index": 1,
+      "explanation": "An explicit ELSE makes the fallback behavior intentional and visible, rather than an implicit NULL.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-12-case-8",
+      "test_id": "pt-dbms-sql-12-case",
+      "question_text": "Is CASE a standalone SQL statement or an expression?",
+      "options": [
+        "A standalone statement, like SELECT or UPDATE",
+        "An expression that produces a value, usable within other statements",
+        "Neither — it's a type of constraint",
+        "A comment syntax"
+      ],
+      "correct_index": 1,
+      "explanation": "CASE's expression nature is exactly why it can be embedded almost anywhere a value belongs.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "coordinator",
+    "independent_review": "passed",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Independent manual review passed; native MySQL fixture evidence recorded separately; provider/browser/Supabase release gates remain separate.",
+    "existing_question_corrections": [
+      "tq-dbms-sql-12-case-1",
+      "tq-dbms-sql-12-case-2",
+      "tq-dbms-sql-12-case-3",
+      "tq-dbms-sql-12-case-4",
+      "tq-dbms-sql-12-case-5",
+      "tq-dbms-sql-12-case-6",
+      "tq-dbms-sql-12-case-7",
+      "tq-dbms-sql-12-case-8"
+    ],
+    "canonical_answer_indices_preserved": true,
+    "editorial_record": "Original snapshots retained. Questions rewritten for precise dialect and topic coverage while preserving identities and canonical answer positions; technical and independent review pending.",
+    "independent_reviewer": "Codex reviewer, current 2026-10-30 session",
+    "independent_review_scope": "Read full notes, all 640 MCQ stems/options/canonical answers/explanations, 64 exercise contracts/solutions/fixtures, and all 32 diagrams. Verified retained identities/answers through source-continuity tests; SQL execution evidence is recorded separately. No external originality, provider, live application or Supabase authorization clearance.",
+    "independent_review_record": "reports/independent-review-2026-10-30.json",
+    "content_sha256": "cd5b3d8e1daf9abb20e7371f680907a2c3a52202d18e24d0cf5c4684204b5ede"
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-12-case",
+    "original_note_sha256": "1e4bdf89c70797cb5f58384c041aabef0e1a066907599f5633bb0c07d7f25165",
+    "status": "drafted; not yet included in prepared paired migrations"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "The first true price condition determines the retained tier",
+      "description": "Price is required by the retained source schema, and both middle-tier boundaries are included.",
+      "columns": [
+        "Price",
+        "Below 300",
+        "At most 1000",
+        "Chosen tier"
+      ],
+      "rows": [
+        [
+          "299",
+          "TRUE",
+          "Not reached for result",
+          "Budget"
+        ],
+        [
+          "300",
+          "FALSE",
+          "TRUE",
+          "Mid"
+        ],
+        [
+          "1000",
+          "FALSE",
+          "TRUE",
+          "Mid"
+        ],
+        [
+          "1001",
+          "FALSE",
+          "FALSE",
+          "Premium"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "drafted — verification pending",
+    "server_rendering": "pending",
+    "browser_rendering": "unverified",
+    "independent_review": "pending"
+  },
+  "authoring_status": "drafted — verification pending",
+  "sql_verification": {
+    "scope": "not executed; exact MySQL/provider verification pending",
+    "all_passed": false,
+    "cases": []
+  }
+}

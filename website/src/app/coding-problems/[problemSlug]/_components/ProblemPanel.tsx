@@ -51,15 +51,18 @@ export function ProblemPanel({
   related,
   adjacent,
   problemBasePath = "/coding-problems",
+  embedded = false,
 }: {
   detail: CodingProblemDetail;
   nav?: ProblemCrumb[];
   related?: RelatedProblemCard[];
   adjacent?: { prev: AdjacentProblem | null; next: AdjacentProblem | null };
   problemBasePath?: string;
+  embedded?: boolean;
 }) {
   const { problem, topic, editorial, solution_approach } = detail;
   const crumbs: ProblemCrumb[] = nav ?? defaultProblemCrumbs(detail);
+  const Heading = embedded ? "h3" : "h1";
   // Only the Learning topic-scoped system has a real tutorial relationship in
   // the data model — Practice problems (empty grid_slug/topic_slug, see
   // `getPracticeProblem`) never get a fabricated "Learn the Concept" link.
@@ -136,7 +139,7 @@ export function ProblemPanel({
 
   return (
     <div className="px-4 py-5 sm:px-6 sm:py-6">
-      <nav aria-label="Breadcrumb" className="flex flex-wrap items-center gap-1 text-sm text-ink-faint">
+      {!embedded && <nav aria-label="Breadcrumb" className="flex flex-wrap items-center gap-1 text-sm text-ink-faint">
         {crumbs.map((c, i) => (
           <span key={i} className="flex items-center gap-1">
             {i > 0 ? <ChevronRight className="h-3.5 w-3.5 flex-shrink-0" aria-hidden /> : null}
@@ -149,9 +152,9 @@ export function ProblemPanel({
             )}
           </span>
         ))}
-      </nav>
+      </nav>}
 
-      <h1 className="mt-3 text-2xl font-bold tracking-tight text-ink sm:text-[1.75rem]">{problem.title}</h1>
+      <Heading className="mt-3 text-2xl font-bold tracking-tight text-ink sm:text-[1.75rem]">{problem.title}</Heading>
 
       <div className="mt-2.5 flex flex-wrap items-center gap-2 text-xs">
         <span
@@ -174,7 +177,7 @@ export function ProblemPanel({
         ) : null}
       </div>
 
-      {tutorialHref ? (
+      {tutorialHref && !embedded ? (
         <Link
           href={tutorialHref}
           className="mt-3 inline-flex items-center gap-1.5 text-sm font-semibold text-primary hover:underline"

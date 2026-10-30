@@ -1,0 +1,581 @@
+{
+  "source_ref": "chapter-17-subqueries/exists",
+  "slug": "exists",
+  "title": "EXISTS",
+  "description": "Use EXISTS to test qualifying relationships without multiplying outer rows, with correlation, NULL, aggregate-subquery and multiple-witness examples.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Test whether a qualifying relationship exists\n\nEXISTS turns a subquery's row existence into a Boolean condition. It is true when the subquery produces at least one row and false when it produces none. This is useful when a report needs eligible outer entities rather than a list of every related record. For example, a library may want members who have at least one currently open loan.\n\nConnect this topic with [subqueries in WHERE](/learning/dbms-sql-tutorial/subquery-in-where), [correlated subquery](/learning/dbms-sql-tutorial/correlated-subquery) and [anti join](/learning/dbms-sql-tutorial/anti-join). The examples use MySQL 8.4. Learn the row-existence meaning first; optimizer transformations may change the execution strategy without changing which outer rows meet that meaning.\n\n## Build the qualifying subquery before negating anything\n\nSuppose members stores one member per member_id and loans stores loan_id, member_id and state. A member qualifies when some loan refers to that member and has state open. The member relationship and state restriction both belong to the match definition. A closed loan alone does not establish that an open loan exists.\n\n```sql\nSELECT m.member_id, m.member_name\nFROM members AS m\nWHERE EXISTS (\n SELECT 1\n FROM loans AS l\n WHERE l.member_id = m.member_id\n   AND l.state = 'open'\n)\nORDER BY m.member_id;\n```\n\nThe equality correlates the inner row with the current outer member. Without it, any open loan anywhere could make every member pass. A syntactically valid uncorrelated subquery can therefore answer a very different question. Name the roles with aliases and read the relationship predicate as a sentence before trusting a plausible-looking member list.\n\n## Understand why the projected value is incidental\n\nSELECT 1 is a common convention because the condition asks only whether a row exists. Selecting an actual column does not make EXISTS return that column to the outer query. Even selecting a null expression from an existing qualifying row does not make existence false: the row still exists. Missing projected values and absent rows are different concepts.\n\nThis distinction helps explain why EXISTS does not directly calculate a loan total or provide the most recent loan date. Those tasks need a measure or a selected related record. Use aggregation or a well-defined row-selection strategy when details are required. Do not expect EXISTS to return whichever inner value happens to be encountered first.\n\n## Keep the outer grain stable\n\nA member with four qualifying loans appears once when the outer members input contains that member once. EXISTS evaluates eligibility rather than projecting four member-loan pairs. A regular inner join would produce four appearances before any later aggregation or deduplication. If the task needs only eligible members, existence expresses that intention directly.\n\nEXISTS does not impose uniqueness on an already duplicated outer relation. If an earlier join repeats a member, each repeated outer appearance can still pass. Establish the outer grain before assuming a semijoin-style condition has repaired earlier multiplication. Distinct member identities and distinct display names are also different concepts; two people can legitimately share a name.\n\n## Distinguish existence from counting\n\nIf the question asks whether at least one loan exists, computing an exact count can express more work than the question requires. An optimizer may simplify suitable cases, so do not assume a universal performance difference based only on spelling. The clearest formulation is often the one that mirrors the requirement and makes the population explicit.\n\nIf the question instead asks for at least three open loans, simple EXISTS is insufficient. The threshold requires a grouped count or another correct counting strategy. Likewise, knowing that one loan exists says nothing about how many are overdue or how much debt is outstanding. Match the SQL construct to the information the caller actually requests.\n\n## Handle null references and unknown attributes\n\nUnder ordinary equality, a loan whose member_id is null does not match a known member identity. Such a loan does not make every member eligible. A null state does not satisfy state equals open either. These results follow the stated relationship and eligibility rules; they should be covered by fixtures rather than inferred from fully populated sample rows.\n\nA member can still pass when one loan is unknown and another is clearly open. Existence needs one qualifying witness, not complete knowledge about every inner row. Conversely, no visible qualifying witness does not necessarily prove that all real-world loans are closed. It establishes only that the supplied query population has no row satisfying the match.\n\n## Compose independent requirements carefully\n\nSuppose a campaign targets members with an open loan and an active reservation. Two EXISTS conditions express those separate relationships without multiplying loans by reservations. Each subquery must correlate with the same outer member. Accidentally correlating one to a different alias can make eligibility depend on another person's activity.\n\nIf one specific loan must satisfy two properties, put both properties on that same inner row. Two separate existence conditions can be witnessed by two different loans. For example, having some science-book loan and some overdue loan does not prove there is an overdue science-book loan. The difference is a useful introduction to quantifiers in everyday reporting.\n\n## Recognize an aggregate subquery's row shape\n\nAn ungrouped aggregate normally returns one summary row even when its input is empty. Therefore EXISTS around SELECT COUNT(*) can be true even when the count is zero. EXISTS tests the summary row's presence, not whether the number inside it is positive. This is a common beginner error because the nested text visually mentions counting.\n\nTo test whether underlying rows exist, select from those rows with the qualifying predicates. To test a count threshold, express the threshold explicitly. A grouped aggregate behaves differently because it produces only represented groups, and HAVING can remove a summary row. Always reason about the subquery's output rows before applying the outer existence test.\n\n## Negate existence with the same match definition\n\nNOT EXISTS retains members with no qualifying open loan. It does not mean that they have never borrowed anything; members with only closed loans can qualify. A change in the inner predicate changes the absence condition. Keep that definition close to the query so a later author does not interpret the result more broadly than the SQL supports.\n\nUnlike NOT IN over nullable output, this ordinary correlated formulation does not become globally unknown merely because an unrelated loan has a null member reference. The correlation decides whether each loan is a match. However, a poorly specified null-aware correlation can still alter the relationship, so negation is not a replacement for a precise schema and task contract.\n\n## Verify eligibility with contrasting witnesses\n\nA strong fixture includes one member with several open loans, one with only closed loans, one with no loans and one with a null state. Include two members sharing a name and an orphan null member reference. Check identities rather than display labels so duplicate names do not hide a missing correlation or accidental deduplication.\n\nThe beginner exercise selects members with an open loan. The intermediate exercise requires an open loan and an active reservation, using independent correlated conditions. These exercises test result semantics; they do not establish runtime performance. An index on the referenced member and relevant state may help, but representative execution plans are needed before making an optimization claim.\n\n## Include visibility in the question\n\nExistence is evaluated over rows visible to the query's execution context. A library report must retain its tenant and access restrictions. Returning only a yes-or-no decision can still reveal private borrowing activity. Do not treat the smaller projection as permission to query protected relations through an otherwise unauthorized boundary.\n\nFor any later write based on eligibility, evaluate concurrency and trusted enforcement separately. A member may return a book after a report is produced. EXISTS gives a clear relational observation, while transaction design determines how that observation can safely support an action. Keeping those responsibilities distinct makes the technique both easier to learn and safer to reuse. Review the candidate identity, qualifying relationship and observation time together whenever an existence condition drives a real action.\n",
+  "references": [
+    {
+      "title": "Primary reference",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/exists-and-not-exists-subqueries.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-17-exists",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-17-exists-1",
+          "test_id": "pt-dbms-sql-17-exists",
+          "question_text": "When is EXISTS true?",
+          "options": [
+            "When a selected number is positive only",
+            "When its subquery returns at least one row",
+            "Only for exactly one row",
+            "Only for nonnull selected labels"
+          ],
+          "correct_index": 1,
+          "explanation": "Existence concerns the presence of rows rather than the values projected from them.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-17-exists-2",
+          "test_id": "pt-dbms-sql-17-exists",
+          "question_text": "What does SELECT 1 conventionally signal inside EXISTS?",
+          "options": [
+            "One row must be counted",
+            "Only row presence matters",
+            "The first member is selected",
+            "A permanent value is stored"
+          ],
+          "correct_index": 1,
+          "explanation": "The projected constant documents that inner details are unnecessary.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-17-exists-3",
+          "test_id": "pt-dbms-sql-17-exists",
+          "question_text": "What does the correlation l.member_id=m.member_id establish?",
+          "options": [
+            "Every member belongs to every loan",
+            "The loan belongs to the candidate member",
+            "The loan is necessarily overdue",
+            "The member name is unique"
+          ],
+          "correct_index": 1,
+          "explanation": "The inner search must be tied to the current outer identity.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-17-exists-4",
+          "test_id": "pt-dbms-sql-17-exists",
+          "question_text": "What happens if that correlation is omitted?",
+          "options": [
+            "Any open loan can qualify all outer members",
+            "Only its actual owner qualifies",
+            "EXISTS always becomes false",
+            "SQL automatically restores the equality"
+          ],
+          "correct_index": 0,
+          "explanation": "An uncorrelated existence condition has the same answer for every outer row.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-17-exists-5",
+          "test_id": "pt-dbms-sql-17-exists",
+          "question_text": "What if a qualifying row projects NULL?",
+          "options": [
+            "EXISTS becomes NULL",
+            "EXISTS is still true",
+            "The row is deleted",
+            "The outer member is excluded"
+          ],
+          "correct_index": 1,
+          "explanation": "A row containing a null value is still a row.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-17-exists-6",
+          "test_id": "pt-dbms-sql-17-exists",
+          "question_text": "How many appearances does a unique outer member get from four witnesses?",
+          "options": [
+            "Four",
+            "One",
+            "Zero",
+            "Sixteen"
+          ],
+          "correct_index": 1,
+          "explanation": "EXISTS tests eligibility without projecting each related pair.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-17-exists-7",
+          "test_id": "pt-dbms-sql-17-exists",
+          "question_text": "Does EXISTS fix already duplicated outer rows?",
+          "options": [
+            "Yes always",
+            "No",
+            "Only if SELECT 1 is used",
+            "Only after ordering"
+          ],
+          "correct_index": 1,
+          "explanation": "Each existing outer appearance can independently pass the same condition.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-17-exists-8",
+          "test_id": "pt-dbms-sql-17-exists",
+          "question_text": "What is required for at least three open loans?",
+          "options": [
+            "Simple EXISTS alone",
+            "A correct counting threshold",
+            "A name alias",
+            "A descending sort"
+          ],
+          "correct_index": 1,
+          "explanation": "One qualifying witness does not establish three.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-17-exists-new-9",
+          "test_id": "pt-dbms-sql-17-exists",
+          "question_text": "Does a null loan member reference match a known member with equality?",
+          "options": [
+            "No",
+            "Every member",
+            "Only member zero",
+            "The most recent member"
+          ],
+          "correct_index": 0,
+          "explanation": "Ordinary equality involving null does not establish a true relationship.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-17-exists-new-10",
+          "test_id": "pt-dbms-sql-17-exists",
+          "question_text": "Can one clear open loan qualify a member despite another unknown state?",
+          "options": [
+            "No every state must be known",
+            "Yes",
+            "Only with COUNT(*)",
+            "Only if names differ"
+          ],
+          "correct_index": 1,
+          "explanation": "An existential condition needs one qualifying witness.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-17-exists-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-17-exists-application-new-1",
+          "test_id": "pt-dbms-sql-17-exists-application",
+          "question_text": "What do two independent EXISTS predicates permit?",
+          "options": [
+            "Only one shared witness",
+            "No witnesses",
+            "Different rows to witness each requirement",
+            "Automatic grouping"
+          ],
+          "correct_index": 2,
+          "explanation": "Separate existential requirements need not refer to the same related record.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-17-exists-application-new-2",
+          "test_id": "pt-dbms-sql-17-exists-application",
+          "question_text": "How require the same loan to be overdue and science-related?",
+          "options": [
+            "Use two unrelated subqueries without correlation",
+            "Filter member name only",
+            "Order by loan_id",
+            "Put both conditions on one inner loan row"
+          ],
+          "correct_index": 3,
+          "explanation": "One combined predicate requires a single witness satisfying both properties.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-17-exists-application-new-3",
+          "test_id": "pt-dbms-sql-17-exists-application",
+          "question_text": "Why can EXISTS(SELECT COUNT(*) FROM empty_input) be true?",
+          "options": [
+            "The aggregate returns a summary row",
+            "COUNT returns a positive value",
+            "Empty tables contain hidden loans",
+            "NULL always equals one"
+          ],
+          "correct_index": 0,
+          "explanation": "EXISTS sees the summary row even when the count inside it is zero.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-17-exists-application-new-4",
+          "test_id": "pt-dbms-sql-17-exists-application",
+          "question_text": "Does NOT EXISTS open loans mean no borrowing history?",
+          "options": [
+            "Yes",
+            "No",
+            "Only when names repeat",
+            "Only without an index"
+          ],
+          "correct_index": 1,
+          "explanation": "Closed loans do not satisfy an open-loan match but still represent history.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-17-exists-application-new-5",
+          "test_id": "pt-dbms-sql-17-exists-application",
+          "question_text": "What output does EXISTS directly provide?",
+          "options": [
+            "The newest loan date",
+            "Every loan amount",
+            "A Boolean row-existence decision",
+            "A sorted loan list"
+          ],
+          "correct_index": 2,
+          "explanation": "Related details require additional projection or aggregation beyond the existence test.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-17-exists-application-new-6",
+          "test_id": "pt-dbms-sql-17-exists-application",
+          "question_text": "Which fixture exposes missing correlation?",
+          "options": [
+            "Every member has one identical open loan",
+            "Only an empty outer table",
+            "Only one member and one loan",
+            "Several members but only one has an open loan"
+          ],
+          "correct_index": 3,
+          "explanation": "An uncorrelated predicate would incorrectly include members lacking the relationship.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-17-exists-application-new-7",
+          "test_id": "pt-dbms-sql-17-exists-application",
+          "question_text": "Can an unrelated null inner reference poison ordinary NOT EXISTS globally?",
+          "options": [
+            "No",
+            "Yes every null invalidates all candidates",
+            "Only with ORDER BY",
+            "Only for two members"
+          ],
+          "correct_index": 0,
+          "explanation": "Each inner row is tested against the current correlation rather than a nullable NOT IN set.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-17-exists-application-new-8",
+          "test_id": "pt-dbms-sql-17-exists-application",
+          "question_text": "What supports an actual performance claim?",
+          "options": [
+            "Only shorter syntax",
+            "Representative engine execution evidence",
+            "A table caption",
+            "Only SELECT 1 spelling"
+          ],
+          "correct_index": 1,
+          "explanation": "The optimizer can transform equivalent constructs, so plans and measurements matter.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-17-exists-application-new-9",
+          "test_id": "pt-dbms-sql-17-exists-application",
+          "question_text": "Does a Boolean result eliminate privacy concerns?",
+          "options": [
+            "Yes because no detail columns are returned",
+            "Only for positive answers",
+            "No",
+            "Only for a single tenant"
+          ],
+          "correct_index": 2,
+          "explanation": "Even relationship existence can reveal protected activity.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-17-exists-application-new-10",
+          "test_id": "pt-dbms-sql-17-exists-application",
+          "question_text": "Can a later return of a book change the business observation?",
+          "options": [
+            "No EXISTS locks the fact forever",
+            "Only after deployment",
+            "Only if the member is renamed",
+            "Yes"
+          ],
+          "correct_index": 3,
+          "explanation": "The statement observes a data state; later actions need their own concurrency contract.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cx-exists-open-loan-members",
+      "slug": "exists-open-loan-members",
+      "title": "Find members with an open loan",
+      "difficulty": "Easy",
+      "task": "Return member_id,member_name for members with at least one open loan. Order by member_id.",
+      "schema_sql": "CREATE TABLE members(member_id INT PRIMARY KEY,member_name VARCHAR(30) NOT NULL); CREATE TABLE loans(loan_id INT PRIMARY KEY,member_id INT NULL,state VARCHAR(10) NULL); CREATE TABLE reservations(reservation_id INT PRIMARY KEY,member_id INT NOT NULL,state VARCHAR(10) NOT NULL);",
+      "seed_sql": "INSERT INTO members VALUES (1,'Ari'),(2,'Ari'),(3,'Kim'),(4,'Jo'); INSERT INTO loans VALUES (1,1,'open'),(2,1,'open'),(3,2,'closed'),(4,3,'open'),(5,NULL,'open'),(6,4,NULL); INSERT INTO reservations VALUES (1,1,'cancelled'),(2,3,'active'),(3,3,'active');",
+      "solution_sql": "SELECT m.member_id,m.member_name FROM members AS m WHERE EXISTS (SELECT 1 FROM loans AS l WHERE l.member_id=m.member_id AND l.state='open') ORDER BY m.member_id;",
+      "expected": "member_id\tmember_name\n1\tAri\n3\tKim",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO members VALUES (1,'A'); INSERT INTO loans VALUES (1,NULL,'open');",
+          "expected": ""
+        }
+      ],
+      "ordering": "Order by keys explicitly stated in the task.",
+      "constraints": [
+        "Use supplied synthetic data.",
+        "Return only requested columns."
+      ],
+      "edge_cases": [
+        "Multiple witnesses do not repeat member",
+        "Null reference matches none"
+      ],
+      "hints": [
+        "Correlate an open loan witness to each candidate member."
+      ],
+      "explanation": "Correlate an open loan witness to each candidate member."
+    },
+    {
+      "id": "cx-exists-independent-eligibility",
+      "slug": "exists-independent-eligibility",
+      "title": "Require an open loan and active reservation",
+      "difficulty": "Medium",
+      "task": "Return member_id for members with at least one open loan and at least one active reservation. Order by member_id.",
+      "schema_sql": "CREATE TABLE members(member_id INT PRIMARY KEY,member_name VARCHAR(30) NOT NULL); CREATE TABLE loans(loan_id INT PRIMARY KEY,member_id INT NULL,state VARCHAR(10) NULL); CREATE TABLE reservations(reservation_id INT PRIMARY KEY,member_id INT NOT NULL,state VARCHAR(10) NOT NULL);",
+      "seed_sql": "INSERT INTO members VALUES (1,'Ari'),(2,'Ari'),(3,'Kim'),(4,'Jo'); INSERT INTO loans VALUES (1,1,'open'),(2,1,'open'),(3,2,'closed'),(4,3,'open'),(5,NULL,'open'),(6,4,NULL); INSERT INTO reservations VALUES (1,1,'cancelled'),(2,3,'active'),(3,3,'active');",
+      "solution_sql": "SELECT m.member_id FROM members AS m WHERE EXISTS (SELECT 1 FROM loans AS l WHERE l.member_id=m.member_id AND l.state='open') AND EXISTS (SELECT 1 FROM reservations AS r WHERE r.member_id=m.member_id AND r.state='active') ORDER BY m.member_id;",
+      "expected": "member_id\n3",
+      "validation_cases": [
+        {
+          "seed_sql": "",
+          "expected": ""
+        }
+      ],
+      "ordering": "Order by keys explicitly stated in the task.",
+      "constraints": [
+        "Use supplied synthetic data.",
+        "Return only requested columns."
+      ],
+      "edge_cases": [
+        "Multiple loans and reservations",
+        "Separate requirements"
+      ],
+      "hints": [
+        "Use two independent correlated existence tests without multiplying witnesses."
+      ],
+      "explanation": "Use two independent correlated existence tests without multiplying witnesses."
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-17-exists-1",
+      "test_id": "pt-dbms-sql-17-exists",
+      "question_text": "What does EXISTS(subquery) evaluate to?",
+      "options": [
+        "The first row of the subquery",
+        "TRUE or FALSE based on whether any row is returned",
+        "NULL if zero rows are returned",
+        "The count of matching rows"
+      ],
+      "correct_index": 1,
+      "explanation": "EXISTS is a pure boolean test of row presence.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-17-exists-2",
+      "test_id": "pt-dbms-sql-17-exists",
+      "question_text": "Inside an EXISTS subquery, what do the selected columns matter for?",
+      "options": [
+        "They determine the final output columns",
+        "Nothing — only row existence matters, so SELECT 1 or SELECT * behave the same",
+        "They must match the outer SELECT list",
+        "They must be aggregates"
+      ],
+      "correct_index": 1,
+      "explanation": "EXISTS discards the actual selected values; it only checks whether any row came back.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-17-exists-3",
+      "test_id": "pt-dbms-sql-17-exists",
+      "question_text": "Using the sample data, why does the department 'HR' get excluded from `WHERE EXISTS (SELECT 1 FROM employees e WHERE e.department = d.name)`?",
+      "options": [
+        "HR has no budget",
+        "No employee has department = 'HR', so the subquery returns zero rows there",
+        "HR is spelled differently in the departments table",
+        "EXISTS always excludes the last row"
+      ],
+      "correct_index": 1,
+      "explanation": "No employee row matches department 'HR', so the correlated subquery is empty and EXISTS is FALSE.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-17-exists-4",
+      "test_id": "pt-dbms-sql-17-exists",
+      "question_text": "Why can EXISTS be more efficient than IN with a large multi-row subquery?",
+      "options": [
+        "EXISTS can short-circuit and stop at the first matching row",
+        "EXISTS always uses fewer joins",
+        "IN cannot use correlated columns",
+        "EXISTS is always evaluated at compile time"
+      ],
+      "correct_index": 0,
+      "explanation": "EXISTS only needs to find one matching row to be satisfied, unlike building a full membership set.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-17-exists-5",
+      "test_id": "pt-dbms-sql-17-exists",
+      "question_text": "Can EXISTS ever evaluate to NULL or UNKNOWN?",
+      "options": [
+        "Yes, when the subquery has NULLs",
+        "No — EXISTS is always definitively TRUE or FALSE",
+        "Yes, when the subquery returns zero rows",
+        "Only with NOT EXISTS"
+      ],
+      "correct_index": 1,
+      "explanation": "Unlike value comparisons, EXISTS only checks row presence, so it never produces UNKNOWN.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-17-exists-6",
+      "test_id": "pt-dbms-sql-17-exists",
+      "question_text": "Is `EXISTS (SELECT 1 FROM employees)` with no outer reference a valid, if usually not very useful, query?",
+      "options": [
+        "No, it's a syntax error",
+        "Yes — it's valid, it just answers \"is the table non-empty\" once for the whole query",
+        "It always returns FALSE",
+        "It requires GROUP BY"
+      ],
+      "correct_index": 1,
+      "explanation": "An uncorrelated EXISTS is legal SQL, just a less powerful use of the construct.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-17-exists-7",
+      "test_id": "pt-dbms-sql-17-exists",
+      "question_text": "What is the real power of EXISTS most associated with?",
+      "options": [
+        "Sorting large tables",
+        "Correlation — testing per outer row whether a related row exists",
+        "Replacing all JOINs",
+        "Aggregating data"
+      ],
+      "correct_index": 1,
+      "explanation": "EXISTS shines when correlated, checking existence per outer row against related data.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-17-exists-8",
+      "test_id": "pt-dbms-sql-17-exists",
+      "question_text": "Which best describes why `SELECT 1` is conventional inside EXISTS rather than `SELECT column`?",
+      "options": [
+        "It's required by the SQL standard",
+        "It's a style signal that only row presence matters; engines typically skip fetching data for EXISTS regardless",
+        "It runs faster because 1 is an integer",
+        "`SELECT column` is illegal inside EXISTS"
+      ],
+      "correct_index": 1,
+      "explanation": "It's a readability convention, not a hard requirement — the actual selected values are irrelevant to EXISTS.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "/root/worker_2",
+    "independent_review": "passed",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "authored; independent review pending",
+    "canonical_answer_indices_preserved": true,
+    "editorial_record": "Original prose and assessments. Seed snapshots and canonical answer indices retained; external originality clearance pending.",
+    "independent_reviewer": "/root",
+    "independent_review_scope": "Full notes,20 MCQs/options/reasoning,both exercise contracts with four predicted outputs and table diagram reviewed. Correlation, single versus separate witnesses, aggregate-row trap, NULL and outer multiplicity correct. Broken generic subqueries link replaced with actual subquery-in-where identity. Engine/browser validation separate."
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-17-exists",
+    "original_note_sha256": "bcb334ed3212b0ab5bd64f173ae79dc4d901752717bfec67cc07e0dc97df9c76",
+    "status": "drafted; not included in prepared paired migrations"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "A qualifying witness decides eligibility",
+      "description": "The number of witnesses does not duplicate a unique outer member.",
+      "columns": [
+        "Member",
+        "Open-loan witnesses",
+        "Active reservation",
+        "Passes both?"
+      ],
+      "rows": [
+        [
+          "1",
+          "2",
+          "No",
+          "No"
+        ],
+        [
+          "2",
+          "0",
+          "No",
+          "No"
+        ],
+        [
+          "3",
+          "1",
+          "Yes",
+          "Yes"
+        ],
+        [
+          "4",
+          "0",
+          "No",
+          "No"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "technical_review": "coordinator independent manual review passed",
+    "browser_rendering": "unverified",
+    "independent_review": "passed",
+    "server_rendering": "passed",
+    "server_rendering_evidence": "2026-10-29 full Vitest:1310 passed/12 skipped; actual LessonBlock/TopicDiagrams render over230 packages. Browser visual QA remains unverified."
+  },
+  "authoring_status": "drafted; verification pending",
+  "sql_verification": {
+    "scope": "not executed; exact MySQL/provider execution pending",
+    "all_passed": false,
+    "cases": []
+  }
+}

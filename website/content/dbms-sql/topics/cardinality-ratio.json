@@ -1,0 +1,642 @@
+{
+  "source_ref": "chapter-6-er-and-eer-modeling/cardinality-ratio",
+  "slug": "cardinality-ratio",
+  "title": "Cardinality",
+  "description": "Define maximum relationship multiplicities from allowed states, separate them from mandatory participation, and detect or enforce the appropriate owner-side uniqueness rules.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Cardinality ratio describes permitted multiplicity\n\nAn ER cardinality ratio describes maximum association multiplicities between participant categories under the model. A department can offer many courses while each course belongs to at most one department. That gives a one-to-many relationship from Department to Course. The ratio is a rule about allowed participation, not an exact count of the rows currently stored.\n\nA fixture can contain one department and one course even though the model permits many courses per department. Conversely, observing several courses assigned to one department can disprove a proposed one-course maximum for that data, but a small sample with no such repetition cannot prove that the maximum must be one. Requirements and enforced constraints establish the permitted states.\n\n## Interpret both directions explicitly\n\nRead a binary relationship in both directions. In the department-course model, one department can have many related courses, and one course can have at most one related department. Reversing the direction gives a many-to-one description. These are two views of the same stated maximum rules, not two different associations selected by the order of words in a report title.\n\nFor a one-to-one headship policy, each department can have at most one head and each faculty member can head at most one department. The minimum may still differ on the two sides: the institution can require every department to have a head while allowing many faculty members to head no department. The maximum ratio does not by itself specify those mandatory-participation decisions.\n\n## Many-to-many permits repeated participants\n\nStudent-Course enrollment can be many-to-many when a student can take several courses and a course can have several students. A junction relation can record the particular pairs. A key on student_id alone would wrongly restrict each student to one relationship occurrence. A key on course_id alone would wrongly restrict each course to one student under that model.\n\nA combined student-course key can protect one current enrollment per pair while allowing each component to repeat across distinct pairs. If repeat attempts are separate occurrences, the identity needs to distinguish those facts explicitly. Many-to-many multiplicity does not mean unlimited duplicate copies of the same identifying participation. Occurrence identity and maximum participation are related but separate requirements.\n\n## Maximum and minimum are different bounds\n\nA course may be allowed at most one department while either requiring one or permitting none. The first case has a mandatory assignment and the second an optional one. A nullable reference can represent an optional single-column assignment under the chosen mapping. NOT NULL combined with an appropriate supported reference rule can enforce a required assigned parent for each course row.\n\nThat does not require every department to have a course. A foreign key from Course to Department checks the child-side assignment, while the parent's minimum number of children is another rule. A new department with no courses can therefore be legal even when every course must have a valid department. Avoid interpreting one-to-many notation as automatically imposing total participation on both sides.\n\n## Relationship degree is another measurement\n\nA binary relationship connects the two participant categories in the convention used here. It can still have any of the familiar one-to-one, one-to-many, or many-to-many maximum patterns. Degree counts association structure; cardinality ratio expresses permitted multiplicity; relation cardinality counts current tuples. A SQL table's degree counts its attributes. These terms should not be exchanged without saying what is being measured.\n\nA relationship with a date attribute does not acquire another entity participant merely because the mapping has an extra column. Similarly, a larger current enrollment table does not make the association ternary. The modeled roles and constraints determine the conceptual structure, while fixture and output counts describe the represented population under particular queries.\n\n## Map one-to-many on the many side\n\nA straightforward Department-Course mapping can place department_id on Course. Each course row then supplies one scalar department reference, with nullability expressing the chosen absence policy. Supported foreign-key enforcement checks that a nonmissing reference names an allowed department. No uniqueness constraint on Course.department_id is needed when several courses may belong to the same department.\n\nAdding UNIQUE(department_id) would change the permitted model by preventing repeated assigned departments under its actual comparison and NULL rules. That could be useful for another requirement, but it is incorrect for ordinary many-course ownership. Explain the effect of each declaration rather than adding constraints simply because an identifier column looks important.\n\n## Map one-to-one with compatible uniqueness\n\nSuppose a head_assignments relation stores department_id and faculty_id as required values. If each department has at most one head, department_id can identify the assignment row. To make each faculty member head at most one department, faculty_id needs an independent uniqueness rule. Parent existence and mandatory assignment of every department still require their own compatible policies.\n\n```sql\nALTER TABLE head_assignments\nADD CONSTRAINT one_department_per_head UNIQUE (faculty_id);\n```\n\nThis declaration limits a faculty identity's reuse in the assignment population. It does not require a head row for every department or prove the faculty member is eligible for that duty. A correct exercise should distinguish the at-most-one guarantee from total participation, domain eligibility, and authorization to create or change the assignment.\n\n## Audit the rule at the correct side\n\nA staging set of proposed head assignments can contain the same faculty member for several departments. Grouping by faculty_id and finding more than one department identifies current conflicts with the at-most-one-department headship policy. Grouping by department_id instead checks another side of the relationship. The diagnostic grouping should match the precise bound being investigated.\n\nKeep the proposed identity and group count so reviewers can trace the conflict. A current-data audit does not establish the future guarantee by itself. An enforced constraint protects the accepted write boundary where supported, while a correction workflow resolves existing conflicts under the domain's authority. Do not arbitrarily delete a department assignment merely to obtain a passing declaration.\n\n## Query counts depend on the result grain\n\nA department-course join repeats each department once per matching course. Counting every joined row measures combinations, not automatically distinct departments. A student-course junction can similarly repeat a student across enrollments. A valid many-side listing can contain repeated parent labels without creating duplicate parent entities. Read the selected identities and requested report meaning before removing repetitions.\n\nFor all-department summaries, preserve empty departments and count nonmissing course identities. For a list of participating departments only, an existence test or distinct parent identity can be appropriate. Those reports answer different questions. The relationship ratio does not choose which population the consumer wants or guarantee a default result order for either query.\n\n## More precise ratios need more precise scope\n\nA rule such as one instructor per course can mean one for the catalogue course forever or one per course offering in a term. A mapping enforcing global course uniqueness could reject valid different-term assignments. State the actual entity occurrence and time scope before selecting keys or unique combinations. A ratio without a clear role definition can hide a major modeling mismatch.\n\nFor higher-degree associations, a maximum can depend on a combination of other participants. One faculty member per course-semester pair is different from a binary global bound. The introductory ratios remain useful, but the complete constraint must identify which roles jointly determine the permitted participant. Do not extend a simple binary slogan to every ternary rule without analysis.\n\n## Verify both permitted repetition and forbidden reuse\n\nFor one-to-many, test several courses in the same department to ensure legitimate many-side participation remains accepted. For one-to-one headship, test distinct faculty assignments and an attempted faculty reuse in another department. Separately test missing or invalid parent references if those guarantees are in scope. One uniqueness failure does not verify every reference or mandatory-participation condition.\n\nThe exercises audit proposed head reuse and enforce one particular maximum on isolated SQL fixtures. Native parent references, total participation, exact MySQL/provider behaviour, and production headship authority remain outside those temporary examples. Cardinality ratios are useful when each direction, maximum, minimum, and occurrence scope is explicit, letting the mapping preserve legitimate participation without confusing observed counts with the model's allowed states.\n",
+  "references": [],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-6-cardinality-ratio",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-6-cardinality-ratio-1",
+          "test_id": "pt-dbms-sql-6-cardinality-ratio",
+          "question_text": "What does cardinality (cardinality ratio) specify in a relationship?",
+          "options": [
+            "Whether participation is mandatory",
+            "The maximum association multiplicities permitted by the relationship model, rather than its exact current row count",
+            "The number of entity sets involved",
+            "The name of the relationship"
+          ],
+          "correct_index": 1,
+          "explanation": "The ratio expresses allowed-state bounds. Minimum participation is a separate question in this introductory classification.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-6-cardinality-ratio-2",
+          "test_id": "pt-dbms-sql-6-cardinality-ratio",
+          "question_text": "What is the cardinality of Student Enrolls_In Course, where a student can take many courses and a course can have many students?",
+          "options": [
+            "1:1",
+            "1:N",
+            "M:N",
+            "N:1"
+          ],
+          "correct_index": 2,
+          "explanation": "Both sides allow multiple instances, making it many-to-many (M:N).",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-6-cardinality-ratio-3",
+          "test_id": "pt-dbms-sql-6-cardinality-ratio",
+          "question_text": "Department Headed_By Faculty, where each department has exactly one head and each faculty member heads at most one department, has what cardinality?",
+          "options": [
+            "1:1",
+            "1:N",
+            "M:N",
+            "Cannot be a valid relationship"
+          ],
+          "correct_index": 0,
+          "explanation": "Exactly one on each side gives a one-to-one (1:1) cardinality.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-6-cardinality-ratio-4",
+          "test_id": "pt-dbms-sql-6-cardinality-ratio",
+          "question_text": "Which correctly distinguishes cardinality from participation?",
+          "options": [
+            "They are the same concept described differently",
+            "Cardinality is a maximum/structural limit on how many instances can be linked; participation is about whether linking is mandatory for every instance",
+            "Participation only applies to M:N relationships",
+            "Cardinality only applies to weak entities"
+          ],
+          "correct_index": 1,
+          "explanation": "Cardinality answers 'how many can relate', participation answers 'must every instance relate' — independent, combinable properties.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-6-cardinality-ratio-5",
+          "test_id": "pt-dbms-sql-6-cardinality-ratio",
+          "question_text": "Which correctly distinguishes cardinality from relationship degree?",
+          "options": [
+            "Degree counts entity instances; cardinality counts entity sets",
+            "Cardinality ratio concerns permitted occurrence multiplicities; degree classifies the relationship’s participating categories under the stated convention",
+            "They are identical",
+            "Degree only matters for 1:1 relationships"
+          ],
+          "correct_index": 1,
+          "explanation": "Distinguish both from the current cardinality and degree of a mapped SQL relation.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-6-cardinality-ratio-6",
+          "test_id": "pt-dbms-sql-6-cardinality-ratio",
+          "question_text": "How is an M:N relationship typically implemented in a relational database?",
+          "options": [
+            "As a foreign key in either table, whichever is more convenient",
+            "As a separate junction/associative table holding foreign keys to both entity sets",
+            "It cannot be implemented relationally",
+            "As a multi-valued attribute"
+          ],
+          "correct_index": 1,
+          "explanation": "A junction relation can represent the participation pairs, with complete occurrence identity and supported participant references supplied explicitly.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-6-cardinality-ratio-7",
+          "test_id": "pt-dbms-sql-6-cardinality-ratio",
+          "question_text": "A relationship is 1:N between Department and Course. Does this alone tell you whether every Course MUST belong to a Department?",
+          "options": [
+            "Yes, 1:N always implies mandatory participation",
+            "No — cardinality (1:N) and participation (mandatory or optional) are independent; a separate participation constraint is needed to say whether it's mandatory",
+            "No, because 1:N relationships never have mandatory participation",
+            "Yes, but only if the relationship is recursive"
+          ],
+          "correct_index": 1,
+          "explanation": "1:N only bounds how many courses per department (and one department per course); whether a course is required to have a department is a separate participation question.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-6-cardinality-ratio-8",
+          "test_id": "pt-dbms-sql-6-cardinality-ratio",
+          "question_text": "Which relational implementation strategy typically works for a 1:N relationship WITHOUT needing a separate junction table?",
+          "options": [
+            "Placing a foreign key referencing the 'one' side inside the table on the 'many' side",
+            "Always creating a junction table regardless of cardinality",
+            "Storing all data in one merged table with repeating groups",
+            "Using a multi-valued attribute in the 'one' side's table"
+          ],
+          "correct_index": 0,
+          "explanation": "For 1:N, a simple foreign key on the 'many' side referencing the 'one' side's key is sufficient — unlike M:N, which needs a junction table.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-6-cardinality-ratio-new-9",
+          "test_id": "pt-dbms-sql-6-cardinality-ratio",
+          "question_text": "Does one observed course per department prove a one-course maximum?",
+          "options": [
+            "Yes; the sample determines every future state",
+            "No; the allowed-state policy must establish that bound",
+            "Only if sorted",
+            "Only if course names differ"
+          ],
+          "correct_index": 1,
+          "explanation": "A sample without repetition is not a universal multiplicity guarantee.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-6-cardinality-ratio-new-10",
+          "test_id": "pt-dbms-sql-6-cardinality-ratio",
+          "question_text": "Why can UNIQUE on a course’s department_id be wrong for a one-to-many model?",
+          "options": [
+            "It permits duplicate course ids",
+            "It removes the department reference type",
+            "It forbids legitimate reuse of one department by several courses",
+            "It makes every department mandatory"
+          ],
+          "correct_index": 2,
+          "explanation": "The many-side reference is ordinarily allowed to repeat.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-6-cardinality-ratio-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-6-cardinality-ratio-application-new-1",
+          "test_id": "pt-dbms-sql-6-cardinality-ratio-application",
+          "question_text": "Does a required valid department reference on every Course require every Department to have a course?",
+          "options": [
+            "Yes; every FK creates a child automatically",
+            "Only if ids are integers",
+            "No; the parent minimum is separate",
+            "Only if all departments are active"
+          ],
+          "correct_index": 2,
+          "explanation": "Child-side total assignment differs from parent-side participation.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-6-cardinality-ratio-application-new-2",
+          "test_id": "pt-dbms-sql-6-cardinality-ratio-application",
+          "question_text": "What does independent faculty_id uniqueness add to a department-keyed head assignment?",
+          "options": [
+            "Exactly one row for every department",
+            "Automatic eligibility validation",
+            "Unlimited head reuse",
+            "At most one department per faculty member in that population"
+          ],
+          "correct_index": 3,
+          "explanation": "Each side’s maximum needs the appropriate guarantee.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-6-cardinality-ratio-application-new-3",
+          "test_id": "pt-dbms-sql-6-cardinality-ratio-application",
+          "question_text": "What grouping audits repeated faculty use under the proposed one-to-one headship rule?",
+          "options": [
+            "Group by faculty_id",
+            "Group only by a unique proposal id",
+            "Group by a result alias unrelated to identity",
+            "Group by every current score"
+          ],
+          "correct_index": 0,
+          "explanation": "The grouping must match the constrained side.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-6-cardinality-ratio-application-new-4",
+          "test_id": "pt-dbms-sql-6-cardinality-ratio-application",
+          "question_text": "Can a binary association be many-to-many?",
+          "options": [
+            "No; binary implies one-to-one",
+            "Yes",
+            "Only when no rows exist",
+            "Only if there are four columns"
+          ],
+          "correct_index": 1,
+          "explanation": "Degree and cardinality ratio differ.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-6-cardinality-ratio-application-new-5",
+          "test_id": "pt-dbms-sql-6-cardinality-ratio-application",
+          "question_text": "Why retain participant identities in a junction listing?",
+          "options": [
+            "Every name is globally unique",
+            "Labels create foreign keys",
+            "Repeated labels can represent different legitimate associations",
+            "Identities are only for sorting"
+          ],
+          "correct_index": 2,
+          "explanation": "The occurrence grain follows the actual pair or richer identity.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-6-cardinality-ratio-application-new-6",
+          "test_id": "pt-dbms-sql-6-cardinality-ratio-application",
+          "question_text": "What might one instructor per course mean when terms exist?",
+          "options": [
+            "Always one teacher for all time",
+            "Always unlimited instructors",
+            "Only a display convention",
+            "A scoped course-offering or course-term rule requiring explicit definition"
+          ],
+          "correct_index": 3,
+          "explanation": "Scope determines the right identifying combination.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-6-cardinality-ratio-application-new-7",
+          "test_id": "pt-dbms-sql-6-cardinality-ratio-application",
+          "question_text": "Does a uniqueness test prove faculty eligibility for headship?",
+          "options": [
+            "No; that is another business requirement",
+            "Yes; every existing id is eligible",
+            "Only if it passes twice",
+            "Only if the table is empty"
+          ],
+          "correct_index": 0,
+          "explanation": "Multiplicity is distinct from semantic eligibility and authority.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-6-cardinality-ratio-application-new-8",
+          "test_id": "pt-dbms-sql-6-cardinality-ratio-application",
+          "question_text": "What does COUNT(*) after a parent-child join normally count?",
+          "options": [
+            "Always distinct parents",
+            "The resulting combinations",
+            "Always relation attributes",
+            "Always permitted maximum children"
+          ],
+          "correct_index": 1,
+          "explanation": "Query grain determines the measured population.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-6-cardinality-ratio-application-new-9",
+          "test_id": "pt-dbms-sql-6-cardinality-ratio-application",
+          "question_text": "Which accepted fixture challenges a mistaken one-course-per-department constraint?",
+          "options": [
+            "One course alone",
+            "A duplicate course primary id",
+            "Two different courses assigned to the same department",
+            "An absent department"
+          ],
+          "correct_index": 2,
+          "explanation": "The model should allow legitimate many-side repetition.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-6-cardinality-ratio-application-new-10",
+          "test_id": "pt-dbms-sql-6-cardinality-ratio-application",
+          "question_text": "What remains separate from an at-most-one head assignment rule?",
+          "options": [
+            "The declared UNIQUE predicate itself",
+            "The observed rejection error",
+            "The tested faculty reuse collision",
+            "Mandatory assignment of every department"
+          ],
+          "correct_index": 3,
+          "explanation": "A maximum bound alone does not supply a minimum.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cx-cardinality-ratio-audit",
+      "slug": "cardinality-ratio-audit",
+      "title": "Find proposed heads assigned to multiple departments",
+      "difficulty": "Easy",
+      "task": "In proposals, each department_id occurs once. Return faculty_id and department_count for faculty identities proposed for more than one department.",
+      "schema_sql": "CREATE TABLE proposals (department_id INT PRIMARY KEY, faculty_id INT NOT NULL);",
+      "seed_sql": "INSERT INTO proposals VALUES (1,7),(2,7),(3,9),(4,10),(5,10),(6,10);",
+      "expected": "faculty_id\tdepartment_count\n7\t2\n10\t3",
+      "ordering": "Ascending faculty_id.",
+      "constraints": [
+        "This is a staging audit for an intended at-most-one-department-per-head policy."
+      ],
+      "edge_cases": [
+        "Three conflicting assignments must report all three.",
+        "No repeated faculty gives an empty error report."
+      ],
+      "hints": [
+        "Group on the participant whose reuse is constrained.",
+        "Keep groups with more than one assignment."
+      ],
+      "solution_sql": "SELECT faculty_id, COUNT(*) AS department_count FROM proposals GROUP BY faculty_id HAVING COUNT(*) > 1 ORDER BY faculty_id;",
+      "explanation": "The audit checks one side of the proposed maximum without claiming total participation or eligibility.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO proposals VALUES (1,7),(2,9);",
+          "expected": ""
+        },
+        {
+          "seed_sql": "",
+          "expected": ""
+        }
+      ]
+    },
+    {
+      "id": "cx-cardinality-ratio-enforce",
+      "slug": "cardinality-ratio-enforce",
+      "title": "Enforce the faculty side of a one-to-one headship maximum",
+      "difficulty": "Medium",
+      "task": "head_assignments already has department_id as primary key. Add UNIQUE(faculty_id) named one_department_per_head, then return department_id and faculty_id. Do not claim that every department has an assignment.",
+      "starter_sql": "-- Add faculty identity uniqueness and return assignments.",
+      "schema_sql": "CREATE TABLE head_assignments (department_id INT PRIMARY KEY, faculty_id INT NOT NULL);",
+      "seed_sql": "INSERT INTO head_assignments VALUES (1,7),(2,9);",
+      "expected": "department_id\tfaculty_id\n1\t7\n2\t9",
+      "ordering": "Ascending department_id.",
+      "constraints": [
+        "Initial assignments satisfy both at-most-one directions.",
+        "Parent existence, total participation, faculty eligibility and production authorization are outside these temporary fixtures."
+      ],
+      "edge_cases": [
+        "A new department must not reuse an occupied head identity.",
+        "An update can also create forbidden reuse."
+      ],
+      "hints": [
+        "Keep the existing department identity.",
+        "An independent UNIQUE rule protects the other maximum."
+      ],
+      "solution_sql": "ALTER TABLE head_assignments ADD CONSTRAINT one_department_per_head UNIQUE (faculty_id);\nSELECT department_id, faculty_id FROM head_assignments ORDER BY department_id;",
+      "explanation": "Department uniqueness supplies one maximum, and faculty uniqueness supplies the other. Neither creates missing mandatory assignments.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO head_assignments VALUES (9,17);",
+          "expected": "department_id\tfaculty_id\n9\t17"
+        },
+        {
+          "seed_sql": "",
+          "expected": ""
+        }
+      ],
+      "negative_validation_cases": [
+        {
+          "sql": "INSERT INTO head_assignments VALUES (99,7);",
+          "error_codes": [
+            1062
+          ]
+        },
+        {
+          "sql": "UPDATE head_assignments SET faculty_id=7 WHERE department_id=2;",
+          "error_codes": [
+            1062
+          ]
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-6-cardinality-ratio-1",
+      "test_id": "pt-dbms-sql-6-cardinality-ratio",
+      "question_text": "What does cardinality (cardinality ratio) specify in a relationship?",
+      "options": [
+        "Whether participation is mandatory",
+        "The number of entity instances of one set that can be associated with instances of another set",
+        "The number of entity sets involved",
+        "The name of the relationship"
+      ],
+      "correct_index": 1,
+      "explanation": "Cardinality describes 1:1, 1:N, or M:N — how many instances can be linked through the relationship.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-6-cardinality-ratio-2",
+      "test_id": "pt-dbms-sql-6-cardinality-ratio",
+      "question_text": "What is the cardinality of Student Enrolls_In Course, where a student can take many courses and a course can have many students?",
+      "options": [
+        "1:1",
+        "1:N",
+        "M:N",
+        "N:1"
+      ],
+      "correct_index": 2,
+      "explanation": "Both sides allow multiple instances, making it many-to-many (M:N).",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-6-cardinality-ratio-3",
+      "test_id": "pt-dbms-sql-6-cardinality-ratio",
+      "question_text": "Department Headed_By Faculty, where each department has exactly one head and each faculty member heads at most one department, has what cardinality?",
+      "options": [
+        "1:1",
+        "1:N",
+        "M:N",
+        "Cannot be a valid relationship"
+      ],
+      "correct_index": 0,
+      "explanation": "Exactly one on each side gives a one-to-one (1:1) cardinality.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-6-cardinality-ratio-4",
+      "test_id": "pt-dbms-sql-6-cardinality-ratio",
+      "question_text": "Which correctly distinguishes cardinality from participation?",
+      "options": [
+        "They are the same concept described differently",
+        "Cardinality is a maximum/structural limit on how many instances can be linked; participation is about whether linking is mandatory for every instance",
+        "Participation only applies to M:N relationships",
+        "Cardinality only applies to weak entities"
+      ],
+      "correct_index": 1,
+      "explanation": "Cardinality answers 'how many can relate', participation answers 'must every instance relate' — independent, combinable properties.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-6-cardinality-ratio-5",
+      "test_id": "pt-dbms-sql-6-cardinality-ratio",
+      "question_text": "Which correctly distinguishes cardinality from relationship degree?",
+      "options": [
+        "Degree counts entity instances; cardinality counts entity sets",
+        "Cardinality counts how many entity instances can be linked (1, N, M); degree counts how many entity SETS participate in the relationship",
+        "They are identical",
+        "Degree only matters for 1:1 relationships"
+      ],
+      "correct_index": 1,
+      "explanation": "Degree = structural count of entity sets (e.g., 2 for binary); cardinality = numeric limit on instances within that relationship.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-6-cardinality-ratio-6",
+      "test_id": "pt-dbms-sql-6-cardinality-ratio",
+      "question_text": "How is an M:N relationship typically implemented in a relational database?",
+      "options": [
+        "As a foreign key in either table, whichever is more convenient",
+        "As a separate junction/associative table holding foreign keys to both entity sets",
+        "It cannot be implemented relationally",
+        "As a multi-valued attribute"
+      ],
+      "correct_index": 1,
+      "explanation": "M:N relationships need their own linking table since a single foreign key column cannot represent a many-to-many association.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-6-cardinality-ratio-7",
+      "test_id": "pt-dbms-sql-6-cardinality-ratio",
+      "question_text": "A relationship is 1:N between Department and Course. Does this alone tell you whether every Course MUST belong to a Department?",
+      "options": [
+        "Yes, 1:N always implies mandatory participation",
+        "No — cardinality (1:N) and participation (mandatory or optional) are independent; a separate participation constraint is needed to say whether it's mandatory",
+        "No, because 1:N relationships never have mandatory participation",
+        "Yes, but only if the relationship is recursive"
+      ],
+      "correct_index": 1,
+      "explanation": "1:N only bounds how many courses per department (and one department per course); whether a course is required to have a department is a separate participation question.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-6-cardinality-ratio-8",
+      "test_id": "pt-dbms-sql-6-cardinality-ratio",
+      "question_text": "Which relational implementation strategy typically works for a 1:N relationship WITHOUT needing a separate junction table?",
+      "options": [
+        "Placing a foreign key referencing the 'one' side inside the table on the 'many' side",
+        "Always creating a junction table regardless of cardinality",
+        "Storing all data in one merged table with repeating groups",
+        "Using a multi-valued attribute in the 'one' side's table"
+      ],
+      "correct_index": 0,
+      "explanation": "For 1:N, a simple foreign key on the 'many' side referencing the 'one' side's key is sufficient — unlike M:N, which needs a junction table.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "coordinator",
+    "independent_review": "unavailable; no agent tools",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Definitions and examples checked against questions; no plagiarism certification.",
+    "existing_question_corrections": [
+      "tq-dbms-sql-6-cardinality-ratio-1",
+      "tq-dbms-sql-6-cardinality-ratio-5",
+      "tq-dbms-sql-6-cardinality-ratio-6"
+    ],
+    "canonical_answer_indices_preserved": true
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-6-cardinality-ratio",
+    "original_note_sha256": "2738072aed8b3095abf20e6fb63257a5cafc1e669647f4565e0be8e19b37cca6",
+    "status": "paired migration prepared; not applied"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Maximum multiplicity does not determine minimum participation",
+      "description": "Each rule states one direction and separates the allowed maximum from whether participation is required.",
+      "columns": [
+        "Relationship direction",
+        "Maximum",
+        "Separate minimum question"
+      ],
+      "rows": [
+        [
+          "Department → Course",
+          "Many courses per department",
+          "May a department have zero courses?"
+        ],
+        [
+          "Course → Department",
+          "At most one department per course",
+          "Must a course have an assigned department?"
+        ],
+        [
+          "Department → Head",
+          "At most one faculty head",
+          "Must every department have a head?"
+        ],
+        [
+          "Faculty → Headed department",
+          "At most one department",
+          "May a faculty member head none?"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "coordinator checked both directional maxima and independent parent/child minimum participation",
+    "server_rendering": "passed",
+    "browser_rendering": "unverified",
+    "independent_review": "unavailable; no agent tools",
+    "server_rendering_evidence": "2026-10-29: actual LessonBlock rendering passed in focused suite including the authored window package."
+  },
+  "sql_verification": {
+    "engine": "11.8.6-MariaDB-0+deb13u1 from Debian",
+    "scope": "MariaDB compatibility execution; exact MySQL 8.4/provider execution unverified",
+    "fingerprint": "401ca25e6a52e3e7845d740278f9f4e351d1a7505c10731b54d95e4ebb15d26b",
+    "cases": [
+      {
+        "problem": "cardinality-ratio-audit",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "cardinality-ratio-audit",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "cardinality-ratio-audit",
+        "case": 2,
+        "passed": true
+      },
+      {
+        "problem": "cardinality-ratio-enforce",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "cardinality-ratio-enforce",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "cardinality-ratio-enforce",
+        "case": 2,
+        "passed": true
+      },
+      {
+        "problem": "cardinality-ratio-enforce",
+        "negative_case": 0,
+        "error_code": 1062,
+        "passed": true
+      },
+      {
+        "problem": "cardinality-ratio-enforce",
+        "negative_case": 1,
+        "error_code": 1062,
+        "passed": true
+      }
+    ],
+    "all_passed": true
+  }
+}

@@ -1,0 +1,510 @@
+{
+  "source_ref": "chapter-23-concurrency-control/non-serial-schedule",
+  "slug": "non-serial-schedule",
+  "title": "Non Serial Schedule",
+  "description": "Trace interleaved transaction schedules, distinguish serializability from matching final values, construct conflict graphs and separate recovery properties from business correctness.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Describe interleaving before judging its safety\n\nA nonserial schedule interleaves operations from different transactions instead of placing each transaction's operations in one uninterrupted block. The schedule preserves the operation order required within each transaction. Interleaving can improve resource use, but the label nonserial alone says nothing about whether the observed interactions are equivalent to a serial execution or whether the application rules were correct.\n\nRead [serial schedules](/learning/dbms-sql-tutorial/serial-schedule), [conflict serializability](/learning/dbms-sql-tutorial/conflict-serializability) and [precedence graphs](/learning/dbms-sql-tutorial/precedence-graph). Use a clearly stated read-write model before drawing conclusions. A list of statement names omitting the data items, read values or transaction outcomes often hides exactly the interaction the lesson needs to explain.\n\n## Give every operation an owner and an item\n\nWrite r1(A) for transaction one reading item A and w2(B) for transaction two writing item B. Write c1 for commit and a2 for abort. Local computation can occur between reads and writes; the values computed should be stated when arithmetic matters. Distinguish these local variables from the shared database items so a stale assignment can be traced correctly.\n\nConsider T1 reading and updating A, then reading and updating B. T2 does the same. A serial order T1 followed by T2 places all T1 operations, including its outcome, before T2 begins. A nonserial order can let T2 read A after T1 writes A while T1 still has its later B work to do. Each transaction's own order can remain intact despite the overlap.\n\nA schedule is not invalid merely because it has three or more transactions. The same ownership and ordering notation extends to many participants. However, inspecting only one pair can miss a dependency cycle involving a third transaction. Record every relevant transaction and item before simplifying a larger history into a two-transaction teaching picture.\n\n## Trace an interleaving with a serial equivalent\n\nStart with A equal to one thousand and B equal to two thousand. T1 transfers one hundred from A to B; T2 increases each balance by ten percent, using its read value for that item. Perform the following read-write sequence, preserving each transaction's A-before-B order.\n\n| Step | Operation | Shared value afterward |\n|---|---|---|\n| 1 | r1(A), w1(A=900) | A=900 |\n| 2 | r2(A), w2(A=990) | A=990 |\n| 3 | r1(B), w1(B=2100) | B=2100 |\n| 4 | r2(B), w2(B=2310) | B=2310 |\n| 5 | c1, c2 | A=990, B=2310 |\n\nThe write-read and write-write order on both items goes from T1 to T2, so the conflict order is consistent with serial T1 then T2. The alternative serial order gives A equal to one thousand and B equal to two thousand three hundred. The interleaving is conflict-serializable to the first order under this simple model.\n\nIt still lets T2 read T1's uncommitted writes before c1. If T1 aborts, T2's reasoning depends on values that should not survive. Serializability and recovery properties are separate. This schedule is an analytical history, not a promise that a particular InnoDB isolation level permits these reads or that an actual engine executes the displayed sequence without blocking.\n\n## Construct a cycle instead of guessing from appearances\n\nConsider r1(A), r2(B), w1(B), w2(A), followed by both commits. The read by T1 of A precedes T2's write of A, giving edge T1 to T2. The read by T2 of B precedes T1's write of B, giving edge T2 to T1. The graph contains a directed cycle, so the schedule is not conflict-serializable in the stated single-version item model.\n\nConflicts occur between different transactions on the same item when at least one operation writes. Two reads alone do not conflict. Operations on different items do not create an edge in this model. Draw edges from earlier conflicting operations to later ones, then check for a cycle. Do not reverse every edge simply because the write appears second; chronology determines direction.\n\nAn acyclic graph admits a topological transaction order, which supplies a conflict-equivalent serial order. Several topological orders can be valid if some transactions have no ordering relationship. A cycle prevents this particular equivalence; it does not mean that every arithmetic result from every initial state must visibly differ. Keep the formal criterion separate from one convenient numerical outcome.\n\n## Do not use equal final values as a complete proof\n\nTwo histories can finish with the same A and B while returning different values to callers. A transaction may make a business decision based on an earlier read even if its final write coincidentally matches another schedule. Equality on one chosen initial state is weaker than preserving the operation relationships required by a serializability definition.\n\nConflict equivalence preserves conflicting-operation order. View equivalence considers which transaction supplied each read, reads of initial values and final writers in the classical model. A cyclic conflict graph does not rule out every view-equivalent serial history when blind writes are present. The conflict test is powerful because its graph criterion is practical, but its conclusion should be named precisely.\n\nBusiness validity is another axis. A serial transaction can subtract capacity from a nonexistent reservation or credit the wrong account. Serializability preserves an ordering model for the transactions supplied; it does not repair their internal logic. State the assumed invariants and correct transaction behavior before calling any execution safe for an application.\n\n## Distinguish histories from execution protocols\n\nA schedule describes a history. A concurrency-control protocol decides which histories are permitted or how competing requests wait, abort or retry. Locking and versioning techniques can permit interleaving while enforcing a specified isolation contract. They do not all provide serializability at every setting, and the optimizer does not select an isolation guarantee merely by choosing a faster join plan.\n\nA sequential list in one SQL connection cannot demonstrate a genuine two-session interleaving. Likewise, sending two requests at approximately the same time does not prove the intended read-write order occurred. A concurrency experiment needs controlled barriers or observed trace evidence and a documented interpretation of locks, snapshots and errors. Do not infer permission to change isolation settings from an educational history.\n\n## Track commit and abort dependencies explicitly\n\nIf T2 reads a value written by T1, a recoverable history requires that T2 not commit before T1 commits. Cascadeless histories avoid reading T1's uncommitted write in the first place. Strict histories also restrict overwriting another transaction's uncommitted write. These properties address recovery and cascading effects, complementing the serial-equivalence question.\n\nIn the numerical example, c1 before c2 gives the appropriate commit order for the dependency, but does not remove the earlier dirty read. Moving c1 after c2 can make the history unrecoverable if T1 later aborts. A graph omitting commit markers cannot answer these questions. Include transaction outcomes whenever recovery behavior is part of the requirement.\n\n## Account for SQL predicates and multiple versions\n\nA classroom item can stand for a row, a counter or a carefully defined logical value. Real SQL reads can also concern a set of rows selected by a predicate. An insertion might change that set without touching an existing row that the simplified diagram named. Predicate conflicts and phantom behavior require a richer model than tracking only the two rows already in the fixture.\n\nMultiple-version systems add version selection to the read interpretation. A read after another transaction's physical write may still observe an older committed version. The theoretical read-from relation must reflect the value actually observed. Use these limitations to guide the next lesson or lab rather than claiming a simple single-version graph fully describes every production schedule.\n\n## Explain an interleaving with evidence and limits\n\nFor a first exercise, reconstruct both serial orders for the numerical transfer-and-interest example and compare the observed reads, writes and final balances. For a second exercise, draw every edge for the cyclic history, then change one operation ordering to remove the cycle. Explain whether the modification also changes dirty-read or commit dependencies; those answers need not move together.\n\nRecord assumptions, item definitions, transaction-local order, outcomes and the specific serializability test used. Continue with [view serializability](/learning/dbms-sql-tutorial/view-serializability), [recoverable schedules](/learning/dbms-sql-tutorial/recoverable-schedule) and [strict schedules](/learning/dbms-sql-tutorial/strict-schedule). A useful analysis replaces vague claims that overlap is fast or unsafe with an explicit account of which dependencies the history preserves.",
+  "references": [
+    {
+      "title": "Database System Concepts: transaction/concurrency materials",
+      "url": "https://www.db-book.com/slides-dir/index.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-23-non-serial-schedule",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-23-non-serial-schedule-1",
+          "test_id": "pt-dbms-sql-23-non-serial-schedule",
+          "question_text": "What makes a schedule 'non-serial'?",
+          "options": [
+            "It involves more than 5 transactions",
+            "Operations from different transactions interleave rather than forming one uninterrupted block per transaction",
+            "It always ends in an abort",
+            "It never involves a COMMIT"
+          ],
+          "correct_index": 1,
+          "explanation": "Some transactions may finish before others start; the presence of interleaving elsewhere is enough for a nonserial history.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-23-non-serial-schedule-2",
+          "test_id": "pt-dbms-sql-23-non-serial-schedule",
+          "question_text": "In the stated A=1000,B=2000 example,T1 transfers100 andT2 applies10% afterT1 on each item. Which serial order has final A=990,B=2310?",
+          "options": [
+            "No, it is a completely unique result impossible under any serial order",
+            "Yes — it matches the result of the serial schedule <T1, T2>, even though the operations were interleaved",
+            "It cannot be determined without running the schedule twice",
+            "Yes, it matches <T2, T1>"
+          ],
+          "correct_index": 1,
+          "explanation": "T1 thenT2 gives900×1.1=990 and2100×1.1=2310. Recovery and engine permissibility remain separate.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-23-non-serial-schedule-3",
+          "test_id": "pt-dbms-sql-23-non-serial-schedule",
+          "question_text": "What is the key open question a non-serial schedule raises that a serial schedule never does?",
+          "options": [
+            "Whether the transactions will ever commit",
+            "Whether the interleaved result is equivalent to some serial execution, or whether it produces a state no serial order could ever produce",
+            "Whether the schedule uses SQL correctly",
+            "Whether the transactions touch the same table"
+          ],
+          "correct_index": 1,
+          "explanation": "Serializability tests serial-equivalence of the interaction; business correctness still depends on the transactions and invariants supplied.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-23-non-serial-schedule-4",
+          "test_id": "pt-dbms-sql-23-non-serial-schedule",
+          "question_text": "Which theoretical tools determine whether a given non-serial schedule is 'safe' (serializable)?",
+          "options": [
+            "Only the DBMS's query optimizer",
+            "Conflict serializability and view serializability",
+            "The number of tables involved",
+            "The transaction isolation level configured by the DBA"
+          ],
+          "correct_index": 1,
+          "explanation": "Conflict serializability (practical, used by real concurrency control protocols) and view serializability (a broader, more theoretical notion) are exactly the tools used to judge non-serial schedule correctness.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-23-non-serial-schedule-5",
+          "test_id": "pt-dbms-sql-23-non-serial-schedule",
+          "question_text": "What is the goal of a concurrency protocol configured to enforce serializable execution?",
+          "options": [
+            "To prevent any non-serial schedule from ever occurring",
+            "To ensure that only serializable non-serial schedules are allowed to execute, combining interleaving's speed with serial execution's correctness guarantee",
+            "To force every schedule to become serial",
+            "To speed up disk I/O directly"
+          ],
+          "correct_index": 1,
+          "explanation": "The scope is explicitly serializable execution. Weaker supported isolation modes need not reject every nonserializable history.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-23-non-serial-schedule-6",
+          "test_id": "pt-dbms-sql-23-non-serial-schedule",
+          "question_text": "In the stated formal read/write model, does conflict-serializability analysis require understanding the business meaning of each arithmetic operation?",
+          "options": [
+            "Yes, semantic understanding is required",
+            "No — serializability analysis only needs to know which data items are read/written and their relative order, regardless of what the operations 'mean'",
+            "Only for financial applications",
+            "Only if the transaction spans multiple tables"
+          ],
+          "correct_index": 1,
+          "explanation": "Conflict analysis uses transaction owners, items, access types and order. Application validity and richer predicate/version models need additional reasoning.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-23-non-serial-schedule-7",
+          "test_id": "pt-dbms-sql-23-non-serial-schedule",
+          "question_text": "Is it possible for more than two transactions to interleave in a single non-serial schedule?",
+          "options": [
+            "No, non-serial schedules are limited to exactly two transactions",
+            "Yes — the same serializability analysis techniques generalize to any number of concurrently interleaved transactions",
+            "Only if all transactions are read-only",
+            "Only in distributed databases"
+          ],
+          "correct_index": 1,
+          "explanation": "Non-serial schedules and the tools to analyze them (precedence graphs, etc.) work for any number of transactions, not just two.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-23-non-serial-schedule-8",
+          "test_id": "pt-dbms-sql-23-non-serial-schedule",
+          "question_text": "Which statement correctly summarizes the relationship between 'non-serial' and 'incorrect'?",
+          "options": [
+            "Non-serial and incorrect mean the same thing",
+            "Nonserial only describes interleaving; serializability,recovery and application invariants require their own checks",
+            "All non-serial schedules are incorrect by definition",
+            "Only serial schedules can ever be interleaved"
+          ],
+          "correct_index": 1,
+          "explanation": "Interleaving alone neither proves nor disproves any complete application correctness claim.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-23-non-serial-schedule-new-9",
+          "test_id": "pt-dbms-sql-23-non-serial-schedule",
+          "question_text": "Which pair conflicts in the single-version item model?",
+          "options": [
+            "r1(A) and r2(A)",
+            "r1(A) and w2(A)",
+            "r1(A) and w2(B)",
+            "Two reads byT1 alone"
+          ],
+          "correct_index": 1,
+          "explanation": "Different owners, same item and a write establish conflict.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-23-non-serial-schedule-new-10",
+          "test_id": "pt-dbms-sql-23-non-serial-schedule",
+          "question_text": "What direction follows r1(A) before w2(A)?",
+          "options": [
+            "T2 toT1",
+            "No edge because the read is first",
+            "T1 toT2",
+            "Both edges automatically"
+          ],
+          "correct_index": 2,
+          "explanation": "The edge follows conflicting-operation chronology.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-23-non-serial-schedule-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-23-non-serial-schedule-application-new-1",
+          "test_id": "pt-dbms-sql-23-non-serial-schedule-application",
+          "question_text": "What graph condition proves conflict serializability?",
+          "options": [
+            "Every node has an outgoing edge",
+            "A single numerical total",
+            "Both transactions commit",
+            "Acyclicity"
+          ],
+          "correct_index": 3,
+          "explanation": "A topological order supplies a compatible serial order.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-23-non-serial-schedule-application-new-2",
+          "test_id": "pt-dbms-sql-23-non-serial-schedule-application",
+          "question_text": "The conflict graph is acyclic but T2 reads T1 beforeT1 commits. What still needs review?",
+          "options": [
+            "Recovery and dirty-read properties",
+            "Whether numbers are integers",
+            "Whether transaction names are equal",
+            "Whether GROUP BY is used"
+          ],
+          "correct_index": 0,
+          "explanation": "Serial-equivalent conflict order does not establish cascadelessness.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-23-non-serial-schedule-application-new-3",
+          "test_id": "pt-dbms-sql-23-non-serial-schedule-application",
+          "question_text": "Why is one equal final balance not a serializability proof?",
+          "options": [
+            "Final values never matter",
+            "Returned reads and decisions may differ",
+            "All schedules have equal reads",
+            "Serializability forbids arithmetic"
+          ],
+          "correct_index": 1,
+          "explanation": "One initial-state result is weaker than preserving the specified relationships.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-23-non-serial-schedule-application-new-4",
+          "test_id": "pt-dbms-sql-23-non-serial-schedule-application",
+          "question_text": "Can some view-serializable histories fail the conflict-graph test?",
+          "options": [
+            "Never",
+            "Only when there is one transaction",
+            "Yes, for example with suitable blind-write histories",
+            "Only when no writes occur"
+          ],
+          "correct_index": 2,
+          "explanation": "Conflict serializability is a stricter classical criterion.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-23-non-serial-schedule-application-new-5",
+          "test_id": "pt-dbms-sql-23-non-serial-schedule-application",
+          "question_text": "Does READ COMMITTED automatically imply serializable execution?",
+          "options": [
+            "Yes, every transactional setting does",
+            "Only with an index",
+            "Only when tables have IDs",
+            "No"
+          ],
+          "correct_index": 3,
+          "explanation": "Isolation-level guarantees need their actual engine contract.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-23-non-serial-schedule-application-new-6",
+          "test_id": "pt-dbms-sql-23-non-serial-schedule-application",
+          "question_text": "What does a topological order represent?",
+          "options": [
+            "A conflict-equivalent serial transaction order",
+            "The physical page order",
+            "The alphabetical table names",
+            "A mandatory query plan"
+          ],
+          "correct_index": 0,
+          "explanation": "Every graph dependency precedes its dependent transaction.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-23-non-serial-schedule-application-new-7",
+          "test_id": "pt-dbms-sql-23-non-serial-schedule-application",
+          "question_text": "Why include commits in a recovery analysis?",
+          "options": [
+            "Commits rename all data items",
+            "Read dependencies constrain permissible commit order",
+            "Graphs never contain transactions",
+            "Only commits can conflict"
+          ],
+          "correct_index": 1,
+          "explanation": "An operation-only graph cannot show unrecoverable commit sequences.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-23-non-serial-schedule-application-new-8",
+          "test_id": "pt-dbms-sql-23-non-serial-schedule-application",
+          "question_text": "What can a row-only schedule omit about a SQL range query?",
+          "options": [
+            "Its selected aliases only",
+            "Every existing read",
+            "Predicate changes caused by inserted rows",
+            "All column values"
+          ],
+          "correct_index": 2,
+          "explanation": "Phantom and predicate interactions need a richer logical model.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-23-non-serial-schedule-application-new-9",
+          "test_id": "pt-dbms-sql-23-non-serial-schedule-application",
+          "question_text": "Does one connection executing scripts sequentially prove two-session interleaving?",
+          "options": [
+            "Yes, if START appears twice",
+            "Only with long table names",
+            "Only after a build passes",
+            "No"
+          ],
+          "correct_index": 3,
+          "explanation": "Concurrent experiments need controlled or observed operation order.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-23-non-serial-schedule-application-new-10",
+          "test_id": "pt-dbms-sql-23-non-serial-schedule-application",
+          "question_text": "What should a schedule verdict name?",
+          "options": [
+            "The model and specific equivalence or recovery property tested",
+            "Only safe or unsafe",
+            "Only runtime duration",
+            "Only the number of rows"
+          ],
+          "correct_index": 0,
+          "explanation": "Correctness conclusions are conditional on those definitions.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [],
+  "coding_not_applicable": "The objective is interleaving and dependency analysis, requiring controlled multi-session traces for engine claims. The notes provide two complete schedule-analysis exercises; a single-session output judge would not prove concurrency or serializability.",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-23-non-serial-schedule-1",
+      "test_id": "pt-dbms-sql-23-non-serial-schedule",
+      "question_text": "What makes a schedule 'non-serial'?",
+      "options": [
+        "It involves more than 5 transactions",
+        "At least one operation of one transaction is interleaved between operations of another transaction — no transaction fully completes before the next begins",
+        "It always ends in an abort",
+        "It never involves a COMMIT"
+      ],
+      "correct_index": 1,
+      "explanation": "Non-serial simply means the operations of the transactions overlap in time, unlike a serial schedule where one transaction fully finishes before the next starts.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-23-non-serial-schedule-2",
+      "test_id": "pt-dbms-sql-23-non-serial-schedule",
+      "question_text": "In worked schedule S1 in this topic, is the final state (A=990, B=2310) the same as some serial schedule's result?",
+      "options": [
+        "No, it is a completely unique result impossible under any serial order",
+        "Yes — it matches the result of the serial schedule <T1, T2>, even though the operations were interleaved",
+        "It cannot be determined without running the schedule twice",
+        "Yes, it matches <T2, T1>"
+      ],
+      "correct_index": 1,
+      "explanation": "Tracing S1 shows the final balances exactly match the serial schedule <T1, T2>, because T2's reads always land after T1 has already updated the relevant item.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-23-non-serial-schedule-3",
+      "test_id": "pt-dbms-sql-23-non-serial-schedule",
+      "question_text": "What is the key open question a non-serial schedule raises that a serial schedule never does?",
+      "options": [
+        "Whether the transactions will ever commit",
+        "Whether the interleaved result is equivalent to some serial execution, or whether it produces a state no serial order could ever produce",
+        "Whether the schedule uses SQL correctly",
+        "Whether the transactions touch the same table"
+      ],
+      "correct_index": 1,
+      "explanation": "A serial schedule is correct by definition; a non-serial schedule's correctness must be checked via serializability, since interleaving may or may not preserve the same effective result as some serial order.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-23-non-serial-schedule-4",
+      "test_id": "pt-dbms-sql-23-non-serial-schedule",
+      "question_text": "Which theoretical tools determine whether a given non-serial schedule is 'safe' (serializable)?",
+      "options": [
+        "Only the DBMS's query optimizer",
+        "Conflict serializability and view serializability",
+        "The number of tables involved",
+        "The transaction isolation level configured by the DBA"
+      ],
+      "correct_index": 1,
+      "explanation": "Conflict serializability (practical, used by real concurrency control protocols) and view serializability (a broader, more theoretical notion) are exactly the tools used to judge non-serial schedule correctness.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-23-non-serial-schedule-5",
+      "test_id": "pt-dbms-sql-23-non-serial-schedule",
+      "question_text": "Why does the DBMS's concurrency control protocol (e.g., locking) exist, in relation to non-serial schedules?",
+      "options": [
+        "To prevent any non-serial schedule from ever occurring",
+        "To ensure that only serializable non-serial schedules are allowed to execute, combining interleaving's speed with serial execution's correctness guarantee",
+        "To force every schedule to become serial",
+        "To speed up disk I/O directly"
+      ],
+      "correct_index": 1,
+      "explanation": "Concurrency control mechanisms restrict which interleavings are permitted so that whatever non-serial schedule actually runs is guaranteed to be serializable.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-23-non-serial-schedule-6",
+      "test_id": "pt-dbms-sql-23-non-serial-schedule",
+      "question_text": "Does checking serializability require the DBMS to understand what a transaction's operations mean semantically (e.g., that a write represents 'applying interest')?",
+      "options": [
+        "Yes, semantic understanding is required",
+        "No — serializability analysis only needs to know which data items are read/written and their relative order, regardless of what the operations 'mean'",
+        "Only for financial applications",
+        "Only if the transaction spans multiple tables"
+      ],
+      "correct_index": 1,
+      "explanation": "Serializability theory is purely operation-based (tracking reads/writes on data items and their order), which is what makes it generally applicable without any application-specific logic.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-23-non-serial-schedule-7",
+      "test_id": "pt-dbms-sql-23-non-serial-schedule",
+      "question_text": "Is it possible for more than two transactions to interleave in a single non-serial schedule?",
+      "options": [
+        "No, non-serial schedules are limited to exactly two transactions",
+        "Yes — the same serializability analysis techniques generalize to any number of concurrently interleaved transactions",
+        "Only if all transactions are read-only",
+        "Only in distributed databases"
+      ],
+      "correct_index": 1,
+      "explanation": "Non-serial schedules and the tools to analyze them (precedence graphs, etc.) work for any number of transactions, not just two.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-23-non-serial-schedule-8",
+      "test_id": "pt-dbms-sql-23-non-serial-schedule",
+      "question_text": "Which statement correctly summarizes the relationship between 'non-serial' and 'incorrect'?",
+      "options": [
+        "Non-serial and incorrect mean the same thing",
+        "A non-serial schedule may or may not be correct — it depends on whether it is serializable, not on the mere fact that it's interleaved",
+        "All non-serial schedules are incorrect by definition",
+        "Only serial schedules can ever be interleaved"
+      ],
+      "correct_index": 1,
+      "explanation": "Being non-serial only describes timing/interleaving; whether the result is correct depends entirely on whether the schedule is serializable.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "/root",
+    "independent_review": "passed",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Independent manual content review passed within independent_review_scope; engine/browser/release gates separate.",
+    "canonical_answer_indices_preserved": true,
+    "independent_reviewer": "/root/content_c",
+    "independent_review_scope": "Full notes, all20 MCQs/answers/explanations, diagram and no-coding rationale. Numerical outcomes, dependency cycle, view equivalence and recovery distinctions sound. Manual editorial/math review only; engine, browser, originality and AdSense clearance separate."
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-23-non-serial-schedule",
+    "original_note_sha256": "adf7bff5dce90abf828c2e858b3f3a437cc3c8b2bdf9e7d70010a396a1b2536c",
+    "status": "drafted; not included in prepared paired migrations"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Serial equivalence and recovery ask different questions",
+      "description": "The numerical interleaving has T1-before-T2 conflict edges but also reads uncommittedT1 data.",
+      "columns": [
+        "Axis",
+        "Evidence",
+        "Conclusion for the displayed history"
+      ],
+      "rows": [
+        [
+          "Conflict order",
+          "OnlyT1→T2 edges",
+          "Conflict-serializable"
+        ],
+        [
+          "Dirty reads",
+          "T2 reads beforec1",
+          "Not cascadeless"
+        ],
+        [
+          "Commit dependency",
+          "c1 precedesc2",
+          "Recoverable in the stated completed history"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "provided",
+    "technical_review": "author review; independent review pending",
+    "server_rendering": "passed",
+    "browser_rendering": "unverified",
+    "independent_review": "pending",
+    "server_rendering_evidence": "2026-10-29 full Vitest:1310 passed/12 skipped; actual LessonBlock/TopicDiagrams render over230 packages. Browser visual QA remains unverified."
+  },
+  "authoring_status": "drafted; verification pending",
+  "sql_verification": {
+    "scope": "not executed; exact MySQL/provider verification pending",
+    "all_passed": false,
+    "cases": []
+  }
+}

@@ -1,0 +1,607 @@
+{
+  "source_ref": "chapter-4-relational-model/tuple",
+  "slug": "tuple",
+  "title": "Tuple",
+  "description": "Read a tuple as one complete fact, understand attribute bindings and identity, and handle optional SQL values without losing rows.",
+  "dialect": "MySQL 8.4",
+  "notes": "## One tuple expresses one fact\n\nA tuple is one element of a relation. It supplies a value for every attribute in the relation's schema. In Student(student_id, student_name, programme, score), a displayed tuple such as (17, Asha, Computing, 86) associates four values with four named roles. The tuple represents one student fact under this schema. The relation is the collection of all such facts, rather than another name for this individual tuple.\n\nAlways ask what one tuple means in its own relation. In Enrollment(student_id, course_id, enrolled_on), one tuple represents a student's enrollment in one course. A student enrolled in several courses has several enrollment tuples. Those tuples do not imply several student identities. Confusing the grain of different relations leads to incorrect counts, inappropriate uniqueness constraints, and accidental deletion of legitimate repeated participation.\n\n## Attributes give values their roles\n\nThe displayed position of a value is useful only when the schema's attribute order is known. In (17, Asha, Computing, 86), the final number means score because that is the displayed fourth attribute. Without the schema, the number might instead mean age, credits, or an identifier. A value alone cannot explain its role, measurement scale, or permitted range.\n\nAn attribute-based description is clearer: student_id is 17, student_name is Asha, programme is Computing, and score is 86. The logical fact associates values with names. Rearranging columns together with their corresponding values does not change those associations. Swapping the values while keeping the names fixed can change the fact or make it invalid. Presentation order and attribute meaning are different concerns.\n\n## Every tuple follows the same structure\n\nThe relation's degree determines how many attribute values each tuple has. If Student has four attributes, each Student tuple has four attribute positions. A row with a missing optional score in SQL still has the score column; NULL marks the absence of an ordinary value in that position. It does not shorten the row or reduce the relation's degree.\n\nSQL INSERT syntax can omit columns that have suitable defaults or permit NULL. The database constructs a complete stored row according to the table definition. Omitting a required column without an acceptable default may fail. Therefore an INSERT statement listing three expressions does not prove the resulting four-column table contains a three-attribute tuple. Distinguish the statement's supplied inputs from the completed row defined by the schema.\n\n## Complete equality and business identity\n\nTwo strict relational tuples are equal when their values agree for every corresponding attribute. Matching names alone is insufficient: two students named Asha can have different identifiers. A set-based relation cannot contain two copies of the same complete tuple. Practical SQL tables can permit repeated rows unless relevant constraints prevent them, so inspect the actual definition before assuming uniqueness.\n\nA candidate key identifies a tuple using a subset of attributes. If student_id is a key, its value must identify at most one Student tuple. Two rows with identifier 17 and different names are different complete rows but violate that key rule. This distinction matters when cleaning data: SELECT DISTINCT over all columns does not repair contradictory facts associated with one intended identity.\n\n## Position is not an identifier\n\nA tuple does not acquire its identity from being the third row on a screen. The same facts can be displayed in another order without changing the relation. Storage movement, query planning, and a changed sort expression can all change a row's observed position. Applications should identify the intended record through a key rather than through an offset into an unordered result.\n\nFor example, an update to student 17 should constrain student_id, not assume the first displayed Asha is the intended student. Names can repeat, and display order can change. A key-based condition expresses the fact being targeted. Before updating a real dataset, preview the condition's matches and consider transaction and authorization requirements; a syntactically valid statement can still target the wrong population.\n\n## SQL NULL needs a separate interpretation\n\nClassical relational descriptions use domain values. SQL extends practical row handling with NULL and three-valued comparison behaviour. A NULL score can mean the score has not been recorded, if that meaning is defined by the application. It is different from a recorded zero. Replacing every missing score with zero changes the represented facts and can distort averages, rankings, and eligibility decisions.\n\nA SQL row containing multiple NULLs is still one row if the schema permits those absences and all other constraints hold. NULL is forbidden in a primary key and in a NOT NULL column. Other constraints can also reject a proposed row. Never infer validity merely from the row's width: structural completeness and satisfaction of integrity rules must both be considered.\n\n## Filtering tuples without losing optional facts\n\nWHERE retains rows whose predicate evaluates to TRUE. FALSE and UNKNOWN do not pass the filter. A comparison such as score >= 80 excludes a row with a NULL score because the comparison is unknown. Use IS NULL when the task specifically asks for missing scores. Use an explicit alternative when both high scores and missing scores must appear.\n\n```sql\nSELECT student_id, student_name\nFROM students\nWHERE score IS NULL\nORDER BY student_id;\n```\n\nThe query returns one output row for every matching student. It keeps the identifier so that two students with the same name remain distinguishable. Removing student_id and adding DISTINCT would answer a different question: which distinct names occur among students with missing scores. That might hide separate students who require separate follow-up actions.\n\n## Projection creates output tuples\n\nA query can construct result tuples with fewer attributes or computed attributes. Selecting student_id and score produces output rows of degree two even if the source has degree four. That does not modify stored Student tuples. Similarly, an expression such as score + 5 produces a computed result value; it does not update the stored score without an appropriate data modification statement.\n\nName computed columns descriptively so readers understand their meaning. A query can classify a score as missing, passing, or below the threshold with CASE. Put the missing-value branch explicitly in the expression when the output contract distinguishes absence. Otherwise an ELSE branch can silently mix missing scores with recorded failing scores, even though those states require different student support actions.\n\n## Counting rows and recorded values\n\nCOUNT(*) counts rows in a group. COUNT(score) counts rows whose score expression is non-NULL. With three student tuples and one missing score, the counts are three and two respectively. Neither count is the number of attributes. If a join repeats a student once per enrollment, COUNT(*) over that joined result counts enrollment combinations rather than automatically counting distinct students.\n\nBuild a tiny fixture before trusting a report: include two students sharing a name, a recorded zero, a missing score, and a high score. Check the population retained by each predicate and the meaning of each output column. These examples expose assumptions about identity and absence that a dataset of unique names and complete positive scores would never challenge.\n\n## Reviewing a tuple-based solution\n\nRead a proposed tuple against the named attributes, check domain compatibility, and then check key and cross-row rules. For SQL, also check nullability and the handling of unknown comparisons. Decide whether the output must preserve each source identity or intentionally collapse selected values. Specify an order only when the presentation or automated comparison requires one, using a tie-breaker where necessary.\n\nThe useful idea is precise and small: one tuple is one structured fact in a particular relation. Its values are meaningful through attributes, its admissibility depends on constraints, and its identity should not depend on where it happens to appear. Carrying that interpretation into SQL makes filters, computed results, counts, and targeted updates easier to explain and verify.\n",
+  "references": [],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-4-tuple",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-4-tuple-1",
+          "test_id": "pt-dbms-sql-4-tuple",
+          "question_text": "What does a tuple represent within a relation?",
+          "options": [
+            "A single column definition",
+            "One fact binding a value to each named attribute in the relation schema",
+            "The name of the relation",
+            "The total count of rows in the relation"
+          ],
+          "correct_index": 1,
+          "explanation": "A tuple binds values to attributes; its displayed positional order must be interpreted using the schema.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-4-tuple-2",
+          "test_id": "pt-dbms-sql-4-tuple",
+          "question_text": "In Students(id, name, department, gpa), how many values does each tuple contain?",
+          "options": [
+            "1",
+            "2",
+            "4, one for each attribute",
+            "It varies from tuple to tuple"
+          ],
+          "correct_index": 2,
+          "explanation": "Every tuple in a relation has exactly as many values as the relation's degree (number of attributes) — here, 4.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-4-tuple-3",
+          "test_id": "pt-dbms-sql-4-tuple",
+          "question_text": "Which statement correctly distinguishes a Tuple from a Relation?",
+          "options": [
+            "A tuple is a whole table; a relation is one row",
+            "A relation is the entire set of tuples; a tuple is one element (row) of that set",
+            "They are exactly the same concept",
+            "A tuple contains multiple relations"
+          ],
+          "correct_index": 1,
+          "explanation": "A relation is the set; a tuple is a single member (row) belonging to that set.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-4-tuple-4",
+          "test_id": "pt-dbms-sql-4-tuple",
+          "question_text": "Can the same relation legally contain two tuples with identical values in every attribute?",
+          "options": [
+            "Yes, always",
+            "No, because a relation is a set and cannot contain duplicate elements",
+            "Only if the primary key is NULL",
+            "Only for relations of degree 1"
+          ],
+          "correct_index": 1,
+          "explanation": "Since a relation is a set, two tuples with identical values in every attribute would be the same set element, not two distinct tuples.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-4-tuple-5",
+          "test_id": "pt-dbms-sql-4-tuple",
+          "question_text": "Under Students(id, name, department, gpa), what does 9.1 represent in (3, Meera, CS, 9.1)?",
+          "options": [
+            "The degree of the tuple",
+            "The value the 'gpa' attribute takes for this specific tuple",
+            "A separate relation",
+            "The cardinality of the relation"
+          ],
+          "correct_index": 1,
+          "explanation": "9.1 is simply the value bound to the 'gpa' attribute within this one tuple/row.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-4-tuple-6",
+          "test_id": "pt-dbms-sql-4-tuple",
+          "question_text": "Does the physical position of a tuple among other tuples in a relation carry logical meaning?",
+          "options": [
+            "Yes, tuple order determines its identity",
+            "No, tuple order is meaningless since a relation is an unordered set",
+            "Only for the first tuple inserted",
+            "Only in relations with a primary key"
+          ],
+          "correct_index": 1,
+          "explanation": "Because relations are sets, no ordering among tuples is logically significant.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-4-tuple-7",
+          "test_id": "pt-dbms-sql-4-tuple",
+          "question_text": "In an SQL Students table that permits NULL in department and gpa, and whose other constraints hold, is (5, Ganesh, NULL, NULL) one valid row?",
+          "options": [
+            "No, tuples cannot contain more than one NULL",
+            "Yes, it is one well-formed tuple even though two of its values are NULL",
+            "No, NULL values are not permitted in tuples at all",
+            "Yes, but it counts as two tuples"
+          ],
+          "correct_index": 1,
+          "explanation": "The SQL row remains one row; permitted NULLs do not remove columns. Actual validity also depends on all other table constraints.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-4-tuple-8",
+          "test_id": "pt-dbms-sql-4-tuple",
+          "question_text": "If a relation's degree is n, what can you say about every tuple belonging to that relation?",
+          "options": [
+            "Each tuple has exactly n values, one per attribute",
+            "Each tuple has at most n values",
+            "Tuples may vary in size up to n",
+            "n refers to the number of tuples, not values per tuple"
+          ],
+          "correct_index": 0,
+          "explanation": "Degree fixes how many attributes the schema has, and every tuple must supply exactly that many values.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-4-tuple-new-9",
+          "test_id": "pt-dbms-sql-4-tuple",
+          "question_text": "A four-column SQL row contains a NULL score. How many attribute positions does it have?",
+          "options": [
+            "Three",
+            "Four",
+            "Zero",
+            "One per non-NULL column only"
+          ],
+          "correct_index": 1,
+          "explanation": "NULL does not remove the score column.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-4-tuple-new-10",
+          "test_id": "pt-dbms-sql-4-tuple",
+          "question_text": "Two students share a name but have different identifiers. What follows?",
+          "options": [
+            "They must be one tuple",
+            "The name is necessarily a key",
+            "They can be distinct tuples",
+            "One must be deleted"
+          ],
+          "correct_index": 2,
+          "explanation": "Complete identity cannot be inferred from a repeated name.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-4-tuple-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-4-tuple-application-new-1",
+          "test_id": "pt-dbms-sql-4-tuple-application",
+          "question_text": "Why should an update target a student identifier rather than a screen row number?",
+          "options": [
+            "Rows always stay at fixed disk positions",
+            "Keys guarantee authorization",
+            "Display position can change while a key identifies the intended fact",
+            "Screen numbers are always unique forever"
+          ],
+          "correct_index": 2,
+          "explanation": "Logical identity must survive reordered results.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-4-tuple-application-new-2",
+          "test_id": "pt-dbms-sql-4-tuple-application",
+          "question_text": "A four-column table is queried with SELECT student_id, score. What is the output degree?",
+          "options": [
+            "Four",
+            "The number of students",
+            "Zero",
+            "Two"
+          ],
+          "correct_index": 3,
+          "explanation": "The output tuple contains two selected attributes.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-4-tuple-application-new-3",
+          "test_id": "pt-dbms-sql-4-tuple-application",
+          "question_text": "Three rows include one NULL score. What are COUNT(*) and COUNT(score)?",
+          "options": [
+            "3 and 2",
+            "2 and 3",
+            "3 and 3",
+            "2 and 2"
+          ],
+          "correct_index": 0,
+          "explanation": "COUNT(*) counts rows; COUNT(expression) excludes NULL results.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-4-tuple-application-new-4",
+          "test_id": "pt-dbms-sql-4-tuple-application",
+          "question_text": "What does WHERE score >= 80 do to a row with NULL score?",
+          "options": [
+            "Include it as zero",
+            "Exclude it because the predicate is UNKNOWN",
+            "Raise a compulsory error",
+            "Treat NULL as 100"
+          ],
+          "correct_index": 1,
+          "explanation": "WHERE retains TRUE, not UNKNOWN.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-4-tuple-application-new-5",
+          "test_id": "pt-dbms-sql-4-tuple-application",
+          "question_text": "Which predicate selects missing scores?",
+          "options": [
+            "score = NULL",
+            "score <> NULL",
+            "score IS NULL",
+            "score = 0"
+          ],
+          "correct_index": 2,
+          "explanation": "IS NULL is the absence test.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-4-tuple-application-new-6",
+          "test_id": "pt-dbms-sql-4-tuple-application",
+          "question_text": "Why is a recorded zero different from a NULL score?",
+          "options": [
+            "Both always mean failure",
+            "NULL automatically equals zero",
+            "Zero removes an attribute",
+            "Zero is a known value; NULL marks absence under the defined contract"
+          ],
+          "correct_index": 3,
+          "explanation": "Replacing absence with zero changes meaning.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-4-tuple-application-new-7",
+          "test_id": "pt-dbms-sql-4-tuple-application",
+          "question_text": "What does SELECT score + 5 do to stored scores?",
+          "options": [
+            "It computes output values without updating stored rows",
+            "It permanently adds five",
+            "It deletes NULL rows",
+            "It changes the schema"
+          ],
+          "correct_index": 0,
+          "explanation": "An ordinary SELECT expression does not modify source values.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-4-tuple-application-new-8",
+          "test_id": "pt-dbms-sql-4-tuple-application",
+          "question_text": "An INSERT omits a nullable column and receives a default NULL. Is the stored row narrower?",
+          "options": [
+            "Yes; its degree decreases",
+            "No; the schema still defines that column",
+            "Yes; it becomes a separate relation",
+            "Only if the table is empty"
+          ],
+          "correct_index": 1,
+          "explanation": "Input omission is not structural omission from the stored row.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-4-tuple-application-new-9",
+          "test_id": "pt-dbms-sql-4-tuple-application",
+          "question_text": "When can two differing complete rows still violate an identity rule?",
+          "options": [
+            "Only when all columns are identical",
+            "Whenever they share a programme",
+            "When they share a value that must be unique as a key",
+            "Only when they are adjacent"
+          ],
+          "correct_index": 2,
+          "explanation": "A key constraint can reject rows that differ outside the key.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-4-tuple-application-new-10",
+          "test_id": "pt-dbms-sql-4-tuple-application",
+          "question_text": "What should a missing/pass/fail CASE expression distinguish explicitly?",
+          "options": [
+            "Physical row positions",
+            "Insertion timestamps only",
+            "Column widths",
+            "Missing scores from recorded failing scores"
+          ],
+          "correct_index": 3,
+          "explanation": "Absence and failure are different states in the stated contract.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cx-tuple-missing-score",
+      "slug": "tuple-missing-score",
+      "title": "Find student facts with missing scores",
+      "difficulty": "Easy",
+      "task": "Return student_id and student_name for students whose score is missing. Preserve separate identities with repeated names.",
+      "schema_sql": "CREATE TABLE students (student_id INT PRIMARY KEY, student_name VARCHAR(30) NOT NULL, score INT NULL);",
+      "seed_sql": "INSERT INTO students VALUES (1,'Asha',NULL),(2,'Asha',0),(3,'Ravi',NULL);",
+      "expected": "student_id\tstudent_name\n1\tAsha\n3\tRavi",
+      "ordering": "Ascending student_id.",
+      "constraints": [
+        "Identifiers are unique; supplied scores are NULL or integers from 0 to 100."
+      ],
+      "edge_cases": [
+        "Repeated student names identify separate students.",
+        "A recorded zero must not be treated as missing."
+      ],
+      "hints": [
+        "Retain the identifier in the output.",
+        "Handle NULL explicitly before ordinary numeric comparisons."
+      ],
+      "solution_sql": "SELECT student_id, student_name FROM students WHERE score IS NULL ORDER BY student_id;",
+      "explanation": "The result preserves one row per qualifying student and interprets missing scores separately from known scores.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO students VALUES (1,'Asha',0);",
+          "expected": ""
+        },
+        {
+          "seed_sql": "INSERT INTO students VALUES (2,'Mira',NULL),(1,'Mira',NULL);",
+          "expected": "student_id\tstudent_name\n1\tMira\n2\tMira"
+        }
+      ]
+    },
+    {
+      "id": "cx-tuple-score-status",
+      "slug": "tuple-score-status",
+      "title": "Classify each student score",
+      "difficulty": "Medium",
+      "task": "Return student_id and score_status for every student: missing for NULL, pass for score >= 50, otherwise below. Use lowercase labels.",
+      "schema_sql": "CREATE TABLE students (student_id INT PRIMARY KEY, student_name VARCHAR(30) NOT NULL, score INT NULL);",
+      "seed_sql": "INSERT INTO students VALUES (1,'Asha',NULL),(2,'Ravi',0),(3,'Mira',50),(4,'Dev',49);",
+      "expected": "student_id\tscore_status\n1\tmissing\n2\tbelow\n3\tpass\n4\tbelow",
+      "ordering": "Ascending student_id.",
+      "constraints": [
+        "Identifiers are unique; supplied scores are NULL or integers from 0 to 100."
+      ],
+      "edge_cases": [
+        "Repeated student names identify separate students.",
+        "A recorded zero must not be treated as missing."
+      ],
+      "hints": [
+        "Retain the identifier in the output.",
+        "Handle NULL explicitly before ordinary numeric comparisons."
+      ],
+      "solution_sql": "SELECT student_id, CASE WHEN score IS NULL THEN 'missing' WHEN score >= 50 THEN 'pass' ELSE 'below' END AS score_status FROM students ORDER BY student_id;",
+      "explanation": "The result preserves one row per qualifying student and interprets missing scores separately from known scores.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO students VALUES (9,'Mira',100),(2,'Mira',NULL);",
+          "expected": "student_id\tscore_status\n2\tmissing\n9\tpass"
+        },
+        {
+          "seed_sql": "",
+          "expected": ""
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-4-tuple-1",
+      "test_id": "pt-dbms-sql-4-tuple",
+      "question_text": "What does a tuple represent within a relation?",
+      "options": [
+        "A single column definition",
+        "One row: an ordered set of values, one per attribute, describing one entity/fact",
+        "The name of the relation",
+        "The total count of rows in the relation"
+      ],
+      "correct_index": 1,
+      "explanation": "A tuple is one row of the relation, holding one value for each attribute in the schema.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-4-tuple-2",
+      "test_id": "pt-dbms-sql-4-tuple",
+      "question_text": "In Students(id, name, department, gpa), how many values does each tuple contain?",
+      "options": [
+        "1",
+        "2",
+        "4, one for each attribute",
+        "It varies from tuple to tuple"
+      ],
+      "correct_index": 2,
+      "explanation": "Every tuple in a relation has exactly as many values as the relation's degree (number of attributes) — here, 4.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-4-tuple-3",
+      "test_id": "pt-dbms-sql-4-tuple",
+      "question_text": "Which statement correctly distinguishes a Tuple from a Relation?",
+      "options": [
+        "A tuple is a whole table; a relation is one row",
+        "A relation is the entire set of tuples; a tuple is one element (row) of that set",
+        "They are exactly the same concept",
+        "A tuple contains multiple relations"
+      ],
+      "correct_index": 1,
+      "explanation": "A relation is the set; a tuple is a single member (row) belonging to that set.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-4-tuple-4",
+      "test_id": "pt-dbms-sql-4-tuple",
+      "question_text": "Can the same relation legally contain two tuples with identical values in every attribute?",
+      "options": [
+        "Yes, always",
+        "No, because a relation is a set and cannot contain duplicate elements",
+        "Only if the primary key is NULL",
+        "Only for relations of degree 1"
+      ],
+      "correct_index": 1,
+      "explanation": "Since a relation is a set, two tuples with identical values in every attribute would be the same set element, not two distinct tuples.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-4-tuple-5",
+      "test_id": "pt-dbms-sql-4-tuple",
+      "question_text": "In the tuple (3, Meera, CS, 9.1), what does the value 9.1 represent?",
+      "options": [
+        "The degree of the tuple",
+        "The value the 'gpa' attribute takes for this specific tuple",
+        "A separate relation",
+        "The cardinality of the relation"
+      ],
+      "correct_index": 1,
+      "explanation": "9.1 is simply the value bound to the 'gpa' attribute within this one tuple/row.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-4-tuple-6",
+      "test_id": "pt-dbms-sql-4-tuple",
+      "question_text": "Does the physical position of a tuple among other tuples in a relation carry logical meaning?",
+      "options": [
+        "Yes, tuple order determines its identity",
+        "No, tuple order is meaningless since a relation is an unordered set",
+        "Only for the first tuple inserted",
+        "Only in relations with a primary key"
+      ],
+      "correct_index": 1,
+      "explanation": "Because relations are sets, no ordering among tuples is logically significant.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-4-tuple-7",
+      "test_id": "pt-dbms-sql-4-tuple",
+      "question_text": "A tuple (5, Ganesh, NULL, NULL) is inserted into Students. Is this a valid single tuple?",
+      "options": [
+        "No, tuples cannot contain more than one NULL",
+        "Yes, it is one well-formed tuple even though two of its values are NULL",
+        "No, NULL values are not permitted in tuples at all",
+        "Yes, but it counts as two tuples"
+      ],
+      "correct_index": 1,
+      "explanation": "A tuple with NULLs in some positions is still a single, valid tuple; NULL merely marks missing values.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-4-tuple-8",
+      "test_id": "pt-dbms-sql-4-tuple",
+      "question_text": "If a relation's degree is n, what can you say about every tuple belonging to that relation?",
+      "options": [
+        "Each tuple has exactly n values, one per attribute",
+        "Each tuple has at most n values",
+        "Tuples may vary in size up to n",
+        "n refers to the number of tuples, not values per tuple"
+      ],
+      "correct_index": 0,
+      "explanation": "Degree fixes how many attributes the schema has, and every tuple must supply exactly that many values.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "coordinator",
+    "independent_review": "unavailable; no agent tools",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Definitions and examples checked against questions; no plagiarism certification.",
+    "existing_question_corrections": [
+      "tq-dbms-sql-4-tuple-1",
+      "tq-dbms-sql-4-tuple-5",
+      "tq-dbms-sql-4-tuple-7"
+    ],
+    "canonical_answer_indices_preserved": true
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-4-tuple",
+    "original_note_sha256": "c2017e0fa0908a184cef5fecbe95d8d566280af10e4710eb27a5525c671988a2",
+    "status": "paired migration prepared; not applied"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "A tuple binds one value or permitted SQL absence to every attribute",
+      "description": "The same schema describes both rows. NULL occupies an existing score position; repeated names do not imply repeated identity.",
+      "columns": [
+        "student_id",
+        "student_name",
+        "programme",
+        "score"
+      ],
+      "rows": [
+        [
+          "17",
+          "Asha",
+          "Computing",
+          "86"
+        ],
+        [
+          "24",
+          "Asha",
+          "Electronics",
+          "NULL (not recorded)"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "coordinator checked identity and SQL NULL qualification",
+    "server_rendering": "passed",
+    "browser_rendering": "unverified",
+    "independent_review": "unavailable; no agent tools",
+    "server_rendering_evidence": "2026-10-29: database-authored-content Vitest renders each authored package through LessonBlock; 67 focused tests passed."
+  },
+  "sql_verification": {
+    "engine": "11.8.6-MariaDB-0+deb13u1 from Debian",
+    "scope": "MariaDB compatibility execution; exact MySQL 8.4/provider execution unverified",
+    "fingerprint": "4b0f26002169b3bbe8114bdf6804615d73d9a24f2ac1bddcd509d6dd18fdf061",
+    "cases": [
+      {
+        "problem": "tuple-missing-score",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "tuple-missing-score",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "tuple-missing-score",
+        "case": 2,
+        "passed": true
+      },
+      {
+        "problem": "tuple-score-status",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "tuple-score-status",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "tuple-score-status",
+        "case": 2,
+        "passed": true
+      }
+    ],
+    "all_passed": true
+  }
+}

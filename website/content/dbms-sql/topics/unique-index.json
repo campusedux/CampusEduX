@@ -1,0 +1,582 @@
+{
+  "source_ref": "chapter-20-indexes-and-access-paths/unique-index",
+  "slug": "unique-index",
+  "title": "Unique Index",
+  "description": "Understand unique indexes as write-time key invariants, including composite scope, MySQL NULL behavior, collation, concurrency and honest duplicate-preflight limits.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Enforce one permitted occurrence of a key\n\nA unique index prevents duplicate nonnull indexed key values under the database's comparison rules while also providing an index access structure. A campus event system might require each registration code to identify at most one registration. The rule is an integrity invariant: a second conflicting code must be rejected even when two requests arrive concurrently and both previously observed no existing registration.\n\nThis differs from a normal nonunique index, which can accelerate a search without prohibiting repeated keys. It also differs from SELECT DISTINCT, which removes duplicate projected rows from one result but leaves stored data unchanged. Read [duplicate handling](/learning/dbms-sql-tutorial/duplicate-handling) to distinguish a query's display policy from a database rule enforced when records are written.\n\n## Define the intended business key first\n\nSuppose registration_code is globally unique and required. A unique rule on that column expresses the invariant directly, provided its type and comparison behavior match the code format. If codes are unique only within an event, the key is event_id plus registration_code. A global unique index on the code alone would reject legitimate reuse by a different event and impose a stronger rule than the domain requested.\n\n```sql\nCREATE UNIQUE INDEX uq_event_registration_code\nON registrations(event_id, registration_code);\n```\n\nThis is an educational DDL example for a deliberately defined table. It is not authorization to alter an application's schema. Existing data, callers, foreign keys, locking, rollback and operational impact require separate review before a real migration. The lesson's exercises are read-only preflight queries and do not claim to demonstrate write-time enforcement or concurrent behavior.\n\n## Read composite uniqueness as a tuple rule\n\nA composite unique index requires uniqueness of the complete indexed combination. Event one with code A and event two with code A are different keys and can coexist. Event one with code A repeated conflicts when all indexed components are nonnull and compare equal. Neither component needs to be unique by itself for the pair to be unique.\n\nDo not describe a two-column unique index as two independent unique constraints. Separate unique indexes on event_id and registration_code would prohibit multiple registrations for an event and prohibit code reuse anywhere. That is a different, usually incorrect invariant. Write allowed and forbidden example pairs before choosing the index definition so that an accidental strengthening is visible before any schema change is proposed.\n\n## Define nullability alongside uniqueness\n\nMySQL permits multiple NULL values in an ordinary nullable unique index. For composite uniqueness, a tuple containing a null component can therefore behave differently from a complete nonnull duplicate key. A unique declaration alone is not a substitute for NOT NULL when every business key must be present. Model requiredness and uniqueness as separate but coordinated constraints.\n\nTwo registrations with missing codes may be acceptable while codes are being assigned. Alternatively, the domain may require an assigned code before a registration exists. Those are different lifecycle policies. Do not silently map missing codes to an empty string to simulate requiredness: empty text can collide differently, hide uncertainty and introduce a sentinel value that callers might treat as a real code.\n\n## Match string comparisons to code meaning\n\nUniqueness for text follows the relevant comparison rules, including collation. Codes ABC and abc can conflict under a case-insensitive collation. Under another intended comparison policy they might be distinct. The index enforces the database's defined equality, not necessarily what a person perceives from printed characters or what an application compares byte by byte.\n\nDecide canonical spelling and permitted characters at the trusted input boundary, and align storage comparison with that contract. A normalization rule that trims or folds input is itself a behavior decision requiring compatibility review. Do not promise that a unique string index guarantees byte-for-byte distinctions in every configuration. Include case and spacing boundaries in engine-specific verification when those distinctions matter to the application.\n\n## Separate uniqueness from primary-key status\n\nA table has one primary key designation but can have several unique candidate identifiers. A registration might have a surrogate registration_id as the primary key and a separate unique event-code pair. Both can help identify rows, but they express different contracts. The primary key is nonnull and has additional storage significance in InnoDB; a nullable unique index does not automatically become an equivalent primary-key definition.\n\nA surrogate key does not remove the need for the approved business uniqueness rule. Two different generated identities can still refer to duplicate event-code registrations unless that pair is constrained. Conversely, a business-key change can have operational consequences even when the surrogate identity remains stable. Consider direct callers and references before proposing any key replacement.\n\n## Check existing data before adding a rule\n\nA preflight query can locate complete nonnull keys currently repeated in a snapshot. For the event-code example, group by both components and filter groups whose row count exceeds one. Excluding null components makes the diagnostic focus on the ordinary nonnull duplicate conflicts described by this lesson.\n\n```sql\nSELECT event_id, registration_code, COUNT(*) AS copies\nFROM registration_import\nWHERE event_id IS NOT NULL\n  AND registration_code IS NOT NULL\nGROUP BY event_id, registration_code\nHAVING COUNT(*) > 1\nORDER BY event_id, registration_code;\n```\n\nThis identifies candidates for reconciliation; it does not decide which stored row should survive. A duplicate may represent an import replay, an incorrectly merged event identity or a legitimate policy not yet reflected in the proposed key. Investigate the domain and related data before deleting or rewriting anything. A clean snapshot also does not prevent a later conflicting write unless enforcement is installed appropriately.\n\n## Expect concurrency at the enforcement boundary\n\nApplication code that selects for an existing key and then inserts if none is found has a race: two sessions can both observe absence before either inserts. A database uniqueness rule resolves that race at the trusted write boundary. The application still needs to handle the resulting conflict deliberately and map it to the correct user-visible outcome.\n\nA conflict does not automatically mean the requested operation succeeded earlier. For an idempotent retry, verify that the existing row belongs to the same authorized request and has the expected payload. Treating every duplicate-key error as success can hide a different user's record or a mismatched request. These application and security decisions go beyond the index's simple equality invariant.\n\n## Understand that enforcement has a write cost\n\nInserts and indexed-key updates must maintain the access structure and check uniqueness. Additional indexes also consume space and can affect write latency. A unique index should therefore express a required invariant or a demonstrated access need, rather than being added indiscriminately to every searchable column. Its correctness value can justify cost even when a particular query does not use it.\n\nThe optimizer may exploit uniqueness when estimating matching rows, but a unique index does not guarantee that every query will use it. Composite column order affects available access paths even when swapping columns leaves the tuple-uniqueness rule logically equivalent. Evaluate the invariant and the workload separately, then choose a definition that respects both without inventing redundant indexes.\n\n## Avoid prefix and expression surprises\n\nA prefix unique index on a long string enforces uniqueness of the indexed prefix, not of the entire longer value. Two distinct complete strings with the same indexed prefix can therefore conflict. That can be much stronger than the domain's intended full-code uniqueness rule. Do not add a short prefix merely to satisfy an index-length limit without examining which values become indistinguishable.\n\nExpression-based or generated-value uniqueness likewise applies to the indexed expression's result and its null behavior. For example, a case-folded expression changes the compared key. Such designs require precise engine-supported syntax and review of all accepted inputs. This introductory lesson keeps the executable preflight examples on ordinary integer pairs so that their intended equality is explicit and portable at the query level.\n\n## Verify allowed and denied keys separately\n\nAn eventual native-engine check should prove that a fresh complete key is accepted, a duplicate complete key is rejected, allowed reuse under another owner is accepted, and null behavior matches the declared policy. Verify that a rejected update leaves unrelated state intact and that concurrent conflicts are handled correctly. None of those results can be inferred from a successful read-only duplicate scan.\n\nThe exercises practice diagnosing scalar and composite duplicate candidates without changing schema. Continue with [composite indexes](/learning/dbms-sql-tutorial/composite-index) for access order and [index maintenance](/learning/dbms-sql-tutorial/index-maintenance) for write overhead. A complete unique-key design names the entity scope, nullability, comparison semantics and conflict behavior, not just the index name.\n",
+  "references": [
+    {
+      "title": "MySQL 8.4 reference manual",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/create-index.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-20-unique-index",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-20-unique-index-1",
+          "test_id": "pt-dbms-sql-20-unique-index",
+          "question_text": "For ordinary complete nonnull indexed keys, what roles does a unique index serve?",
+          "options": [
+            "It only removes display duplicates",
+            "It enforces key uniqueness and provides an index access structure",
+            "It only sorts the final result",
+            "It makes every query use the index"
+          ],
+          "correct_index": 1,
+          "explanation": "Nullability and comparison rules remain relevant; the optimizer need not choose the index for every lookup.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-20-unique-index-2",
+          "test_id": "pt-dbms-sql-20-unique-index",
+          "question_text": "In an InnoDB table, what is a normal consequence of declaring a primary key?",
+          "options": [
+            "No index is associated with the key",
+            "Its unique nonnull key is used for the clustered index",
+            "Every secondary key becomes unique",
+            "The primary key permits repeated NULLs"
+          ],
+          "correct_index": 1,
+          "explanation": "The lesson scopes this physical behavior to MySQL InnoDB rather than every SQL engine.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-20-unique-index-3",
+          "test_id": "pt-dbms-sql-20-unique-index",
+          "question_text": "Why is enforcing uniqueness via a database-level unique index better than only checking it in application code?",
+          "options": [
+            "Application-level checks are always faster",
+            "A unique index atomically prevents race conditions where two simultaneous inserts could otherwise both succeed with duplicate values",
+            "Unique indexes remove the need for a primary key",
+            "Application code cannot check for duplicates at all"
+          ],
+          "correct_index": 1,
+          "explanation": "Database-enforced uniqueness closes the race-condition window that application-only checks are vulnerable to under concurrent writes.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-20-unique-index-4",
+          "test_id": "pt-dbms-sql-20-unique-index",
+          "question_text": "For nonnull components, what does UNIQUE(department,id) enforce?",
+          "options": [
+            "Every department value is individually unique",
+            "No repeated department-id pair, while id can be reused in another department",
+            "Every id is globally unique",
+            "Only the first component is checked"
+          ],
+          "correct_index": 1,
+          "explanation": "The complete pair defines the invariant; nullable-key cases require separate reasoning.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-20-unique-index-5",
+          "test_id": "pt-dbms-sql-20-unique-index",
+          "question_text": "How does MySQL 8.4 treat multiple NULL values in an ordinary nullable unique index?",
+          "options": [
+            "They are always rejected",
+            "They are permitted",
+            "Exactly one is permitted in every index",
+            "They become zero automatically"
+          ],
+          "correct_index": 1,
+          "explanation": "This is a MySQL-specific nullability rule, not a universal claim across all engines.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-20-unique-index-6",
+          "test_id": "pt-dbms-sql-20-unique-index",
+          "question_text": "Which ordinary index type is relevant to the shown InnoDB unique-key example?",
+          "options": [
+            "BTREE",
+            "FULLTEXT only",
+            "SPATIAL only",
+            "A client-side hash map"
+          ],
+          "correct_index": 0,
+          "explanation": "The lesson concerns ordinary InnoDB ordered indexes; uniqueness alone does not specify every engine index implementation.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-20-unique-index-7",
+          "test_id": "pt-dbms-sql-20-unique-index",
+          "question_text": "What happens when creating a unique index over repeated complete nonnull keys that compare equal?",
+          "options": [
+            "The engine deletes duplicate records automatically",
+            "Creation fails because the existing data violates the rule",
+            "The engine keeps the newest row automatically",
+            "The index silently becomes nonunique"
+          ],
+          "correct_index": 1,
+          "explanation": "Preflight and reconciliation are needed; repeated nullable keys have different rules.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-20-unique-index-8",
+          "test_id": "pt-dbms-sql-20-unique-index",
+          "question_text": "What write cost can an ordinary unique index introduce?",
+          "options": [
+            "No cost because uniqueness is only a display rule",
+            "Index maintenance and uniqueness checks on relevant writes",
+            "Automatic table deletion",
+            "Guaranteed blocking of all SELECTs"
+          ],
+          "correct_index": 1,
+          "explanation": "The exact cost depends on the workload and engine; the approved invariant can justify it.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "cx-q-unique-index-9",
+          "test_id": "pt-dbms-sql-20-unique-index",
+          "question_text": "A complete unique key is(event_id,code). Existing key(10,7) and proposed key(20,7) have no other conflicts. What does this rule permit?",
+          "options": [
+            "The second key, because its owner scope differs",
+            "No other event may ever use7",
+            "Only one registration in the table",
+            "Both keys only when code is NULL"
+          ],
+          "correct_index": 0,
+          "explanation": "Composite uniqueness compares the complete nonnull tuple. Global code uniqueness would impose a different rule.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "cx-q-unique-index-10",
+          "test_id": "pt-dbms-sql-20-unique-index",
+          "question_text": "Every registration must have an assigned nonnull code as well as a unique code. What requiredness rule accompanies UNIQUE?",
+          "options": [
+            "Replace all missing codes with a blank string",
+            "Declare the code NOT NULL under the approved schema contract",
+            "Use SELECT DISTINCT in a dashboard",
+            "Sort missing codes last"
+          ],
+          "correct_index": 1,
+          "explanation": "MySQL nullable uniqueness allows missing values. Requiredness must be declared separately when absence is forbidden.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "cx-test-unique-index-2",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "cx-q-unique-index-11",
+          "test_id": "cx-test-unique-index-2",
+          "question_text": "Two sessions attempt the same complete nonnull unique key. With no deletion or key change, how many conflicting inserts can remain committed?",
+          "options": [
+            "Both, if both SELECT checks saw no row",
+            "Neither can ever be accepted",
+            "At most one, with the other conflict handled or rolled back",
+            "Any number if the requests have different users"
+          ],
+          "correct_index": 2,
+          "explanation": "The trusted unique invariant prevents two committed rows with the same complete key. A prior application read cannot override enforcement.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "cx-q-unique-index-12",
+          "test_id": "cx-test-unique-index-2",
+          "question_text": "Does SELECT DISTINCT enforce stored uniqueness?",
+          "options": [
+            "Yes, permanently",
+            "Only for composite keys",
+            "Only when ORDER BY exists",
+            "No"
+          ],
+          "correct_index": 3,
+          "explanation": "It changes one query result.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "cx-q-unique-index-13",
+          "test_id": "cx-test-unique-index-2",
+          "question_text": "Why can a case-insensitive collation matter?",
+          "options": [
+            "Differently cased codes may conflict",
+            "It changes integer precision",
+            "It removes primary keys",
+            "It makes every string distinct"
+          ],
+          "correct_index": 0,
+          "explanation": "Uniqueness follows the defined comparison semantics.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "cx-q-unique-index-14",
+          "test_id": "cx-test-unique-index-2",
+          "question_text": "What does a surrogate registration_id fail to guarantee alone?",
+          "options": [
+            "A row identity",
+            "Uniqueness of the business event-code pair",
+            "That a primary key is nonnull",
+            "That an index can exist"
+          ],
+          "correct_index": 1,
+          "explanation": "Separate rows can repeat the same business fact.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "cx-q-unique-index-15",
+          "test_id": "cx-test-unique-index-2",
+          "question_text": "Why is a prefix unique index potentially stronger than intended?",
+          "options": [
+            "It compares every suffix instead",
+            "It never rejects any value",
+            "Distinct full strings can share one indexed prefix",
+            "It always creates two indexes"
+          ],
+          "correct_index": 2,
+          "explanation": "The compared key is the prefix, not the full string.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "cx-q-unique-index-16",
+          "test_id": "cx-test-unique-index-2",
+          "question_text": "What can a clean duplicate preflight prove?",
+          "options": [
+            "All future writes are safe",
+            "Concurrency is verified",
+            "Every application caller is authorized",
+            "No current conflicts in the scanned population"
+          ],
+          "correct_index": 3,
+          "explanation": "A snapshot observation is not installed enforcement.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "cx-q-unique-index-17",
+          "test_id": "cx-test-unique-index-2",
+          "question_text": "Why can code A be allowed in two different events?",
+          "options": [
+            "The approved key may be event_id plus code",
+            "Composite uniqueness forbids all code reuse",
+            "An index ignores event identity",
+            "Only NULL event IDs can differ"
+          ],
+          "correct_index": 0,
+          "explanation": "The owner scope is part of the tuple.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "cx-q-unique-index-18",
+          "test_id": "cx-test-unique-index-2",
+          "question_text": "Does every duplicate-key error prove an idempotent retry succeeded?",
+          "options": [
+            "Yes, regardless of payload",
+            "No",
+            "Only if a SELECT exists",
+            "Only for numeric codes"
+          ],
+          "correct_index": 1,
+          "explanation": "The existing authorized request and payload must be verified.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "cx-q-unique-index-19",
+          "test_id": "cx-test-unique-index-2",
+          "question_text": "What should precede adding a unique rule to existing data?",
+          "options": [
+            "Deleting all repeated labels",
+            "Disabling constraints",
+            "Domain analysis and conflict preflight",
+            "Choosing the shortest name"
+          ],
+          "correct_index": 2,
+          "explanation": "The rule must fit permitted facts and current state.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "cx-q-unique-index-20",
+          "test_id": "cx-test-unique-index-2",
+          "question_text": "What eventual native test is essential?",
+          "options": [
+            "A SELECT returns a heading",
+            "A typecheck passes",
+            "A diagram renders",
+            "A forbidden duplicate write is rejected"
+          ],
+          "correct_index": 3,
+          "explanation": "Read-only diagnostics cannot establish write-time enforcement.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cx-unique-scalar-conflicts",
+      "slug": "unique-scalar-conflicts",
+      "title": "Find repeated complete scalar codes",
+      "difficulty": "Easy",
+      "task": "Return code,copies for nonnull code values appearing more than once, ordered by code. This diagnoses a proposed GLOBAL code rule.",
+      "schema_sql": "CREATE TABLE registration_import(row_id INT PRIMARY KEY,event_id INT NULL,code INT NULL);",
+      "seed_sql": "INSERT INTO registration_import VALUES (1,10,7),(2,10,7),(3,20,7),(4,20,NULL),(5,20,NULL),(6,NULL,8);",
+      "solution_sql": "SELECT code,COUNT(*) AS copies FROM registration_import WHERE code IS NOT NULL GROUP BY code HAVING COUNT(*)>1 ORDER BY code;",
+      "expected": "code\tcopies\n7\t3",
+      "ordering": "As specified by the task and explicit ORDER BY.",
+      "constraints": [
+        "Return code,copies for nonnull code values appearing more than once, ordered by code. This diagnoses a proposed GLOBAL code rule."
+      ],
+      "edge_cases": [
+        "Repeated codes in different events still conflict under a global rule.",
+        "NULL codes are excluded from the complete-key diagnostic."
+      ],
+      "hints": [
+        "Global code uniqueness ignores event scope; missing codes are excluded from this nonnull diagnostic."
+      ],
+      "explanation": "Global code uniqueness ignores event scope; missing codes are excluded from this nonnull diagnostic.",
+      "validation_cases": [
+        {
+          "name": "missing codes do not become complete conflicts",
+          "seed_sql": "INSERT INTO registration_import VALUES (1,1,NULL),(2,2,NULL),(3,1,5);",
+          "expected": ""
+        },
+        {
+          "name": "empty input",
+          "seed_sql": "",
+          "expected": ""
+        }
+      ]
+    },
+    {
+      "id": "cx-unique-composite-conflicts",
+      "slug": "unique-composite-conflicts",
+      "title": "Find repeated complete event-code keys",
+      "difficulty": "Medium",
+      "task": "Return event_id,code,copies for repeated pairs with BOTH components nonnull, ordered by event_id,code.",
+      "schema_sql": "CREATE TABLE registration_import(row_id INT PRIMARY KEY,event_id INT NULL,code INT NULL);",
+      "seed_sql": "INSERT INTO registration_import VALUES (1,10,7),(2,10,7),(3,20,7),(4,20,NULL),(5,20,NULL),(6,NULL,8);",
+      "solution_sql": "SELECT event_id,code,COUNT(*) AS copies FROM registration_import WHERE event_id IS NOT NULL AND code IS NOT NULL GROUP BY event_id,code HAVING COUNT(*)>1 ORDER BY event_id,code;",
+      "expected": "event_id\tcode\tcopies\n10\t7\t2",
+      "ordering": "As specified by the task and explicit ORDER BY.",
+      "constraints": [
+        "Return event_id,code,copies for repeated pairs with BOTH components nonnull, ordered by event_id,code."
+      ],
+      "edge_cases": [
+        "Owner scope matters.",
+        "Incomplete pairs are outside this complete-key diagnostic."
+      ],
+      "hints": [
+        "A code reused by a different event is not the same composite key."
+      ],
+      "explanation": "A code reused by a different event is not the same composite key.",
+      "validation_cases": [
+        {
+          "name": "owner reuse and incomplete pairs",
+          "seed_sql": "INSERT INTO registration_import VALUES (1,1,7),(2,2,7),(3,1,NULL),(4,1,NULL),(5,NULL,8),(6,NULL,8);",
+          "expected": ""
+        },
+        {
+          "name": "two complete conflicts",
+          "seed_sql": "INSERT INTO registration_import VALUES (1,1,7),(2,1,7),(3,2,8),(4,2,8),(5,2,8);",
+          "expected": "event_id\tcode\tcopies\n1\t7\t2\n2\t8\t3"
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-20-unique-index-1",
+      "test_id": "pt-dbms-sql-20-unique-index",
+      "question_text": "What two things does a unique index do at the same time?",
+      "options": [
+        "It compresses the table and encrypts data",
+        "It enforces that indexed values are not duplicated AND functions as a regular index for fast lookups",
+        "It deletes duplicate rows automatically",
+        "It converts the table into a hash table only"
+      ],
+      "correct_index": 1,
+      "explanation": "A unique index both enforces the uniqueness constraint and serves as a normal, fast-lookup index simultaneously.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-20-unique-index-2",
+      "test_id": "pt-dbms-sql-20-unique-index",
+      "question_text": "When you declare a column as PRIMARY KEY, what typically happens behind the scenes in most engines?",
+      "options": [
+        "Nothing extra happens; no index is created",
+        "The engine automatically creates a unique index to enforce and efficiently check the primary key constraint",
+        "The engine converts the table into a view",
+        "The column becomes unindexable"
+      ],
+      "correct_index": 1,
+      "explanation": "PRIMARY KEY (and UNIQUE) constraints are typically implemented via an automatically created unique index.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-20-unique-index-3",
+      "test_id": "pt-dbms-sql-20-unique-index",
+      "question_text": "Why is enforcing uniqueness via a database-level unique index better than only checking it in application code?",
+      "options": [
+        "Application-level checks are always faster",
+        "A unique index atomically prevents race conditions where two simultaneous inserts could otherwise both succeed with duplicate values",
+        "Unique indexes remove the need for a primary key",
+        "Application code cannot check for duplicates at all"
+      ],
+      "correct_index": 1,
+      "explanation": "Database-enforced uniqueness closes the race-condition window that application-only checks are vulnerable to under concurrent writes.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-20-unique-index-4",
+      "test_id": "pt-dbms-sql-20-unique-index",
+      "question_text": "What does UNIQUE (department, id) actually guarantee?",
+      "options": [
+        "Every id value must be globally unique across the whole table regardless of department",
+        "The same id can repeat across different departments, but not more than once within the same department",
+        "department values must all be unique",
+        "Nothing; composite unique constraints are not supported"
+      ],
+      "correct_index": 1,
+      "explanation": "A composite unique constraint applies to the combination of columns together, not to each column independently.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-20-unique-index-5",
+      "test_id": "pt-dbms-sql-20-unique-index",
+      "question_text": "In most engines, how many NULL values are typically allowed in a column with a unique index?",
+      "options": [
+        "Zero; NULL is treated as a duplicate value",
+        "Multiple NULLs are usually allowed, since NULL represents 'unknown' and unknowns aren't considered equal to each other",
+        "Exactly one NULL is allowed",
+        "Unique indexes reject NULL entirely and the column becomes NOT NULL automatically"
+      ],
+      "correct_index": 1,
+      "explanation": "Most engines allow multiple NULLs in a unique index because NULL is not considered equal to another NULL for uniqueness purposes.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-20-unique-index-6",
+      "test_id": "pt-dbms-sql-20-unique-index",
+      "question_text": "What underlying structure does a unique index typically use, similar to a regular index?",
+      "options": [
+        "A B+ Tree",
+        "A flat unsorted array only",
+        "Plain text files",
+        "A view"
+      ],
+      "correct_index": 0,
+      "explanation": "A unique index is typically implemented as a B+ Tree (or similar ordered structure), just like a regular index, with an added uniqueness check.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-20-unique-index-7",
+      "test_id": "pt-dbms-sql-20-unique-index",
+      "question_text": "What happens if you try to declare UNIQUE on a column that already contains duplicate values?",
+      "options": [
+        "The duplicates are silently deleted",
+        "The constraint/index creation fails until the duplicates are resolved",
+        "The database ignores the UNIQUE keyword",
+        "All future inserts on that column are blocked forever"
+      ],
+      "correct_index": 1,
+      "explanation": "A unique index cannot be created over data that already violates the uniqueness rule; existing duplicates must be resolved first.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-20-unique-index-8",
+      "test_id": "pt-dbms-sql-20-unique-index",
+      "question_text": "Does a unique index add any write overhead compared to a non-unique index?",
+      "options": [
+        "No, unique indexes have zero overhead",
+        "Yes, similar overhead to any index, since every insert/update must be checked against the structure for a duplicate before proceeding",
+        "Unique indexes make writes faster than no index at all with no downside",
+        "Unique indexes eliminate the need to update the index on writes"
+      ],
+      "correct_index": 1,
+      "explanation": "Like any index, a unique index must be maintained and checked on every relevant write, contributing to overall write overhead (20.14).",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "worker_3",
+    "independent_review": "passed",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "author review; independent review pending",
+    "canonical_answer_indices_preserved": true,
+    "editorial_record": "Original explanations and assessments; seeded identities and canonical answer positions retained. External originality clearance unavailable.",
+    "independent_reviewer": "/root",
+    "independent_review_scope": "Full notes,20 MCQs/options/reasoning,both preflight exercises with six predicted outputs and scoped-key diagram reviewed. Composite owner scope, nullable MySQL uniqueness, collation, prefix restriction, concurrency and idempotency distinguished correctly. Replaced three repeated definitions with applied key-reuse, requiredness and concurrent-conflict questions. Read-only duplicate detection explicitly does not prove native write enforcement. Exact MySQL/provider, browser and release validation remain separate."
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-20-unique-index",
+    "original_note_sha256": "d22cfdf95e1c083986973bd14ffbc4666f670e0fea281970fb47f856856e9f69",
+    "status": "drafted; not included in prepared paired migrations"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Composite scope differs from global code uniqueness",
+      "description": "The complete owner-code tuple defines the approved conflict rule; nullability is a separate policy.",
+      "columns": [
+        "Existing key",
+        "Proposed key",
+        "Complete-pair conflict?"
+      ],
+      "rows": [
+        [
+          "Event 10, code 7",
+          "Event 10, code 7",
+          "Yes"
+        ],
+        [
+          "Event 10, code 7",
+          "Event 20, code 7",
+          "No"
+        ],
+        [
+          "Event 20, NULL",
+          "Event 20, NULL",
+          "Not a nonnull complete-key conflict in MySQL"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "coordinator independent manual review passed",
+    "server_rendering": "passed",
+    "browser_rendering": "unverified",
+    "independent_review": "passed",
+    "server_rendering_evidence": "2026-10-29 full Vitest:1310 passed/12 skipped; actual LessonBlock/TopicDiagrams render over230 packages. Browser visual QA remains unverified."
+  },
+  "authoring_status": "drafted; verification pending",
+  "sql_verification": {
+    "scope": "not executed; exact MySQL/provider execution pending",
+    "all_passed": false,
+    "cases": []
+  }
+}

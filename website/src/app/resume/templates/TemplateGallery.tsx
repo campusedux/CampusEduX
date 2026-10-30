@@ -50,19 +50,26 @@ export function TemplateGallery({
   }, [templates, filter]);
 
   async function handleUse(templateId: string) {
+    if (pendingId) return;
     setError(null);
     setPendingId(templateId);
-    const result = await createResumeFromTemplateAction(templateId);
-    if (result.needsAuth) {
-      router.push(`/login?next=${encodeURIComponent("/resume/templates")}`);
-      return;
-    }
-    if (result.error || !result.resumeId) {
-      setError(result.error ?? "Something went wrong. Please try again.");
+    try {
+      const result = await createResumeFromTemplateAction(templateId);
+      if (result.needsAuth) {
+        router.push(`/login?next=${encodeURIComponent("/resume/templates")}`);
+        return;
+      }
+      if (result.error || !result.resumeId) {
+        setError(result.error ?? "Something went wrong. Please try again.");
+        setPendingId(null);
+        return;
+      }
+      router.push(`/account/resume/${result.resumeId}/edit`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
+    } finally {
       setPendingId(null);
-      return;
     }
-    router.push(`/account/resume/${result.resumeId}/edit`);
   }
 
   return (

@@ -1,0 +1,648 @@
+{
+  "source_ref": "chapter-8-sql-fundamentals/data-types",
+  "slug": "data-types",
+  "title": "Data Types",
+  "description": "Choose MySQL types from the meaning and range of data, distinguishing exact amounts, approximate measurements, text identifiers, dates, boolean constraints, NULL, and conversion behavior.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Choosing a representation from the fact\n\nA data type defines the kind of value a column or expression represents and constrains how the database stores, compares, and operates on it. Choosing a type is a modeling decision with correctness and operational consequences. A number representing a quantity needs arithmetic; a code containing digits may need its leading zeros preserved. Their similar appearance does not make them the same kind of fact.\n\nThis topic uses MySQL 8.4. Type names and behavior differ across products, and relevant modes affect how invalid or out-of-range input is handled. Treat the declared type, constraints, and application meaning as a combined contract. A type name alone cannot supply a currency, timezone policy, valid status list, or permission to change a record.\n\nConsider a campus supply catalog with product_id, product_code, product_name, unit_price, stock_qty, introduced_on, and active. The identifier distinguishes products, the code is a text label, the price is an exact decimal amount in the stated catalog currency, and stock is a count. Each attribute needs a representation appropriate to its actual domain.\n\n## Using integers for counts and identities\n\nAn integer type is appropriate for whole-number counts when fractional values are not meaningful. The selected range must cover valid values and expected growth. A count of available notebooks might be nonnegative, while a signed change in stock can be negative. The same integer family does not establish the same validity rules for both attributes.\n\nA key stored as an integer also needs a stable identity contract. ProductID is not automatically a quantity simply because its representation supports addition. Adding two product identifiers has no useful catalog meaning. Likewise, a type that accepts a range of integers does not make every integer a valid reference to an existing product; a relationship needs its own rule.\n\nUse explicit constraints for narrower domains. If active must be zero or one, a small integer representation with a check can express that requirement. An integer storage type by itself can allow other values. Do not rely on an application's dropdown as the only place that rejects an invalid state.\n\n## Using exact decimals for recorded amounts\n\nDECIMAL and NUMERIC in MySQL represent exact decimal values within declared precision and scale. Precision describes the total number of decimal digits, while scale describes digits after the decimal point. DECIMAL eight comma two, for example, allows two fractional digits and leaves the remaining declared digits for the integral portion.\n\n```sql\nCREATE TABLE catalog_example (\n  product_id INT PRIMARY KEY,\n  product_code VARCHAR(12) NOT NULL,\n  unit_price DECIMAL(8,2) NOT NULL CHECK (unit_price >= 0),\n  stock_qty INT NOT NULL CHECK (stock_qty >= 0)\n);\n```\n\nFor a unit price of 12.50 and quantity three, the exact extended amount is 37.50. The database expression still needs an appropriate output type and rounding policy if later calculations produce more fractional digits than the result permits. Exact storage does not mean every division has an infinitely precise terminating representation.\n\nAn amount also needs a unit. If all catalog prices use one stated currency, say so. If products can use different currencies, store and preserve that distinction rather than summing unlike amounts. Choosing DECIMAL prevents a class of representation problems; it does not define the business measurement or authorize a financial operation.\n\n## Reserving approximate numbers for suitable measurements\n\nFLOAT and DOUBLE represent approximate numeric values. They can be appropriate for measurements where a documented tolerance fits the task, such as sensor readings or scientific estimates. Their range and approximation behavior are different design considerations from a ledger-like requirement for exact recorded decimal amounts.\n\nMany ordinary decimal fractions do not have exact finite binary floating-point representations. Arithmetic can therefore produce small differences from a decimal calculation. Do not compare an approximate measurement to an expected value without considering a suitable tolerance. Nor should a fixed number of displayed decimal places be mistaken for proof that the underlying stored value is exact.\n\nAvoid blanket performance claims such as every approximate type is always faster than every decimal type. Actual costs depend on the engine, expression, hardware, and workload. Choose correctness requirements first, then measure relevant performance. A fast result with the wrong amount is not an acceptable representation trade-off.\n\n## Keeping codes and names as text\n\nA product code such as 0017 is often text, because leading zeros are part of its label rather than optional numeric formatting. Storing it as integer seventeen loses that spelling unless an external rule reconstructs it. Telephone numbers, postal labels, and other digit-heavy identifiers likewise need interpretation before being assigned an arithmetic type.\n\nCHAR and VARCHAR are character types with different fixed-length and variable-length behavior. MySQL CHAR values involve padding and retrieval rules, while VARCHAR retains a variable-length value within its declared limit. Do not simplify this into a universal claim that every CHAR always occupies exactly its declared character count in bytes. Character sets and implementation details matter.\n\nTrailing spaces and comparisons require care. Their significance depends on the type, retrieval behavior, and collation. A catalog code that must distinguish exact byte sequences needs a deliberately chosen comparison contract rather than a guess based on visual spacing. Test the actual target behavior before relying on padded text as a portable identity mechanism.\n\n## Choosing lengths and character handling\n\nA VARCHAR limit describes permitted character length within the type's rules, not a guarantee that every future input will fit. A new thirty-character product name does not cause a VARCHAR twenty column to resize itself. Depending on input context and strict-mode behavior, an oversized value can be rejected or handled with truncation and warnings. Review the actual outcome instead of assuming silent success.\n\nFor character data, character count and byte count can differ. CHAR_LENGTH reports characters in MySQL, while LENGTH reports bytes. A Unicode name can use more bytes than characters, so application validation must match the intended limit rather than treating a transport byte count as a universal text-length rule.\n\nChoose a character set and collation compatible with the application's data and comparison needs. A name being valid text does not imply that a case-insensitive or accent-insensitive comparison is always desired. Those semantics belong to the contract, especially when codes or user-visible search behavior depend on them.\n\n## Storing calendar and time facts deliberately\n\nA DATE represents a calendar date without a time-of-day component. MySQL DATETIME and TIMESTAMP have their own supported behavior, ranges, and time interpretation. Select among them based on whether the fact is a calendar event, a local wall-clock value, or a timestamp requiring a defined time policy. A date-looking string does not settle that choice.\n\nText can contain a date representation, but mixed formats do not necessarily sort chronologically. Date functions may convert suitable strings, so it is too broad to claim that no date arithmetic is ever possible on text. The concern is that conversions add assumptions and failure cases that a suitable typed contract makes more explicit.\n\nUse unambiguous examples and validate required calendar values in the intended engine and mode. A column's type cannot replace application-specific rules such as a supply introduction date not preceding an approved launch. Define those rules independently and enforce them at the appropriate trusted boundary.\n\n## Preserving absence and conversion meaning\n\nNullability is separate from the basic type family. An optional stock estimate can be NULL when it is unrecorded; zero means a recorded count of none. Replacing the missing estimate with zero changes its meaning. A query can expose a missing-value label or keep NULL according to the task, but should not invent a measurement merely to simplify output.\n\nConversions also deserve explicit review. Comparing numeric columns with numeric-looking text can invoke implicit conversion. Casting an invalid label into a number does not create a meaningful quantity. Use typed values and the driver's supported binding mechanism, and test boundary or invalid input where conversion is part of the contract.\n\nA type change can affect callers, constraints, storage, and stored values. Before changing an existing column, inspect its uses and plan the approved migration and rollback. For new queries, choose output representations that preserve identity, exactness, units, and missingness. Data types are useful because they make those requirements concrete, not because a familiar type name automatically proves the whole data model correct.\n",
+  "references": [
+    {
+      "title": "MySQL exact fixed-point types",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/fixed-point-types.html"
+    },
+    {
+      "title": "MySQL CHAR and VARCHAR",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/char.html"
+    },
+    {
+      "title": "MySQL temporal types",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/datetime.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-8-data-types",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-8-data-types-1",
+          "test_id": "pt-dbms-sql-8-data-types",
+          "question_text": "Which data type family is correct for storing monetary amounts that must be exact?",
+          "options": [
+            "FLOAT",
+            "DOUBLE",
+            "DECIMAL/NUMERIC",
+            "BOOLEAN"
+          ],
+          "correct_index": 2,
+          "explanation": "DECIMAL/NUMERIC provide exact fixed-point arithmetic, avoiding the rounding errors inherent to binary floating point.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-8-data-types-2",
+          "test_id": "pt-dbms-sql-8-data-types",
+          "question_text": "Which description is accurate for MySQL CHAR and VARCHAR?",
+          "options": [
+            "They are exactly identical in every way",
+            "CHAR has fixed-length/padding semantics; VARCHAR stores variable-length values within its declared limit",
+            "VARCHAR always uses more storage than CHAR for any value",
+            "CHAR can only store numbers"
+          ],
+          "correct_index": 1,
+          "explanation": "Byte storage and trailing-space behavior require the actual type, character set, and collation context.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-8-data-types-3",
+          "test_id": "pt-dbms-sql-8-data-types",
+          "question_text": "Why is FLOAT/DOUBLE considered risky for storing currency?",
+          "options": [
+            "They cannot store numbers larger than 100",
+            "Binary floating-point representation causes rounding errors (e.g. 0.1 + 0.2 not being exactly 0.3), which is unacceptable for money",
+            "They are slower than DECIMAL in every single database",
+            "FLOAT columns cannot be compared with WHERE clauses"
+          ],
+          "correct_index": 1,
+          "explanation": "Floating-point's binary approximation of decimal fractions causes small but real rounding errors that compound in financial calculations.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-8-data-types-4",
+          "test_id": "pt-dbms-sql-8-data-types",
+          "question_text": "What risk arises when calendar dates are stored as inconsistently formatted VARCHAR values?",
+          "options": [
+            "Nothing is lost; strings and DATE behave identically in every respect",
+            "Text ordering may not be chronological, and date operations require additional conversion assumptions",
+            "The ability to display the date at all",
+            "The column becomes impossible to index"
+          ],
+          "correct_index": 1,
+          "explanation": "Date functions can convert suitable text. The problem is an unclear typed contract and mixed-format conversion risk, not a universal inability to calculate dates.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-8-data-types-5",
+          "test_id": "pt-dbms-sql-8-data-types",
+          "question_text": "A column is defined as VARCHAR(20) but a new business requirement occasionally needs 30-character values. What is the likely consequence?",
+          "options": [
+            "The column automatically resizes itself with no configuration needed",
+            "Silent truncation or an insert failure, depending on the engine's strict-mode configuration",
+            "Nothing changes; VARCHAR has no length limit in practice",
+            "The values are automatically converted to TEXT"
+          ],
+          "correct_index": 1,
+          "explanation": "An undersized VARCHAR either truncates or rejects an oversized value, depending on how strictly the engine enforces the declared length.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-8-data-types-6",
+          "test_id": "pt-dbms-sql-8-data-types",
+          "question_text": "What should be checked when trailing spaces matter to a MySQL text comparison?",
+          "options": [
+            "They can never be compared under any circumstances",
+            "The actual type, retrieval behavior, and collation rules rather than assuming padding is irrelevant",
+            "They are always guaranteed to be unequal",
+            "CHAR values cannot contain the letters A-Z"
+          ],
+          "correct_index": 1,
+          "explanation": "Space behavior is context-dependent; a visual display alone does not establish exact comparison semantics.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-8-data-types-7",
+          "test_id": "pt-dbms-sql-8-data-types",
+          "question_text": "A MySQL active flag must accept only 0 and 1. What kind of representation and constraint can express that?",
+          "options": [
+            "VARCHAR(1000)",
+            "A suitable integer type with an explicit 0/1 validity rule",
+            "FLOAT",
+            "There is no way to represent a boolean without a native BOOLEAN type"
+          ],
+          "correct_index": 1,
+          "explanation": "An integer representation alone can accept values outside the intended two-state domain; a constraint supplies the narrower rule.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-8-data-types-8",
+          "test_id": "pt-dbms-sql-8-data-types",
+          "question_text": "Why is choosing a data type described as 'a design decision, not a formality'?",
+          "options": [
+            "Because data types only affect how a column looks in documentation",
+            "Because the wrong choice can cause real correctness bugs (e.g. rounding errors) and performance/storage consequences, not just cosmetic differences",
+            "Because SQL ignores declared data types at runtime",
+            "Because every data type behaves identically once data is inserted"
+          ],
+          "correct_index": 1,
+          "explanation": "Type choice has concrete correctness (exactness, comparison behavior) and performance/storage implications — it's a real engineering decision.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-8-data-types-new-9",
+          "test_id": "pt-dbms-sql-8-data-types",
+          "question_text": "What does DECIMAL(8,2) specify?",
+          "options": [
+            "Eight fractional digits and two total digits",
+            "Eight total decimal digits, with two fractional digits",
+            "An eight-byte string with two letters",
+            "A mandatory currency code"
+          ],
+          "correct_index": 1,
+          "explanation": "Precision and scale define the exact decimal representation, not its business unit.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-8-data-types-new-10",
+          "test_id": "pt-dbms-sql-8-data-types",
+          "question_text": "Why might product_code 0017 belong in a text column?",
+          "options": [
+            "Every digit string must be a floating-point number",
+            "Text columns automatically prove uniqueness",
+            "The leading zeros are part of the identifier label",
+            "An integer preserves every original spelling"
+          ],
+          "correct_index": 2,
+          "explanation": "An arithmetic representation can lose a meaningful label format.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-8-data-types-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-8-data-types-application-new-1",
+          "test_id": "pt-dbms-sql-8-data-types-application",
+          "question_text": "An exact unit price is 12.50 and quantity is three. What is the exact extended amount?",
+          "options": [
+            "37.05",
+            "12.53",
+            "37.50",
+            "15.50"
+          ],
+          "correct_index": 2,
+          "explanation": "Multiplying the exact price by the whole-number quantity gives 37.50.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-8-data-types-application-new-2",
+          "test_id": "pt-dbms-sql-8-data-types-application",
+          "question_text": "A stock estimate is NULL. Does converting it to zero preserve the original meaning automatically?",
+          "options": [
+            "Yes; NULL is the integer zero",
+            "Only if the name is unique",
+            "Only if the query has no joins",
+            "No; unrecorded and recorded none differ"
+          ],
+          "correct_index": 3,
+          "explanation": "Missing measurements require a stated policy rather than an invented value.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-8-data-types-application-new-3",
+          "test_id": "pt-dbms-sql-8-data-types-application",
+          "question_text": "A flag uses an integer type but has no validity constraint. Is only 0 or 1 guaranteed by that choice alone?",
+          "options": [
+            "No; the type can allow other integers",
+            "Yes; every integer is boolean",
+            "Only if the column has a short name",
+            "Only if SELECT is uppercase"
+          ],
+          "correct_index": 0,
+          "explanation": "The narrower domain needs its own rule.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-8-data-types-application-new-4",
+          "test_id": "pt-dbms-sql-8-data-types-application",
+          "question_text": "A thirty-character value reaches a VARCHAR(20) column. What should be expected and tested?",
+          "options": [
+            "Automatic resizing with no change",
+            "Rejection or truncation/warning behavior under the actual context and mode",
+            "Guaranteed preservation of all thirty characters",
+            "Automatic conversion of the column to a date"
+          ],
+          "correct_index": 1,
+          "explanation": "The declared limit remains part of the contract.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-8-data-types-application-new-5",
+          "test_id": "pt-dbms-sql-8-data-types-application",
+          "question_text": "A Unicode string has more bytes than characters. Which MySQL function measures characters?",
+          "options": [
+            "LENGTH always measures characters",
+            "COUNT(*) on one row",
+            "CHAR_LENGTH",
+            "CURRENT_TIMESTAMP"
+          ],
+          "correct_index": 2,
+          "explanation": "Character and byte lengths are different measures for multibyte text.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-8-data-types-application-new-6",
+          "test_id": "pt-dbms-sql-8-data-types-application",
+          "question_text": "A decimal price column contains INR and USD amounts with no currency field. What does DECIMAL alone fail to establish?",
+          "options": [
+            "Whether decimal digits exist",
+            "Whether arithmetic operators exist",
+            "Whether a query can return numbers",
+            "Which units can be combined meaningfully"
+          ],
+          "correct_index": 3,
+          "explanation": "Exact representation does not supply a currency contract.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-8-data-types-application-new-7",
+          "test_id": "pt-dbms-sql-8-data-types-application",
+          "question_text": "A floating-point result prints 0.30. Does the display prove exact decimal storage?",
+          "options": [
+            "No; formatting can hide approximation",
+            "Yes; every two-place display is DECIMAL",
+            "Only if an index exists",
+            "Only if the row ID is zero"
+          ],
+          "correct_index": 0,
+          "explanation": "Output formatting is not a complete account of stored numeric representation.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-8-data-types-application-new-8",
+          "test_id": "pt-dbms-sql-8-data-types-application",
+          "question_text": "A calendar date is stored as mixed-format text. What should a query avoid assuming?",
+          "options": [
+            "That text can contain digits",
+            "Lexicographic order is always chronological order",
+            "That a date has a calendar meaning",
+            "That conversion may need validation"
+          ],
+          "correct_index": 1,
+          "explanation": "Mixed text formats can sort differently from the represented dates.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-8-data-types-application-new-9",
+          "test_id": "pt-dbms-sql-8-data-types-application",
+          "question_text": "A column type is widened in a shared schema. What must be reviewed beyond the new declaration?",
+          "options": [
+            "Only the comment font",
+            "Only the SQL filename length",
+            "Stored values, direct callers, constraints, and migration/rollback impact",
+            "Only whether the keyword looks familiar"
+          ],
+          "correct_index": 2,
+          "explanation": "Type changes are shared data-contract changes.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-8-data-types-application-new-10",
+          "test_id": "pt-dbms-sql-8-data-types-application",
+          "question_text": "An identifier is stored as an integer. Is adding two identifiers a meaningful business operation merely because the type permits it?",
+          "options": [
+            "Yes; every integer is a quantity",
+            "Only if both identifiers are even",
+            "Only if a pool is enabled",
+            "No; the modeled fact determines meaningful operations"
+          ],
+          "correct_index": 3,
+          "explanation": "Representation capabilities do not define the domain meaning.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "dsa-dbms-sql-types-exact-value",
+      "slug": "types-exact-value",
+      "title": "Preserve text codes and exact extended values",
+      "difficulty": "Easy",
+      "task": "Return product_code and stock_value for every supply, ordered by product_id. stock_value is unit_price multiplied by stock_qty and cast to DECIMAL(12,2). Preserve leading zeros in product_code and NULL for unknown stock. All prices use one stated catalog currency.",
+      "schema_sql": "CREATE TABLE supplies (product_id INT PRIMARY KEY, product_code VARCHAR(12) NOT NULL, product_name VARCHAR(40) NOT NULL, unit_price DECIMAL(8,2) NOT NULL CHECK (unit_price >= 0), stock_qty INT NULL CHECK (stock_qty >= 0)) DEFAULT CHARACTER SET utf8mb4;",
+      "seed_sql": "INSERT INTO supplies VALUES (2,'0018','Pad',0.10,3),(1,'0017','Book',12.50,3),(3,'0100','Box',5.00,NULL),(4,'0009','Pen',2.00,0);",
+      "expected": "product_code\tstock_value\n0017\t37.50\n0018\t0.30\n0100\tNULL\n0009\t0.00",
+      "ordering": "product_id ascending",
+      "constraints": [
+        "Codes are text labels",
+        "Prices are exact nonnegative decimals",
+        "Stock is a nonnegative integer or NULL",
+        "Fixtures fit the requested output precision"
+      ],
+      "edge_cases": [
+        "Leading zeros stay intact",
+        "Unknown stock produces unknown value",
+        "Known zero stock produces zero",
+        "Repeated product names are allowed"
+      ],
+      "hints": [
+        "Do not cast the code to an integer",
+        "Multiply the exact decimal price and cast only the result"
+      ],
+      "solution_sql": "SELECT product_code, CAST(unit_price * stock_qty AS DECIMAL(12,2)) AS stock_value FROM supplies ORDER BY product_id;",
+      "explanation": "The text code is preserved unchanged. Exact decimal arithmetic and the requested output cast retain two-place amounts without treating missing stock as zero.",
+      "validation_cases": [
+        {
+          "seed_sql": "",
+          "expected": ""
+        },
+        {
+          "seed_sql": "INSERT INTO supplies VALUES (1,'0001','Pin',0.25,4);",
+          "expected": "product_code\tstock_value\n0001\t1.00"
+        }
+      ]
+    },
+    {
+      "id": "dsa-dbms-sql-types-text-length-and-value",
+      "slug": "types-text-length-and-value",
+      "title": "Report character length and typed inventory status",
+      "difficulty": "Medium",
+      "task": "Return product_id, product_code, name_characters, stock_state, stock_value. name_characters counts characters rather than bytes in product_name. Use 'unknown' for NULL stock, 'empty' for zero stock, and 'available' for positive stock. stock_value is the price times stock cast to DECIMAL(12,2), retaining NULL. Order by product_id. Use the stored text code unchanged.",
+      "schema_sql": "CREATE TABLE supplies (product_id INT PRIMARY KEY, product_code VARCHAR(12) NOT NULL, product_name VARCHAR(40) NOT NULL, unit_price DECIMAL(8,2) NOT NULL CHECK (unit_price >= 0), stock_qty INT NULL CHECK (stock_qty >= 0)) DEFAULT CHARACTER SET utf8mb4;",
+      "seed_sql": "INSERT INTO supplies VALUES (1,'0017','Café',12.50,3),(2,'0002','工具',2.00,0),(3,'0003','Box',5.00,NULL);",
+      "expected": "product_id\tproduct_code\tname_characters\tstock_state\tstock_value\n1\t0017\t4\tavailable\t37.50\n2\t0002\t2\tempty\t0.00\n3\t0003\t3\tunknown\tNULL",
+      "ordering": "product_id ascending",
+      "constraints": [
+        "Use the utf8mb4 connection character set for these fixtures",
+        "Each code remains a string label",
+        "Stock is nonnegative or missing",
+        "All prices share one catalog currency"
+      ],
+      "edge_cases": [
+        "Accented and non-Latin names have character counts distinct from byte counts",
+        "NULL stock is not empty stock",
+        "Zero stock remains a recorded zero"
+      ],
+      "hints": [
+        "Use CHAR_LENGTH for characters",
+        "Test IS NULL before comparing stock to zero",
+        "Preserve exact price arithmetic"
+      ],
+      "solution_sql": "SELECT product_id, product_code, CHAR_LENGTH(product_name) AS name_characters, CASE WHEN stock_qty IS NULL THEN 'unknown' WHEN stock_qty = 0 THEN 'empty' ELSE 'available' END AS stock_state, CAST(unit_price * stock_qty AS DECIMAL(12,2)) AS stock_value FROM supplies ORDER BY product_id;",
+      "explanation": "The query keeps the code as text, counts Unicode characters, distinguishes unknown from known-zero stock, and computes values only when the quantity exists.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO supplies VALUES (2,'0002','工具',0.10,3),(1,'0001','A',1.00,NULL);",
+          "expected": "product_id\tproduct_code\tname_characters\tstock_state\tstock_value\n1\t0001\t1\tunknown\tNULL\n2\t0002\t2\tavailable\t0.30"
+        },
+        {
+          "seed_sql": "",
+          "expected": ""
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-8-data-types-1",
+      "test_id": "pt-dbms-sql-8-data-types",
+      "question_text": "Which data type family is correct for storing monetary amounts that must be exact?",
+      "options": [
+        "FLOAT",
+        "DOUBLE",
+        "DECIMAL/NUMERIC",
+        "BOOLEAN"
+      ],
+      "correct_index": 2,
+      "explanation": "DECIMAL/NUMERIC provide exact fixed-point arithmetic, avoiding the rounding errors inherent to binary floating point.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-8-data-types-2",
+      "test_id": "pt-dbms-sql-8-data-types",
+      "question_text": "What is the key difference between CHAR(n) and VARCHAR(n)?",
+      "options": [
+        "They are exactly identical in every way",
+        "CHAR is fixed-length and pads shorter values with trailing spaces; VARCHAR is variable-length up to n",
+        "VARCHAR always uses more storage than CHAR for any value",
+        "CHAR can only store numbers"
+      ],
+      "correct_index": 1,
+      "explanation": "CHAR(n) always occupies n characters, space-padding shorter values; VARCHAR(n) stores only what's needed, up to n.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-8-data-types-3",
+      "test_id": "pt-dbms-sql-8-data-types",
+      "question_text": "Why is FLOAT/DOUBLE considered risky for storing currency?",
+      "options": [
+        "They cannot store numbers larger than 100",
+        "Binary floating-point representation causes rounding errors (e.g. 0.1 + 0.2 not being exactly 0.3), which is unacceptable for money",
+        "They are slower than DECIMAL in every single database",
+        "FLOAT columns cannot be compared with WHERE clauses"
+      ],
+      "correct_index": 1,
+      "explanation": "Floating-point's binary approximation of decimal fractions causes small but real rounding errors that compound in financial calculations.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-8-data-types-4",
+      "test_id": "pt-dbms-sql-8-data-types",
+      "question_text": "What is lost by storing a date as a plain VARCHAR string instead of a DATE type?",
+      "options": [
+        "Nothing is lost; strings and DATE behave identically in every respect",
+        "Correct chronological sorting (if formats/lengths vary) and the ability to use date-arithmetic functions",
+        "The ability to display the date at all",
+        "The column becomes impossible to index"
+      ],
+      "correct_index": 1,
+      "explanation": "String sorting is lexicographic, not chronological, once formats vary, and string columns don't support date-arithmetic functions.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-8-data-types-5",
+      "test_id": "pt-dbms-sql-8-data-types",
+      "question_text": "A column is defined as VARCHAR(20) but a new business requirement occasionally needs 30-character values. What is the likely consequence?",
+      "options": [
+        "The column automatically resizes itself with no configuration needed",
+        "Silent truncation or an insert failure, depending on the engine's strict-mode configuration",
+        "Nothing changes; VARCHAR has no length limit in practice",
+        "The values are automatically converted to TEXT"
+      ],
+      "correct_index": 1,
+      "explanation": "An undersized VARCHAR either truncates or rejects an oversized value, depending on how strictly the engine enforces the declared length.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-8-data-types-6",
+      "test_id": "pt-dbms-sql-8-data-types",
+      "question_text": "Comparing a CHAR(10) value 'Asha' (space-padded to 10 chars) against a VARCHAR value 'Asha' (no padding) — what should you expect?",
+      "options": [
+        "They can never be compared under any circumstances",
+        "Most engines handle trailing-space comparison for CHAR sensibly, but the padding behavior is a real subtlety worth knowing about, not something to assume away",
+        "They are always guaranteed to be unequal",
+        "CHAR values cannot contain the letters A-Z"
+      ],
+      "correct_index": 1,
+      "explanation": "CHAR's automatic space-padding is a genuine source of subtle bugs and worth understanding explicitly rather than assuming it never matters.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-8-data-types-7",
+      "test_id": "pt-dbms-sql-8-data-types",
+      "question_text": "Which type is most appropriate for a boolean 'is_active' flag on a database that has no native BOOLEAN type (e.g. classic SQL Server style)?",
+      "options": [
+        "VARCHAR(1000)",
+        "A small integer/bit type (e.g. TINYINT/BIT) used to represent 0/1",
+        "FLOAT",
+        "There is no way to represent a boolean without a native BOOLEAN type"
+      ],
+      "correct_index": 1,
+      "explanation": "Engines without a native boolean commonly emulate it with a small integer or BIT type storing 0/1.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-8-data-types-8",
+      "test_id": "pt-dbms-sql-8-data-types",
+      "question_text": "Why is choosing a data type described as 'a design decision, not a formality'?",
+      "options": [
+        "Because data types only affect how a column looks in documentation",
+        "Because the wrong choice can cause real correctness bugs (e.g. rounding errors) and performance/storage consequences, not just cosmetic differences",
+        "Because SQL ignores declared data types at runtime",
+        "Because every data type behaves identically once data is inserted"
+      ],
+      "correct_index": 1,
+      "explanation": "Type choice has concrete correctness (exactness, comparison behavior) and performance/storage implications — it's a real engineering decision.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "coordinator",
+    "independent_review": "unavailable; no agent tools",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Definitions and examples checked against questions; no plagiarism certification.",
+    "existing_question_corrections": [
+      "tq-dbms-sql-8-data-types-2",
+      "tq-dbms-sql-8-data-types-4",
+      "tq-dbms-sql-8-data-types-6",
+      "tq-dbms-sql-8-data-types-7"
+    ],
+    "canonical_answer_indices_preserved": true
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-8-data-types",
+    "original_note_sha256": "23eab77db779c684171f370112451cea8d77fccb7c154ed82047bcc849e03856",
+    "status": "paired migration prepared; not applied"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Supply attributes and the facts their types preserve",
+      "description": "Type choices work with explicit domain rules. Exact decimals do not establish currency, and a numeric-looking code can still be a text identifier.",
+      "columns": [
+        "Attribute",
+        "Representation",
+        "Meaning to preserve"
+      ],
+      "rows": [
+        [
+          "product_id",
+          "Integer key",
+          "Stable identity, not an amount"
+        ],
+        [
+          "product_code",
+          "VARCHAR",
+          "Leading zeros are part of a label"
+        ],
+        [
+          "unit_price",
+          "DECIMAL with stated scale",
+          "Exact amount in the defined currency"
+        ],
+        [
+          "stock_qty",
+          "Integer, optionally NULL",
+          "Whole count; unrecorded differs from zero"
+        ],
+        [
+          "introduced_on",
+          "Appropriate temporal type",
+          "Calendar/time meaning under a defined policy"
+        ],
+        [
+          "active",
+          "Small integer plus 0/1 rule",
+          "Only the intended two-state domain"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "coordinator review",
+    "server_rendering": "passed",
+    "browser_rendering": "unverified",
+    "independent_review": "unavailable; no agent tools",
+    "rendering_check": "2026-10-28: 39 authored-package checks passed through the actual LessonBlock/TopicDiagrams renderer in the full website suite (1111 passed, 12 skipped). Desktop/mobile browser rendering unverified."
+  },
+  "sql_verification": {
+    "engine": "11.8.6-MariaDB-0+deb13u1 from Debian",
+    "scope": "MariaDB compatibility execution; exact MySQL 8.4/provider execution unverified",
+    "fingerprint": "557975d056a576ecace7f8ffb9450ceeca7c0bbb32c18efe03e1bfdf0ba58855",
+    "cases": [
+      {
+        "problem": "types-exact-value",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "types-exact-value",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "types-exact-value",
+        "case": 2,
+        "passed": true
+      },
+      {
+        "problem": "types-text-length-and-value",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "types-text-length-and-value",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "types-text-length-and-value",
+        "case": 2,
+        "passed": true
+      }
+    ],
+    "all_passed": true
+  }
+}

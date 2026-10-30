@@ -1,0 +1,512 @@
+{
+  "source_ref": "chapter-23-concurrency-control/conflict-serializability",
+  "slug": "conflict-serializability",
+  "title": "Conflict Serializability",
+  "description": "Recognize read-write conflicts, transform interleavings and build precedence graphs with worked acyclic and cyclic examples, recovery distinctions and SQL trace caveats.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Ask whether an interleaving preserves conflict order\n\nConflict serializability is a property of a read and write history. A schedule has this property when it is conflict equivalent to some serial execution of the same transactions. Conflict equivalence preserves the relative order of every conflicting pair, while each transaction retains its own operation order. The criterion helps explain when concurrent work has the same dependency structure as transactions running one after another.\n\nUse a classical single version model with explicit logical items. Write r1(A) for transaction one's read of A, w2(B) for transaction two's write of B and c1 for transaction one's commit. A real SQL statement can access many rows and predicates, so its full dependency footprint is richer than one symbol. Define the model before using a small diagram to make claims about an implementation.\n\n## Identify conflicts with three conditions\n\nTwo operations conflict when they belong to different transactions, access the same logical data item and include at least one write. This yields read-write, write-read and write-write conflicts. Two reads of the same item do not conflict because neither changes the value the other observes. Writes to different items do not conflict in this simplified model, even if the application gives their tables similar names.\n\n| Pair from different transactions | Same item? | Conflict? |\n|---|---|---|\n| r1(A), r2(A) | Yes | No |\n| r1(A), w2(A) | Yes | Yes |\n| w1(A), r2(A) | Yes | Yes |\n| w1(A), w2(A) | Yes | Yes |\n| w1(A), w2(B) | No | No |\n\nDo not use the absence of a conflict between two individual operations to reorder a transaction internally. Its program order is part of the schedule definition. Legal swap reasoning exchanges adjacent operations of different transactions when they do not conflict. A distant exchange must be justified as a sequence of such valid adjacent exchanges, not as one arbitrary jump over intervening dependencies.\n\n## Transform a positive example carefully\n\nLet S1 be r1(A), w1(A), r2(A), w2(A), r1(B), w1(B), r2(B), w2(B). Both transactions read and update A before reading and updating B. On A, all cross-transaction conflicts point from T1 to T2. The same direction holds on B. Interleaving is visible because T2 begins its work on A before T1 finishes its work on B.\n\nMove T1's operations on B leftward across T2's operations on A one adjacent step at a time. Every exchanged pair concerns different items and different transactions, so no conflict order changes. The result is r1(A), w1(A), r1(B), w1(B), r2(A), w2(A), r2(B), w2(B), the serial order T1 then T2. S1 is therefore conflict serializable even though it was originally interleaved.\n\nThe transformation is a proof about the listed history, not a recommendation that a running database should physically rearrange completed operations. It explains equivalence after the fact. Runtime protocols aim to prevent inadmissible dependency patterns without repeatedly presenting a human style swap proof for every transaction submitted by an application.\n\n## Use a precedence graph instead of guessing swaps\n\nCreate one graph vertex per transaction. For each conflicting pair, add a directed edge from the transaction whose operation occurred earlier to the transaction whose operation occurred later. Multiple pairs can justify the same edge. Read-read pairs produce no edge, and pairs within a transaction do not produce intertransaction edges. Preserve evidence for why each edge exists so another reader can reproduce the classification.\n\nA schedule is conflict serializable exactly when this graph is acyclic under the stated classical model. Any topological ordering gives a conflict equivalent serial transaction order. There can be several valid orders when some transactions have no dependency between them. A missing edge does not imply that two transactions did no work; it means the listed operations impose no conflicting precedence between those vertices.\n\n## Recognize the smallest contradictory cycle\n\nLet S2 be r1(A), r2(B), w1(B), w2(A). On A, T1 reads before T2 writes, creating T1 to T2. On B, T2 reads before T1 writes, creating T2 to T1. Both orders cannot hold in one serial sequence. The cycle proves that S2 is not conflict serializable, regardless of whether particular initial values happen to make its final numbers look harmless.\n\nThis distinction is useful in inventory planning. One transaction can inspect one warehouse and update another while its competitor inspects the second and updates the first. An apparently plausible final total is weaker evidence than a dependency analysis. The graph identifies the incompatible observation order without needing to invent application arithmetic that happens to expose the problem on every possible fixture.\n\n## Keep commit safety as a separate question\n\nConflict serializability does not by itself establish recoverability, cascadelessness or strictness. A history w1(A), r2(A), c1, c2 has conflict direction T1 to T2 but contains a read of an uncommitted value. Its conflict graph is acyclic. Whether T2's commit depends safely on T1 and whether dirty reads are allowed are additional properties that must be examined using their own definitions.\n\nConversely, a history can prohibit access after another transaction's unresolved write and still contain a read-before-write cycle. Read the separate [strict schedule](/learning/dbms-sql-tutorial/strict-schedule) topic for a concrete example. Keeping these axes separate prevents the mistaken inference that a useful recovery property automatically supplies every serializability guarantee.\n\n## Distinguish conflict equivalence from broader models\n\nConflict serializability is a sufficient and efficiently testable condition for serializability in the classical model, but view equivalence permits some additional histories involving blind writes. Do not reverse the inclusion merely because conflict graphs are easier to draw. The topic [view serializability](/learning/dbms-sql-tutorial/view-serializability) explains which read relationships and final writers a different equivalence test preserves.\n\nReal systems also use multiple row versions, predicate reads and engine specific isolation levels. A graph built only from displayed row updates may omit a dependency caused by a predicate or a version choice. Treat classroom item histories as precise exercises within their assumptions. Do not claim a database isolation level is fully characterized by a four operation example without consulting its actual concurrency contract.\n\n## Connect theory with controlled SQL observations\n\nA SQL lab can place reads and writes on two sessions and record their observed order. For example, each session can read a stock quantity before sending a later absolute assignment. The abstract read-modify-write history makes the resulting dependencies visible. Actual blocking, deadlock errors or snapshot reads depend on the engine and isolation mode; a proposed symbolic history may not be admitted by the chosen implementation.\n\n```sql\nSELECT warehouse_id, quantity FROM warehouse_stock WHERE warehouse_id = 1;\n-- Record this read in the lab trace before another session writes.\nUPDATE warehouse_stock SET quantity = 15 WHERE warehouse_id = 2;\n```\n\nA timestamped application log alone may not establish the exact database order of overlapping operations. Capture the controlled command sequence, session identities, transaction boundaries and outcomes. Failed or aborted attempts require careful treatment rather than being silently dropped from an explanation of what the application observed.\n\n## Solve two graph exercises with explicit answers\n\nBeginner exercise: classify r1(A), r2(A), w2(B), w1(C). There are no cross-transaction conflicts, because the shared A accesses are both reads and the writes touch distinct items. The graph contains two isolated vertices. Either T1 then T2 or T2 then T1 is a valid serial order, while each transaction keeps its own read before its write.\n\nAdvanced exercise: add T3 so the edges are T1 to T2 on A, T2 to T3 on B and T3 to T1 on C. Every pairwise comparison is easy to read, yet the three-edge cycle eliminates all serial orders. Removing an unrelated read cannot fix that cycle. The solution must remove or change an actual dependency through a different admitted execution or concurrency mechanism, then analyze the resulting history again.\n\nWhen checking a longer exercise, keep a compact edge ledger with the item, the earlier operation and the later operation. Duplicate edges need only one graph arrow, but retaining their separate justifications makes omissions easier to detect. Recheck all item accesses after drawing the graph instead of stopping as soon as one plausible order appears.\n\nUse [precedence graphs](/learning/dbms-sql-tutorial/precedence-graph) and [lost updates](/learning/dbms-sql-tutorial/lost-update) to strengthen this skill. A complete answer names each conflict, draws its direction, checks the entire graph and reports serializability independently from recovery, engine execution and application correctness.",
+  "references": [
+    {
+      "title": "Database System Concepts: concurrency-control teaching materials",
+      "url": "https://www.db-book.com/slides-dir/index.html"
+    },
+    {
+      "title": "MySQL 8.4 InnoDB transaction model",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/innodb-transaction-model.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-23-conflict-serializability",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-23-conflict-serializability-1",
+          "test_id": "pt-dbms-sql-23-conflict-serializability",
+          "question_text": "Which pair of operations on the same data item A, from different transactions, does NOT count as a conflict?",
+          "options": [
+            "R(A) and W(A)",
+            "W(A) and W(A)",
+            "R(A) and R(A)",
+            "W(A) and R(A)"
+          ],
+          "correct_index": 2,
+          "explanation": "Two reads never interfere with each other since neither changes data — R-R is the only pairing on the same item that is not a conflict.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-23-conflict-serializability-2",
+          "test_id": "pt-dbms-sql-23-conflict-serializability",
+          "question_text": "What are the three conditions required for two operations to 'conflict'?",
+          "options": [
+            "Same transaction, same data item, same timestamp",
+            "Different transactions, same data item, at least one is a write",
+            "Different transactions, different data items, both are writes",
+            "Same transaction, different data items, at least one is a read"
+          ],
+          "correct_index": 1,
+          "explanation": "Conflict requires operations from two different transactions, touching the same data item, with at least one of the two being a write.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-23-conflict-serializability-3",
+          "test_id": "pt-dbms-sql-23-conflict-serializability",
+          "question_text": "In the worked example, schedule S1 was shown to be conflict-serializable by transforming it into which serial schedule?",
+          "options": [
+            "<T2, T1>",
+            "<T1, T2>",
+            "No serial schedule — S1 is not conflict-serializable",
+            "A schedule involving a third transaction T3"
+          ],
+          "correct_index": 1,
+          "explanation": "Move T1 operations on B across T2 operations on A using valid adjacent intertransaction swaps; this preserves conflict order and yields T1 then T2.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-23-conflict-serializability-4",
+          "test_id": "pt-dbms-sql-23-conflict-serializability",
+          "question_text": "In schedule S2 (T1: R(A), W(B); T2: R(B), W(A) interleaved as R1(A) R2(B) W1(B) W2(A)), why is it NOT conflict-serializable?",
+          "options": [
+            "Because R1(A) and R2(B) conflict",
+            "Because the conflicts force T2 to precede T1 (on B) and simultaneously force T1 to precede T2 (on A) — a contradiction no swap sequence can resolve",
+            "Because it has more than 4 operations",
+            "Because neither transaction ever commits"
+          ],
+          "correct_index": 1,
+          "explanation": "The B-conflict (R2 before W1) demands T2 before T1, while the A-conflict (R1 before W2) demands T1 before T2 — contradictory ordering requirements mean no serial-equivalent order exists.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-23-conflict-serializability-5",
+          "test_id": "pt-dbms-sql-23-conflict-serializability",
+          "question_text": "What operation is legal when checking conflict serializability by swapping?",
+          "options": [
+            "Swapping any two operations anywhere in the schedule, conflicting or not",
+            "Swapping adjacent nonconflicting operations from different transactions while preserving each transaction program order",
+            "Swapping only operations belonging to the same transaction",
+            "Swapping conflicting operations as long as they are on different data items"
+          ],
+          "correct_index": 1,
+          "explanation": "Legal exchanges preserve both conflict order and internal transaction order.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-23-conflict-serializability-6",
+          "test_id": "pt-dbms-sql-23-conflict-serializability",
+          "question_text": "If two transactions access completely disjoint sets of data items, what can be said about any schedule interleaving them?",
+          "options": [
+            "It can never be conflict-serializable",
+            "It is trivially conflict-serializable, since there are no conflicting operations to worry about",
+            "It depends on the isolation level",
+            "It is only serializable if run serially"
+          ],
+          "correct_index": 1,
+          "explanation": "With zero conflicting operation pairs, every interleaving is automatically equivalent to any serial order, making the schedule trivially conflict-serializable.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-23-conflict-serializability-7",
+          "test_id": "pt-dbms-sql-23-conflict-serializability",
+          "question_text": "How can an appropriate classical two-phase locking protocol enforce conflict serializability without a swap proof for each execution?",
+          "options": [
+            "It runs the full swap-checking algorithm on every schedule before executing it",
+            "Its lock acquisition and release rules admit conflict-serializable histories in the stated model",
+            "It disallows all non-serial schedules",
+            "It only allows read-only transactions to run concurrently"
+          ],
+          "correct_index": 1,
+          "explanation": "This is a property of the appropriate protocol and model, not a claim that every real engine isolation level admits only conflict-serializable histories.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-23-conflict-serializability-8",
+          "test_id": "pt-dbms-sql-23-conflict-serializability",
+          "question_text": "Which statement about swap validity is correct?",
+          "options": [
+            "Any two operations that are far apart in the schedule can be swapped directly in one step",
+            "Swaps must be performed one adjacent pair at a time, and every intermediate swap in the sequence must itself involve non-conflicting operations",
+            "Only the first and last operations of a schedule can ever be swapped",
+            "Swapping is unrelated to whether a schedule is conflict-serializable"
+          ],
+          "correct_index": 1,
+          "explanation": "Conflict serializability is checked by a sequence of adjacent swaps, each individually valid (non-conflicting) — you cannot 'jump' an operation past a conflicting one even indirectly.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-23-conflict-serializability-new-9",
+          "test_id": "pt-dbms-sql-23-conflict-serializability",
+          "question_text": "What direction does r1(A) before w2(A) impose?",
+          "options": [
+            "T1 to T2",
+            "T2 to T1",
+            "No direction because reads never conflict",
+            "T1 to itself"
+          ],
+          "correct_index": 0,
+          "explanation": "A read-write pair on one item orders the distinct transactions.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-23-conflict-serializability-new-10",
+          "test_id": "pt-dbms-sql-23-conflict-serializability",
+          "question_text": "Why is S1 conflict serializable?",
+          "options": [
+            "It has no writes",
+            "All its conflicts agree with T1 before T2",
+            "Its operations were originally serial",
+            "Commit markers erase conflicts"
+          ],
+          "correct_index": 1,
+          "explanation": "The acyclic graph admits that serial order.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-23-conflict-serializability-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-23-conflict-serializability-application-new-1",
+          "test_id": "pt-dbms-sql-23-conflict-serializability-application",
+          "question_text": "Which graph property proves conflict serializability in the stated model?",
+          "options": [
+            "A cycle of any length",
+            "Every vertex having an edge",
+            "Acyclicity",
+            "Equal transaction names"
+          ],
+          "correct_index": 2,
+          "explanation": "A topological order provides a conflict equivalent serial sequence.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-23-conflict-serializability-application-new-2",
+          "test_id": "pt-dbms-sql-23-conflict-serializability-application",
+          "question_text": "Can a graph have several valid serial orders?",
+          "options": [
+            "No, every graph has exactly one order",
+            "Only if all transactions abort",
+            "Only when every pair conflicts",
+            "Yes, independent transactions may be ordered differently"
+          ],
+          "correct_index": 3,
+          "explanation": "Missing precedence constraints permit several topological orders.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-23-conflict-serializability-application-new-3",
+          "test_id": "pt-dbms-sql-23-conflict-serializability-application",
+          "question_text": "Why do r1(A) and r2(A) produce no conflict edge?",
+          "options": [
+            "Neither operation writes the item",
+            "They belong to one transaction",
+            "A is not a logical item",
+            "Reads always commit immediately"
+          ],
+          "correct_index": 0,
+          "explanation": "Two reads do not change each other observed value.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-23-conflict-serializability-application-new-4",
+          "test_id": "pt-dbms-sql-23-conflict-serializability-application",
+          "question_text": "What is wrong with swapping two distant operations directly?",
+          "options": [
+            "Distant operations always touch one item",
+            "Intervening adjacent exchanges may cross conflicts",
+            "Only the first operation matters",
+            "Transaction order is irrelevant"
+          ],
+          "correct_index": 1,
+          "explanation": "Every adjacent step needs its own valid justification.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-23-conflict-serializability-application-new-5",
+          "test_id": "pt-dbms-sql-23-conflict-serializability-application",
+          "question_text": "S2 has T1 to T2 and T2 to T1. What does this imply?",
+          "options": [
+            "Both serial orders work",
+            "A read-read pair caused the cycle",
+            "No conflict equivalent serial order exists",
+            "Commit order automatically repairs it"
+          ],
+          "correct_index": 2,
+          "explanation": "The required precedence directions contradict each other.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-23-conflict-serializability-application-new-6",
+          "test_id": "pt-dbms-sql-23-conflict-serializability-application",
+          "question_text": "Does an acyclic conflict graph alone rule out dirty reads?",
+          "options": [
+            "Yes, every acyclic history is strict",
+            "Only with integer items",
+            "Only with two transactions",
+            "No, recovery and visibility properties need separate tests"
+          ],
+          "correct_index": 3,
+          "explanation": "Conflict serializability is separate from cascadelessness.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-23-conflict-serializability-application-new-7",
+          "test_id": "pt-dbms-sql-23-conflict-serializability-application",
+          "question_text": "What must remain unchanged during legal intertransaction swaps?",
+          "options": [
+            "Each transaction own operation order",
+            "Only the final operation count",
+            "The visual spacing",
+            "All unrelated table names"
+          ],
+          "correct_index": 0,
+          "explanation": "Program order is part of the schedule definition.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-23-conflict-serializability-application-new-8",
+          "test_id": "pt-dbms-sql-23-conflict-serializability-application",
+          "question_text": "Why can matching final values be insufficient evidence?",
+          "options": [
+            "Outputs cannot be queried",
+            "An inadmissible dependency pattern can happen to yield the same numbers",
+            "Values determine the transaction names",
+            "Graphs never describe writes"
+          ],
+          "correct_index": 1,
+          "explanation": "Conflict equivalence preserves dependency order rather than one lucky fixture.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-23-conflict-serializability-application-new-9",
+          "test_id": "pt-dbms-sql-23-conflict-serializability-application",
+          "question_text": "What extra care does a multiversion SQL trace require?",
+          "options": [
+            "Treat every read as a dirty read",
+            "Ignore isolation settings",
+            "Identify actual versions and predicate dependencies",
+            "Drop all read operations"
+          ],
+          "correct_index": 2,
+          "explanation": "The implementation model can differ from a simple single-version history.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-23-conflict-serializability-application-new-10",
+          "test_id": "pt-dbms-sql-23-conflict-serializability-application",
+          "question_text": "A three-transaction cycle exists. Does removing an unrelated read fix it?",
+          "options": [
+            "Yes, every shorter history is serializable",
+            "Only if the read used an alias",
+            "Only if there are no commit markers",
+            "No, the actual cycle edges remain"
+          ],
+          "correct_index": 3,
+          "explanation": "Only a change to a dependency on the cycle can remove that cycle.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [],
+  "coding_not_applicable": "The objective is formal history classification and graph proof, including cyclic and acyclic worked exercises. A SQL result-only judge cannot establish intersession order or validate the graph argument.",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-23-conflict-serializability-1",
+      "test_id": "pt-dbms-sql-23-conflict-serializability",
+      "question_text": "Which pair of operations on the same data item A, from different transactions, does NOT count as a conflict?",
+      "options": [
+        "R(A) and W(A)",
+        "W(A) and W(A)",
+        "R(A) and R(A)",
+        "W(A) and R(A)"
+      ],
+      "correct_index": 2,
+      "explanation": "Two reads never interfere with each other since neither changes data — R-R is the only pairing on the same item that is not a conflict.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-23-conflict-serializability-2",
+      "test_id": "pt-dbms-sql-23-conflict-serializability",
+      "question_text": "What are the three conditions required for two operations to 'conflict'?",
+      "options": [
+        "Same transaction, same data item, same timestamp",
+        "Different transactions, same data item, at least one is a write",
+        "Different transactions, different data items, both are writes",
+        "Same transaction, different data items, at least one is a read"
+      ],
+      "correct_index": 1,
+      "explanation": "Conflict requires operations from two different transactions, touching the same data item, with at least one of the two being a write.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-23-conflict-serializability-3",
+      "test_id": "pt-dbms-sql-23-conflict-serializability",
+      "question_text": "In the worked example, schedule S1 was shown to be conflict-serializable by transforming it into which serial schedule?",
+      "options": [
+        "<T2, T1>",
+        "<T1, T2>",
+        "No serial schedule — S1 is not conflict-serializable",
+        "A schedule involving a third transaction T3"
+      ],
+      "correct_index": 1,
+      "explanation": "Three legal adjacent swaps of non-conflicting operations transform S1 into exactly the serial schedule <T1, T2>.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-23-conflict-serializability-4",
+      "test_id": "pt-dbms-sql-23-conflict-serializability",
+      "question_text": "In schedule S2 (T1: R(A), W(B); T2: R(B), W(A) interleaved as R1(A) R2(B) W1(B) W2(A)), why is it NOT conflict-serializable?",
+      "options": [
+        "Because R1(A) and R2(B) conflict",
+        "Because the conflicts force T2 to precede T1 (on B) and simultaneously force T1 to precede T2 (on A) — a contradiction no swap sequence can resolve",
+        "Because it has more than 4 operations",
+        "Because neither transaction ever commits"
+      ],
+      "correct_index": 1,
+      "explanation": "The B-conflict (R2 before W1) demands T2 before T1, while the A-conflict (R1 before W2) demands T1 before T2 — contradictory ordering requirements mean no serial-equivalent order exists.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-23-conflict-serializability-5",
+      "test_id": "pt-dbms-sql-23-conflict-serializability",
+      "question_text": "What operation is legal when checking conflict serializability by swapping?",
+      "options": [
+        "Swapping any two operations anywhere in the schedule, conflicting or not",
+        "Swapping adjacent operations that do NOT conflict with each other",
+        "Swapping only operations belonging to the same transaction",
+        "Swapping conflicting operations as long as they are on different data items"
+      ],
+      "correct_index": 1,
+      "explanation": "Only adjacent, non-conflicting operations may be swapped; conflicting operations must keep their relative order, since swapping them could change the result.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-23-conflict-serializability-6",
+      "test_id": "pt-dbms-sql-23-conflict-serializability",
+      "question_text": "If two transactions access completely disjoint sets of data items, what can be said about any schedule interleaving them?",
+      "options": [
+        "It can never be conflict-serializable",
+        "It is trivially conflict-serializable, since there are no conflicting operations to worry about",
+        "It depends on the isolation level",
+        "It is only serializable if run serially"
+      ],
+      "correct_index": 1,
+      "explanation": "With zero conflicting operation pairs, every interleaving is automatically equivalent to any serial order, making the schedule trivially conflict-serializable.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-23-conflict-serializability-7",
+      "test_id": "pt-dbms-sql-23-conflict-serializability",
+      "question_text": "How does a real DBMS typically guarantee conflict serializability at runtime?",
+      "options": [
+        "It runs the full swap-checking algorithm on every schedule before executing it",
+        "It uses locking protocols (like two-phase locking) designed so that any schedule they permit is automatically conflict-serializable, without explicitly computing swaps",
+        "It disallows all non-serial schedules",
+        "It only allows read-only transactions to run concurrently"
+      ],
+      "correct_index": 1,
+      "explanation": "Practical systems don't test serializability after the fact; they use protocols engineered to only ever produce conflict-serializable schedules by construction.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-23-conflict-serializability-8",
+      "test_id": "pt-dbms-sql-23-conflict-serializability",
+      "question_text": "Which statement about swap validity is correct?",
+      "options": [
+        "Any two operations that are far apart in the schedule can be swapped directly in one step",
+        "Swaps must be performed one adjacent pair at a time, and every intermediate swap in the sequence must itself involve non-conflicting operations",
+        "Only the first and last operations of a schedule can ever be swapped",
+        "Swapping is unrelated to whether a schedule is conflict-serializable"
+      ],
+      "correct_index": 1,
+      "explanation": "Conflict serializability is checked by a sequence of adjacent swaps, each individually valid (non-conflicting) — you cannot 'jump' an operation past a conflicting one even indirectly.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "/root/content_b",
+    "independent_review": "passed",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "canonical_answer_indices_preserved": true,
+    "independent_reviewer": "/root",
+    "independent_review_scope": "Full notes,20MCQs/options/explanations,diagram and graph exercises. S1swap proof and T1→T2 graph,S2cycle and recovery separation sound. Incorrect swap count,internal-program-order ambiguity and default-engine guarantee corrected. Manual editorial/fixture reasoning only; SQL engine,browser,originality and AdSense verification separate."
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-23-conflict-serializability",
+    "original_note_sha256": "337db2dd51cff41eb0efb781a2d1b9eac7d140a8a14c4a68bc1187903e785a08",
+    "status": "drafted; not included in prepared paired migrations"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Conflict edges determine the serial-order verdict",
+      "description": "S1 has one consistent direction; S2 demands two contradictory directions.",
+      "columns": [
+        "History",
+        "Edge evidence",
+        "Verdict"
+      ],
+      "rows": [
+        [
+          "S1 on A and B",
+          "T1 → T2 only",
+          "Conflict serializable: T1 then T2"
+        ],
+        [
+          "S2: r1(A), r2(B), w1(B), w2(A)",
+          "T1 → T2 on A; T2 → T1 on B",
+          "Cycle: not conflict serializable"
+        ],
+        [
+          "Two readers of A; writes to distinct B/C",
+          "No cross-transaction conflicts",
+          "Either serial order"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "provided",
+    "technical_review": "author review; independent review pending",
+    "server_rendering": "unverified",
+    "browser_rendering": "unverified",
+    "independent_review": "pending"
+  },
+  "authoring_status": "drafted; verification pending",
+  "sql_verification": {
+    "scope": "not executed; exact MySQL/provider verification pending",
+    "all_passed": false,
+    "cases": []
+  }
+}

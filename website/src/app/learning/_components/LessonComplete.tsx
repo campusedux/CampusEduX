@@ -31,11 +31,11 @@ export function LessonComplete({ lesson, sectionSlugs, courseSlugs, next, varian
   const { gridSlug, topicSlug } = lesson;
 
   if (!progress.ready) {
-    // Same box as the compact button below (`h-11 sm:h-9`, ~"Mark as complete"
+    // Same box as the compact button below (`h-11`, ~"Mark as complete"
     // width) so the lesson header row doesn't grow on mobile and shift the
     // article when local progress loads.
     return variant === "compact" ? (
-      <span className="inline-block h-11 w-[10.25rem] animate-pulse rounded-xl bg-surface sm:h-9" aria-hidden />
+      <span className="inline-block h-11 w-[10.25rem] max-w-full animate-pulse rounded-lg bg-surface" aria-hidden />
     ) : null;
   }
 
@@ -90,7 +90,7 @@ export function LessonComplete({ lesson, sectionSlugs, courseSlugs, next, varian
           onClick={done ? undo : complete}
           aria-pressed={done}
           className={cn(
-            "inline-flex h-11 items-center gap-1.5 rounded-xl px-3.5 text-[0.8rem] font-semibold transition sm:h-9",
+            "inline-flex h-11 items-center justify-center gap-1.5 rounded-lg px-3 text-[0.8rem] font-semibold transition",
             done ? "bg-success/15 text-success hover:bg-success/20" : "border border-line bg-card text-ink hover:border-success/40 hover:text-success",
           )}
         >
@@ -107,19 +107,19 @@ export function LessonComplete({ lesson, sectionSlugs, courseSlugs, next, varian
     <section
       aria-label="Lesson progress"
       className={cn(
-        "mt-10 overflow-hidden rounded-3xl border p-5 sm:p-6",
+        "mt-8 overflow-hidden rounded-2xl border p-4 sm:p-6",
         done ? "border-success/30 bg-success/[0.06]" : "border-line bg-card shadow-card",
       )}
     >
       {!done ? (
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
+          <div className="min-w-0">
             <p className="font-display text-lg font-bold text-ink">Finished this lesson?</p>
             <p className="mt-0.5 text-sm text-ink-muted">
               Mark it complete to track your progress{goal ? ` — ${completedToday}/${goal} done today` : ""}.
             </p>
           </div>
-          <button type="button" onClick={complete} className="btn-primary h-12 flex-shrink-0 px-6">
+          <button type="button" onClick={complete} className="btn-primary h-11 flex-shrink-0 px-4">
             <Check className="h-4 w-4" aria-hidden /> Mark as complete
           </button>
         </div>
@@ -129,13 +129,13 @@ export function LessonComplete({ lesson, sectionSlugs, courseSlugs, next, varian
             <p className="flex items-center gap-2 font-display text-lg font-bold text-success">
               <CheckCircle2 className="h-5 w-5" aria-hidden /> Lesson complete
             </p>
-            <button type="button" onClick={undo} className="inline-flex items-center gap-1 text-xs font-semibold text-ink-muted hover:text-ink">
+            <button type="button" onClick={undo} className="inline-flex min-h-11 items-center gap-1 rounded-lg px-2 text-xs font-semibold text-ink-muted hover:text-ink">
               <Undo2 className="h-3.5 w-3.5" aria-hidden /> Undo
             </button>
           </div>
-          <div className="mt-4 grid gap-4 sm:grid-cols-[1fr_auto] sm:items-end">
-            <div>
-              <p className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-ink-muted">
+          <div className="mt-4 grid gap-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+            <div className="min-w-0">
+              <p className="mb-1.5 flex flex-wrap items-center gap-1.5 text-xs font-semibold text-ink-muted">
                 <Flame className="h-3.5 w-3.5 text-warning" aria-hidden />
                 Today: {completedToday}/{goal} lesson{goal === 1 ? "" : "s"}
                 {met ? " · goal reached" : ""}
@@ -144,12 +144,12 @@ export function LessonComplete({ lesson, sectionSlugs, courseSlugs, next, varian
               <ProgressBar value={completedToday} max={goal} label="Today's goal" tone={met ? "success" : "primary"} />
             </div>
             {next ? (
-              <Link href={nextHref} className="btn-primary h-12 px-6">
+              <Link href={nextHref} className="btn-primary min-h-11 h-auto min-w-0 px-4 py-2.5 text-center">
                 Up next: {next.title.length > 36 ? `${next.title.slice(0, 34)}…` : next.title}
                 <ArrowRight className="h-4 w-4" aria-hidden />
               </Link>
             ) : (
-              <Link href="/learning" className="btn-primary h-12 px-6">
+              <Link href="/learning" className="btn-primary min-h-11 h-auto px-4 py-2.5 text-center">
                 <GraduationCap className="h-4 w-4" aria-hidden /> Explore more courses
               </Link>
             )}

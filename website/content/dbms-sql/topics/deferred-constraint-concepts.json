@@ -1,0 +1,646 @@
+{
+  "source_ref": "chapter-10-sql-constraints/deferred-constraint-concepts",
+  "slug": "deferred-constraint-concepts",
+  "title": "Deferred Constraint Concepts",
+  "description": "Distinguish deferred checking from disabled enforcement and legacy validation, understand PostgreSQL timing controls, and inspect final-state proposals through explicitly labeled MySQL query mirrors.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Deferral changes when a supported rule must hold\n\nA deferred constraint remains an integrity rule, but the engine can postpone its supported validation until a later transaction boundary. This can permit a temporary intermediate state that is inconsistent while several related statements build a valid final state. The transaction must still satisfy the applicable rules before successful completion. Deferral is not permission to commit arbitrary broken references.\n\nConsider two new campus nodes that should refer to each other. If the workflow inserts their required relationships in separate statements, the first statement may reference a node not inserted until the next statement. A supported deferred reference can permit that intermediate state while requiring the completed transaction to contain both nodes. The final accepted graph, not a disabled checking window, is the intended contract.\n\n## Immediate behaviour is also constraint specific\n\nWithout supported deferral, applicable constraints are checked according to their normal timing as commands execute. Exact timing can differ by rule kind and product, so the phrase every constraint is checked once after each statement is too broad. A nondeferrable uniqueness rule and a foreign-key trigger need not have identical internal validation timing.\n\nThe useful practical distinction is whether a permitted intermediate state can survive until a later transaction check. If the required rule rejects that state immediately, the statement sequence must be redesigned or use an actually supported deferral feature. Adding a BEGIN keyword alone does not make every constraint accept temporarily invalid rows.\n\n## PostgreSQL declares deferrability explicitly\n\nFor eligible PostgreSQL constraints, DEFERRABLE says the checking mode can be controlled through the supported mechanism. INITIALLY IMMEDIATE or INITIALLY DEFERRED selects the default timing for that constraint. These are separate decisions: a rule can be capable of deferral while starting in immediate mode, or capable of deferral while starting deferred.\n\nDo not describe INITIALLY DEFERRED as an irreversible promise to wait until commit. A supported SET CONSTRAINTS operation can request an earlier immediate check. That matters when a workflow wants to verify an intermediate milestone before performing more work. The declaration and transaction setting together determine the applicable timing, not the word initially in isolation.\n\n```sql\nCONSTRAINT fk_member_parent\n  FOREIGN KEY (parent_id) REFERENCES nodes (node_id)\n  DEFERRABLE INITIALLY DEFERRED\n```\n\n## Only eligible rule kinds participate\n\nPostgreSQL supports deferrability for appropriate primary-key, unique, foreign-key and exclusion constraints. CHECK and NOT NULL are not made deferrable merely by adding the same clause to their definitions. This corrects a common teaching error that lists every familiar constraint kind as if the timing feature applies uniformly.\n\nThe eligibility also has practical limitations in related operations and references, which need the target's actual documentation. A conceptual statement that a rule would be convenient to defer is not proof that its declaration is supported. Choose the mechanism after identifying the real invariant and product rather than assuming the desired timing can be attached to any predicate.\n\n## A request for immediate checking can expose pending failure\n\nWhen a supported deferred rule is switched to immediate mode, outstanding changes must satisfy the required check at that point under PostgreSQL's semantics. The workflow can therefore discover an unresolved reference before the final commit attempt. That earlier failure is useful evidence about the transaction's state, not a reason to silently discard the constraint.\n\nThe application must handle the failed operation and the connection's transaction state correctly. Do not issue more writes blindly while assuming every driver automatically restored a usable transaction. Error handling belongs to the supported database and provider contract. A tutorial should distinguish the integrity outcome from a universal claim about client recovery behaviour.\n\n## Commit rejection protects the accepted final state\n\nIf a required deferred relationship is still invalid when its final check occurs, the transaction cannot be accepted as a successful inconsistent commit. The application receives an error and must follow the required failure or rollback handling for its connection state. A generated identifier allocated during the attempt can have separate generator semantics and need not become a gapless accepted record.\n\nA successful early statement therefore does not prove the complete transaction will commit. User-facing workflows should wait for the authoritative completion result before presenting an accepted outcome that depends on deferred integrity. This is a transaction contract, not merely a matter of displaying an optimistic success message and hoping the final check agrees.\n\n## Deferral differs from validating historical backlog\n\nPostgreSQL NOT VALID for applicable additions separates legacy-state validation from relevant ongoing enforcement. DEFERRABLE instead concerns the timing of eligible checks within transactions. These features answer different questions: has old accepted data been checked, and when must current transactional changes satisfy a rule? One should not be taught as a synonym for the other.\n\nAn old unresolved orphan is not automatically approved because a new constraint is initially deferred. Likewise, adding NOT VALID does not provide a general permission for new transactions to commit broken relationships. Read the exact feature's population and timing rules. The constraint-validation topic covers the backlog distinction separately so these concepts remain consistent across the syllabus.\n\n## Disabled checking is not a deferrable constraint\n\nTurning off a MySQL check mechanism does not create PostgreSQL's controlled promise to validate the final state at commit. It can allow inconsistent facts, and re-enabling a setting does not necessarily rescan everything inserted during the disabled window. Presenting that shortcut as a routine equivalent workaround would teach a different and weaker integrity contract.\n\nThe exercises never disable foreign-key enforcement. When the target lacks the desired deferrable feature, choose a compatible workflow, staging model or different supported mechanism with explicit validation and concurrency handling. Do not weaken accepted-state protection merely to imitate the syntax of a product that offers a different transaction feature.\n\n## MySQL/InnoDB needs an honestly different execution model\n\nThe MySQL/InnoDB target here does not accept PostgreSQL-style DEFERRABLE INITIALLY DEFERRED as a way to postpone its references. The executable tasks therefore examine staged candidate data through ordinary SQL queries. They teach final-state reasoning, but they do not claim those queries create native deferred constraints or automatically make later commits safe.\n\nA staging table is proposed state until an authorized workflow accepts it. The actual acceptance operation must preserve the intended invariant under concurrent writers and failure handling. A SELECT that finds no problem in one snapshot is useful preparation, not a substitute for the final trusted constraint or transaction mechanism. Keep that distinction visible in the problem statement.\n\n## Build the final candidate universe explicitly\n\nA valid final-state test must include every node that will exist when the proposed batch is accepted. Looking only at the old committed nodes can incorrectly reject a reference to another node being created in the same batch. Conversely, assuming every referenced number will somehow appear later can approve a missing endpoint without evidence.\n\nThe medium mirror forms a candidate universe from current_nodes and proposed_nodes. It then checks both child and parent endpoints of each proposed link. Repeated node proposals collapse to the same candidate identity under the stated set policy. This defines a precise final-state question without pretending to execute the database writes or PostgreSQL's native deferral machinery.\n\n## Distinguish cycles from missing endpoints\n\nA pair of links 1 to 2 and 2 to 1 can be referentially complete when both nodes exist in the final universe. A foreign key does not automatically forbid cycles. A graph-specific acyclicity requirement would be another invariant with its own implementation and concurrency concerns. Do not confuse a complete mutual reference with a missing parent merely because its shape is circular.\n\nThe introductory mirror reports children whose required parent is absent from the supplied final node universe. The medium task labels missing child, missing parent or both. These outputs let learners trace the exact unresolved witness instead of guessing from insertion order. Empty links contain no endpoint violation, while a missing node cannot be invented by the query.\n\n## Verify the model without overstating native evidence\n\nUse a valid mutual pair, a reference to an absent node, a node introduced by the proposed batch and an entirely absent pair. Those cases distinguish final-state completeness from a test limited to old rows. Separate temporary candidate copies in the reference solution avoid unnecessary repeated references to one temporary object in the target's query forms.\n\nRecorded MariaDB compatibility checks verify these SQL mirrors only. Native PostgreSQL deferral, SET CONSTRAINTS timing, commit rejection behaviour, exact MySQL/provider execution and concurrent batch acceptance remain separately unverified. The complete learning package explains the supported concept and supplies meaningful assessments while making clear that a diagnostic model is not an applied migration or an enforced native deferred constraint.\n",
+  "references": [
+    {
+      "title": "PostgreSQL 18 CREATE TABLE constraint timing",
+      "url": "https://www.postgresql.org/docs/18/sql-createtable.html"
+    },
+    {
+      "title": "PostgreSQL 18 SET CONSTRAINTS",
+      "url": "https://www.postgresql.org/docs/18/sql-set-constraints.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-10-deferred-constraint-concepts",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-10-deferred-constraint-concepts-1",
+          "test_id": "pt-dbms-sql-10-deferred-constraint-concepts",
+          "question_text": "Without supported deferral, how should constraint timing be interpreted?",
+          "options": [
+            "Only at COMMIT time for the whole transaction",
+            "Under the target’s normal immediate rules for the specific constraint kind",
+            "Only when explicitly requested via SET CONSTRAINTS",
+            "Never, unless the table is queried afterward"
+          ],
+          "correct_index": 1,
+          "explanation": "Not every kind has one identical internal per-statement checking point.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-10-deferred-constraint-concepts-2",
+          "test_id": "pt-dbms-sql-10-deferred-constraint-concepts",
+          "question_text": "What real-world scenario is the classic motivating example for DEFERRABLE INITIALLY DEFERRED constraints?",
+          "options": [
+            "Improving SELECT query performance",
+            "Circular foreign key references between two tables, where inserting the first row of either table would otherwise violate the other's FK",
+            "Enforcing uniqueness across two different tables",
+            "Making CHECK constraints run faster on large tables"
+          ],
+          "correct_index": 1,
+          "explanation": "A mutual foreign key dependency (e.g., employees referencing departments and departments referencing employees) cannot be populated under strict immediate checking without deferring at least one constraint to COMMIT time.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-10-deferred-constraint-concepts-3",
+          "test_id": "pt-dbms-sql-10-deferred-constraint-concepts",
+          "question_text": "When must a still-deferred eligible PostgreSQL constraint hold?",
+          "options": [
+            "After every individual INSERT/UPDATE statement, same as immediate constraints",
+            "At its required final check, normally commit unless an earlier immediate check is requested",
+            "Only when the table is dropped",
+            "Immediately, but only for the first statement in the transaction"
+          ],
+          "correct_index": 1,
+          "explanation": "It is not necessarily checked only once at commit in every workflow.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-10-deferred-constraint-concepts-4",
+          "test_id": "pt-dbms-sql-10-deferred-constraint-concepts",
+          "question_text": "Is disabling MySQL foreign-key checking equivalent to PostgreSQL deferred enforcement?",
+          "options": [
+            "Yes, identically to PostgreSQL",
+            "No; it does not provide the same required final-state validation contract",
+            "Yes, but only for UNIQUE constraints",
+            "Yes, but only in MySQL 8.0.16 and later"
+          ],
+          "correct_index": 1,
+          "explanation": "Do not recommend weakening checks as a routine deferral substitute.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-10-deferred-constraint-concepts-5",
+          "test_id": "pt-dbms-sql-10-deferred-constraint-concepts",
+          "question_text": "What distinguishes INITIALLY IMMEDIATE from INITIALLY DEFERRED on an eligible DEFERRABLE rule?",
+          "options": [
+            "There is no functional difference; both always defer to COMMIT",
+            "They select the starting timing mode, which supported SET CONSTRAINTS operations can change",
+            "INITIALLY IMMEDIATE constraints cannot ever be deferred under any circumstance",
+            "INITIALLY DEFERRED only applies to CHECK constraints"
+          ],
+          "correct_index": 1,
+          "explanation": "Initially deferred does not mean irrevocably deferred.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-10-deferred-constraint-concepts-6",
+          "test_id": "pt-dbms-sql-10-deferred-constraint-concepts",
+          "question_text": "What if an eligible deferred rule remains violated at its required final check?",
+          "options": [
+            "The commit silently succeeds anyway",
+            "The transaction cannot complete as a successful inconsistent commit; the application must handle the failure state",
+            "Only the last statement in the transaction is rolled back",
+            "The constraint is automatically dropped"
+          ],
+          "correct_index": 1,
+          "explanation": "Do not assume every client automatically recovers a usable transaction.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-10-deferred-constraint-concepts-7",
+          "test_id": "pt-dbms-sql-10-deferred-constraint-concepts",
+          "question_text": "Which PostgreSQL rule kinds can support deferrability?",
+          "options": [
+            "Only FOREIGN KEY",
+            "Appropriate PRIMARY KEY, UNIQUE, FOREIGN KEY and exclusion constraints; not CHECK or NOT NULL",
+            "Only NOT NULL and CHECK",
+            "Only PRIMARY KEY"
+          ],
+          "correct_index": 1,
+          "explanation": "Eligibility is rule-kind specific.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-10-deferred-constraint-concepts-8",
+          "test_id": "pt-dbms-sql-10-deferred-constraint-concepts",
+          "question_text": "Why should deferred constraints be applied selectively rather than as a default posture across all constraints?",
+          "options": [
+            "Deferred constraints are always slower to evaluate",
+            "Overusing deferred checking can hide bugs that immediate checking would otherwise catch early within a long transaction",
+            "PostgreSQL limits the number of deferred constraints per table",
+            "Deferred constraints cannot be combined with transactions"
+          ],
+          "correct_index": 1,
+          "explanation": "Since a violation isn't surfaced until COMMIT, using deferred checking broadly can let inconsistent intermediate states go unnoticed longer than necessary, delaying error discovery.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-10-deferred-constraint-concepts-new-9",
+          "test_id": "pt-dbms-sql-10-deferred-constraint-concepts",
+          "question_text": "Does a successful early statement guarantee the deferred transaction will commit?",
+          "options": [
+            "Yes",
+            "No",
+            "Only when it inserts ids",
+            "Only with an alias"
+          ],
+          "correct_index": 1,
+          "explanation": "Outstanding final checks can still reject the state.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-10-deferred-constraint-concepts-new-10",
+          "test_id": "pt-dbms-sql-10-deferred-constraint-concepts",
+          "question_text": "Can two existing final nodes refer to each other without an orphan endpoint?",
+          "options": [
+            "No, all cycles are missing parents",
+            "Only if one is NULL",
+            "Yes",
+            "Only after deleting a node"
+          ],
+          "correct_index": 2,
+          "explanation": "Referential completeness and acyclicity are different invariants.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-10-deferred-constraint-concepts-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-10-deferred-constraint-concepts-application-new-1",
+          "test_id": "pt-dbms-sql-10-deferred-constraint-concepts-application",
+          "question_text": "Is NOT VALID another spelling for DEFERRABLE?",
+          "options": [
+            "Yes",
+            "Only for references",
+            "No",
+            "Only if named"
+          ],
+          "correct_index": 2,
+          "explanation": "Legacy backlog and transaction timing differ.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-10-deferred-constraint-concepts-application-new-2",
+          "test_id": "pt-dbms-sql-10-deferred-constraint-concepts-application",
+          "question_text": "Does a MySQL diagnostic SELECT install native deferred checking?",
+          "options": [
+            "Yes",
+            "Only with two stages",
+            "Only if no issues are returned",
+            "No"
+          ],
+          "correct_index": 3,
+          "explanation": "A model query is not an enforced constraint.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-10-deferred-constraint-concepts-application-new-3",
+          "test_id": "pt-dbms-sql-10-deferred-constraint-concepts-application",
+          "question_text": "Why include proposed nodes in the final universe?",
+          "options": [
+            "A link can validly reference another node introduced by the same batch",
+            "To invent every missing number",
+            "To disable references",
+            "To force all cycles to fail"
+          ],
+          "correct_index": 0,
+          "explanation": "The test must reflect the actual proposed final population.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-10-deferred-constraint-concepts-application-new-4",
+          "test_id": "pt-dbms-sql-10-deferred-constraint-concepts-application",
+          "question_text": "What does an absent parent witness mean in the mirror?",
+          "options": [
+            "The query authorized a repair",
+            "The supplied final universe cannot satisfy that required endpoint",
+            "The engine committed a broken transaction",
+            "Every node is invalid"
+          ],
+          "correct_index": 1,
+          "explanation": "The result is a diagnostic under stated inputs.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-10-deferred-constraint-concepts-application-new-5",
+          "test_id": "pt-dbms-sql-10-deferred-constraint-concepts-application",
+          "question_text": "Can PostgreSQL CHECK become deferrable by adding the clause arbitrarily?",
+          "options": [
+            "Yes",
+            "Only for numbers",
+            "No",
+            "Only if table-level"
+          ],
+          "correct_index": 2,
+          "explanation": "The product limits eligible constraint kinds.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-10-deferred-constraint-concepts-application-new-6",
+          "test_id": "pt-dbms-sql-10-deferred-constraint-concepts-application",
+          "question_text": "What can SET CONSTRAINTS IMMEDIATE do for supported pending checks?",
+          "options": [
+            "Disable them forever",
+            "Approve all missing parents",
+            "Erase all proposed rows",
+            "Require their applicable validation earlier"
+          ],
+          "correct_index": 3,
+          "explanation": "The timing can change before commit.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-10-deferred-constraint-concepts-application-new-7",
+          "test_id": "pt-dbms-sql-10-deferred-constraint-concepts-application",
+          "question_text": "Does a foreign key itself enforce acyclicity?",
+          "options": [
+            "No",
+            "Yes",
+            "Only for a mutual pair",
+            "Only for integer keys"
+          ],
+          "correct_index": 0,
+          "explanation": "Cycle policy needs a separate invariant.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-10-deferred-constraint-concepts-application-new-8",
+          "test_id": "pt-dbms-sql-10-deferred-constraint-concepts-application",
+          "question_text": "What must an application await before confirming an outcome depending on deferred integrity?",
+          "options": [
+            "Only the first insert acknowledgment",
+            "The authoritative successful transaction completion",
+            "Only an allocated id",
+            "Only the page render"
+          ],
+          "correct_index": 1,
+          "explanation": "Early statements are provisional.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-10-deferred-constraint-concepts-application-new-9",
+          "test_id": "pt-dbms-sql-10-deferred-constraint-concepts-application",
+          "question_text": "Why is re-enabling checks not a native deferral substitute?",
+          "options": [
+            "It always runs PostgreSQL SET CONSTRAINTS",
+            "It creates a global transaction",
+            "It need not perform the required final validation of all admitted legacy state",
+            "It validates all history universally"
+          ],
+          "correct_index": 2,
+          "explanation": "The enforcement contracts differ.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-10-deferred-constraint-concepts-application-new-10",
+          "test_id": "pt-dbms-sql-10-deferred-constraint-concepts-application",
+          "question_text": "What remains outside the mirror fixtures?",
+          "options": [
+            "The supplied missing-endpoint labels",
+            "The recorded candidate universe results",
+            "The valid mutual-pair diagnostic",
+            "Native deferral and concurrent acceptance guarantees"
+          ],
+          "correct_index": 3,
+          "explanation": "Model evidence must remain distinct from native execution.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cx-deferred-final-parent-mirror",
+      "slug": "deferred-final-parent-mirror",
+      "title": "Inspect required parents against a proposed final universe",
+      "difficulty": "Easy",
+      "task": "This is a MySQL query mirror for final-state reasoning, not a native deferred constraint. final_nodes supplies every node proposed to exist. Each links.child_id already names one of those nodes; parent_id is required. Return child_id for links whose parent is absent from final_nodes. A mutual pair is not an orphan when both nodes exist. Do not apply writes or disable checks.",
+      "schema_sql": "CREATE TABLE final_nodes (node_id INT PRIMARY KEY); CREATE TABLE links (child_id INT PRIMARY KEY,parent_id INT NOT NULL);",
+      "seed_sql": "INSERT INTO final_nodes VALUES (1),(2),(3); INSERT INTO links VALUES (1,2),(2,1),(3,99);",
+      "expected": "child_id\n3",
+      "ordering": "Ascending child_id.",
+      "constraints": [
+        "Only the parent endpoint needs diagnosis in this introductory contract.",
+        "Explicit conceptual mirror; no native deferrable declaration is exercised."
+      ],
+      "edge_cases": [
+        "A valid mutual pair has no missing endpoint.",
+        "Empty links has no issue rows."
+      ],
+      "hints": [
+        "Use the supplied final universe, not an imagined insertion order.",
+        "A missing marker from a preserving join identifies the absent required parent."
+      ],
+      "solution_sql": "SELECT l.child_id FROM links l LEFT JOIN final_nodes p ON p.node_id=l.parent_id WHERE p.node_id IS NULL ORDER BY l.child_id;",
+      "explanation": "The diagnostic finds a concrete missing final parent without rejecting valid cycles or claiming native transaction deferral.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO final_nodes VALUES (7),(8); INSERT INTO links VALUES (7,8),(8,7);",
+          "expected": ""
+        },
+        {
+          "seed_sql": "",
+          "expected": ""
+        }
+      ]
+    },
+    {
+      "id": "cx-deferred-batch-endpoints-mirror",
+      "slug": "deferred-batch-endpoints-mirror",
+      "title": "Validate both endpoints against current and proposed node identities",
+      "difficulty": "Medium",
+      "task": "This is a MySQL final-state query mirror, not native deferred enforcement. Form a candidate node set from current_nodes UNION proposed_nodes. For each proposed_links row, return link_id and issue only if an endpoint is absent: child, parent or both. Do not apply the batch. Separate temporary child and parent copies may be used to avoid repeated-reference limitations.",
+      "schema_sql": "CREATE TABLE current_nodes (node_id INT PRIMARY KEY); CREATE TABLE proposed_nodes (node_id INT NOT NULL); CREATE TABLE proposed_links (link_id INT PRIMARY KEY,child_id INT NOT NULL,parent_id INT NOT NULL);",
+      "seed_sql": "INSERT INTO current_nodes VALUES (1); INSERT INTO proposed_nodes VALUES (2),(2); INSERT INTO proposed_links VALUES (1,1,2),(2,3,1),(3,9,8);",
+      "expected": "link_id\tissue\n2\tchild\n3\tboth",
+      "ordering": "Ascending link_id.",
+      "constraints": [
+        "Candidate node identity is a set.",
+        "Both endpoints must be in the supplied final candidate universe."
+      ],
+      "edge_cases": [
+        "A proposed node can satisfy another proposed relationship.",
+        "Duplicate node proposals do not create distinct identities.",
+        "Valid mutual pairs are permitted."
+      ],
+      "hints": [
+        "Construct the candidate union before checking links.",
+        "Use reliable non-NULL node keys to label missing endpoints."
+      ],
+      "solution_sql": "CREATE TEMPORARY TABLE candidate_children (node_id INT PRIMARY KEY); INSERT INTO candidate_children SELECT node_id FROM current_nodes UNION SELECT node_id FROM proposed_nodes; CREATE TEMPORARY TABLE candidate_parents (node_id INT PRIMARY KEY); INSERT INTO candidate_parents SELECT node_id FROM candidate_children; SELECT l.link_id,CASE WHEN c.node_id IS NULL AND p.node_id IS NULL THEN 'both' WHEN c.node_id IS NULL THEN 'child' ELSE 'parent' END AS issue FROM proposed_links l LEFT JOIN candidate_children c ON c.node_id=l.child_id LEFT JOIN candidate_parents p ON p.node_id=l.parent_id WHERE c.node_id IS NULL OR p.node_id IS NULL ORDER BY l.link_id;",
+      "explanation": "The diagnostic tests the actual proposed final universe while leaving native enforcement and concurrent acceptance as separate requirements.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO proposed_nodes VALUES (5),(6); INSERT INTO proposed_links VALUES (1,5,6),(2,6,5);",
+          "expected": ""
+        },
+        {
+          "seed_sql": "INSERT INTO current_nodes VALUES (7); INSERT INTO proposed_links VALUES (9,7,99);",
+          "expected": "link_id\tissue\n9\tparent"
+        },
+        {
+          "seed_sql": "",
+          "expected": ""
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-10-deferred-constraint-concepts-1",
+      "test_id": "pt-dbms-sql-10-deferred-constraint-concepts",
+      "question_text": "By default (without any DEFERRABLE clause), when is a constraint checked in PostgreSQL?",
+      "options": [
+        "Only at COMMIT time for the whole transaction",
+        "Immediately, after each individual statement",
+        "Only when explicitly requested via SET CONSTRAINTS",
+        "Never, unless the table is queried afterward"
+      ],
+      "correct_index": 1,
+      "explanation": "The default behavior for every constraint, unless explicitly declared DEFERRABLE and deferred, is immediate checking right after each statement executes.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-10-deferred-constraint-concepts-2",
+      "test_id": "pt-dbms-sql-10-deferred-constraint-concepts",
+      "question_text": "What real-world scenario is the classic motivating example for DEFERRABLE INITIALLY DEFERRED constraints?",
+      "options": [
+        "Improving SELECT query performance",
+        "Circular foreign key references between two tables, where inserting the first row of either table would otherwise violate the other's FK",
+        "Enforcing uniqueness across two different tables",
+        "Making CHECK constraints run faster on large tables"
+      ],
+      "correct_index": 1,
+      "explanation": "A mutual foreign key dependency (e.g., employees referencing departments and departments referencing employees) cannot be populated under strict immediate checking without deferring at least one constraint to COMMIT time.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-10-deferred-constraint-concepts-3",
+      "test_id": "pt-dbms-sql-10-deferred-constraint-concepts",
+      "question_text": "When is a constraint declared DEFERRABLE INITIALLY DEFERRED actually validated?",
+      "options": [
+        "After every individual INSERT/UPDATE statement, same as immediate constraints",
+        "Once, at COMMIT time, for the entire transaction",
+        "Only when the table is dropped",
+        "Immediately, but only for the first statement in the transaction"
+      ],
+      "correct_index": 1,
+      "explanation": "INITIALLY DEFERRED means the constraint check is postponed until the transaction commits, allowing temporary mid-transaction inconsistency.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-10-deferred-constraint-concepts-4",
+      "test_id": "pt-dbms-sql-10-deferred-constraint-concepts",
+      "question_text": "Does MySQL support PostgreSQL-style DEFERRABLE INITIALLY DEFERRED constraints?",
+      "options": [
+        "Yes, identically to PostgreSQL",
+        "No, MySQL does not support deferrable constraints; a common workaround is SET FOREIGN_KEY_CHECKS=0",
+        "Yes, but only for UNIQUE constraints",
+        "Yes, but only in MySQL 8.0.16 and later"
+      ],
+      "correct_index": 1,
+      "explanation": "MySQL has no true deferred-constraint mechanism; the typical workaround for circular references or bulk loads is temporarily disabling foreign key checks entirely, which is cruder than per-transaction deferral.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-10-deferred-constraint-concepts-5",
+      "test_id": "pt-dbms-sql-10-deferred-constraint-concepts",
+      "question_text": "What is the difference between DEFERRABLE INITIALLY IMMEDIATE and DEFERRABLE INITIALLY DEFERRED?",
+      "options": [
+        "There is no functional difference; both always defer to COMMIT",
+        "INITIALLY IMMEDIATE checks right after each statement by default but can be switched to deferred per-transaction with SET CONSTRAINTS; INITIALLY DEFERRED always defers unless overridden",
+        "INITIALLY IMMEDIATE constraints cannot ever be deferred under any circumstance",
+        "INITIALLY DEFERRED only applies to CHECK constraints"
+      ],
+      "correct_index": 1,
+      "explanation": "Both variants are deferrable in principle, but they differ in their default timing: IMMEDIATE checks right away unless a transaction opts into SET CONSTRAINTS ... DEFERRED, while DEFERRED checks at commit unless explicitly switched to immediate.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-10-deferred-constraint-concepts-6",
+      "test_id": "pt-dbms-sql-10-deferred-constraint-concepts",
+      "question_text": "If data is still genuinely inconsistent at COMMIT time for a transaction using a deferred constraint, what happens?",
+      "options": [
+        "The commit silently succeeds anyway",
+        "The entire transaction is rolled back, just as immediate checking would reject an individual bad statement",
+        "Only the last statement in the transaction is rolled back",
+        "The constraint is automatically dropped"
+      ],
+      "correct_index": 1,
+      "explanation": "Deferred constraints still fire eventually — if the data hasn't become consistent by COMMIT time, the whole transaction fails and rolls back.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-10-deferred-constraint-concepts-7",
+      "test_id": "pt-dbms-sql-10-deferred-constraint-concepts",
+      "question_text": "Which constraint types can be declared DEFERRABLE in PostgreSQL?",
+      "options": [
+        "Only FOREIGN KEY",
+        "PRIMARY KEY, UNIQUE, FOREIGN KEY, and CHECK, wherever declared deferrable",
+        "Only NOT NULL and CHECK",
+        "Only PRIMARY KEY"
+      ],
+      "correct_index": 1,
+      "explanation": "Deferred checking in PostgreSQL is not exclusive to foreign keys; PRIMARY KEY, UNIQUE, FOREIGN KEY, and CHECK can all be declared deferrable, even though FK circularity is the most common motivating example.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-10-deferred-constraint-concepts-8",
+      "test_id": "pt-dbms-sql-10-deferred-constraint-concepts",
+      "question_text": "Why should deferred constraints be applied selectively rather than as a default posture across all constraints?",
+      "options": [
+        "Deferred constraints are always slower to evaluate",
+        "Overusing deferred checking can hide bugs that immediate checking would otherwise catch early within a long transaction",
+        "PostgreSQL limits the number of deferred constraints per table",
+        "Deferred constraints cannot be combined with transactions"
+      ],
+      "correct_index": 1,
+      "explanation": "Since a violation isn't surfaced until COMMIT, using deferred checking broadly can let inconsistent intermediate states go unnoticed longer than necessary, delaying error discovery.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "coordinator",
+    "independent_review": "unavailable; no agent tools",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Definitions and examples checked against questions; no plagiarism certification.",
+    "existing_question_corrections": [
+      "tq-dbms-sql-10-deferred-constraint-concepts-1",
+      "tq-dbms-sql-10-deferred-constraint-concepts-3",
+      "tq-dbms-sql-10-deferred-constraint-concepts-4",
+      "tq-dbms-sql-10-deferred-constraint-concepts-5",
+      "tq-dbms-sql-10-deferred-constraint-concepts-6",
+      "tq-dbms-sql-10-deferred-constraint-concepts-7"
+    ],
+    "canonical_answer_indices_preserved": true,
+    "batch_review": {
+      "reviewer": "coordinator",
+      "independent": false,
+      "scope": "This new package: explained definitions and boundaries, retained source question identities/canonical indices, new correct answers and explanations, exercise solutions and recorded fixtures, diagram trace and prepared integration.",
+      "execution_evidence": "Focused MariaDB reference cases and selected actual LessonBlock rendering passed; no browser QA or exact MySQL/provider execution.",
+      "source_preservation": "Original snapshots retained; eight retained exercises across this continuation matched source identity, difficulty, schema, seed and trailing checker.",
+      "limits": "No independent worker available. Output fixtures do not prove arbitrary student submissions used a requested technique. Native PostgreSQL/other-engine concepts remain documented or explicitly mirrored, not verified by MariaDB."
+    }
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-10-deferred-constraint-concepts",
+    "original_note_sha256": "9d8aa47ed2d4ec001348a41c61d7b5c743d9410cad76090a13d03a09a433ed41",
+    "status": "paired migration prepared; not applied"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Deferral preserves a final integrity requirement; disabling checks does not supply it",
+      "description": "The temporary intermediate state is permitted only under a supported controlled timing mechanism, while the mirror merely diagnoses proposed final endpoints.",
+      "columns": [
+        "Mechanism",
+        "Intermediate state",
+        "Required final guarantee"
+      ],
+      "rows": [
+        [
+          "Supported deferred constraint",
+          "Eligible inconsistency can be provisional",
+          "Actual required check must pass before accepted completion"
+        ],
+        [
+          "Immediate constraint",
+          "Normal supported timing applies",
+          "Each applicable operation must satisfy its rules"
+        ],
+        [
+          "Disabled checks",
+          "Inconsistent facts can enter without equivalent protection",
+          "No automatic PostgreSQL-style final guarantee"
+        ],
+        [
+          "SQL final-state mirror",
+          "Proposals are inspected as supplied data",
+          "Diagnostic only; does not apply or enforce the batch"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "coordinator checked eligible PostgreSQL kinds, changeable initial timing, final-state universes and explicit nonnative mirror boundaries",
+    "server_rendering": "passed",
+    "browser_rendering": "unverified",
+    "independent_review": "unavailable; no agent tools",
+    "server_rendering_evidence": "Selected actual LessonBlock Vitest rendering passed for this batch; no browser QA."
+  },
+  "sql_verification": {
+    "engine": "11.8.6-MariaDB-0+deb13u1 from Debian",
+    "scope": "MariaDB compatibility execution; exact MySQL 8.4/provider execution unverified",
+    "fingerprint": "34fb797a66d304c58cecce09f2d2e4acee78c60e529b71ee301592ae118985e0",
+    "cases": [
+      {
+        "problem": "deferred-final-parent-mirror",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "deferred-final-parent-mirror",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "deferred-final-parent-mirror",
+        "case": 2,
+        "passed": true
+      },
+      {
+        "problem": "deferred-batch-endpoints-mirror",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "deferred-batch-endpoints-mirror",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "deferred-batch-endpoints-mirror",
+        "case": 2,
+        "passed": true
+      },
+      {
+        "problem": "deferred-batch-endpoints-mirror",
+        "case": 3,
+        "passed": true
+      }
+    ],
+    "all_passed": true
+  }
+}

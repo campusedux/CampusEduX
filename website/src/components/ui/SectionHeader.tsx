@@ -29,19 +29,19 @@ export function SectionHeader({
   className?: string;
 }) {
   return (
-    <div className={cn("mb-5 flex flex-wrap items-end justify-between gap-x-4 gap-y-3 sm:mb-6", className)}>
+    <div className={cn("mb-6 flex flex-wrap items-end justify-between gap-x-4 gap-y-3", className)}>
       <div className="min-w-0 max-w-2xl">
         {eyebrow && <p className="eyebrow mb-1.5">{eyebrow}</p>}
         <Heading id={id} className="h-section">
           {title}
         </Heading>
-        {description && <p className="mt-1.5 text-sm text-ink-muted sm:text-[15px]">{description}</p>}
+        {description && <p className="mt-1.5 text-sm text-ink-muted md:text-base">{description}</p>}
       </div>
       {action}
       {!action && viewAllHref && (
         <Link
           href={viewAllHref}
-          className="group inline-flex items-center gap-1 whitespace-nowrap rounded-lg text-sm font-semibold text-primary transition hover:text-primary-700"
+          className="group inline-flex min-h-11 items-center gap-1 whitespace-nowrap rounded-lg text-sm font-semibold text-ink-muted transition hover:text-primary-700"
         >
           {viewAllLabel}
           <ArrowRight

@@ -1,0 +1,644 @@
+{
+  "source_ref": "chapter-5-keys-and-integrity/alternate-key",
+  "slug": "alternate-key",
+  "title": "Alternate Key",
+  "description": "Preserve independent candidate identities after primary-key selection, implement required alternate uniqueness, and distinguish optional unique values from classical keys.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Another valid way to identify the same fact\n\nAn alternate key is a candidate key that was not chosen as the primary key. Suppose Course has an internal course_id and a required institutional course_code. If each independently identifies the course under the documented rules, both are candidate keys. Choosing course_id as primary leaves course_code as an alternate key. The course code does not lose its identifying guarantee merely because a different key received the primary designation.\n\nThe word alternate describes its role, not weaker enforcement. An alternate identifier can be important to students, administrators, imported files, and reports. If two rows claim the same institutional course code while policy says it identifies one course, the data is inconsistent even when the rows have different internal primary identifiers. The surrogate primary key alone cannot prevent that business-identity collision.\n\n## Establish candidate status before naming an alternate\n\nA field is not an alternate key merely because it looks useful for searching. Candidate-key status requires a guaranteed identifying set and minimality. A course title can repeat across departments or years, so a current collection of unique titles does not establish an alternate identity. An indexed search field can be useful without being a key at all.\n\nLikewise, an email address may be optional, shared, mutable, or compared under particular rules. A system can intentionally require unique nonmissing institutional email addresses, but those assumptions must be explicit. Do not promote any convenient descriptive field to alternate-key status solely because its current sample values differ. The allowed-state contract, not the visual appearance of a column, supplies the guarantee.\n\n## SQL needs uniqueness and an absence policy\n\nA required alternate identity commonly uses UNIQUE with NOT NULL. UNIQUE prevents conflicting ordinary values or combinations, while NOT NULL requires the identifying information to be present. A primary key supplies its own required-key-component behaviour; the alternate declaration should express the relevant obligations without assuming the two keywords are interchangeable in every detail.\n\n```sql\nCREATE TABLE courses (\n  course_id INT PRIMARY KEY,\n  course_code VARCHAR(20) NOT NULL UNIQUE,\n  course_title VARCHAR(80) NOT NULL\n);\n```\n\nThis definition permits two courses with the same title if their identities differ. It rejects a repeated course_code even when course_id changes. It also rejects a missing required course code. These are separate acceptance cases, and each should be checked directly rather than treating one successful insert as evidence that the complete alternate identity policy works.\n\n## Optional uniqueness is a different contract\n\nAn optional external reference can be required to be distinct when present while allowing many rows with no value yet. MySQL's nullable UNIQUE behaviour can fit that contract. It does not provide a definite nonmissing identifier for every tuple, so it should not be described uncritically as a classical candidate key for the whole relation.\n\nConsider an optional library barcode assigned after a physical copy arrives. Several planned copies may have NULL barcodes, while every assigned barcode must be unique. That is a useful optional uniqueness rule. If the application needs to identify every planned copy before barcodes arrive, a different required identifier is needed. Do not infer that absent barcodes magically distinguish the pending copies from one another.\n\n## Alternate identities can be composite\n\nAn alternate key can contain several attributes. A course can have a required department_code and local_course_code whose combination is unique, while course_id remains primary. Different departments can reuse the same local code, and a department can offer several courses. The pair can identify a course even though neither component identifies it alone.\n\nDeclare one combined UNIQUE constraint for the pair rather than separate uniqueness constraints on both components. Separate constraints would forbid legitimate department participation and code reuse. Minimality still matters: if local_course_code is already globally unique by policy, adding department_code is redundant and the pair is a nonminimal superkey rather than another candidate key under that stronger policy.\n\n## Compare according to the intended identifier rules\n\nString uniqueness follows applicable type and collation rules. If course codes differing only in letter case should represent the same identifier, the contract should say so and the implementation should enforce that choice. If they must be distinct, that is a different comparison requirement. Do not assume displayed spellings correspond to distinct database identities under every default collation.\n\nNormalization in an input pipeline can also change which values reach the database. Trimming or case folding may be intentional, but it should match how imports, forms, and lookups interpret the identifier. A required uniqueness constraint protects stored values under its comparison rules; it does not automatically validate the external issuing authority or reconstruct distinctions discarded before storage.\n\n## Lookups can use the alternate identity\n\nUsers may know a course by code while applications join its related facts using course_id. A lookup can resolve the required unique code to the internal identity and descriptive title. The two identifiers can coexist without forcing every screen to display internal numbers. Make the lookup predicate and selected result clear so repeated titles do not create ambiguity.\n\n```sql\nSELECT course_id, course_title\nFROM courses\nWHERE course_code = 'DB101';\n```\n\nUnder the declared required unique code policy, this returns at most one course. It can return no rows if the code is absent. Do not select the first matching title and assume it is equivalent: titles are descriptive and may repeat. A valid lookup follows the actual alternate identity rather than a convenient approximate label.\n\n## Foreign references can target supported alternate keys\n\nA foreign key can reference an appropriate unique alternate key where the database supports the required definition. The columns, types, ordering, index requirements, and referential actions must be compatible. It is inaccurate to state that every possible UNIQUE column in every dialect is automatically an acceptable target without checking those conditions.\n\nThe chosen reference has lifecycle consequences. A business course code might change while the internal course identity stays stable. Referencing the code can require coordinated updates or an explicit supported action when it changes. Referencing the internal identifier can decouple that change from related facts. Neither choice is universally correct; the actual public identifier contract and update policy determine the appropriate design.\n\n## Existing data must fit a new guarantee\n\nBefore adding an alternate uniqueness rule, audit repeated proposed values and missing required identifiers. A sample with no duplicates is weaker than an audit of the complete relevant dataset. Existing conflicts need a deliberate interpretation: are they duplicate records, reused codes, distinct historical editions, or evidence that the proposed identity is not actually unique under the business model?\n\nDo not delete arbitrary rows to make a constraint fit a mistaken assumption. A course code reused across academic years might require a year component or a revised identity policy. The appropriate resolution follows fact meaning and caller dependencies. A local exercise can begin with compatible data, while a real migration needs authorized investigation and a transition that preserves legitimate information.\n\n## Test alternate enforcement independently\n\nTry a new internal primary identifier with an existing alternate value. It should fail under the required uniqueness contract. Also test a valid distinct alternate value with a repeated descriptive title; that should pass. A separate missing-value case verifies the required absence policy. These cases isolate the alternate rule from the primary rule instead of causing every failure through the primary identifier alone.\n\nA lookup by only one component of a composite alternate identity can return several courses. Supply the whole identifying combination when the task requires one course. For a composite alternate identity, test repeated individual components with distinct complete pairs, then challenge the exact pair. Record what the database actually rejected and why. Local scratch checks establish the exercised behaviour on the recorded engine, while exact provider behaviour, reference transitions, and production authorization remain separate verification concerns. Alternate keys are useful when these independent identifying promises stay visible, enforced, and aligned with the facts they represent.\n",
+  "references": [],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-5-alternate-key",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-5-alternate-key-1",
+          "test_id": "pt-dbms-sql-5-alternate-key",
+          "question_text": "What is an alternate key?",
+          "options": [
+            "A foreign key that references a different table",
+            "A candidate key that was not chosen as the primary key",
+            "A key made of alternating data types",
+            "A key that changes value periodically"
+          ],
+          "correct_index": 1,
+          "explanation": "Alternate key = candidate key minus whichever one became the primary key.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-5-alternate-key-2",
+          "test_id": "pt-dbms-sql-5-alternate-key",
+          "question_text": "How is an alternate key typically implemented in SQL?",
+          "options": [
+            "With the PRIMARY KEY keyword",
+            "With UNIQUE and an appropriate NOT NULL policy for a required candidate identity",
+            "With a FOREIGN KEY constraint",
+            "It cannot be enforced in SQL at all"
+          ],
+          "correct_index": 1,
+          "explanation": "A required alternate candidate identity needs both uniqueness and nonmissing values; optional uniqueness is a different contract.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-5-alternate-key-3",
+          "test_id": "pt-dbms-sql-5-alternate-key",
+          "question_text": "In MySQL, does a plain nullable UNIQUE column forbid NULL like a primary key?",
+          "options": [
+            "Yes, identically",
+            "No; nullable UNIQUE permits NULL, including multiple absent values under MySQL rules",
+            "UNIQUE forbids exactly one NULL value",
+            "UNIQUE converts NULLs to zero automatically"
+          ],
+          "correct_index": 1,
+          "explanation": "The absence policy must be specified separately. Ordinary NULL inequality is not the explanation for a TRUE comparison.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-5-alternate-key-4",
+          "test_id": "pt-dbms-sql-5-alternate-key",
+          "question_text": "How many alternate keys can a table have?",
+          "options": [
+            "Exactly one, always",
+            "Zero, one, or many, depending on how many unchosen candidate keys exist",
+            "Exactly the same number as foreign keys",
+            "Alternate keys are not allowed in SQL"
+          ],
+          "correct_index": 1,
+          "explanation": "There can be zero or more unchosen candidate keys after selecting one primary candidate.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-5-alternate-key-5",
+          "test_id": "pt-dbms-sql-5-alternate-key",
+          "question_text": "Can a foreign key in another table reference an alternate key instead of the primary key?",
+          "options": [
+            "Never, under any circumstances",
+            "Yes, when the alternate unique key and referencing definition satisfy the target engine’s requirements",
+            "Only if the alternate key is also the primary key",
+            "Only in NoSQL databases"
+          ],
+          "correct_index": 1,
+          "explanation": "Alternate unique keys can be supported reference targets, subject to actual engine, type, index and definition requirements.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-5-alternate-key-6",
+          "test_id": "pt-dbms-sql-5-alternate-key",
+          "question_text": "If students has candidate keys {id} and {email}, and {id} is the primary key, what is {email}?",
+          "options": [
+            "A foreign key",
+            "An alternate key",
+            "A super key only, not a candidate key",
+            "An invalid key with no formal name"
+          ],
+          "correct_index": 1,
+          "explanation": "Since {email} was a candidate key that wasn't chosen as primary, it's specifically an alternate key.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-5-alternate-key-7",
+          "test_id": "pt-dbms-sql-5-alternate-key",
+          "question_text": "Why can an optional distinct-when-present SQL identifier use nullable UNIQUE, while remaining different from a required classical alternate key?",
+          "options": [
+            "It never makes sense and is always a bug",
+            "Some rows may legitimately not have that optional value yet (e.g. an email not yet collected), while any values that ARE present must still be distinct",
+            "NULL values are required by the SQL standard for all UNIQUE columns",
+            "UNIQUE columns cannot hold real data at all"
+          ],
+          "correct_index": 1,
+          "explanation": "Optional uniqueness can be useful, but it does not provide a nonmissing identifier for every row.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-5-alternate-key-8",
+          "test_id": "pt-dbms-sql-5-alternate-key",
+          "question_text": "Is it accurate to say an alternate key is 'less enforced' than a primary key?",
+          "options": [
+            "Yes, alternate keys are only a suggestion, not enforced",
+            "No; supported UNIQUE enforcement is real, while the chosen primary role and nullability policy remain distinct",
+            "Alternate keys are enforced only during INSERT, never UPDATE",
+            "Alternate keys are enforced only in application code, never the database"
+          ],
+          "correct_index": 1,
+          "explanation": "The uniqueness aspect is enforced rather than advisory; an alternate key can also be a supported foreign-key target.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-5-alternate-key-new-9",
+          "test_id": "pt-dbms-sql-5-alternate-key",
+          "question_text": "Does choosing course_id as primary invalidate a guaranteed candidate course_code?",
+          "options": [
+            "Yes; all other candidates disappear",
+            "No; course_code remains an alternate key",
+            "Only title remains a key",
+            "It becomes a foreign key automatically"
+          ],
+          "correct_index": 1,
+          "explanation": "Primary choice preserves other candidate identities.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-5-alternate-key-new-10",
+          "test_id": "pt-dbms-sql-5-alternate-key",
+          "question_text": "Why does a distinct internal id not make a repeated required course_code acceptable?",
+          "options": [
+            "Primary keys disable all UNIQUE checks",
+            "Titles determine every code",
+            "The alternate identity has its own uniqueness obligation",
+            "A larger id repairs the code"
+          ],
+          "correct_index": 2,
+          "explanation": "Independent identifying rules must both hold.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-5-alternate-key-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-5-alternate-key-application-new-1",
+          "test_id": "pt-dbms-sql-5-alternate-key-application",
+          "question_text": "Which write directly challenges alternate course_code uniqueness?",
+          "options": [
+            "An existing course_id with a new code only",
+            "A shared title with distinct identities",
+            "A new course_id with an existing course_code",
+            "A missing query alias"
+          ],
+          "correct_index": 2,
+          "explanation": "The failure should arise from the alternate rule, not only the primary key.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-5-alternate-key-application-new-2",
+          "test_id": "pt-dbms-sql-5-alternate-key-application",
+          "question_text": "Can a composite alternate identity permit local code reuse across departments?",
+          "options": [
+            "No; every component must be globally unique",
+            "Only if no primary key exists",
+            "Only if names are unique",
+            "Yes; the complete department-code pair is unique"
+          ],
+          "correct_index": 3,
+          "explanation": "The combined identity differs from component uniqueness.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-5-alternate-key-application-new-3",
+          "test_id": "pt-dbms-sql-5-alternate-key-application",
+          "question_text": "Why does nullable UNIQUE not identify every pending record with missing values?",
+          "options": [
+            "Several records can lack that optional identifier",
+            "NULL automatically creates different numbers",
+            "Each missing value is a definite email",
+            "A display label supplies uniqueness"
+          ],
+          "correct_index": 0,
+          "explanation": "Optional absence is not a complete required identity.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-5-alternate-key-application-new-4",
+          "test_id": "pt-dbms-sql-5-alternate-key-application",
+          "question_text": "What can a course-code lookup return under a required unique code rule?",
+          "options": [
+            "Exactly one row for every possible string",
+            "At most one matching course",
+            "Every repeated course title",
+            "One row per department always"
+          ],
+          "correct_index": 1,
+          "explanation": "Uniqueness limits matches, while absent codes return none.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-5-alternate-key-application-new-5",
+          "test_id": "pt-dbms-sql-5-alternate-key-application",
+          "question_text": "What affects whether differently cased string codes collide?",
+          "options": [
+            "Only the font",
+            "Only the row count",
+            "The intended comparison policy and column collation",
+            "Only the SQL alias"
+          ],
+          "correct_index": 2,
+          "explanation": "Stored string uniqueness follows applicable comparison rules.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-5-alternate-key-application-new-6",
+          "test_id": "pt-dbms-sql-5-alternate-key-application",
+          "question_text": "Why audit code reuse across academic years before declaring global uniqueness?",
+          "options": [
+            "Every reused code is necessarily a duplicate person",
+            "UNIQUE always deletes history",
+            "Years cannot be attributes",
+            "The intended fact identity may include a year or edition"
+          ],
+          "correct_index": 3,
+          "explanation": "Existing patterns can reveal a mistaken proposed business identity.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-5-alternate-key-application-new-7",
+          "test_id": "pt-dbms-sql-5-alternate-key-application",
+          "question_text": "Does an index used for searching a title make title an alternate key?",
+          "options": [
+            "No; search usefulness does not guarantee minimal unique identity",
+            "Yes; every index is an alternate key",
+            "Only for text columns",
+            "Only for sorted output"
+          ],
+          "correct_index": 0,
+          "explanation": "Indexing and candidate-key status are distinct.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-5-alternate-key-application-new-8",
+          "test_id": "pt-dbms-sql-5-alternate-key-application",
+          "question_text": "What should be checked before referencing an alternate key?",
+          "options": [
+            "Only its displayed position",
+            "Supported target-key, type, index and lifecycle requirements",
+            "Only the shortest spelling",
+            "Only whether it contains digits"
+          ],
+          "correct_index": 1,
+          "explanation": "Reference compatibility and change policy matter.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-5-alternate-key-application-new-9",
+          "test_id": "pt-dbms-sql-5-alternate-key-application",
+          "question_text": "What should remain valid if course titles are descriptive?",
+          "options": [
+            "Two rows claiming the same required course_code",
+            "A missing mandatory code",
+            "Two courses with the same title and distinct required identities",
+            "Two primary-key declarations"
+          ],
+          "correct_index": 2,
+          "explanation": "Descriptive repetition is not an identity conflict.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-5-alternate-key-application-new-10",
+          "test_id": "pt-dbms-sql-5-alternate-key-application",
+          "question_text": "What does isolated alternate-constraint execution establish?",
+          "options": [
+            "Every provider configuration",
+            "All production reference transitions",
+            "External identifier issuance truth",
+            "The checked accepted and rejected cases on the recorded engine"
+          ],
+          "correct_index": 3,
+          "explanation": "The evidence does not exceed its exercised scope.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cx-alternate-key-lookup",
+      "slug": "alternate-key-lookup",
+      "title": "Resolve a course through its alternate identity",
+      "difficulty": "Easy",
+      "task": "Return course_id and course_title for the required unique course_code DB101. Repeated titles do not identify a course.",
+      "schema_sql": "CREATE TABLE courses (course_id INT PRIMARY KEY, course_code VARCHAR(20) NOT NULL UNIQUE, course_title VARCHAR(80) NOT NULL);",
+      "seed_sql": "INSERT INTO courses VALUES (1,'DB101','Databases'),(2,'DB201','Databases');",
+      "expected": "course_id\tcourse_title\n1\tDatabases",
+      "ordering": "At most one row.",
+      "constraints": [
+        "Codes are canonical uppercase strings; the lookup matches the exact supplied code."
+      ],
+      "edge_cases": [
+        "The requested code can be absent.",
+        "Other courses can share the title."
+      ],
+      "hints": [
+        "Filter by course_code rather than course_title.",
+        "The alternate uniqueness rule limits the result population."
+      ],
+      "solution_sql": "SELECT course_id, course_title FROM courses WHERE course_code = 'DB101';",
+      "explanation": "The lookup uses the independent alternate identity while returning the selected internal identity and description.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO courses VALUES (3,'DB201','Databases');",
+          "expected": ""
+        },
+        {
+          "seed_sql": "INSERT INTO courses VALUES (7,'DB101','Foundations');",
+          "expected": "course_id\tcourse_title\n7\tFoundations"
+        }
+      ]
+    },
+    {
+      "id": "cx-alternate-key-enforcement",
+      "slug": "alternate-key-enforcement",
+      "title": "Keep an alternate course identity enforced",
+      "difficulty": "Medium",
+      "task": "courses already has course_id as primary key and required course_code values. Add UNIQUE(course_code) named course_code_identity, then return course_id, course_code and course_title. Permit repeated titles but reject repeated codes even under a new primary id.",
+      "starter_sql": "-- Add the course_code_identity uniqueness constraint, then return the course facts.",
+      "schema_sql": "CREATE TABLE courses (course_id INT PRIMARY KEY, course_code VARCHAR(20) NOT NULL, course_title VARCHAR(80) NOT NULL);",
+      "seed_sql": "INSERT INTO courses VALUES (1,'DB101','Databases'),(2,'DB201','Databases');",
+      "expected": "course_id\tcourse_code\tcourse_title\n1\tDB101\tDatabases\n2\tDB201\tDatabases",
+      "ordering": "Ascending course_id.",
+      "constraints": [
+        "Initial codes are unique and nonmissing."
+      ],
+      "edge_cases": [
+        "Different primary identities can still conflict on alternate identity.",
+        "Required alternate identity cannot be absent."
+      ],
+      "hints": [
+        "The table already has a primary key; do not declare another.",
+        "Use a separate UNIQUE constraint for the alternate guarantee."
+      ],
+      "solution_sql": "ALTER TABLE courses ADD CONSTRAINT course_code_identity UNIQUE (course_code);\nSELECT course_id, course_code, course_title FROM courses ORDER BY course_id;",
+      "explanation": "The added constraint protects an independent required identity without imposing uniqueness on descriptive titles.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO courses VALUES (9,'NW101','Networks');",
+          "expected": "course_id\tcourse_code\tcourse_title\n9\tNW101\tNetworks"
+        },
+        {
+          "seed_sql": "",
+          "expected": ""
+        }
+      ],
+      "negative_validation_cases": [
+        {
+          "sql": "INSERT INTO courses VALUES (99,'DB101','Other');",
+          "error_codes": [
+            1062
+          ]
+        },
+        {
+          "sql": "INSERT INTO courses VALUES (99,NULL,'Other');",
+          "error_codes": [
+            1048
+          ]
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-5-alternate-key-1",
+      "test_id": "pt-dbms-sql-5-alternate-key",
+      "question_text": "What is an alternate key?",
+      "options": [
+        "A foreign key that references a different table",
+        "A candidate key that was not chosen as the primary key",
+        "A key made of alternating data types",
+        "A key that changes value periodically"
+      ],
+      "correct_index": 1,
+      "explanation": "Alternate key = candidate key minus whichever one became the primary key.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-5-alternate-key-2",
+      "test_id": "pt-dbms-sql-5-alternate-key",
+      "question_text": "How is an alternate key typically implemented in SQL?",
+      "options": [
+        "With the PRIMARY KEY keyword",
+        "With a UNIQUE constraint",
+        "With a FOREIGN KEY constraint",
+        "It cannot be enforced in SQL at all"
+      ],
+      "correct_index": 1,
+      "explanation": "SQL reserves PRIMARY KEY for the chosen key; alternate keys are enforced with UNIQUE.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-5-alternate-key-3",
+      "test_id": "pt-dbms-sql-5-alternate-key",
+      "question_text": "Does a UNIQUE constraint by itself forbid NULL values the same way PRIMARY KEY does?",
+      "options": [
+        "Yes, identically",
+        "No — most engines allow multiple NULLs in a UNIQUE column, since NULL is not considered equal to another NULL",
+        "UNIQUE forbids exactly one NULL value",
+        "UNIQUE converts NULLs to zero automatically"
+      ],
+      "correct_index": 1,
+      "explanation": "This is the key SQL-level difference: UNIQUE alone doesn't imply NOT NULL, and NULLs aren't compared as duplicates of each other.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-5-alternate-key-4",
+      "test_id": "pt-dbms-sql-5-alternate-key",
+      "question_text": "How many alternate keys can a table have?",
+      "options": [
+        "Exactly one, always",
+        "Zero, one, or many, depending on how many unchosen candidate keys exist",
+        "Exactly the same number as foreign keys",
+        "Alternate keys are not allowed in SQL"
+      ],
+      "correct_index": 1,
+      "explanation": "Unlike primary key (always exactly one), a table can have any number of alternate keys, including zero.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-5-alternate-key-5",
+      "test_id": "pt-dbms-sql-5-alternate-key",
+      "question_text": "Can a foreign key in another table reference an alternate key instead of the primary key?",
+      "options": [
+        "Never, under any circumstances",
+        "Most SQL dialects technically allow referencing any UNIQUE column, though referencing the primary key is far more common",
+        "Only if the alternate key is also the primary key",
+        "Only in NoSQL databases"
+      ],
+      "correct_index": 1,
+      "explanation": "It's technically possible in most dialects, though primary-key references are the conventional, more maintainable default.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-5-alternate-key-6",
+      "test_id": "pt-dbms-sql-5-alternate-key",
+      "question_text": "If students has candidate keys {id} and {email}, and {id} is the primary key, what is {email}?",
+      "options": [
+        "A foreign key",
+        "An alternate key",
+        "A super key only, not a candidate key",
+        "An invalid key with no formal name"
+      ],
+      "correct_index": 1,
+      "explanation": "Since {email} was a candidate key that wasn't chosen as primary, it's specifically an alternate key.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-5-alternate-key-7",
+      "test_id": "pt-dbms-sql-5-alternate-key",
+      "question_text": "Why might allowing multiple NULLs in a UNIQUE alternate-key column actually make business sense?",
+      "options": [
+        "It never makes sense and is always a bug",
+        "Some rows may legitimately not have that optional value yet (e.g. an email not yet collected), while any values that ARE present must still be distinct",
+        "NULL values are required by the SQL standard for all UNIQUE columns",
+        "UNIQUE columns cannot hold real data at all"
+      ],
+      "correct_index": 1,
+      "explanation": "For an optional-but-must-be-distinct-when-present attribute, allowing multiple NULLs (absent values) while still enforcing distinctness among the real values is exactly the desired behavior.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-5-alternate-key-8",
+      "test_id": "pt-dbms-sql-5-alternate-key",
+      "question_text": "Is it accurate to say an alternate key is 'less enforced' than a primary key?",
+      "options": [
+        "Yes, alternate keys are only a suggestion, not enforced",
+        "No — a UNIQUE constraint is fully enforced by the database; it's simply not the table's designated primary/foreign-key-target identifier",
+        "Alternate keys are enforced only during INSERT, never UPDATE",
+        "Alternate keys are enforced only in application code, never the database"
+      ],
+      "correct_index": 1,
+      "explanation": "UNIQUE constraints are just as strictly enforced by the database as PRIMARY KEY's uniqueness aspect — the difference is role, not enforcement strength.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "coordinator",
+    "independent_review": "unavailable; no agent tools",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Definitions and examples checked against questions; no plagiarism certification.",
+    "existing_question_corrections": [
+      "tq-dbms-sql-5-alternate-key-2",
+      "tq-dbms-sql-5-alternate-key-3",
+      "tq-dbms-sql-5-alternate-key-4",
+      "tq-dbms-sql-5-alternate-key-5",
+      "tq-dbms-sql-5-alternate-key-7",
+      "tq-dbms-sql-5-alternate-key-8"
+    ],
+    "canonical_answer_indices_preserved": true
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-5-alternate-key",
+    "original_note_sha256": "69fde396ecfe258379d9a02b2879ae08bee577223d83e06f5e7a42f04d316150",
+    "status": "paired migration prepared; not applied"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Primary selection does not erase the alternate identity",
+      "description": "Assume course_id and course_code are required minimal identifiers. Title is descriptive and can repeat.",
+      "columns": [
+        "Attribute",
+        "Role",
+        "Enforcement expectation"
+      ],
+      "rows": [
+        [
+          "course_id",
+          "Chosen primary candidate",
+          "Unique and nonmissing"
+        ],
+        [
+          "course_code",
+          "Alternate candidate",
+          "Independently unique and nonmissing"
+        ],
+        [
+          "course_title",
+          "Description",
+          "Repeated titles permitted"
+        ],
+        [
+          "New id with existing code",
+          "Alternate-identity collision",
+          "Reject despite a distinct primary id"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "coordinator checked alternate candidate versus optional uniqueness and independent rejection fixtures",
+    "server_rendering": "passed",
+    "browser_rendering": "unverified",
+    "independent_review": "unavailable; no agent tools",
+    "server_rendering_evidence": "2026-10-29: actual LessonBlock rendering passed for all authored packages in focused Vitest suite."
+  },
+  "sql_verification": {
+    "engine": "11.8.6-MariaDB-0+deb13u1 from Debian",
+    "scope": "MariaDB compatibility execution; exact MySQL 8.4/provider execution unverified",
+    "fingerprint": "4d6e1ac1c94f7affacf0a611056524728c0bd6455f2311573286853f0c9b46ec",
+    "cases": [
+      {
+        "problem": "alternate-key-lookup",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "alternate-key-lookup",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "alternate-key-lookup",
+        "case": 2,
+        "passed": true
+      },
+      {
+        "problem": "alternate-key-enforcement",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "alternate-key-enforcement",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "alternate-key-enforcement",
+        "case": 2,
+        "passed": true
+      },
+      {
+        "problem": "alternate-key-enforcement",
+        "negative_case": 0,
+        "error_code": 1062,
+        "passed": true
+      },
+      {
+        "problem": "alternate-key-enforcement",
+        "negative_case": 1,
+        "error_code": 1048,
+        "passed": true
+      }
+    ],
+    "all_passed": true
+  }
+}

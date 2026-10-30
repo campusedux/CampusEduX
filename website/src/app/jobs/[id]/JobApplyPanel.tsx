@@ -76,7 +76,7 @@ export default function JobApplyPanel({ jobId, externalApply = false }: { jobId:
       supabase.from("resumes").select("id,file_name,uploaded_at").eq("user_id", user.id).order("uploaded_at", { ascending: false }),
     ]);
 
-    if (appliedRes.data) setApplied({ status: appliedRes.data.status, created_at: appliedRes.data.created_at });
+    setApplied(appliedRes.data ? { status: appliedRes.data.status, created_at: appliedRes.data.created_at } : null);
     setIsSaved(!!savedRes.data);
     const rows = (resumesRes.data ?? []) as ResumeRow[];
     setResumes(rows);
@@ -100,15 +100,22 @@ export default function JobApplyPanel({ jobId, externalApply = false }: { jobId:
   }, [sessionLoading, sessionUserId, load]);
 
   async function handleToggleSave() {
+    if (savePending) return;
     setSavePending(true);
     setSaveError(null);
-    const result = await toggleSaveJobAction(jobId);
-    setSavePending(false);
-    if ("error" in result) {
-      setSaveError(result.error);
-      return;
+    try {
+      const result = await toggleSaveJobAction(jobId);
+      setSavePending(false);
+      if ("error" in result) {
+        setSaveError(result.error);
+        return;
+      }
+      setIsSaved(result.saved);
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
+    } finally {
+      setSavePending(false);
     }
-    setIsSaved(result.saved);
   }
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -178,6 +185,8 @@ export default function JobApplyPanel({ jobId, externalApply = false }: { jobId:
       }
       setApplied({ status: "in_review", created_at: new Date().toISOString() });
       await load();
+    } catch (err) {
+      setSubmitError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
     } finally {
       setSubmitting(false);
     }

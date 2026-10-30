@@ -1,0 +1,698 @@
+{
+  "source_ref": "chapter-8-sql-fundamentals/ddl",
+  "slug": "ddl",
+  "title": "DDL",
+  "description": "Define and evolve MySQL structures with explicit types and constraints, distinguishing temporary objects, implicit commits, atomic DDL, dependent callers, and safe validation.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Defining the structures that give data meaning\n\nData Definition Language, usually shortened to DDL, describes SQL operations that create or change database objects. CREATE introduces an object, ALTER changes a supported definition, and DROP removes an object. Tables, indexes, and views are familiar targets. DDL differs from changing the rows already held by a table, although a structural operation can have substantial consequences for existing data and callers.\n\nThis topic uses MySQL 8.4. Examples describe isolated learning objects, not commands to run against an application database. A definition is a shared contract: column names, types, keys, nullability, and constraints determine which facts callers can represent. Understanding DDL means understanding that contract as well as the statement's grammar.\n\nConsider a campus equipment catalog. Each item has an item_id, item_name, and quantity. The identifier must be unique, names must be recorded, and quantity cannot be negative. Those requirements lead to a more useful definition than merely creating three columns that happen to accept today's sample rows.\n\n## Creating a table from explicit requirements\n\nA CREATE TABLE statement names columns and their types, then supplies the required constraints. INT can represent a whole-number quantity, while VARCHAR provides a bounded character value for an item name. The primary key gives stable identity. NOT NULL prevents a missing value, and a check expresses a narrower permitted domain where the engine supports and enforces it.\n\n```sql\nCREATE TEMPORARY TABLE equipment (\n  item_id INT PRIMARY KEY,\n  item_name VARCHAR(40) NOT NULL,\n  quantity INT NOT NULL CHECK (quantity >= 0)\n) ENGINE=InnoDB;\n```\n\nThis example deliberately creates a temporary table. It is associated with the session and is useful for an isolated exercise. A permanent application table requires the project's approved migration process. The keyword temporary changes lifetime and some transaction behavior; it does not make the declared key or quantity rule irrelevant.\n\nA type is not the whole rule. INT by itself permits values outside the intended nonnegative quantity range. Likewise, a name column without NOT NULL can admit absence even when the task requires a recorded name. Define the domain first, then select the representation and constraints that express it.\n\n## Separating structure from the current rows\n\nOnce equipment exists, INSERT can add rows and SELECT can inspect them. Those operations use the structure rather than defining it. An empty equipment table still has a schema. Conversely, copying three sample rows into another table does not prove the second table has the same constraints or identity contract.\n\nDROP TABLE removes the object and its rows. DELETE removes qualifying rows while leaving the table definition available. A DELETE without a filter can empty a table but does not become equivalent to DROP. TRUNCATE has its own MySQL semantics and implicit-commit behavior; it should not be substituted merely because an empty output looks the same.\n\nThis distinction matters for recovery. Recreating a dropped table with matching column names cannot reconstruct lost records or every previous dependency automatically. An explanation of DDL must not treat destructive operations as harmless formatting changes. The exercises use temporary objects and synthetic data to make structural work concrete without changing production state.\n\n## Altering a definition deliberately\n\nALTER TABLE changes supported aspects of an existing table. A new optional recorded date can be introduced using ADD COLUMN. If callers do not require it yet, allowing NULL can represent that the date is not recorded for existing rows. Whether that is the correct business policy must be decided explicitly rather than inferred from convenient migration syntax.\n\n```sql\nALTER TABLE equipment ADD COLUMN inspected_on DATE NULL;\n```\n\nAfter this change, old equipment rows can remain present with a missing inspection date. Adding a mandatory field without a suitable population or default policy is a different problem. A schema change must account for both existing rows and future writes, including clients that still use the old contract.\n\nAvoid assuming every alteration is instantaneous. Product version, engine, requested change, and table properties affect the available algorithms and locking requirements. Even an operation supported by an efficient algorithm can need metadata coordination. An isolated exercise demonstrates syntax and result behavior, not the maintenance duration of a large live table.\n\n## Understanding implicit commits in MySQL\n\nMany ordinary MySQL DDL statements cause implicit transaction commits. A transaction containing earlier row changes must not assume that a later ROLLBACK will undo everything after an intervening permanent CREATE or ALTER. Read the documented behavior of the exact statement rather than treating DDL as automatically part of the same reversible unit as transactional row changes.\n\nCREATE TEMPORARY TABLE is an important distinction. It does not cause the ordinary implicit commit associated with CREATE TABLE, but creating the temporary object is not undone by a user ROLLBACK. Temporary lifetime and rollback semantics are separate properties. Other operations on temporary objects also require their own documented checks.\n\nDo not extend MySQL's behavior into a blanket claim about every product. Transactional DDL support varies by engine and operation. In particular, describing SQL Server as universally unable to roll back CREATE TABLE is incorrect. Keep cross-product statements narrow, or verify the exact target operation before teaching them.\n\n## Distinguishing atomic DDL from user rollback\n\nMySQL supports atomic DDL for supported operations and engines. In this context, atomicity concerns coordinated completion or recovery of the definition change and its associated storage work. It does not mean an application can issue a successful permanent CREATE TABLE and later reverse it with an ordinary ROLLBACK.\n\nThe two ideas answer different questions. Atomic DDL asks how the system handles the definition operation as a whole, especially during failure. Transactional DDL asks whether user transaction boundaries can undo a successful definition change. Confusing them leads to a particularly dangerous assumption: that a modern engine's crash-safe DDL is permission to experiment on live structures without a recovery plan.\n\nUse the exact product documentation when this distinction affects execution. A MariaDB compatibility run of temporary-table exercises does not establish MySQL's complete atomic-DDL implementation. Record what actually ran and leave exact MySQL or hosted-provider behavior unverified until tested in that environment.\n\n## Accounting for callers and dependencies\n\nChanging a definition can affect direct queries, views, reports, imports, and application writes. A column rename may break a view still referring to the old name. A narrower type can reject existing values. Adding a uniqueness requirement can invalidate previously accepted records. These are observable contract changes, not merely edits to database documentation.\n\nBefore proposing a real migration, inspect current definitions and callers, including other applications sharing the database. Preserve stable identifiers and external URLs where required. An interface mapping can sometimes retain an old label, but it cannot invent data that a destructive change removed. Compatibility needs evidence about values, types, nullability, and relationship cardinality.\n\nAn IF NOT EXISTS guard also has limited meaning. It can prevent a duplicate-object creation error but does not prove that an already existing object has the desired definition. Idempotence must include verifying the intended state and handling drift, not simply suppressing errors until a script reports success.\n\n## Testing definitions as well as examples\n\nPositive tests should create the intended object, load valid rows, and inspect useful results in a deterministic order. Negative tests should attempt invalid states that the definition promises to reject: duplicate identifiers, missing required names, and negative quantities. A successful SELECT over ordinary rows alone cannot prove every constraint was installed correctly.\n\nA structural illustration should name columns, keys, and permitted absence so readers can connect the SQL to the model. The same names should appear in notes, tests, and exercises. Temporary-table practice can demonstrate those concepts, while live migration validation still needs the real schema, permissions, dependencies, and approved operational procedure.\n\nDDL is therefore the language of explicit structural contracts. Learn CREATE, ALTER, and DROP together with the values and callers they affect. Keep object lifetime, implicit commits, atomic recovery, and user rollback distinct. That precision makes a small teaching definition understandable and provides the habits needed to review a real structural change responsibly.\n",
+  "references": [
+    {
+      "title": "MySQL implicit commits",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/implicit-commit.html"
+    },
+    {
+      "title": "MySQL atomic DDL",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/atomic-ddl.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-8-ddl",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-8-ddl-1",
+          "test_id": "pt-dbms-sql-8-ddl",
+          "question_text": "Which three verbs form the core of DDL?",
+          "options": [
+            "SELECT, INSERT, UPDATE",
+            "CREATE, ALTER, DROP",
+            "GRANT, REVOKE, DENY",
+            "COMMIT, ROLLBACK, SAVEPOINT"
+          ],
+          "correct_index": 1,
+          "explanation": "CREATE, ALTER, and DROP define and change the structure of database objects — the essence of DDL.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-8-ddl-2",
+          "test_id": "pt-dbms-sql-8-ddl",
+          "question_text": "What is the key difference between DROP TABLE and DELETE FROM table?",
+          "options": [
+            "They are exact synonyms with no difference",
+            "DROP TABLE removes the structure and data together; DELETE FROM only removes the data, keeping the table structure",
+            "DELETE FROM removes the table structure; DROP TABLE only removes data",
+            "DROP TABLE can be undone with UPDATE"
+          ],
+          "correct_index": 1,
+          "explanation": "DROP TABLE eliminates the object entirely (structure + data); DELETE FROM empties the rows but the table itself still exists.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-8-ddl-3",
+          "test_id": "pt-dbms-sql-8-ddl",
+          "question_text": "Can an ordinary successful MySQL permanent CREATE TABLE generally be undone by a later user ROLLBACK?",
+          "options": [
+            "Yes, always, on every engine without exception",
+            "No; ordinary permanent CREATE TABLE has implicit-commit behavior and is not reversed that way",
+            "Only if wrapped in a SAVEPOINT",
+            "Only on weekends"
+          ],
+          "correct_index": 1,
+          "explanation": "This question is scoped to MySQL; it does not make the incorrect claim that SQL Server universally lacks transactional CREATE TABLE.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-8-ddl-4",
+          "test_id": "pt-dbms-sql-8-ddl",
+          "question_text": "Which statement correctly distinguishes atomic DDL from transactional DDL?",
+          "options": [
+            "MySQL",
+            "Oracle",
+            "Atomic DDL coordinates completion/recovery; transactional DDL concerns undo through user transaction boundaries",
+            "SQLite always without exception"
+          ],
+          "correct_index": 2,
+          "explanation": "MySQL atomic DDL is not a promise of later user rollback.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-8-ddl-5",
+          "test_id": "pt-dbms-sql-8-ddl",
+          "question_text": "Which statement correctly adds a new column to an existing table?",
+          "options": [
+            "ALTER TABLE employees ADD COLUMN hire_date DATE;",
+            "CREATE COLUMN hire_date ON employees;",
+            "UPDATE employees ADD hire_date DATE;",
+            "INSERT COLUMN hire_date INTO employees;"
+          ],
+          "correct_index": 0,
+          "explanation": "ALTER TABLE ... ADD COLUMN is the standard way to add a column to an existing table.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-8-ddl-6",
+          "test_id": "pt-dbms-sql-8-ddl",
+          "question_text": "Why should DDL transaction behavior be checked for the exact product and statement?",
+          "options": [
+            "Because it's true on literally every database with zero exceptions, so it's actually safe",
+            "Different engines and operations have different implicit-commit and rollback rules",
+            "Because DDL never commits on any engine",
+            "Because auto-commit only applies to SELECT statements"
+          ],
+          "correct_index": 1,
+          "explanation": "Avoid universal claims, including about temporary objects and other database products.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-8-ddl-7",
+          "test_id": "pt-dbms-sql-8-ddl",
+          "question_text": "What is a real operational risk of running ALTER TABLE ... DROP COLUMN on a large, live production table?",
+          "options": [
+            "There is never any risk — ALTER TABLE is always instantaneous on every engine",
+            "On some engines it can be a slow, locking operation, not an instant metadata-only change",
+            "It always deletes the entire table by accident",
+            "It is impossible to drop a column on a table with any data in it"
+          ],
+          "correct_index": 1,
+          "explanation": "Depending on the engine and table size, structural changes can require rewriting data or holding locks, making them slower and riskier than they look syntactically.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-8-ddl-8",
+          "test_id": "pt-dbms-sql-8-ddl",
+          "question_text": "What category of SQL statement is CREATE INDEX?",
+          "options": [
+            "DML",
+            "DQL",
+            "DDL",
+            "TCL"
+          ],
+          "correct_index": 2,
+          "explanation": "CREATE INDEX defines a structural database object (an index), which makes it DDL, just like CREATE TABLE.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-8-ddl-new-9",
+          "test_id": "pt-dbms-sql-8-ddl",
+          "question_text": "Does IF NOT EXISTS prove an existing table has the required columns and constraints?",
+          "options": [
+            "Yes; it repairs every mismatch",
+            "No; the actual definition still needs verification",
+            "Yes; names determine every constraint",
+            "Only if the table has rows"
+          ],
+          "correct_index": 1,
+          "explanation": "A duplicate-object guard does not establish structural equivalence.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-8-ddl-new-10",
+          "test_id": "pt-dbms-sql-8-ddl",
+          "question_text": "Which negative test checks the quantity domain in the equipment definition?",
+          "options": [
+            "Read a valid positive quantity",
+            "Sort names alphabetically",
+            "Attempt to insert a negative quantity",
+            "Count only existing valid rows"
+          ],
+          "correct_index": 2,
+          "explanation": "The promised nonnegative rule must reject an invalid value.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-8-ddl-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-8-ddl-application-new-1",
+          "test_id": "pt-dbms-sql-8-ddl-application",
+          "question_text": "A temporary equipment table is created and the user rolls back. Must the object creation itself be undone?",
+          "options": [
+            "Yes; all temporary objects are transactional DDL",
+            "Yes; every table is removed by ROLLBACK",
+            "No; temporary creation does not imply user-rollback support",
+            "Only the table name is rolled back"
+          ],
+          "correct_index": 2,
+          "explanation": "MySQL temporary creation avoids the ordinary create implicit commit but is not itself undone by user rollback.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-8-ddl-application-new-2",
+          "test_id": "pt-dbms-sql-8-ddl-application",
+          "question_text": "A new nullable inspected_on column is added to existing equipment rows. What can NULL represent?",
+          "options": [
+            "An inspection certainly happened today",
+            "A deleted equipment identifier",
+            "A negative quantity",
+            "No inspection date recorded under the stated policy"
+          ],
+          "correct_index": 3,
+          "explanation": "Nullability needs a defined absence policy.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-8-ddl-application-new-3",
+          "test_id": "pt-dbms-sql-8-ddl-application",
+          "question_text": "An alteration is fast on a tiny scratch table. What remains unverified?",
+          "options": [
+            "Its live-table locking, algorithm, and operational cost",
+            "Whether the scratch statement ran",
+            "Whether columns have names",
+            "Whether the example used SQL"
+          ],
+          "correct_index": 0,
+          "explanation": "Small examples do not establish production maintenance behavior.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-8-ddl-application-new-4",
+          "test_id": "pt-dbms-sql-8-ddl-application",
+          "question_text": "A view still references a renamed column. What requires review?",
+          "options": [
+            "Only the visual diagram color",
+            "The dependent mapping and caller contract",
+            "Only the database file extension",
+            "Only the query indentation"
+          ],
+          "correct_index": 1,
+          "explanation": "Structural changes can break dependent SQL definitions.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-8-ddl-application-new-5",
+          "test_id": "pt-dbms-sql-8-ddl-application",
+          "question_text": "A table is emptied with DELETE. What remains?",
+          "options": [
+            "No object with that name",
+            "Only a view definition",
+            "Its table definition and constraints",
+            "Only the transaction log filename"
+          ],
+          "correct_index": 2,
+          "explanation": "Removing rows differs from removing the table object.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-8-ddl-application-new-6",
+          "test_id": "pt-dbms-sql-8-ddl-application",
+          "question_text": "A unique constraint is added where duplicate identifiers already exist. What must preparation address?",
+          "options": [
+            "Only the number of visible rows per page",
+            "Only the order of column comments",
+            "Nothing; DDL always repairs duplicates",
+            "The existing data conflict under the intended rule"
+          ],
+          "correct_index": 3,
+          "explanation": "Existing states need validation before enforcing a stricter contract.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-8-ddl-application-new-7",
+          "test_id": "pt-dbms-sql-8-ddl-application",
+          "question_text": "A key rejects duplicate item_id but item_name can be NULL. Does that meet a required-name contract?",
+          "options": [
+            "No; uniqueness and required values are separate rules",
+            "Yes; primary keys make every other column required",
+            "Only if names are short",
+            "Only if quantities are positive"
+          ],
+          "correct_index": 0,
+          "explanation": "NOT NULL or the equivalent required-value rule must be specified separately.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-8-ddl-application-new-8",
+          "test_id": "pt-dbms-sql-8-ddl-application",
+          "question_text": "A permanent DDL statement intervenes between transactional updates and ROLLBACK in MySQL. What assumption is unsafe?",
+          "options": [
+            "That exact statement behavior matters",
+            "That the later rollback reverses every earlier change",
+            "That implicit commits can exist",
+            "That the application needs transaction boundaries"
+          ],
+          "correct_index": 1,
+          "explanation": "An implicit commit can end the earlier transaction.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-8-ddl-application-new-9",
+          "test_id": "pt-dbms-sql-8-ddl-application",
+          "question_text": "A crash-safe DDL feature is enabled. What does it not authorize?",
+          "options": [
+            "Coordinated DDL recovery where supported",
+            "Reading official statement documentation",
+            "Unapproved experiments on live structures without recovery planning",
+            "Checking structural definitions"
+          ],
+          "correct_index": 2,
+          "explanation": "Recovery guarantees and authorization to perform changes are separate.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-8-ddl-application-new-10",
+          "test_id": "pt-dbms-sql-8-ddl-application",
+          "question_text": "A quantity column is INT but has no nonnegative rule. Which input may remain representable?",
+          "options": [
+            "Only positive integers",
+            "Only NULL values",
+            "Only strings",
+            "A negative integer within the type range"
+          ],
+          "correct_index": 3,
+          "explanation": "Type range alone is broader than the modeled nonnegative domain.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "dsa-dbms-sql-ddl-create-equipment",
+      "slug": "ddl-create-equipment",
+      "title": "Define a temporary equipment table",
+      "difficulty": "Easy",
+      "task": "Create a TEMPORARY InnoDB table named equipment with item_id INT PRIMARY KEY, item_name VARCHAR(40) NOT NULL, and quantity INT NOT NULL CHECK (quantity >= 0). Copy the valid rows from equipment_input using an explicit INSERT column list, then return item_id, item_name, quantity ordered by item_id. The provided table is input data, not the required new definition.",
+      "schema_sql": "CREATE TABLE equipment_input (item_id INT PRIMARY KEY, item_name VARCHAR(40) NOT NULL, quantity INT NOT NULL CHECK (quantity >= 0));",
+      "seed_sql": "INSERT INTO equipment_input VALUES (2,'Tripod',0),(1,'Camera',3);",
+      "expected": "item_id\titem_name\tquantity\n1\tCamera\t3\n2\tTripod\t0",
+      "ordering": "item_id ascending",
+      "constraints": [
+        "The new object must be temporary",
+        "Unique non-null item_id",
+        "Names required",
+        "Quantity required and nonnegative"
+      ],
+      "edge_cases": [
+        "Zero quantity is valid",
+        "Empty input still requires the table definition",
+        "Duplicate keys, NULL names and negative quantities must be rejected"
+      ],
+      "hints": [
+        "CREATE TEMPORARY TABLE defines the new object",
+        "Declare constraints before loading input rows"
+      ],
+      "starter_sql": "-- Define the temporary table, copy input, then SELECT the result.\n",
+      "solution_sql": "CREATE TEMPORARY TABLE equipment (item_id INT PRIMARY KEY, item_name VARCHAR(40) NOT NULL, quantity INT NOT NULL CHECK (quantity >= 0)) ENGINE=InnoDB;\nINSERT INTO equipment (item_id,item_name,quantity) SELECT item_id,item_name,quantity FROM equipment_input;\nSELECT item_id,item_name,quantity FROM equipment ORDER BY item_id;",
+      "explanation": "The temporary definition expresses identity, required values, and the nonnegative domain before loading the fixture. Ordered output checks the copied state; separate rejected-input checks verify constraints.",
+      "validation_cases": [
+        {
+          "seed_sql": "",
+          "expected": ""
+        },
+        {
+          "seed_sql": "INSERT INTO equipment_input VALUES (9,'Mic',0);",
+          "expected": "item_id\titem_name\tquantity\n9\tMic\t0"
+        }
+      ],
+      "negative_validation_cases": [
+        {
+          "sql": "INSERT INTO equipment VALUES (1,'Duplicate',1);",
+          "error_codes": [
+            1062
+          ]
+        },
+        {
+          "sql": "INSERT INTO equipment VALUES (8,NULL,1);",
+          "error_codes": [
+            1048
+          ]
+        },
+        {
+          "sql": "INSERT INTO equipment VALUES (8,'Invalid',-1);",
+          "error_codes": [
+            3819,
+            4025
+          ]
+        }
+      ]
+    },
+    {
+      "id": "dsa-dbms-sql-ddl-alter-equipment",
+      "slug": "ddl-alter-equipment",
+      "title": "Extend equipment with an optional inspection date",
+      "difficulty": "Medium",
+      "task": "The temporary equipment table already contains the fixture rows. Add inspected_on DATE NULL with ALTER TABLE. Set inspected_on to 2026-09-01 for rows with quantity > 0, leaving zero-quantity rows unrecorded. Return item_id, item_name, quantity, inspected_on ordered by item_id. Do not recreate the table or change identifiers.",
+      "schema_sql": "CREATE TEMPORARY TABLE equipment (item_id INT PRIMARY KEY, item_name VARCHAR(40) NOT NULL, quantity INT NOT NULL CHECK (quantity >= 0)) ENGINE=InnoDB;",
+      "seed_sql": "INSERT INTO equipment VALUES (2,'Tripod',0),(1,'Camera',3);",
+      "expected": "item_id\titem_name\tquantity\tinspected_on\n1\tCamera\t3\t2026-09-01\n2\tTripod\t0\tNULL",
+      "ordering": "item_id ascending",
+      "constraints": [
+        "Preserve the original table and rows",
+        "The new DATE column permits NULL",
+        "Existing quantity constraints remain"
+      ],
+      "edge_cases": [
+        "Zero quantity keeps NULL",
+        "Empty input still needs an altered definition",
+        "Original key and nonnegative constraint remain effective"
+      ],
+      "hints": [
+        "Use ADD COLUMN on the existing table",
+        "Populate only the stated positive-quantity rows"
+      ],
+      "starter_sql": "-- ALTER the temporary table, populate dates, then SELECT.\n",
+      "solution_sql": "ALTER TABLE equipment ADD COLUMN inspected_on DATE NULL;\nUPDATE equipment SET inspected_on = '2026-09-01' WHERE quantity > 0;\nSELECT item_id,item_name,quantity,inspected_on FROM equipment ORDER BY item_id;",
+      "explanation": "The alteration adds a nullable calendar fact while retaining identity and existing validity rules. The targeted update leaves unrecorded dates distinct from the chosen inspection date.",
+      "validation_cases": [
+        {
+          "seed_sql": "",
+          "expected": ""
+        },
+        {
+          "seed_sql": "INSERT INTO equipment VALUES (5,'Mic',0),(3,'Screen',1);",
+          "expected": "item_id\titem_name\tquantity\tinspected_on\n3\tScreen\t1\t2026-09-01\n5\tMic\t0\tNULL"
+        }
+      ],
+      "negative_validation_cases": [
+        {
+          "sql": "INSERT INTO equipment VALUES (1,'Duplicate',1,NULL);",
+          "error_codes": [
+            1062
+          ]
+        },
+        {
+          "sql": "INSERT INTO equipment VALUES (8,'Invalid',-1,NULL);",
+          "error_codes": [
+            3819,
+            4025
+          ]
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-8-ddl-1",
+      "test_id": "pt-dbms-sql-8-ddl",
+      "question_text": "Which three verbs form the core of DDL?",
+      "options": [
+        "SELECT, INSERT, UPDATE",
+        "CREATE, ALTER, DROP",
+        "GRANT, REVOKE, DENY",
+        "COMMIT, ROLLBACK, SAVEPOINT"
+      ],
+      "correct_index": 1,
+      "explanation": "CREATE, ALTER, and DROP define and change the structure of database objects — the essence of DDL.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-8-ddl-2",
+      "test_id": "pt-dbms-sql-8-ddl",
+      "question_text": "What is the key difference between DROP TABLE and DELETE FROM table?",
+      "options": [
+        "They are exact synonyms with no difference",
+        "DROP TABLE removes the structure and data together; DELETE FROM only removes the data, keeping the table structure",
+        "DELETE FROM removes the table structure; DROP TABLE only removes data",
+        "DROP TABLE can be undone with UPDATE"
+      ],
+      "correct_index": 1,
+      "explanation": "DROP TABLE eliminates the object entirely (structure + data); DELETE FROM empties the rows but the table itself still exists.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-8-ddl-3",
+      "test_id": "pt-dbms-sql-8-ddl",
+      "question_text": "On MySQL, Oracle, and SQL Server, can a CREATE TABLE statement typically be undone with a later ROLLBACK?",
+      "options": [
+        "Yes, always, on every engine without exception",
+        "No — DDL auto-commits on these engines and generally cannot be rolled back",
+        "Only if wrapped in a SAVEPOINT",
+        "Only on weekends"
+      ],
+      "correct_index": 1,
+      "explanation": "DDL auto-commits immediately on these engines, unlike DML, so ROLLBACK typically cannot undo it.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-8-ddl-4",
+      "test_id": "pt-dbms-sql-8-ddl",
+      "question_text": "Which mainstream database is notable for supporting transactional DDL (DDL that CAN be rolled back)?",
+      "options": [
+        "MySQL",
+        "Oracle",
+        "PostgreSQL",
+        "SQLite always without exception"
+      ],
+      "correct_index": 2,
+      "explanation": "PostgreSQL is well known for allowing CREATE/ALTER/DROP to participate in a rollback-able transaction, unlike most other mainstream engines.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-8-ddl-5",
+      "test_id": "pt-dbms-sql-8-ddl",
+      "question_text": "Which statement correctly adds a new column to an existing table?",
+      "options": [
+        "ALTER TABLE employees ADD COLUMN hire_date DATE;",
+        "CREATE COLUMN hire_date ON employees;",
+        "UPDATE employees ADD hire_date DATE;",
+        "INSERT COLUMN hire_date INTO employees;"
+      ],
+      "correct_index": 0,
+      "explanation": "ALTER TABLE ... ADD COLUMN is the standard way to add a column to an existing table.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-8-ddl-6",
+      "test_id": "pt-dbms-sql-8-ddl",
+      "question_text": "Why is 'DDL always auto-commits' a dangerous assumption to hard-code into a mental model?",
+      "options": [
+        "Because it's true on literally every database with zero exceptions, so it's actually safe",
+        "Because it's false on PostgreSQL, so code or habits built on that assumption can behave very differently depending on the target engine",
+        "Because DDL never commits on any engine",
+        "Because auto-commit only applies to SELECT statements"
+      ],
+      "correct_index": 1,
+      "explanation": "The auto-commit behavior of DDL is dialect-dependent, so assuming it universally is a portability trap — PostgreSQL genuinely differs.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-8-ddl-7",
+      "test_id": "pt-dbms-sql-8-ddl",
+      "question_text": "What is a real operational risk of running ALTER TABLE ... DROP COLUMN on a large, live production table?",
+      "options": [
+        "There is never any risk — ALTER TABLE is always instantaneous on every engine",
+        "On some engines it can be a slow, locking operation, not an instant metadata-only change",
+        "It always deletes the entire table by accident",
+        "It is impossible to drop a column on a table with any data in it"
+      ],
+      "correct_index": 1,
+      "explanation": "Depending on the engine and table size, structural changes can require rewriting data or holding locks, making them slower and riskier than they look syntactically.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-8-ddl-8",
+      "test_id": "pt-dbms-sql-8-ddl",
+      "question_text": "What category of SQL statement is CREATE INDEX?",
+      "options": [
+        "DML",
+        "DQL",
+        "DDL",
+        "TCL"
+      ],
+      "correct_index": 2,
+      "explanation": "CREATE INDEX defines a structural database object (an index), which makes it DDL, just like CREATE TABLE.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "coordinator",
+    "independent_review": "unavailable; no agent tools",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Definitions and examples checked against questions; no plagiarism certification.",
+    "existing_question_corrections": [
+      "tq-dbms-sql-8-ddl-3",
+      "tq-dbms-sql-8-ddl-4",
+      "tq-dbms-sql-8-ddl-6"
+    ],
+    "canonical_answer_indices_preserved": true
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-8-ddl",
+    "original_note_sha256": "d54e64269782623e92f2ef7351eb7f79bf03aa05478dde4137033967c6c5795d",
+    "status": "paired migration prepared; not applied"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Equipment definition before and after an optional-date alteration",
+      "description": "The existing identifier, required name, and nonnegative quantity remain unchanged. The added date permits absence; the new column does not imply that every item was inspected.",
+      "columns": [
+        "Attribute",
+        "Original definition",
+        "After ALTER"
+      ],
+      "rows": [
+        [
+          "item_id",
+          "INT PRIMARY KEY",
+          "Unchanged"
+        ],
+        [
+          "item_name",
+          "VARCHAR(40) NOT NULL",
+          "Unchanged"
+        ],
+        [
+          "quantity",
+          "INT NOT NULL, quantity >= 0",
+          "Unchanged"
+        ],
+        [
+          "inspected_on",
+          "Absent",
+          "DATE NULL"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "coordinator review",
+    "server_rendering": "passed",
+    "browser_rendering": "unverified",
+    "independent_review": "unavailable; no agent tools",
+    "rendering_check": "2026-10-29: 44 authored-package render checks and 8 diagram/access integration checks passed. Desktop/mobile browser rendering unverified."
+  },
+  "sql_verification": {
+    "engine": "11.8.6-MariaDB-0+deb13u1 from Debian",
+    "scope": "MariaDB compatibility execution; exact MySQL 8.4/provider execution unverified",
+    "fingerprint": "1a85335876503a75c65847edba7cd0355b0426efae58de8401bda547a6ae742d",
+    "cases": [
+      {
+        "problem": "ddl-create-equipment",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "ddl-create-equipment",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "ddl-create-equipment",
+        "case": 2,
+        "passed": true
+      },
+      {
+        "problem": "ddl-create-equipment",
+        "negative_case": 0,
+        "error_code": 1062,
+        "passed": true
+      },
+      {
+        "problem": "ddl-create-equipment",
+        "negative_case": 1,
+        "error_code": 1048,
+        "passed": true
+      },
+      {
+        "problem": "ddl-create-equipment",
+        "negative_case": 2,
+        "error_code": 4025,
+        "passed": true
+      },
+      {
+        "problem": "ddl-alter-equipment",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "ddl-alter-equipment",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "ddl-alter-equipment",
+        "case": 2,
+        "passed": true
+      },
+      {
+        "problem": "ddl-alter-equipment",
+        "negative_case": 0,
+        "error_code": 1062,
+        "passed": true
+      },
+      {
+        "problem": "ddl-alter-equipment",
+        "negative_case": 1,
+        "error_code": 4025,
+        "passed": true
+      }
+    ],
+    "all_passed": true
+  }
+}

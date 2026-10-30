@@ -1,0 +1,615 @@
+{
+  "source_ref": "chapter-6-er-and-eer-modeling/relationship",
+  "slug": "relationship",
+  "title": "Relationship",
+  "description": "Model associations between identified occurrences, distinguish instances from types, and preserve relationship meaning through SQL joins and participation queries.",
+  "dialect": "MySQL 8.4",
+  "notes": "## A relationship associates identified occurrences\n\nA relationship in entity-relationship modeling describes an association among entity occurrences in defined roles. One student enrolls in one course offering, one instructor teaches a section, or one employee supervises another. The relationship explains how participants are connected in the domain. It is more than a coincidence between similar descriptive values in separate records.\n\nThe relationship type defines the association's meaning and allowed participants. A relationship instance connects particular occurrences, such as Student 17 enrolling in Offering 301. The set of current enrollment instances is the recorded participation population. Keep those levels separate: the word Enrolls does not denote one particular student, and one example participation does not describe every allowed enrollment in the system.\n\n## Participant identity matters more than labels\n\nTwo students can share a name while enrolling in different courses. Two course offerings can share a title while taking place in different terms or sections. Relate the intended identities rather than joining on names merely because the sample labels look unique. A mistaken label join can connect unrelated occurrences and multiply results without any obvious syntax error.\n\nA relationship also needs a clear fact grain. Enrollment can mean one current student-course pair, one student-offering pair, or one attempt at a course. These are different models. If repeat attempts are permitted, a pair of student_id and catalogue course_id might be insufficient to identify an occurrence. State which combination or occurrence identifier distinguishes the participation before assigning grades or counting registrations.\n\n## Multiple relationship types can share participants\n\nStudent and Course can be connected through EnrolledIn and Completed. These types communicate different facts even when they involve the same entity categories. A student may enroll without yet completing the course. A completed-course relation might describe a later accepted result under an explicit eligibility policy. Do not merge them merely because both mappings contain student_id and course_id columns.\n\nThe model may constrain completion to an appropriate prior enrollment, but that cross-relationship rule needs its own definition and enforcement. Two tables with compatible identifiers do not automatically prove the rule. Similarly, overlapping pairs can appear in both current populations while retaining different meanings. A report should specify whether it asks about enrollment, completion, or a comparison of the two.\n\n## Roles make self-associations understandable\n\nAn Employee type can participate as supervisor and subordinate in a recursive relationship. Role names distinguish the two positions even though both refer to employees. A self-reference column or association relation can map the connection, depending on the required multiplicity and lifecycle. Without roles, two employee identifiers in one row are ambiguous about who supervises whom.\n\nThe same identity appearing in both roles can require a separate policy. A basic reference can ensure that employee identifiers exist while still allowing self-supervision or longer cycles unless other rules prohibit them. Relationship existence, direction, identity, and hierarchy restrictions are distinct concerns. Explain which of them the model states instead of treating every recursive association as an automatically valid tree.\n\n## Degree, multiplicity and participation differ\n\nRelationship degree concerns the participating categories or the convention used for the association's arity. A Student-Offering enrollment is binary in this lesson's introductory terminology. Cardinality ratio describes maximum participation patterns such as one-to-many or many-to-many. Minimum participation indicates whether an occurrence may have no association or must participate.\n\nThese properties do not replace the relationship's meaning. A binary association can be one-to-one, one-to-many, or many-to-many under different requirements. A current dataset with one enrollment per student does not prove the model permits only one. The allowed states and explicit constraints establish the rule; observed fixtures provide examples that can expose violations or incorrect assumptions.\n\n## Relationship attributes describe participation facts\n\nA score or enrollment date can belong to the participation rather than the Student or Course entity independently. One student can receive different scores in different courses, and different students can receive different scores in the same course. The relationship occurrence gives the value its correct scope. Storing one score directly on Student would lose those distinctions under this model.\n\nA relationship can have attributes without universally requiring a new entity representation. An associative-entity design can be useful when participation has its own identity or lifecycle, while another notation can retain an attributed relationship. The implementation must preserve participants, properties, and intended occurrence identity consistently. A diagramming convention should not override the actual facts being represented.\n\n## A mapping makes the association explicit\n\nA many-to-many current enrollment mapping can use Student, Course, and Enrollment relations. The association relation carries the relevant participant references and any participation-specific attributes. A combined key can prevent repeated pairs when the policy permits one enrollment per pair. It still needs suitable parent-reference enforcement to reject absent participants at the trusted database boundary.\n\n```sql\nSELECT e.student_id, s.student_name, e.course_id, e.score\nFROM enrollments e\nJOIN students s ON s.student_id = e.student_id\nORDER BY e.student_id, e.course_id;\n```\n\nThe output has one row per matching enrollment, not one per student. Repeated student labels can therefore be correct. Omitting course_id and adding DISTINCT might collapse legitimate separate participations when selected values happen to match. Decide the requested output grain before treating repeated output as a defect.\n\n## Join preservation follows the requested population\n\nAn inner join returns matching combinations. A report asking for all students, including those with no enrollment, needs a preserving formulation. A report asking for enrollment facts need not invent a participation row for an unenrolled student. Both are useful reports, but their populations and interpretations differ. A familiar table name does not determine which one the task requires.\n\nFor a zero-inclusive count, count a nonmissing child identity rather than the preserved unmatched output row. A student with no enrollment should have zero participation under the stated contract. For a student enrolled in two courses, two matching rows represent two associations with one student identity. Counting student entities and counting relationship facts are separate measurements.\n\n## Compare relationship populations deliberately\n\nA query can identify enrollments without a matching completion. It should compare the complete participant combination, not just student_id. If a student completed course ten but remains enrolled in course twenty, a student-only existence test can wrongly treat both enrollments as completed. The association's full identity determines which fact is being compared.\n\nMissing optional participation values need care too. A NULL score can mean not yet marked, while a completion relationship records another explicit state. Do not infer every business status solely from an absent score unless the policy defines that equivalence. A recorded zero can be a real score rather than an absence marker. The content and fixtures should preserve those distinctions consistently.\n\n## Diagrams describe rather than enforce\n\nCommon Chen-style diagrams draw a relationship with a diamond connected to the participating entity types, with additional symbols for particular constraints. Other conventions can show associations differently. A picture helps communicate roles and rules, but it does not create SQL constraints or establish that an actual database rejects invalid references or unauthorized changes.\n\nA complete verification plan separates conceptual review, mapping checks, native constraint operations, and application authority. Temporary query mirrors can establish result semantics over supplied valid participants, while separate supported native checks exercise reference behaviour on the recorded engine. Neither should be described as exact MySQL/provider proof when execution occurred only on MariaDB.\n\n## Review with contrasting occurrences\n\nUse repeated student names, one student in several courses, a student with no participation, a recorded zero score, and an enrollment without completion. Ask which associations each row denotes and whether the query retains the correct identities. These counterexamples make the relationship meaning observable instead of relying on one perfectly matching pair that conceals a wrong join or incomplete comparison.\n\nRelationships are useful because they connect independently understandable occurrences under an explicit domain meaning. Preserve participant roles, occurrence grain, attributes, multiplicity and optionality in the mapping. Then describe which population the query returns and which enforcement checks actually ran. That keeps the association concept consistent from the ER explanation through SQL results without confusing names, repeated output, or shared column types with a genuine relationship.\n",
+  "references": [],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-6-relationship",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-6-relationship-1",
+          "test_id": "pt-dbms-sql-6-relationship",
+          "question_text": "What is a relationship in the ER model?",
+          "options": [
+            "A single entity's descriptive property",
+            "An association among identified entity occurrences in defined roles, including repeated roles of one type in a recursive case",
+            "A synonym for an attribute's domain",
+            "A rule restricting attribute values"
+          ],
+          "correct_index": 1,
+          "explanation": "A recursive association can involve one entity category in several roles; relationship instances connect specific occurrences.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-6-relationship-2",
+          "test_id": "pt-dbms-sql-6-relationship",
+          "question_text": "In common Chen-style ER notation, how is an ordinary relationship drawn?",
+          "options": [
+            "As a rectangle",
+            "As an oval",
+            "As a diamond",
+            "As a double-line rectangle"
+          ],
+          "correct_index": 2,
+          "explanation": "The diamond shape denotes a relationship, connected to the entity sets it relates.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-6-relationship-3",
+          "test_id": "pt-dbms-sql-6-relationship",
+          "question_text": "Which of these correctly distinguishes 'relationship' from 'relationship degree'?",
+          "options": [
+            "They are identical concepts",
+            "Relationship is the association itself; degree specifically measures how many entity sets participate in that association",
+            "Degree measures 1:1 vs 1:N vs M:N",
+            "Relationship only applies to weak entities"
+          ],
+          "correct_index": 1,
+          "explanation": "The association meaning and its degree classification are distinct; role and type conventions should be stated for recursive cases.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-6-relationship-4",
+          "test_id": "pt-dbms-sql-6-relationship",
+          "question_text": "Which of these correctly distinguishes 'relationship' from 'cardinality'?",
+          "options": [
+            "They mean exactly the same thing",
+            "Relationship is the association; cardinality describes how many instances of each entity set can be linked through it (1:1, 1:N, M:N)",
+            "Cardinality only applies to weak entities",
+            "Relationship always implies M:N cardinality"
+          ],
+          "correct_index": 1,
+          "explanation": "Cardinality is a numeric constraint on instance counts within a relationship, distinct from the relationship as a concept.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-6-relationship-5",
+          "test_id": "pt-dbms-sql-6-relationship",
+          "question_text": "Can two distinct relationships connect the very same pair of entity sets?",
+          "options": [
+            "No, only one relationship is allowed between any two entity sets",
+            "Yes — e.g., Student and Course could be connected by both Enrolls_In and Completed, each with its own meaning",
+            "Only if one of the entity sets is weak",
+            "Only in recursive relationships"
+          ],
+          "correct_index": 1,
+          "explanation": "Multiple distinct relationships with different semantics can connect the same pair of entity sets.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-6-relationship-6",
+          "test_id": "pt-dbms-sql-6-relationship",
+          "question_text": "What is a relationship where an entity set is connected to itself called?",
+          "options": [
+            "A weak relationship",
+            "A recursive relationship",
+            "A composite relationship",
+            "An identifying relationship"
+          ],
+          "correct_index": 1,
+          "explanation": "A recursive relationship links an entity set to itself, such as Employee 'Manages' Employee.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-6-relationship-7",
+          "test_id": "pt-dbms-sql-6-relationship",
+          "question_text": "Can a relationship carry its own descriptive attributes?",
+          "options": [
+            "No, only entities can have attributes",
+            "Yes — e.g., Enrolls_In can have Grade and Enrollment_Date as its own attributes",
+            "Only recursive relationships can have attributes",
+            "Only relationships between weak entities can have attributes"
+          ],
+          "correct_index": 1,
+          "explanation": "Relationships, like entities, can carry descriptive attributes relevant to the association itself.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-6-relationship-8",
+          "test_id": "pt-dbms-sql-6-relationship",
+          "question_text": "What is a 'relationship instance'?",
+          "options": [
+            "The diamond shape drawn on paper",
+            "A specific tuple of participating entities under a relationship, e.g. Aditi Sharma enrolled in CS301",
+            "The name of the relationship",
+            "A synonym for entity set"
+          ],
+          "correct_index": 1,
+          "explanation": "Just as an entity instance is one occurrence of an entity set, a relationship instance is one specific occurrence of the association.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-6-relationship-new-9",
+          "test_id": "pt-dbms-sql-6-relationship",
+          "question_text": "Two students share a name. Why should enrollment joins use student identifiers?",
+          "options": [
+            "Names cannot be compared in SQL",
+            "Names do not necessarily identify the intended occurrence",
+            "Every string is a foreign key",
+            "Repeated names create the same entity"
+          ],
+          "correct_index": 1,
+          "explanation": "The modeled participant identity defines the relationship.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-6-relationship-new-10",
+          "test_id": "pt-dbms-sql-6-relationship",
+          "question_text": "Does one observed enrollment per student prove a one-course maximum?",
+          "options": [
+            "Yes; sample counts define every future state",
+            "Only if sorted",
+            "No; allowed-state rules are needed",
+            "Only if names are required"
+          ],
+          "correct_index": 2,
+          "explanation": "Current populations and permitted multiplicity differ.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-6-relationship-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-6-relationship-application-new-1",
+          "test_id": "pt-dbms-sql-6-relationship-application",
+          "question_text": "Can EnrolledIn and Completed connect the same entity categories?",
+          "options": [
+            "No; a pair of categories allows one meaning only",
+            "Only if both are empty",
+            "Yes; they can express different relationship facts",
+            "Only if names differ"
+          ],
+          "correct_index": 2,
+          "explanation": "Participant categories do not erase distinct association semantics.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-6-relationship-application-new-2",
+          "test_id": "pt-dbms-sql-6-relationship-application",
+          "question_text": "Why compare both student_id and course_id when checking completion for an enrollment?",
+          "options": [
+            "The student identifier is never relevant",
+            "Only course titles identify completion",
+            "ORDER BY creates relationship identity",
+            "Completion of one course does not imply completion of another"
+          ],
+          "correct_index": 3,
+          "explanation": "The comparison must match the full participation grain.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-6-relationship-application-new-3",
+          "test_id": "pt-dbms-sql-6-relationship-application",
+          "question_text": "What makes supervisor and subordinate useful names in a recursive relationship?",
+          "options": [
+            "They distinguish participant roles within the same entity type",
+            "They generate keys automatically",
+            "They forbid all cycles automatically",
+            "They replace employee identities"
+          ],
+          "correct_index": 0,
+          "explanation": "Role names explain direction and meaning.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-6-relationship-application-new-4",
+          "test_id": "pt-dbms-sql-6-relationship-application",
+          "question_text": "Does an existing supervisor reference automatically prove the hierarchy is acyclic?",
+          "options": [
+            "Yes; every foreign key is a tree",
+            "No; existence and cycle restrictions are separate",
+            "Only if id is numeric",
+            "Only if the name is required"
+          ],
+          "correct_index": 1,
+          "explanation": "Additional hierarchy rules need their own evidence.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-6-relationship-application-new-5",
+          "test_id": "pt-dbms-sql-6-relationship-application",
+          "question_text": "Where does a course-specific grade belong?",
+          "options": [
+            "As one universal value for Student",
+            "As the Course title",
+            "On the relevant enrollment or assessment occurrence",
+            "On an unrelated programme label"
+          ],
+          "correct_index": 2,
+          "explanation": "Attribute ownership follows the participation fact.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-6-relationship-application-new-6",
+          "test_id": "pt-dbms-sql-6-relationship-application",
+          "question_text": "Why can a correct enrollment listing repeat a student name?",
+          "options": [
+            "The query always duplicated an entity incorrectly",
+            "Every enrollment changes the student’s identity",
+            "Names must be globally unique",
+            "One student can participate in several relationship facts"
+          ],
+          "correct_index": 3,
+          "explanation": "The result grain is one enrollment.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-6-relationship-application-new-7",
+          "test_id": "pt-dbms-sql-6-relationship-application",
+          "question_text": "Does a relationship attribute force one universal associative-entity representation?",
+          "options": [
+            "No; the mapping should preserve the required identity and lifecycle",
+            "Yes; every date forces a separate entity",
+            "Only if numeric",
+            "Only if no keys exist"
+          ],
+          "correct_index": 0,
+          "explanation": "Notation and actual modeling needs must be distinguished.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-6-relationship-application-new-8",
+          "test_id": "pt-dbms-sql-6-relationship-application",
+          "question_text": "Which report requires preserving unenrolled students?",
+          "options": [
+            "A listing of only enrollment facts",
+            "A report explicitly asking for every student",
+            "Only completed enrollment rows",
+            "A course-code lookup"
+          ],
+          "correct_index": 1,
+          "explanation": "The requested population decides join preservation.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-6-relationship-application-new-9",
+          "test_id": "pt-dbms-sql-6-relationship-application",
+          "question_text": "Does a NULL score necessarily mean the same as no completion relationship?",
+          "options": [
+            "Yes; every absent score is a deleted relationship",
+            "Only zero means no relationship",
+            "No; that equivalence requires a documented policy",
+            "Only if sorted"
+          ],
+          "correct_index": 2,
+          "explanation": "A missing value and an explicit association state can differ.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-6-relationship-application-new-10",
+          "test_id": "pt-dbms-sql-6-relationship-application",
+          "question_text": "What does a diagram diamond prove by itself?",
+          "options": [
+            "Native database enforcement",
+            "User permission to enroll",
+            "Exact provider execution",
+            "The represented association intent"
+          ],
+          "correct_index": 3,
+          "explanation": "A model drawing is separate from runtime evidence.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cx-relationship-list",
+      "slug": "relationship-list",
+      "title": "List the specific student-course participation facts",
+      "difficulty": "Easy",
+      "task": "Return student_id, student_name, course_id and score for matching enrollment rows, retaining separate courses for one student and recorded zero scores.",
+      "schema_sql": "CREATE TABLE students (student_id INT PRIMARY KEY, student_name VARCHAR(80) NOT NULL);\nCREATE TABLE enrollments (student_id INT NOT NULL, course_id INT NOT NULL, score INT NULL, PRIMARY KEY(student_id,course_id));",
+      "seed_sql": "INSERT INTO students VALUES (1,'Asha'),(2,'Asha'),(3,'Mira'); INSERT INTO enrollments VALUES (1,10,0),(1,20,90),(2,10,NULL);",
+      "expected": "student_id\tstudent_name\tcourse_id\tscore\n1\tAsha\t10\t0\n1\tAsha\t20\t90\n2\tAsha\t10\tNULL",
+      "ordering": "Ascending student_id, course_id.",
+      "constraints": [
+        "The exercise models one current enrollment per pair; supplied parent references are valid.",
+        "Temporary fixtures do not verify native parent enforcement or production registration authority."
+      ],
+      "edge_cases": [
+        "Shared names do not merge identities.",
+        "Several participation facts can concern one student."
+      ],
+      "hints": [
+        "Join through the modeled student identifier.",
+        "Retain course_id to preserve the association grain."
+      ],
+      "solution_sql": "SELECT e.student_id, s.student_name, e.course_id, e.score FROM enrollments e JOIN students s ON s.student_id = e.student_id ORDER BY e.student_id, e.course_id;",
+      "explanation": "The result represents participation facts rather than a distinct-name set or one universal score per student.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO students VALUES (1,'Asha');",
+          "expected": ""
+        },
+        {
+          "seed_sql": "INSERT INTO students VALUES (7,'Mira'); INSERT INTO enrollments VALUES (7,10,0),(7,20,0);",
+          "expected": "student_id\tstudent_name\tcourse_id\tscore\n7\tMira\t10\t0\n7\tMira\t20\t0"
+        }
+      ]
+    },
+    {
+      "id": "cx-relationship-compare",
+      "slug": "relationship-compare",
+      "title": "Find enrollments not represented in the completion relationship",
+      "difficulty": "Medium",
+      "task": "Return student_id and course_id for enrollment pairs absent from completions. A completion for another course does not satisfy the pair being checked.",
+      "schema_sql": "CREATE TABLE enrollments (student_id INT NOT NULL, course_id INT NOT NULL, PRIMARY KEY(student_id,course_id));\nCREATE TABLE completions (student_id INT NOT NULL, course_id INT NOT NULL, PRIMARY KEY(student_id,course_id));",
+      "seed_sql": "INSERT INTO enrollments VALUES (1,10),(1,20),(2,10),(3,30); INSERT INTO completions VALUES (1,10),(3,30);",
+      "expected": "student_id\tcourse_id\n1\t20\n2\t10",
+      "ordering": "Ascending student_id, course_id.",
+      "constraints": [
+        "All supplied completions correspond to supplied enrollment pairs; this fixture does not enforce every cross-relationship policy."
+      ],
+      "edge_cases": [
+        "One student can complete one course while another remains incomplete.",
+        "Empty completions make every enrollment eligible for this report."
+      ],
+      "hints": [
+        "Compare the complete participant pair.",
+        "Use a preserving join with a guaranteed nonmissing completion key component as the match test."
+      ],
+      "solution_sql": "SELECT e.student_id, e.course_id FROM enrollments e LEFT JOIN completions c ON c.student_id = e.student_id AND c.course_id = e.course_id WHERE c.student_id IS NULL ORDER BY e.student_id, e.course_id;",
+      "explanation": "The anti-join compares association instances with their complete stated identity instead of treating any student completion as completion of every course.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO enrollments VALUES (1,10),(1,20);",
+          "expected": "student_id\tcourse_id\n1\t10\n1\t20"
+        },
+        {
+          "seed_sql": "INSERT INTO enrollments VALUES (1,10); INSERT INTO completions VALUES (1,10);",
+          "expected": ""
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-6-relationship-1",
+      "test_id": "pt-dbms-sql-6-relationship",
+      "question_text": "What is a relationship in the ER model?",
+      "options": [
+        "A single entity's descriptive property",
+        "An association among two or more entities/entity sets",
+        "A synonym for an attribute's domain",
+        "A rule restricting attribute values"
+      ],
+      "correct_index": 1,
+      "explanation": "A relationship captures a meaningful real-world association between entity sets, such as Student enrolling in Course.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-6-relationship-2",
+      "test_id": "pt-dbms-sql-6-relationship",
+      "question_text": "How is a relationship represented in an ER diagram?",
+      "options": [
+        "As a rectangle",
+        "As an oval",
+        "As a diamond",
+        "As a double-line rectangle"
+      ],
+      "correct_index": 2,
+      "explanation": "The diamond shape denotes a relationship, connected to the entity sets it relates.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-6-relationship-3",
+      "test_id": "pt-dbms-sql-6-relationship",
+      "question_text": "Which of these correctly distinguishes 'relationship' from 'relationship degree'?",
+      "options": [
+        "They are identical concepts",
+        "Relationship is the association itself; degree specifically measures how many entity sets participate in that association",
+        "Degree measures 1:1 vs 1:N vs M:N",
+        "Relationship only applies to weak entities"
+      ],
+      "correct_index": 1,
+      "explanation": "Degree is one specific measurable property (count of participating entity sets) of a relationship, not the relationship itself.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-6-relationship-4",
+      "test_id": "pt-dbms-sql-6-relationship",
+      "question_text": "Which of these correctly distinguishes 'relationship' from 'cardinality'?",
+      "options": [
+        "They mean exactly the same thing",
+        "Relationship is the association; cardinality describes how many instances of each entity set can be linked through it (1:1, 1:N, M:N)",
+        "Cardinality only applies to weak entities",
+        "Relationship always implies M:N cardinality"
+      ],
+      "correct_index": 1,
+      "explanation": "Cardinality is a numeric constraint on instance counts within a relationship, distinct from the relationship as a concept.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-6-relationship-5",
+      "test_id": "pt-dbms-sql-6-relationship",
+      "question_text": "Can two distinct relationships connect the very same pair of entity sets?",
+      "options": [
+        "No, only one relationship is allowed between any two entity sets",
+        "Yes — e.g., Student and Course could be connected by both Enrolls_In and Completed, each with its own meaning",
+        "Only if one of the entity sets is weak",
+        "Only in recursive relationships"
+      ],
+      "correct_index": 1,
+      "explanation": "Multiple distinct relationships with different semantics can connect the same pair of entity sets.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-6-relationship-6",
+      "test_id": "pt-dbms-sql-6-relationship",
+      "question_text": "What is a relationship where an entity set is connected to itself called?",
+      "options": [
+        "A weak relationship",
+        "A recursive relationship",
+        "A composite relationship",
+        "An identifying relationship"
+      ],
+      "correct_index": 1,
+      "explanation": "A recursive relationship links an entity set to itself, such as Employee 'Manages' Employee.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-6-relationship-7",
+      "test_id": "pt-dbms-sql-6-relationship",
+      "question_text": "Can a relationship carry its own descriptive attributes?",
+      "options": [
+        "No, only entities can have attributes",
+        "Yes — e.g., Enrolls_In can have Grade and Enrollment_Date as its own attributes",
+        "Only recursive relationships can have attributes",
+        "Only relationships between weak entities can have attributes"
+      ],
+      "correct_index": 1,
+      "explanation": "Relationships, like entities, can carry descriptive attributes relevant to the association itself.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-6-relationship-8",
+      "test_id": "pt-dbms-sql-6-relationship",
+      "question_text": "What is a 'relationship instance'?",
+      "options": [
+        "The diamond shape drawn on paper",
+        "A specific tuple of participating entities under a relationship, e.g. Aditi Sharma enrolled in CS301",
+        "The name of the relationship",
+        "A synonym for entity set"
+      ],
+      "correct_index": 1,
+      "explanation": "Just as an entity instance is one occurrence of an entity set, a relationship instance is one specific occurrence of the association.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "coordinator",
+    "independent_review": "unavailable; no agent tools",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Definitions and examples checked against questions; no plagiarism certification.",
+    "existing_question_corrections": [
+      "tq-dbms-sql-6-relationship-1",
+      "tq-dbms-sql-6-relationship-2",
+      "tq-dbms-sql-6-relationship-3"
+    ],
+    "canonical_answer_indices_preserved": true
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-6-relationship",
+    "original_note_sha256": "ce57d4af0fd388d0ac3615b4e558fefe7d17e7191cf26eac5fdb411981db6b09",
+    "status": "paired migration prepared; not applied"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "The same participants can be connected by distinct relationship meanings",
+      "description": "Enrollment and completion are different association populations. Student 1 completing course 10 does not establish completion of course 20.",
+      "columns": [
+        "Relationship type",
+        "Participant occurrence pair",
+        "Meaning"
+      ],
+      "rows": [
+        [
+          "EnrolledIn",
+          "Student 1, Course 10",
+          "One registration fact"
+        ],
+        [
+          "EnrolledIn",
+          "Student 1, Course 20",
+          "A different participation by the same student"
+        ],
+        [
+          "Completed",
+          "Student 1, Course 10",
+          "Completion of the matching course only"
+        ],
+        [
+          "No matching Completed pair",
+          "Student 1, Course 20",
+          "Eligible for the incomplete-enrollment report"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "coordinator checked relationship type versus instance, participant roles and complete-pair comparison",
+    "server_rendering": "passed",
+    "browser_rendering": "unverified",
+    "independent_review": "unavailable; no agent tools",
+    "server_rendering_evidence": "2026-10-29: all authored packages rendered through actual LessonBlock in the passing focused Vitest suite."
+  },
+  "sql_verification": {
+    "engine": "11.8.6-MariaDB-0+deb13u1 from Debian",
+    "scope": "MariaDB compatibility execution; exact MySQL 8.4/provider execution unverified",
+    "fingerprint": "61a3e4b70dc1a0515fb39d4cd949d34dca0d5f79e3106cc3d9f22eb9f9625c0e",
+    "cases": [
+      {
+        "problem": "relationship-list",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "relationship-list",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "relationship-list",
+        "case": 2,
+        "passed": true
+      },
+      {
+        "problem": "relationship-compare",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "relationship-compare",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "relationship-compare",
+        "case": 2,
+        "passed": true
+      }
+    ],
+    "all_passed": true
+  }
+}

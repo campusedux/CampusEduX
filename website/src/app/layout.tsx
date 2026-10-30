@@ -1,5 +1,4 @@
 import type { Metadata, Viewport } from "next";
-import { Plus_Jakarta_Sans, Bricolage_Grotesque } from "next/font/google";
 import "./globals.css";
 import { Header } from "@/components/nav/Header";
 import { BottomNav } from "@/components/nav/BottomNav";
@@ -13,11 +12,8 @@ import { BRAND_LOGO_URL, DEFAULT_OG_IMAGE, SITE_URL, websiteJsonLd } from "@/lib
 import { THEME_INIT_SCRIPT } from "@/lib/theme";
 import { Toaster } from "@/components/ui/Toast";
 
-// Self-hosted at build time by next/font (served from our own origin, so the
-// CSP's `font-src 'self'` still holds). Plus Jakarta Sans = UI/body,
-// Bricolage Grotesque = display headings. Both are variable fonts.
-const fontSans = Plus_Jakarta_Sans({ subsets: ["latin"], variable: "--font-sans", display: "swap" });
-const fontDisplay = Bricolage_Grotesque({ subsets: ["latin"], variable: "--font-display", display: "swap" });
+// System font stacks are defined in globals.css. Builds and first renders do
+// not require Google Fonts network access or an unverified cached font bundle.
 
 const siteUrl = SITE_URL;
 
@@ -80,7 +76,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     // suppressHydrationWarning: THEME_INIT_SCRIPT adds `dark` to <html> before
     // React hydrates, which is expected and must not warn.
-    <html lang="en" className={`${fontSans.variable} ${fontDisplay.variable}`} suppressHydrationWarning>
+    <html lang="en" suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
         {supabaseOrigin && <link rel="dns-prefetch" href={supabaseOrigin} />}
@@ -89,7 +85,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className="bg-canvas font-sans text-ink antialiased">
         <a
           href="#main-content"
-          className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[200] focus:rounded-lg focus:bg-primary focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-white"
+          className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[var(--z-modal)] focus:rounded-lg focus:bg-primary focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-white"
         >
           Skip to content
         </a>
@@ -98,12 +94,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <GoogleAnalytics />
         <Header />
         <AnnouncementBar />
-        <main id="main-content" className="min-h-[60vh]">
+        <main id="main-content" className="mobile-scroll-content min-h-[60vh]">
           {children}
         </main>
         <Footer />
-        {/* Clears the fixed mobile bottom nav. */}
-        <div className="h-[calc(4rem+env(safe-area-inset-bottom))] md:hidden" aria-hidden />
         <BottomNav />
         <CookieConsentBanner />
         <Toaster />

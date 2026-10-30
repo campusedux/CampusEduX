@@ -1,13 +1,12 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import Link from "next/link";
-import { BookOpen, FileText, LayoutGrid, Search, SearchX } from "lucide-react";
+import { BookOpen, FileText, LayoutGrid, SearchX } from "lucide-react";
 import { getLearningGrids, searchLearning } from "@/lib/learning";
 import type { LearningGridCard } from "@/lib/learning";
-import { Badge, EmptyState, SectionHeader, Skeleton } from "@/components/ui";
+import { Badge, EmptyState, PageHeader, SearchBar, SectionHeader, Skeleton, Chip, ChipRow, ListLoading } from "@/components/ui";
 import { CourseCard } from "@/components/learning/CourseCard";
 import JsonLd from "@/components/JsonLd";
-import { cn } from "@/lib/cn";
 import { absoluteUrl, breadcrumbJsonLd, courseListJsonLd, DEFAULT_OG_IMAGE } from "@/lib/seo";
 import { BRAND } from "@/lib/brand";
 import { ContinueLearningRow } from "./_components/ContinueLearningRow";
@@ -37,7 +36,7 @@ export const metadata: Metadata = {
 };
 
 type Access = "free" | "premium";
-type SP = { q?: string; access?: string };
+type SP = { q?: string; access?: string; [key: string]: string | string[] | undefined };
 
 const fmt = (n: number) => new Intl.NumberFormat("en-IN").format(n);
 
@@ -45,7 +44,7 @@ const fmt = (n: number) => new Intl.NumberFormat("en-IN").format(n);
 async function SearchResults({ q }: { q: string }) {
   const hits = await searchLearning(q, 30);
   return (
-    <section className="mt-8" aria-labelledby="search-results-title">
+    <section className="mt-5 sm:mt-8" aria-labelledby="search-results-title">
       <h2 id="search-results-title" className="text-sm font-semibold text-ink-muted">
         {hits.length} result{hits.length === 1 ? "" : "s"} for “{q}”
       </h2>
@@ -57,12 +56,12 @@ async function SearchResults({ q }: { q: string }) {
           subtitle="Try a shorter or different word, or browse the courses below."
         />
       ) : (
-        <ul className="mt-4 divide-y divide-line overflow-hidden rounded-2xl border border-line bg-card shadow-card">
+        <ul className="list-enter mt-4 divide-y divide-line overflow-hidden rounded-2xl border border-line bg-card shadow-card">
           {hits.map((h, i) => (
             <li key={`${h.grid_slug}-${h.topic_slug ?? "grid"}-${i}`}>
               <Link
                 href={h.kind === "grid" ? `/learning/${h.grid_slug}` : `/learning/${h.grid_slug}/${h.topic_slug}`}
-                className="group flex items-start gap-3 p-4 transition-colors hover:bg-surface"
+                className="group flex min-w-0 items-start gap-3 p-4 transition-colors hover:bg-surface [overflow-wrap:anywhere]"
               >
                 <span className="mt-0.5 flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-primary-50">
                   {h.kind === "grid" ? (
@@ -94,7 +93,7 @@ async function SearchResults({ q }: { q: string }) {
 
 function SearchSkeleton() {
   return (
-    <div className="mt-8 space-y-3" aria-hidden>
+    <div className="mt-6 space-y-3 sm:mt-8" aria-hidden>
       <Skeleton className="h-4 w-40" />
       <div className="divide-y divide-line overflow-hidden rounded-2xl border border-line bg-card">
         {Array.from({ length: 4 }).map((_, i) => (
@@ -113,7 +112,7 @@ function SearchSkeleton() {
 
 function CourseGrid({ courses }: { courses: LearningGridCard[] }) {
   return (
-    <div className="grid gap-4 sm:grid-cols-2 sm:gap-5 lg:grid-cols-3">
+    <div className="list-enter grid min-w-0 gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3 lg:gap-5">
       {courses.map((g) => (
         <CourseCard key={g.id} course={g} compactOnMobile />
       ))}
@@ -127,7 +126,7 @@ function CourseGrid({ courses }: { courses: LearningGridCard[] }) {
  * with a Free / Premium filter. A catalogue section with fewer than two items
  * is not shown, and the filter only appears when both kinds exist.
  */
-export default async function LearningIndexPage({ searchParams }: { searchParams: SP }) {
+async function LearningContent({ searchParams }: { searchParams: SP }) {
   const q = searchParams.q?.trim() ?? "";
   const access: Access | null = searchParams.access === "free" || searchParams.access === "premium" ? searchParams.access : null;
   const grids = await getLearningGrids();
@@ -136,6 +135,14 @@ export default async function LearningIndexPage({ searchParams }: { searchParams
   const showAccess = grids.some((g) => !g.is_premium) && grids.some((g) => g.is_premium);
   const visible = access && showAccess ? grids.filter((g) => (access === "premium" ? g.is_premium : !g.is_premium)) : grids;
   const featured = visible.filter((g) => g.is_featured);
+
+  const clearParams = new URLSearchParams();
+  for (const [key, value] of Object.entries(searchParams)) {
+    if (key === "q" || value === undefined) continue;
+    for (const item of Array.isArray(value) ? value : [value]) clearParams.append(key, item);
+  }
+  const clearQuery = clearParams.toString();
+  const clearSearchHref = clearQuery ? `/learning?${clearQuery}` : "/learning";
 
   const tabHref = (a: Access | null) => {
     const p = new URLSearchParams();
@@ -146,7 +153,7 @@ export default async function LearningIndexPage({ searchParams }: { searchParams
   };
 
   return (
-    <div className="page-shell">
+    <div className="mobile-discovery page-shell">
       <JsonLd data={breadcrumbJsonLd([{ name: "Learning", path: "/learning" }])} />
       {grids.length > 0 ? (
         <JsonLd
@@ -154,42 +161,30 @@ export default async function LearningIndexPage({ searchParams }: { searchParams
         />
       ) : null}
 
-      <header className="relative overflow-hidden rounded-3xl border border-line bg-card px-5 py-8 shadow-card sm:px-10 sm:py-12">
-        <div aria-hidden className="bg-grid pointer-events-none absolute inset-0 [mask-image:radial-gradient(ellipse_at_top_right,#000_15%,transparent_65%)]" />
-        <div aria-hidden className="pointer-events-none absolute -right-20 -top-24 h-72 w-72 rounded-full bg-primary/15 blur-3xl" />
-        <div className="relative max-w-2xl">
-          <p className="eyebrow">Learning</p>
-          <h1 className="h-hero mt-2">Learn at your own pace</h1>
-          {grids.length > 0 && (
-            <p className="lede mt-3">
-              {grids.length} in-depth course{grids.length === 1 ? "" : "s"} · {fmt(lessonTotal)} lessons with practice
-              questions and mock tests.
-            </p>
-          )}
-          <form action="/learning" method="get" role="search" className="mt-6 flex gap-2">
-            {access ? <input type="hidden" name="access" value={access} /> : null}
-            <label className="relative flex-1">
-              <span className="sr-only">Search courses and lessons</span>
-              <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-faint" aria-hidden />
-              <input
-                type="search"
-                name="q"
-                defaultValue={q}
-                placeholder="Search a topic, e.g. joins, loops, OOP…"
-                className="h-12 w-full rounded-xl border border-line bg-surface pl-10 pr-3 text-[15px] text-ink outline-none transition placeholder:text-ink-faint focus:border-primary focus:ring-4 focus:ring-primary/15 focus:bg-card"
-              />
-            </label>
-            <button type="submit" className="btn-primary h-12 px-5">
-              Search
-            </button>
-          </form>
-          {q ? (
-            <Link href={tabHref(access)} className="mt-3 inline-block text-sm font-semibold text-primary hover:text-primary-700">
-              Clear search
-            </Link>
-          ) : null}
-        </div>
-      </header>
+      <div className="min-w-0">
+        <PageHeader title="Learning" icon={BookOpen} iconClassName="text-accent-teal" caption={`${grids.length} course${grids.length === 1 ? "" : "s"} · ${fmt(lessonTotal)} lessons`} />
+        <SearchBar
+          action="/learning"
+          label="Search courses and lessons"
+          defaultValue={q}
+          placeholder="Search a topic, e.g. joins, loops, OOP…"
+          hiddenParams={{ access: access ?? undefined }}
+          className="mt-3 max-w-2xl"
+        />
+        {q ? (
+          <Link href={clearSearchHref} className="hit-44 mt-3 inline-block text-sm font-semibold text-primary hover:text-primary-700">
+            Clear search
+          </Link>
+        ) : null}
+      </div>
+
+      {showAccess && (
+        <ChipRow label="Filter by access" sticky className="mt-3">
+          {([null, "free", "premium"] as const).map((a) => (
+            <Chip key={a ?? "all"} href={tabHref(a)} active={access === a}>{a === null ? "All" : a === "free" ? "Free" : "Premium"}</Chip>
+          ))}
+        </ChipRow>
+      )}
 
       {q ? (
         <Suspense key={q} fallback={<SearchSkeleton />}>
@@ -200,7 +195,7 @@ export default async function LearningIndexPage({ searchParams }: { searchParams
       {!q && <ContinueLearningRow courses={grids.map(({ slug, name, topic_count }) => ({ slug, name, topic_count }))} />}
 
       {grids.length === 0 ? (
-        <section className="mt-10">
+        <section className="mt-5 sm:mt-8">
           <h2 className="sr-only">All learning resources</h2>
           <EmptyState
             icon={BookOpen}
@@ -211,35 +206,17 @@ export default async function LearningIndexPage({ searchParams }: { searchParams
       ) : (
         <>
           {!q && featured.length >= 2 && (
-            <section className="mt-12" aria-labelledby="featured-title">
+            <section className="mt-5 sm:mt-10" aria-labelledby="featured-title">
               <SectionHeader id="featured-title" eyebrow="Hand-picked" title="Featured courses" />
               <CourseGrid courses={featured} />
             </section>
           )}
 
-          <section className="mt-12" aria-labelledby="all-courses-title">
+          <section className="mt-5 sm:mt-10" aria-labelledby="all-courses-title">
             <SectionHeader
               id="all-courses-title"
               title={access === "premium" ? "Premium courses" : access === "free" ? "Free courses" : "All courses"}
-              action={
-                showAccess ? (
-                  <nav aria-label="Filter by access" className="flex gap-1 rounded-xl bg-surface p-1">
-                    {([null, "free", "premium"] as const).map((a) => (
-                      <Link
-                        key={a ?? "all"}
-                        href={tabHref(a)}
-                        aria-current={access === a ? "page" : undefined}
-                        className={cn(
-                          "h-9 rounded-lg px-3.5 text-sm font-semibold leading-9 transition",
-                          access === a ? "bg-card text-ink shadow-card" : "text-ink-muted hover:text-ink",
-                        )}
-                      >
-                        {a === null ? "All" : a === "free" ? "Free" : "Premium"}
-                      </Link>
-                    ))}
-                  </nav>
-                ) : undefined
-              }
+
             />
             {visible.length === 0 ? (
               <EmptyState icon={BookOpen} title="Nothing here yet" subtitle="No courses match this filter right now." />
@@ -254,4 +231,9 @@ export default async function LearningIndexPage({ searchParams }: { searchParams
       )}
     </div>
   );
+}
+
+// Keep streaming local to this index page: ancestor loading routes change nested 404 status.
+export default function LearningPage({ searchParams }: { searchParams: SP }) {
+  return <Suspense fallback={<ListLoading title="Learning" />}><LearningContent searchParams={searchParams} /></Suspense>;
 }

@@ -5,7 +5,7 @@ export function Skeleton({ className }: { className?: string }) {
   return (
     <div
       className={cn(
-        "animate-shimmer rounded-lg bg-[linear-gradient(90deg,rgb(var(--line)/0.55)_0%,rgb(var(--line)/0.95)_50%,rgb(var(--line)/0.55)_100%)] bg-[length:200%_100%]",
+        "animate-shimmer motion-reduce:animate-none rounded-lg bg-[linear-gradient(90deg,rgb(var(--line)/0.55)_0%,rgb(var(--line)/0.95)_50%,rgb(var(--line)/0.55)_100%)] bg-[length:200%_100%]",
         className,
       )}
       aria-hidden
@@ -83,3 +83,27 @@ export function SkeletonCardGrid({
 }
 
 export default Skeleton;
+
+/** Shared list footprint, including the compact project thumbnail on phones. */
+export function SkeletonCard({ variant = "course" }: { variant?: "course" | "job" | "project" }) {
+  if (variant === "job") return <SkeletonJobCard />;
+  if (variant === "project") return <div className="card flex min-w-0 overflow-hidden sm:flex-col">
+    <Skeleton className="w-24 shrink-0 rounded-none sm:aspect-[16/10] sm:w-full" />
+    <div className="min-w-0 flex-1 space-y-3 p-4"><Skeleton className="h-6 w-24" /><Skeleton className="h-12 w-full" /><Skeleton className="h-4 w-2/3" /><Skeleton className="h-8 w-20" /></div>
+  </div>;
+  return <div className="card min-w-0 space-y-3 p-4">
+    <div className="flex items-center gap-2"><Skeleton className="h-9 w-9" /><Skeleton className="h-6 w-20" /></div>
+    <Skeleton className="h-12 w-full" /><Skeleton className="h-10 w-full" /><Skeleton className="h-4 w-2/3" /><Skeleton className="h-11 w-full" />
+  </div>;
+}
+
+export function ListLoading({ title, variant = "course" }: { title: string; variant?: "course" | "job" | "project" }) {
+  return <div className="page-shell" role="status" aria-label={`Loading ${title.toLowerCase()}`}>
+    <span className="sr-only">Loading {title.toLowerCase()}…</span>
+    <div aria-hidden className="space-y-3">
+      <Skeleton className="h-7 w-48" /><Skeleton className="h-11 w-full" />
+      <div className="flex gap-2"><Skeleton className="h-11 w-16 rounded-full" /><Skeleton className="h-11 w-24 rounded-full" /></div>
+      <div className="grid min-w-0 gap-3 sm:grid-cols-2 lg:grid-cols-3">{Array.from({ length: 6 }, (_, i) => <SkeletonCard key={i} variant={variant} />)}</div>
+    </div>
+  </div>;
+}

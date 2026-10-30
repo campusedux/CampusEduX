@@ -1,0 +1,526 @@
+{
+  "source_ref": "chapter-1-database-foundations/database-engine",
+  "slug": "database-engine",
+  "title": "Database Engine",
+  "description": "Distinguish the DBMS core runtime from MySQL storage engines, and evaluate table-level transaction, foreign-key, catalog, identity, and workload assumptions accurately.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Explaining what the word engine means\n\nDatabase engine can describe the core runtime that performs database work. In that broad sense, it brings together request handling, query execution, storage access, memory management, transaction facilities, and supporting metadata. The term is useful only when its scope is clear. A description of the entire runtime should not be confused with a particular product's more narrowly defined storage engine.\n\nMySQL provides an important example of that distinction. It has a common server layer and supports pluggable storage engines. InnoDB and MyISAM are names of storage engines used for table storage behavior, not alternative names for the whole SQL server. A diagram that labels one broad box engine cannot be mapped directly onto those product names without explaining which responsibility the box represents.\n\nThis topic uses the broad runtime meaning when discussing coordination, and the MySQL storage-engine meaning when comparing table capabilities. Keeping the two meanings separate prevents errors such as claiming that an individual storage plugin must implement every connection interface or that every table in a server has identical transactional behavior merely because the tables share a database name.\n\n## Coordinating a request from connection to result\n\nBefore a client can perform useful database work, the system must establish a connection identity through its configured authentication facilities and account information. Authentication concerns who or what is connecting. Authorization concerns which operations and data that identity may access. These are distinct decisions even when the product exposes them through closely related administrative facilities.\n\nThe runtime then coordinates interpretation and execution of requests within the applicable context. A query processor parses the statement and uses object definitions to resolve references and plan work. Execution requests the relevant records or index entries through the product's storage facilities. Memory management can supply already buffered pages, while transaction facilities determine appropriate visibility and coordination with concurrent work.\n\nThis description is a conceptual account of cooperating responsibilities. It does not establish a single fixed sequence that every query follows exactly once. A request can perform several data accesses, encounter waits, or consult supporting facilities repeatedly. The useful question is which responsibility supplies the required guarantee, not whether every product uses the same internal function names or arrow order.\n\n## Relying on the catalog without inventing its implementation\n\nA database system maintains definitions describing objects such as tables, columns, constraints, and indexes. Query processing and other facilities need that information to interpret requests correctly. An application asking for a column that does not exist cannot be repaired simply by searching more disk pages. The runtime must understand what objects are being referenced and which rules apply to them.\n\nIntroductory accounts often say that the engine owns the catalog. Understand that as responsibility for maintaining authoritative definitions, not a universal physical layout rule. Products differ in how dictionary and catalog facilities are implemented and exposed. In MySQL, the data dictionary and information-schema interfaces are part of the actual product architecture, which is more specific than a generic teaching diagram.\n\nApplications and administrators should use supported interfaces to inspect or change definitions. Editing internal metadata storage as though it were an ordinary application table can violate the consistency of the database's own representation or be prohibited entirely. The catalog is not a shortcut around supported definition commands, permissions, or the operating process required for a shared system.\n\n## Understanding why table storage behavior matters\n\nA storage engine determines important aspects of how a MySQL table stores and accesses its data. Engine choice can affect supported features and the guarantees available to operations on that table. InnoDB provides transactional facilities and foreign-key support. MyISAM has different capabilities and does not provide the same transaction and foreign-key behavior. Sharing one server does not erase those differences.\n\nConsequently, learning that a product supports transactions is not enough to prove that every table participating in a workflow supplies the intended transactional guarantees. Inspect the actual objects and storage capabilities used by the operation. A hypothetical example about committing related changes must state the conditions that make the grouping meaningful rather than assume that a transaction command repairs every possible table configuration.\n\nAvoid describing one engine as universally best for every workload without requirements and evidence. Transaction semantics, access patterns, concurrency, operational requirements, and supported features all matter. A configuration chosen for one style of reporting is not automatically suitable for frequent small concurrent updates. The correct conclusion needs the actual workload and guarantees, not only a familiar engine name.\n\n## Checking foreign-key claims precisely\n\nIn MySQL's supported foreign-key definitions, parent and child tables must use a compatible supported engine arrangement; the documented rule requires the same storage engine. An enabled InnoDB foreign-key definition cannot simply be assumed to work against an ordinary MyISAM parent. The attempt is unsupported and can be rejected. Do not teach that it silently becomes an enforced cross-engine relationship.\n\nThere is a related but different concern with engines that do not implement foreign keys. A definition that does not result in an enforced constraint does not protect relationships merely because the author wrote foreign-key-looking syntax. Inspect the actual supported engine and resulting definition. Distinguish rejection of an unsupported InnoDB reference from a table whose engine does not provide the intended constraint enforcement.\n\nA team that mixes engines and assumes uniform behavior can therefore draw a false conclusion about its data. It may believe every relationship is protected or every multi-table operation is atomic without verifying those assumptions. The appropriate response is to inspect the documented capabilities and actual objects, not to disable integrity checks or claim that a successful-looking application screen proves the underlying guarantee.\n\n## Treating identity and privileges as trusted inputs to execution\n\nThe system's account and privilege facilities are part of its trusted execution boundary. An incorrectly scoped account can have too much or too little access even when individual tables are well designed. A primary key does not decide which person may inspect a record, and a useful index does not grant authorization. Structural design and privilege configuration address different properties.\n\nApplications should not infer authority from the fact that a connection succeeded. Connection verification establishes the relevant identity under the configured mechanism; later operations still need their applicable checks. A reporting identity may connect successfully while being denied an update. That can be the correct outcome rather than evidence that the connection was broken.\n\nAt the same time, a limited technical account does not automatically implement every end-user ownership rule in a multi-user application. The trusted application and database mechanisms must cooperate according to the architecture. The broad runtime supplies facilities, but the actual identities, privileges, queries, and application boundaries determine the behavior a deployment provides.\n\n## Diagnosing an unsuitable runtime or configuration choice\n\nSuppose a team optimizes a system solely for large read-heavy reports and later adds frequent concurrent registration updates. The team should evaluate whether the selected configuration and access patterns still meet the new requirements. Read efficiency alone does not establish acceptable conflict handling, write cost, or recovery behavior. A workload change can reveal assumptions that were reasonable for the earlier use case but no longer sufficient.\n\nInvestigate with evidence appropriate to the symptom. Request failures, plans, waits, page access, and resource pressure can answer different questions. Changing an engine or a configuration setting without understanding dependencies can introduce compatibility and operational consequences. A teaching example should explain the responsibility being evaluated instead of presenting an unverified configuration change as a universal remedy.\n\nWhen assessing an engine-related claim, ask three questions: which meaning of engine is intended, which actual product and table capabilities are involved, and what behavior has been verified? Those distinctions let you explain the core runtime, understand MySQL's storage-engine terminology, and identify unsupported assumptions about transactions, foreign keys, identity, and performance without pretending that one broad label proves them all.",
+  "references": [
+    {
+      "title": "MySQL storage-engine architecture",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/pluggable-storage-overview.html"
+    },
+    {
+      "title": "MySQL foreign-key constraints",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/create-table-foreign-keys.html"
+    },
+    {
+      "title": "MySQL connection verification",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/connection-access.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-1-database-engine",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-1-database-engine-1",
+          "test_id": "pt-dbms-sql-1-database-engine",
+          "question_text": "In the broad sense used in this chapter, what is the Database Engine?",
+          "options": [
+            "The core DBMS runtime that ties together the query processor, storage manager, transaction manager, and buffer manager",
+            "A single SQL statement executed by an end user",
+            "A synonym for the Database Administrator",
+            "A tool used only for generating ER diagrams"
+          ],
+          "correct_index": 0,
+          "explanation": "The notes define the Database Engine as the runtime coordinating all the other subsystems and exposing the unified SQL interface.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-1-database-engine-2",
+          "test_id": "pt-dbms-sql-1-database-engine",
+          "question_text": "What does the Database Engine's connection handler do when a client connects?",
+          "options": [
+            "Establishes the connection identity using configured authentication facilities and account information",
+            "Automatically grants every privilege to any connected identity",
+            "Changes every table to the same storage engine",
+            "Eliminates all later authorization checks"
+          ],
+          "correct_index": 0,
+          "explanation": "Connection verification establishes the relevant identity through the configured mechanism. Later operations still require their applicable authorization checks.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-1-database-engine-3",
+          "test_id": "pt-dbms-sql-1-database-engine",
+          "question_text": "In MySQL, what does choosing ENGINE=InnoDB versus ENGINE=MyISAM affect?",
+          "options": [
+            "Whether the table supports transactions, row-level locking, and foreign-key constraints",
+            "Only the color of the table in a GUI tool",
+            "Whether the table can store text data at all",
+            "Whether the table can be queried using SELECT"
+          ],
+          "correct_index": 0,
+          "explanation": "The notes state InnoDB supports transactions, row-level locking, and foreign keys, while MyISAM historically lacked these.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-1-database-engine-4",
+          "test_id": "pt-dbms-sql-1-database-engine",
+          "question_text": "What does the Database Engine own and maintain that the Query Processor constantly consults while planning queries?",
+          "options": [
+            "The system catalog, containing metadata about tables, columns, constraints, and indexes",
+            "The end user's personal login history only",
+            "A copy of every query ever executed, with no other metadata",
+            "The physical disk drive's manufacturer information"
+          ],
+          "correct_index": 0,
+          "explanation": "The notes explain the engine owns the system catalog/metadata that the Query Processor relies on for planning.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-1-database-engine-5",
+          "test_id": "pt-dbms-sql-1-database-engine",
+          "question_text": "Why can a foreign key from an InnoDB table referencing a MyISAM table be problematic, per the notes?",
+          "options": [
+            "An enabled InnoDB foreign-key definition against a MyISAM parent is unsupported and can be rejected; do not assume an enforced cross-engine relationship",
+            "MyISAM automatically provides all InnoDB transaction guarantees",
+            "A shared server proves every table relationship is enforced",
+            "The parent must always be converted silently"
+          ],
+          "correct_index": 0,
+          "explanation": "MySQL documents a same-storage-engine requirement for parent and child in supported foreign-key definitions. This differs from merely writing syntax for an engine that does not implement enforcement.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-1-database-engine-6",
+          "test_id": "pt-dbms-sql-1-database-engine",
+          "question_text": "What is described as a 'common architecture mistake' related to engine choice, according to the notes?",
+          "options": [
+            "Choosing an engine or configuration optimized for read-heavy analytics for a high-write OLTP workload, or vice versa",
+            "Ever using more than one table in a single database",
+            "Allowing an end user to log into the application",
+            "Storing metadata in the system catalog instead of a separate file"
+          ],
+          "correct_index": 0,
+          "explanation": "The notes identify mismatching engine/replication choice to workload type (analytics vs. OLTP) as a common architecture mistake.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-1-database-engine-7",
+          "test_id": "pt-dbms-sql-1-database-engine",
+          "question_text": "A team creates some tables as InnoDB and others as MyISAM within the same database, assuming all tables behave uniformly regarding constraints. What specific risk does the notes highlight?",
+          "options": [
+            "The actual engines differ in supported guarantees; MyISAM lacks the intended foreign-key support and an InnoDB cross-engine definition must not be assumed valid",
+            "Sharing a database name proves every relationship is enforced",
+            "Every operation becomes atomic regardless of engine",
+            "Every parent is automatically converted to a transactional engine"
+          ],
+          "correct_index": 0,
+          "explanation": "Inspect actual engine capabilities and enforced definitions. Unsupported cross-engine references can be rejected rather than silently becoming valid constraints.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-1-database-engine-8",
+          "test_id": "pt-dbms-sql-1-database-engine",
+          "question_text": "Why does the notes describe the engine's authentication/catalog layer as 'a single point of trust'?",
+          "options": [
+            "Because if the engine's own privilege metadata is misconfigured, it can silently under- or over-grant access regardless of how well individual tables were designed",
+            "Because the catalog layer has no connection to security at all",
+            "Because only End Users interact with the catalog layer directly",
+            "Because the catalog layer is optional and can be disabled without consequence"
+          ],
+          "correct_index": 0,
+          "explanation": "The notes state that misconfigured engine-level privilege metadata can silently affect access control regardless of table-level design quality.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "question_text": "Does a successful connection establish permission for every later operation?",
+          "options": [
+            "Yes; connection success grants every privilege",
+            "Yes; structural constraints replace authorization",
+            "No; connection identity can never be established",
+            "No; operations still face the applicable authorization checks"
+          ],
+          "correct_index": 3,
+          "explanation": "Authentication/connection verification and authorization are different concerns.",
+          "marks": 1,
+          "id": "tq-dbx2-database-engine-1-9",
+          "test_id": "pt-dbms-sql-1-database-engine",
+          "sort_order": 8
+        },
+        {
+          "question_text": "Why must an explanation identify which meaning of engine it uses?",
+          "options": [
+            "Every product uses all architecture terms identically",
+            "Every engine name refers only to a network socket",
+            "The broad core runtime and a MySQL table storage engine have different scopes",
+            "No DBMS can support more than one storage implementation"
+          ],
+          "correct_index": 2,
+          "explanation": "Product-specific storage plugins are not equivalent to the entire runtime in a generic teaching diagram.",
+          "marks": 1,
+          "id": "tq-dbx2-database-engine-1-10",
+          "test_id": "pt-dbms-sql-1-database-engine",
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbx2-database-engine-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "question_text": "A MySQL table uses InnoDB while another uses MyISAM. What should the team avoid assuming?",
+          "options": [
+            "That the server can contain tables",
+            "Identical transaction and foreign-key capabilities merely because both tables share a server",
+            "That queries can reference table definitions",
+            "That workload requirements matter"
+          ],
+          "correct_index": 1,
+          "explanation": "Storage-engine capabilities differ. Shared server placement does not prove uniform guarantees.",
+          "marks": 1,
+          "id": "tq-dbx2-database-engine-2-1",
+          "test_id": "pt-dbx2-database-engine-application",
+          "sort_order": 0
+        },
+        {
+          "question_text": "An enabled InnoDB foreign key is proposed against a MyISAM parent. Which claim is accurate?",
+          "options": [
+            "The unsupported cross-engine definition must not be assumed to work; it can be rejected",
+            "It automatically becomes a guaranteed enforced relationship",
+            "The server must silently convert every parent to InnoDB",
+            "The relationship is proved by a diagram alone"
+          ],
+          "correct_index": 0,
+          "explanation": "MySQL documents compatible supported engine requirements, including the same-engine rule for parent and child.",
+          "marks": 1,
+          "id": "tq-dbx2-database-engine-2-2",
+          "test_id": "pt-dbx2-database-engine-application",
+          "sort_order": 1
+        },
+        {
+          "question_text": "A team writes foreign-key-looking syntax for a table engine without the intended enforcement. What must be checked?",
+          "options": [
+            "The actual supported engine and resulting enforced definition",
+            "Only whether the text contains FOREIGN KEY",
+            "Only the form's visual appearance",
+            "Whether every account has a short name"
+          ],
+          "correct_index": 0,
+          "explanation": "Writing a declaration is not evidence that the chosen object/engine provides the intended constraint.",
+          "marks": 1,
+          "id": "tq-dbx2-database-engine-2-3",
+          "test_id": "pt-dbx2-database-engine-application",
+          "sort_order": 2
+        },
+        {
+          "question_text": "A query names a missing column. Why can a faster storage device not resolve the underlying error?",
+          "options": [
+            "Every missing name is a slow disk read",
+            "The engine can infer arbitrary undeclared columns",
+            "The statement does not resolve against the actual object definitions",
+            "An index grants permission to create the column"
+          ],
+          "correct_index": 2,
+          "explanation": "The catalog defines the available objects. More physical access speed does not change their logical definitions.",
+          "marks": 1,
+          "id": "tq-dbx2-database-engine-2-4",
+          "test_id": "pt-dbx2-database-engine-application",
+          "sort_order": 3
+        },
+        {
+          "question_text": "A reporting account connects successfully but cannot update marks. Is that necessarily a connection failure?",
+          "options": [
+            "Yes; every connected account must update all tables",
+            "Yes; a successful login disables later checks",
+            "No; it may be the correct separation between connection identity and update privileges",
+            "No; the account must therefore be an administrator"
+          ],
+          "correct_index": 2,
+          "explanation": "An operation can be denied even after connection verification succeeds.",
+          "marks": 1,
+          "id": "tq-dbx2-database-engine-2-5",
+          "test_id": "pt-dbx2-database-engine-application",
+          "sort_order": 4
+        },
+        {
+          "question_text": "A table has a well-chosen primary key but an application identity has excessive privileges. Which claim is justified?",
+          "options": [
+            "The key automatically revokes unrelated privileges",
+            "The primary key does not correct the access configuration",
+            "The privilege issue cannot affect any data",
+            "The index layout grants the intended ownership policy"
+          ],
+          "correct_index": 1,
+          "explanation": "Integrity and authorization are separate properties requiring appropriate configuration and enforcement.",
+          "marks": 1,
+          "id": "tq-dbx2-database-engine-2-6",
+          "test_id": "pt-dbx2-database-engine-application",
+          "sort_order": 5
+        },
+        {
+          "question_text": "A configuration fits read-heavy analysis. What must be evaluated before using it for frequent concurrent updates?",
+          "options": [
+            "Only whether the product logo matches",
+            "A guarantee that read performance proves all write behavior",
+            "Whether every transaction command has the same spelling",
+            "The new workload, required guarantees, write costs, and coordination behavior"
+          ],
+          "correct_index": 3,
+          "explanation": "A workload-specific choice must be reviewed when the required operations and guarantees change.",
+          "marks": 1,
+          "id": "tq-dbx2-database-engine-2-7",
+          "test_id": "pt-dbx2-database-engine-application",
+          "sort_order": 6
+        },
+        {
+          "question_text": "A developer manually edits internal catalog storage to bypass the supported interface. What is wrong with the approach?",
+          "options": [
+            "The catalog is always an ordinary writable application table",
+            "It can violate internal consistency or be prohibited and bypasses the intended definition process",
+            "It automatically preserves all privileges and definitions",
+            "It is the universal way to change database objects"
+          ],
+          "correct_index": 1,
+          "explanation": "Use supported inspection and definition facilities under the appropriate authorization and change process.",
+          "marks": 1,
+          "id": "tq-dbx2-database-engine-2-8",
+          "test_id": "pt-dbx2-database-engine-application",
+          "sort_order": 7
+        },
+        {
+          "question_text": "Does transaction support in a product name prove atomicity for every actual table arrangement?",
+          "options": [
+            "No; the objects, storage capabilities, and operation boundaries must be checked",
+            "Yes; all storage arrangements become equivalent",
+            "Yes; every external service is automatically included",
+            "No; transactions can never group local changes"
+          ],
+          "correct_index": 0,
+          "explanation": "The actual components and algorithm determine the available guarantees.",
+          "marks": 1,
+          "id": "tq-dbx2-database-engine-2-9",
+          "test_id": "pt-dbx2-database-engine-application",
+          "sort_order": 8
+        },
+        {
+          "question_text": "Which evidence is strongest for an engine-related explanation?",
+          "options": [
+            "Only the word engine in a diagram",
+            "Only a fast-looking screen",
+            "A claim that all DBMS internals are identical",
+            "A stated term scope, actual product/object capabilities, and verified behavior"
+          ],
+          "correct_index": 3,
+          "explanation": "Separating terminology, capabilities and observations prevents unsupported architectural and operational conclusions.",
+          "marks": 1,
+          "id": "tq-dbx2-database-engine-2-10",
+          "test_id": "pt-dbx2-database-engine-application",
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [],
+  "coding_not_applicable": "A terminology and architecture topic. Engine-specific definition and transaction programming is handled in the dedicated SQL and transaction topics rather than forced into this overview.",
+  "review": {
+    "reviewer": "coordinator",
+    "independent_review": "unavailable; no agent tools",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "definitions, worked examples and question coverage checked; no external plagiarism certification",
+    "existing_question_corrections": [
+      "tq-dbms-sql-1-database-engine-2",
+      "tq-dbms-sql-1-database-engine-5",
+      "tq-dbms-sql-1-database-engine-7"
+    ],
+    "canonical_answer_indices_preserved": true,
+    "answer_position_policy": "Original indices retained; new canonical positions shuffled; website display order also shuffled per attempt."
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-1-database-engine",
+    "original_note_sha256": "10a0b8e9e4ae1cb731c28840fc2fb5abf5fb3a76abb2429622efa1014ae6b10a",
+    "status": "paired migration prepared; not applied"
+  },
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-1-database-engine-1",
+      "test_id": "pt-dbms-sql-1-database-engine",
+      "question_text": "In the broad sense used in this chapter, what is the Database Engine?",
+      "options": [
+        "The core DBMS runtime that ties together the query processor, storage manager, transaction manager, and buffer manager",
+        "A single SQL statement executed by an end user",
+        "A synonym for the Database Administrator",
+        "A tool used only for generating ER diagrams"
+      ],
+      "correct_index": 0,
+      "explanation": "The notes define the Database Engine as the runtime coordinating all the other subsystems and exposing the unified SQL interface.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-1-database-engine-2",
+      "test_id": "pt-dbms-sql-1-database-engine",
+      "question_text": "What does the Database Engine's connection handler do when a client connects?",
+      "options": [
+        "Authenticates the request against the system catalog's metadata about users and privileges",
+        "Immediately deletes all existing data in the database",
+        "Bypasses the Query Processor entirely for every request",
+        "Converts the client's SQL into a spreadsheet"
+      ],
+      "correct_index": 0,
+      "explanation": "The notes describe the connection handler as authenticating against catalog metadata before routing statements through the pipeline.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-1-database-engine-3",
+      "test_id": "pt-dbms-sql-1-database-engine",
+      "question_text": "In MySQL, what does choosing ENGINE=InnoDB versus ENGINE=MyISAM affect?",
+      "options": [
+        "Whether the table supports transactions, row-level locking, and foreign-key constraints",
+        "Only the color of the table in a GUI tool",
+        "Whether the table can store text data at all",
+        "Whether the table can be queried using SELECT"
+      ],
+      "correct_index": 0,
+      "explanation": "The notes state InnoDB supports transactions, row-level locking, and foreign keys, while MyISAM historically lacked these.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-1-database-engine-4",
+      "test_id": "pt-dbms-sql-1-database-engine",
+      "question_text": "What does the Database Engine own and maintain that the Query Processor constantly consults while planning queries?",
+      "options": [
+        "The system catalog, containing metadata about tables, columns, constraints, and indexes",
+        "The end user's personal login history only",
+        "A copy of every query ever executed, with no other metadata",
+        "The physical disk drive's manufacturer information"
+      ],
+      "correct_index": 0,
+      "explanation": "The notes explain the engine owns the system catalog/metadata that the Query Processor relies on for planning.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-1-database-engine-5",
+      "test_id": "pt-dbms-sql-1-database-engine",
+      "question_text": "Why can a foreign key from an InnoDB table referencing a MyISAM table be problematic, per the notes?",
+      "options": [
+        "It may silently fail to be enforced, since MyISAM does not support foreign-key constraints",
+        "It will always cause the entire database to crash immediately",
+        "MySQL prevents this configuration from ever being created",
+        "It has no effect since foreign keys are irrelevant to storage engines"
+      ],
+      "correct_index": 0,
+      "explanation": "The notes explicitly warn that mixing engines can create a foreign key that appears to exist but isn't actually enforced, due to MyISAM's lack of support.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-1-database-engine-6",
+      "test_id": "pt-dbms-sql-1-database-engine",
+      "question_text": "What is described as a 'common architecture mistake' related to engine choice, according to the notes?",
+      "options": [
+        "Choosing an engine or configuration optimized for read-heavy analytics for a high-write OLTP workload, or vice versa",
+        "Ever using more than one table in a single database",
+        "Allowing an end user to log into the application",
+        "Storing metadata in the system catalog instead of a separate file"
+      ],
+      "correct_index": 0,
+      "explanation": "The notes identify mismatching engine/replication choice to workload type (analytics vs. OLTP) as a common architecture mistake.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-1-database-engine-7",
+      "test_id": "pt-dbms-sql-1-database-engine",
+      "question_text": "A team creates some tables as InnoDB and others as MyISAM within the same database, assuming all tables behave uniformly regarding constraints. What specific risk does the notes highlight?",
+      "options": [
+        "Foreign keys referencing a MyISAM table from an InnoDB table may not actually be enforced, creating a silent integrity gap",
+        "MyISAM tables automatically convert themselves to InnoDB after one week",
+        "This configuration is technically impossible in MySQL",
+        "InnoDB tables will refuse to store any data if a MyISAM table exists"
+      ],
+      "correct_index": 0,
+      "explanation": "The notes call this exact scenario out as an edge case: silent, unenforced foreign keys across mixed storage engines.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-1-database-engine-8",
+      "test_id": "pt-dbms-sql-1-database-engine",
+      "question_text": "Why does the notes describe the engine's authentication/catalog layer as 'a single point of trust'?",
+      "options": [
+        "Because if the engine's own privilege metadata is misconfigured, it can silently under- or over-grant access regardless of how well individual tables were designed",
+        "Because the catalog layer has no connection to security at all",
+        "Because only End Users interact with the catalog layer directly",
+        "Because the catalog layer is optional and can be disabled without consequence"
+      ],
+      "correct_index": 0,
+      "explanation": "The notes state that misconfigured engine-level privilege metadata can silently affect access control regardless of table-level design quality.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Broad runtime and MySQL storage-engine terminology",
+      "description": "The rows separate conceptual scope from documented product architecture. They do not describe five interchangeable engines or prove a particular deployment configuration.",
+      "columns": [
+        "Term or responsibility",
+        "Scope",
+        "What not to infer"
+      ],
+      "rows": [
+        [
+          "Broad database runtime",
+          "Coordinates cooperating database work",
+          "Not identical to a single storage plugin"
+        ],
+        [
+          "Common MySQL server layer",
+          "Shared server facilities above pluggable storage",
+          "Not a guarantee of identical table storage behavior"
+        ],
+        [
+          "InnoDB",
+          "A MySQL storage engine with transactional and foreign-key facilities",
+          "Not automatic proof that an application algorithm is correct"
+        ],
+        [
+          "MyISAM",
+          "A different MySQL storage engine with different capabilities",
+          "Not interchangeable with InnoDB for transaction/FK assumptions"
+        ],
+        [
+          "Catalog and privilege facilities",
+          "Authoritative definitions and access information used by the system",
+          "Not replaced by a tidy table diagram"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "coordinator review",
+    "server_rendering": "passed",
+    "browser_rendering": "unverified",
+    "independent_review": "unavailable; no agent tools",
+    "rendering_check": "Actual LessonBlock/TopicDiagrams in React server rendering; 18 authored package checks passed; desktop/mobile browser QA remains unverified"
+  }
+}

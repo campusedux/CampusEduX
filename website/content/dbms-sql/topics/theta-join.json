@@ -1,0 +1,628 @@
+{
+  "source_ref": "chapter-7-relational-algebra/theta-join",
+  "slug": "theta-join",
+  "title": "Theta Join",
+  "description": "Join tuples through explicit comparisons, reason about interval boundaries and multiple matches, and distinguish classical inner theta joins from unmatched-row-preserving outer joins.",
+  "dialect": "MySQL 8.4",
+  "notes": "## The predicate determines which pairs qualify\n\nA theta join combines tuples from two input relations when a specified comparison predicate holds. In classical algebra it can be defined as a Cartesian product followed by selection on that predicate. The condition can use equality or other comparisons, such as less than, greater than, or a combination. The operation returns qualifying matched combinations under the stated inner-join semantics.\n\nThe word theta names the parameterized condition rather than a special SQL keyword that must appear in a query. SQL JOIN with ON can express the condition. A salary-to-band comparison, a booking-to-interval comparison, or a student score matched to a grading interval can illustrate non-equality cases. The actual fact meaning and output grain remain essential even when the comparison syntax is valid.\n\n## Equi joins are a restricted case\n\nWhen the predicate consists of equality comparisons on the relevant attributes, the inner join is commonly described as an equi join. It is a special case within the broader predicate-based inner theta-join account. If the predicate combines equality with an interval comparison, it is no longer purely equality-based even though part of the condition still matches identifiers.\n\nA natural join also includes an equality-based matching idea plus an implicit choice of same-named attributes and a particular output-column treatment. Those additional choices matter. It is useful to describe its connection to theta selection, but a statement that every named join is exactly the same product-and-selection operation would be inaccurate. Read each operator's full matching and preservation semantics.\n\n## Outer joins add unmatched-row preservation\n\nA classical inner theta join returns qualifying combinations. If a left tuple has no qualifying right tuple, it contributes nothing to that inner result. An outer join can preserve the unmatched tuple with missing partner attributes. That null-extension behaviour cannot be obtained merely by filtering an ordinary Cartesian product when no matching partner exists.\n\nThis distinction corrects a common misconception. An outer join may use a theta-style condition in its ON clause, but it is not simply a special case of classical product followed by selection. Predicate form and unmatched-row preservation are different dimensions. An example with an unbanded score makes the distinction observable rather than relying on inputs where every row happens to match.\n\n## Match scores to an explicit band policy\n\nConsider results with result_id and score, plus grade bands with band_id, minimum_score, and maximum_score. The task can specify half-open intervals: minimum_score is included while maximum_score is excluded. A score of fifty then belongs to the band beginning at fifty rather than the band ending there. The interval convention prevents an accidental double match at a shared boundary when the bands are properly arranged.\n\n```sql\nSELECT r.result_id, r.score, b.band_id\nFROM results r\nJOIN bands b\n  ON r.score >= b.minimum_score\n AND r.score < b.maximum_score\nORDER BY r.result_id, b.band_id;\n```\n\nThe query expresses the stated boundary policy directly. BETWEEN would include both endpoints and would therefore implement a different contract at touching boundaries. A lecture must not label an inclusive range expression as equivalent to a half-open interval merely because ordinary mid-band scores produce the same visible results.\n\n## A range join can return several matches\n\nThe join does not automatically guarantee one band per score. If the band data overlaps, one score can satisfy several predicates and produce several result rows. That can be correct when reporting every applicable range, or it can reveal invalid configuration if the business policy requires mutually exclusive bands. The query alone does not resolve that domain decision.\n\nUsing LIMIT, MIN(band_id), or DISTINCT without a stated rule can hide rather than fix the overlap. Distinct result tuples can still differ by band_id, and an arbitrary chosen band can misclassify the score. Define whether overlapping ranges are permitted, which matches should be returned, and where any global nonoverlap invariant is enforced.\n\n## Gaps and absent inputs also matter\n\nA score outside every band is omitted by the inner range join. If the report requires every result including unbanded ones, use an appropriate preserving formulation and state the missing-partner output policy. The two queries answer different questions. Do not treat the missing output as automatic proof that the result itself does not exist or that its score is invalid under every domain rule.\n\nA NULL score makes ordinary numeric comparisons UNKNOWN, so it does not qualify for a matched inner result under those predicates. An explicit task can exclude missing scores, preserve them with a separate status, or define another policy. Replacing absence with zero is not neutral if zero and an unrecorded assessment mean different things.\n\n## Compound predicates combine role constraints\n\nA real range can be scoped to a department, scheme, or term. Matching only score can assign a student's result to another department's band definition. A predicate can therefore require department equality and the score interval together. Parentheses and explicit role qualification help readers see which conditions apply to every branch of an OR expression.\n\nThe result grain is still one qualifying result-band combination. If two source results share the same score and department, they remain different occurrences through result_id. Removing that identity and collapsing labels can lose the distinction between students or attempts. Keep the requested identifiers so output multiplicity can be interpreted rather than guessed from repeated numeric values.\n\n## Logical equivalence does not prescribe materialization\n\nDefining a theta join as selection over product explains the tuple set. It does not require a database to allocate the whole Cartesian product before checking the condition. Nor does it prove every supported plan avoids large intermediate or candidate work. Predicate selectivity, input size, available access paths, and engine strategy determine the physical execution.\n\nEquality and non-equality conditions can offer different optimization opportunities, but no universal performance ranking follows solely from the operator name. A small fixture demonstrates semantics rather than throughput. Use an actual supported plan and relevant measurements when discussing cost, preserving the same boundary and population contract when comparing alternative formulations.\n\n## All-true and all-false conditions are useful checks\n\nIf an inner join condition is always TRUE, every source pair qualifies and the logical result is the Cartesian product. If no pair satisfies the predicate, the result is empty even when both inputs contain tuples. These extremes help distinguish matching semantics from an outer preservation requirement or a union-like operation that keeps unrelated rows.\n\nThe product needs an actual tuple from both inputs. An empty bands relation therefore yields no inner band matches. A preserving left join can behave differently. Include that empty-partner case when reviewing a query that claims to list every source result, because one ordinary matched fixture can conceal a fundamental mismatch between the report population and selected join type.\n\n## State the matching rule rather than claiming universality\n\nTheta join is a broad classical inner-join concept, but it is not a promise that every arbitrary SQL expression, function, or operator is supported in every dialect's ON clause. Product syntax, type rules, NULL behaviour, and supported operations still apply. The lesson's comparisons are deliberately simple and tied to a documented score-scale example.\n\nIt is also unnecessary to claim a global statistic about which joins all applications use most often. Equality and range matching both solve real tasks. Choose the predicate that expresses the domain relationship and verify it against representative tuples. A correct range condition is preferable to an equality shortcut that loses boundary meaning merely because equality is familiar.\n\n## Validate boundaries and multiplicity explicitly\n\nTest a score at a band's lower bound, at its excluded upper bound, in an overlap, in a gap, and with no band rows. For a scoped scheme, include another department with the same numeric boundaries. Confirm both which pairs qualify and whether multiple matches remain intentionally visible. These fixtures distinguish wrong comparison signs, incomplete scope, and hidden arbitrary tie-breaking.\n\nThe exercises verify half-open range matching and a department-scoped compound predicate on synthetic fixtures. They do not enforce global interval nonoverlap, production grading authority, or exact MySQL/provider behaviour. Theta join becomes useful when the predicate, source identities, interval convention, NULL treatment, match multiplicity, and inner-versus-outer distinction are all explicit, allowing precise association queries without confusing comparison flexibility with universal preservation or physical execution guarantees.\n",
+  "references": [],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-7-theta-join",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-7-theta-join-1",
+          "test_id": "pt-dbms-sql-7-theta-join",
+          "question_text": "What distinguishes a Theta Join from other join types?",
+          "options": [
+            "It can only use equality comparisons",
+            "Its classical inner-join predicate can use equality or other supported comparisons, not only equality",
+            "It never involves a Cartesian Product",
+            "It only works on numeric columns"
+          ],
+          "correct_index": 1,
+          "explanation": "The broad predicate form does not make every SQL join, particularly outer preservation, the same product-plus-selection operation.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-7-theta-join-2",
+          "test_id": "pt-dbms-sql-7-theta-join",
+          "question_text": "How is a Theta Join formally defined in terms of other operations?",
+          "options": [
+            "As a Union of two relations",
+            "As a Cartesian Product followed by a Selection using the theta condition",
+            "As a Projection followed by a Rename",
+            "As an Intersection of two relations"
+          ],
+          "correct_index": 1,
+          "explanation": "This is the formal building-block definition: pair everything, then filter by the theta condition.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-7-theta-join-3",
+          "test_id": "pt-dbms-sql-7-theta-join",
+          "question_text": "Is `ON e.salary BETWEEN s.min_salary AND s.max_salary` an example of a Theta Join?",
+          "options": [
+            "No, BETWEEN cannot be used in a join condition",
+            "Yes — since the condition is a range comparison, not equality, this is a genuine (non-equi) Theta Join",
+            "This is actually an Equi Join in disguise",
+            "This is a Cartesian Product, not a join at all"
+          ],
+          "correct_index": 1,
+          "explanation": "BETWEEN expresses an inclusive range in this example; a half-open contract instead needs the appropriate >= and < comparisons.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-7-theta-join-4",
+          "test_id": "pt-dbms-sql-7-theta-join",
+          "question_text": "What happens if a Theta Join's condition is always true (e.g. ON 1=1)?",
+          "options": [
+            "The join returns zero rows",
+            "It degenerates into exactly a Cartesian Product, since every row pairs with every other row",
+            "It causes a syntax error",
+            "It automatically becomes a Natural Join"
+          ],
+          "correct_index": 1,
+          "explanation": "A trivially-true condition filters out nothing, leaving the full Cartesian Product — confirming Cartesian Product is Theta Join's trivial special case.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-7-theta-join-5",
+          "test_id": "pt-dbms-sql-7-theta-join",
+          "question_text": "Which operation is directly an equality-restricted special case of the classical inner theta join?",
+          "options": [
+            "None — Theta Join is unrelated to other join types",
+            "An inner equi join; outer joins add unmatched-row preservation beyond product followed by selection",
+            "Only Cartesian Product is a special case",
+            "Only Outer Join is a special case"
+          ],
+          "correct_index": 1,
+          "explanation": "Natural join also has output/name conventions; an outer join cannot be reduced to simple selection on an ordinary product.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-7-theta-join-6",
+          "test_id": "pt-dbms-sql-7-theta-join",
+          "question_text": "Which requirement is a valid reason to use a non-equality join predicate?",
+          "options": [
+            "Most are range-based",
+            "A result must be matched to a documented score interval rather than to a single equal boundary value",
+            "There is no meaningful difference in frequency",
+            "Equality joins do not exist in relational algebra"
+          ],
+          "correct_index": 1,
+          "explanation": "Predicate choice follows the actual domain task, not an unsupported universal frequency claim.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-7-theta-join-7",
+          "test_id": "pt-dbms-sql-7-theta-join",
+          "question_text": "Can a Theta Join's condition combine multiple comparisons with AND/OR?",
+          "options": [
+            "No, only a single comparison is ever allowed",
+            "Yes, exactly like a Selection's condition can combine multiple comparisons",
+            "Only two comparisons maximum are allowed",
+            "AND is allowed but OR is not"
+          ],
+          "correct_index": 1,
+          "explanation": "Since Theta Join is Cartesian Product plus a Selection-style condition, it can be as compound as any Selection condition.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-7-theta-join-8",
+          "test_id": "pt-dbms-sql-7-theta-join",
+          "question_text": "Why is Theta Join described as 'the most general join'?",
+          "options": [
+            "Because it always returns the most rows of any join type",
+            "It permits a broader class of classical inner comparison predicates, while outer preservation and product syntax need separate treatment",
+            "Because it requires the fewest columns",
+            "Because it is the only join type SQL actually implements"
+          ],
+          "correct_index": 1,
+          "explanation": "General predicate matching is not a claim that every join type or arbitrary dialect expression has identical semantics.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-7-theta-join-new-9",
+          "test_id": "pt-dbms-sql-7-theta-join",
+          "question_text": "For a half-open band [50,70), does score 70 match?",
+          "options": [
+            "Yes; every endpoint is included",
+            "No",
+            "Only if id is lower",
+            "Only if bands overlap"
+          ],
+          "correct_index": 1,
+          "explanation": "The upper boundary is excluded by the stated contract.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-7-theta-join-new-10",
+          "test_id": "pt-dbms-sql-7-theta-join",
+          "question_text": "For that band, does score 50 match?",
+          "options": [
+            "No; both endpoints are excluded",
+            "Only if score is unique",
+            "Yes",
+            "Only if it is stored as text"
+          ],
+          "correct_index": 2,
+          "explanation": "The lower boundary is included.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-7-theta-join-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-7-theta-join-application-new-1",
+          "test_id": "pt-dbms-sql-7-theta-join-application",
+          "question_text": "What can overlapping bands do in an inner range join?",
+          "options": [
+            "Automatically choose one best band",
+            "Delete the result",
+            "Produce several legitimate predicate matches for one result",
+            "Enforce nonoverlap"
+          ],
+          "correct_index": 2,
+          "explanation": "The query reports satisfying pairs rather than silently selecting one.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-7-theta-join-application-new-2",
+          "test_id": "pt-dbms-sql-7-theta-join-application",
+          "question_text": "Why can an arbitrary LIMIT conceal a range configuration issue?",
+          "options": [
+            "It always validates the domain",
+            "It creates a range key",
+            "It makes NULL equal zero",
+            "It can discard matches without a documented selection policy"
+          ],
+          "correct_index": 3,
+          "explanation": "Choosing one row is different from establishing the intended rule.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-7-theta-join-application-new-3",
+          "test_id": "pt-dbms-sql-7-theta-join-application",
+          "question_text": "Does product followed by selection preserve unmatched left tuples?",
+          "options": [
+            "No",
+            "Yes; it invents NULL partners",
+            "Only when ON is inclusive",
+            "Only if ids repeat"
+          ],
+          "correct_index": 0,
+          "explanation": "Outer preservation adds another semantic feature.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-7-theta-join-application-new-4",
+          "test_id": "pt-dbms-sql-7-theta-join-application",
+          "question_text": "What is the logical result when an inner theta predicate is always TRUE?",
+          "options": [
+            "Always the left relation alone",
+            "The Cartesian product",
+            "A union",
+            "Exactly one tuple"
+          ],
+          "correct_index": 1,
+          "explanation": "Every pair qualifies.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-7-theta-join-application-new-5",
+          "test_id": "pt-dbms-sql-7-theta-join-application",
+          "question_text": "What happens to a NULL score under ordinary >= and < band comparisons?",
+          "options": [
+            "It always matches the lowest band",
+            "It becomes zero",
+            "It does not qualify as TRUE for a matched inner row",
+            "It forces all bands to match"
+          ],
+          "correct_index": 2,
+          "explanation": "SQL comparison absence rules remain relevant.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-7-theta-join-application-new-6",
+          "test_id": "pt-dbms-sql-7-theta-join-application",
+          "question_text": "Why include department_id equality in a department-specific band join?",
+          "options": [
+            "To make all scores unique",
+            "To eliminate every overlap globally",
+            "To rename the result",
+            "To prevent numeric matches against another department’s scheme"
+          ],
+          "correct_index": 3,
+          "explanation": "The complete scope must be part of the predicate.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-7-theta-join-application-new-7",
+          "test_id": "pt-dbms-sql-7-theta-join-application",
+          "question_text": "What does the product-plus-selection definition say about physical materialization?",
+          "options": [
+            "It defines the logical tuples, not a required physical plan",
+            "It forces allocation of every pair in all engines",
+            "It proves no large work can ever occur",
+            "It guarantees the fastest strategy"
+          ],
+          "correct_index": 0,
+          "explanation": "Execution claims need engine evidence.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-7-theta-join-application-new-8",
+          "test_id": "pt-dbms-sql-7-theta-join-application",
+          "question_text": "Why retain result_id in a band report?",
+          "options": [
+            "Score is always a primary key",
+            "Different result occurrences can have equal scores",
+            "A band label identifies the student",
+            "Ids make range predicates unnecessary"
+          ],
+          "correct_index": 1,
+          "explanation": "The source identity preserves output occurrence grain.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-7-theta-join-application-new-9",
+          "test_id": "pt-dbms-sql-7-theta-join-application",
+          "question_text": "Does BETWEEN implement the same condition as >= lower AND < upper?",
+          "options": [
+            "Yes; all range operators are identical",
+            "Only for decimal values",
+            "No; BETWEEN includes the upper bound in the stated numeric case",
+            "Only if names differ"
+          ],
+          "correct_index": 2,
+          "explanation": "The boundary contract determines the right predicate.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-7-theta-join-application-new-10",
+          "test_id": "pt-dbms-sql-7-theta-join-application",
+          "question_text": "What does a passing range fixture not establish?",
+          "options": [
+            "Its tested boundary matches",
+            "Its selected output order",
+            "Its recorded engine result",
+            "Global nonoverlap enforcement or production grading authority"
+          ],
+          "correct_index": 3,
+          "explanation": "A query result has a narrower verification scope.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cx-theta-bands",
+      "slug": "theta-bands",
+      "title": "Match every half-open score-band combination",
+      "difficulty": "Easy",
+      "task": "Return result_id and band_id for score >= minimum_score and score < maximum_score. Return every matching band, including overlaps; do not choose one arbitrarily.",
+      "schema_sql": "CREATE TABLE results (result_id INT PRIMARY KEY, score INT NULL);\nCREATE TABLE bands (band_id INT PRIMARY KEY, minimum_score INT NOT NULL, maximum_score INT NOT NULL);",
+      "seed_sql": "INSERT INTO results VALUES (1,50),(2,70),(3,65),(4,NULL),(5,100); INSERT INTO bands VALUES (10,50,70),(20,60,80);",
+      "expected": "result_id\tband_id\n1\t10\n2\t20\n3\t10\n3\t20",
+      "ordering": "Ascending result_id, band_id.",
+      "constraints": [
+        "Every supplied band has minimum_score < maximum_score; overlaps are deliberately allowed in this report."
+      ],
+      "edge_cases": [
+        "The lower bound is included and upper excluded.",
+        "A missing or unbanded score contributes no inner match."
+      ],
+      "hints": [
+        "Use >= for the lower bound and < for the upper.",
+        "Preserve all satisfying result-band pairs."
+      ],
+      "solution_sql": "SELECT r.result_id, b.band_id FROM results r JOIN bands b ON r.score >= b.minimum_score AND r.score < b.maximum_score ORDER BY r.result_id, b.band_id;",
+      "explanation": "The explicit interval convention and match multiplicity define the correct inner result; no unique-band configuration invariant is claimed.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO results VALUES (1,50),(2,70); INSERT INTO bands VALUES (10,50,70);",
+          "expected": "result_id\tband_id\n1\t10"
+        },
+        {
+          "seed_sql": "INSERT INTO results VALUES (1,60);",
+          "expected": ""
+        }
+      ]
+    },
+    {
+      "id": "cx-theta-scoped",
+      "slug": "theta-scoped",
+      "title": "Match scores only within their department’s band scheme",
+      "difficulty": "Medium",
+      "task": "Return result_id and band_id for bands in the same department as the result and the half-open score interval [minimum_score,maximum_score). Return every matching scoped band.",
+      "schema_sql": "CREATE TABLE results (result_id INT PRIMARY KEY, department_id INT NOT NULL, score INT NULL);\nCREATE TABLE bands (band_id INT PRIMARY KEY, department_id INT NOT NULL, minimum_score INT NOT NULL, maximum_score INT NOT NULL);",
+      "seed_sql": "INSERT INTO results VALUES (1,7,50),(2,9,50),(3,7,70),(4,9,NULL); INSERT INTO bands VALUES (10,7,50,70),(20,9,50,80),(30,7,70,90);",
+      "expected": "result_id\tband_id\n1\t10\n2\t20\n3\t30",
+      "ordering": "Ascending result_id, band_id.",
+      "constraints": [
+        "Department scope is an explicit comparison role; this fixture does not implement a separate department catalogue or native reference enforcement."
+      ],
+      "edge_cases": [
+        "The same score can correspond to different schemes.",
+        "A boundary must not match the previous half-open band."
+      ],
+      "hints": [
+        "Combine department equality with both range comparisons.",
+        "Do not rely on score alone to identify the scheme."
+      ],
+      "solution_sql": "SELECT r.result_id, b.band_id FROM results r JOIN bands b ON b.department_id = r.department_id AND r.score >= b.minimum_score AND r.score < b.maximum_score ORDER BY r.result_id, b.band_id;",
+      "explanation": "The predicate preserves both scope and interval meaning, combining equality and non-equality in a non-pure-equi theta join.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO results VALUES (1,7,60); INSERT INTO bands VALUES (20,9,50,80);",
+          "expected": ""
+        },
+        {
+          "seed_sql": "INSERT INTO results VALUES (1,7,50); INSERT INTO bands VALUES (10,7,50,70),(20,7,40,60);",
+          "expected": "result_id\tband_id\n1\t10\n1\t20"
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-7-theta-join-1",
+      "test_id": "pt-dbms-sql-7-theta-join",
+      "question_text": "What distinguishes a Theta Join from other join types?",
+      "options": [
+        "It can only use equality comparisons",
+        "It can use ANY comparison operator (=, <, >, <=, >=, <>) as its join condition, making it the most general join type",
+        "It never involves a Cartesian Product",
+        "It only works on numeric columns"
+      ],
+      "correct_index": 1,
+      "explanation": "Theta Join's defining feature is allowing any comparison operator, not just equality.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-7-theta-join-2",
+      "test_id": "pt-dbms-sql-7-theta-join",
+      "question_text": "How is a Theta Join formally defined in terms of other operations?",
+      "options": [
+        "As a Union of two relations",
+        "As a Cartesian Product followed by a Selection using the theta condition",
+        "As a Projection followed by a Rename",
+        "As an Intersection of two relations"
+      ],
+      "correct_index": 1,
+      "explanation": "This is the formal building-block definition: pair everything, then filter by the theta condition.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-7-theta-join-3",
+      "test_id": "pt-dbms-sql-7-theta-join",
+      "question_text": "Is `ON e.salary BETWEEN s.min_salary AND s.max_salary` an example of a Theta Join?",
+      "options": [
+        "No, BETWEEN cannot be used in a join condition",
+        "Yes — since the condition is a range comparison, not equality, this is a genuine (non-equi) Theta Join",
+        "This is actually an Equi Join in disguise",
+        "This is a Cartesian Product, not a join at all"
+      ],
+      "correct_index": 1,
+      "explanation": "A range/inequality-based join condition is exactly what makes this a true (non-equi) Theta Join.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-7-theta-join-4",
+      "test_id": "pt-dbms-sql-7-theta-join",
+      "question_text": "What happens if a Theta Join's condition is always true (e.g. ON 1=1)?",
+      "options": [
+        "The join returns zero rows",
+        "It degenerates into exactly a Cartesian Product, since every row pairs with every other row",
+        "It causes a syntax error",
+        "It automatically becomes a Natural Join"
+      ],
+      "correct_index": 1,
+      "explanation": "A trivially-true condition filters out nothing, leaving the full Cartesian Product — confirming Cartesian Product is Theta Join's trivial special case.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-7-theta-join-5",
+      "test_id": "pt-dbms-sql-7-theta-join",
+      "question_text": "Which join types are considered special cases of Theta Join?",
+      "options": [
+        "None — Theta Join is unrelated to other join types",
+        "Equi Join, Natural Join, and Outer Join are all more specific variants built on the same Cartesian-Product-plus-filter foundation",
+        "Only Cartesian Product is a special case",
+        "Only Outer Join is a special case"
+      ],
+      "correct_index": 1,
+      "explanation": "Theta Join is the general form; the other named join types add specific restrictions or extra behavior on top of it.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-7-theta-join-6",
+      "test_id": "pt-dbms-sql-7-theta-join",
+      "question_text": "Are most real-world joins equality-based or range-based (true non-equi Theta Joins)?",
+      "options": [
+        "Most are range-based",
+        "Most real-world joins are equality-based (matching foreign key to primary key); non-equi Theta Joins are less common but do appear in real problems",
+        "There is no meaningful difference in frequency",
+        "Equality joins do not exist in relational algebra"
+      ],
+      "correct_index": 1,
+      "explanation": "Equality (foreign-key matching) joins dominate in practice, though genuine range-based joins have real use cases too.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-7-theta-join-7",
+      "test_id": "pt-dbms-sql-7-theta-join",
+      "question_text": "Can a Theta Join's condition combine multiple comparisons with AND/OR?",
+      "options": [
+        "No, only a single comparison is ever allowed",
+        "Yes, exactly like a Selection's condition can combine multiple comparisons",
+        "Only two comparisons maximum are allowed",
+        "AND is allowed but OR is not"
+      ],
+      "correct_index": 1,
+      "explanation": "Since Theta Join is Cartesian Product plus a Selection-style condition, it can be as compound as any Selection condition.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-7-theta-join-8",
+      "test_id": "pt-dbms-sql-7-theta-join",
+      "question_text": "Why is Theta Join described as 'the most general join'?",
+      "options": [
+        "Because it always returns the most rows of any join type",
+        "Because it places the fewest restrictions on the join condition — any comparison is allowed, unlike the more specific named join variants",
+        "Because it requires the fewest columns",
+        "Because it is the only join type SQL actually implements"
+      ],
+      "correct_index": 1,
+      "explanation": "Generality here means fewest restrictions on the condition, which is exactly what lets other join types be understood as its special cases.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "coordinator",
+    "independent_review": "unavailable; no agent tools",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Definitions and examples checked against questions; no plagiarism certification.",
+    "existing_question_corrections": [
+      "tq-dbms-sql-7-theta-join-1",
+      "tq-dbms-sql-7-theta-join-3",
+      "tq-dbms-sql-7-theta-join-5",
+      "tq-dbms-sql-7-theta-join-6",
+      "tq-dbms-sql-7-theta-join-8"
+    ],
+    "canonical_answer_indices_preserved": true,
+    "batch_review": {
+      "reviewer": "coordinator",
+      "independent": false,
+      "scope": "New package only: notes, keyed examples, original question identities and canonical indices, every correct answer, exercises and recorded fixture outputs, diagram trace, content-only paired integration.",
+      "findings_resolved": "Outer Join retained absence question clarified: missing parent is a violation only when the modeled relationship requires it. Division retains its original Hard exercise; validator permits retained Hard alongside Easy while rejecting a new Hard substitute.",
+      "remaining": "Exact MySQL/provider execution, browser QA, independent review and applied-migration behavior unverified; output fixtures do not prove required source technique."
+    }
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-7-theta-join",
+    "original_note_sha256": "55cb9165213c1318bed19b6aea88bfeeeb273e26c564d2b7028a433b2e41588b",
+    "status": "paired migration prepared; not applied"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Half-open intervals and overlapping ranges have explicit match semantics",
+      "description": "The lower bound is included and the upper bound excluded. Overlap intentionally produces several result-band tuples rather than silently choosing one.",
+      "columns": [
+        "Score",
+        "Band 10: [50,70)",
+        "Band 20: [60,80)",
+        "Matching band ids"
+      ],
+      "rows": [
+        [
+          "50",
+          "Yes",
+          "No",
+          "10"
+        ],
+        [
+          "65",
+          "Yes",
+          "Yes",
+          "10 and 20"
+        ],
+        [
+          "70",
+          "No",
+          "Yes",
+          "20"
+        ],
+        [
+          "NULL",
+          "UNKNOWN",
+          "UNKNOWN",
+          "No inner match"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "coordinator checked half-open boundaries, all matching overlaps and correction of outer-join misconception",
+    "server_rendering": "passed",
+    "browser_rendering": "unverified",
+    "independent_review": "unavailable; no agent tools",
+    "server_rendering_evidence": "Three selected actual LessonBlock tests passed for the product/join batch; unchanged packages intentionally skipped."
+  },
+  "sql_verification": {
+    "engine": "11.8.6-MariaDB-0+deb13u1 from Debian",
+    "scope": "MariaDB compatibility execution; exact MySQL 8.4/provider execution unverified",
+    "fingerprint": "2fd37eb35481124f76c4261dfa710a311b0370aa3b78124a26654fad0febe390",
+    "cases": [
+      {
+        "problem": "theta-bands",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "theta-bands",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "theta-bands",
+        "case": 2,
+        "passed": true
+      },
+      {
+        "problem": "theta-scoped",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "theta-scoped",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "theta-scoped",
+        "case": 2,
+        "passed": true
+      }
+    ],
+    "all_passed": true
+  }
+}

@@ -1,0 +1,603 @@
+{
+  "source_ref": "chapter-12-select-and-filtering/operator-precedence",
+  "slug": "operator-precedence",
+  "title": "Operator Precedence",
+  "description": "Understand SQL operator precedence, arithmetic grouping, NOT, AND and OR; use parentheses and counterexamples without assuming evaluation order.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Grouping determines what an expression means\n\nOperator precedence defines how a mixed expression is grouped when parentheses do not state the grouping explicitly. A campus catalogue filter may allow Books or Stationery while imposing one shared price ceiling. The same words and symbols can describe a different population if the price restriction applies only to Stationery. Understanding the default grouping prevents a valid query from quietly answering the wrong question.\n\nPrecedence is about the expression's meaning, not the presentation order of rows or the chronological order in which a processor executes every operation. Keep those concepts separate. A correctly grouped condition still needs ORDER BY if output sequence matters, and the optimizer can choose a physical evaluation strategy while preserving the SQL semantics.\n\n## AND binds more tightly than OR\n\nWith the ordinary keyword forms, a or b and c groups as a or the conjunction of b and c. If a is true, the whole expression can be true regardless of c. This can be exactly the intended rule when a is an unconditional exception. It is wrong when c is supposed to constrain both alternatives. The requirement determines which grouping is appropriate.\n\nFor a shared price ceiling, group the category alternatives before combining them with the ceiling. An expensive book is an essential near-miss fixture because it passes the ungrouped expression through the Books branch. A cheap stationery item alone cannot reveal the defect; it qualifies under both interpretations. Test a row whose classification actually depends on the disputed grouping.\n\n```sql\nSELECT id, name\nFROM products\nWHERE (category = 'Books' OR category = 'Stationery')\n  AND price < 100\nORDER BY id;\n```\n\n## Parentheses can restate or change the default\n\nParentheses matching the default grouping clarify meaning without changing the intended expression result. Parentheses choosing a different grouping can change which rows qualify. Do not claim that every added pair necessarily changes the answer or that parentheses are only cosmetic. Their effect depends on the grouping they state relative to the language's default rules.\n\nUse parentheses to communicate meaningful policy boundaries rather than wrap every individual literal in visual clutter. Group alternatives that share a restriction, arithmetic that must happen together and the condition to which a negation applies. A reader should be able to connect those groups with the English requirement without mentally reconstructing a large precedence table for every ordinary edit.\n\n## Arithmetic has its own binding rules\n\nMultiplication and division bind more tightly than addition and subtraction. A fee expression consisting of base_fee plus quantity times unit_fee adds the base once after calculating the variable fee. If the requirement is to multiply quantity by the sum of two per-item fees, parentheses around that sum are necessary. The numeric values and operators alone do not identify which business interpretation is intended.\n\nUse units to check the grouping. A one-time booking fee and a per-item handling fee have different roles. Adding them before multiplication can accidentally charge the booking fee once per item. A fixture with quantity one can hide that error because several groupings coincide. Include quantity greater than one and distinct fee values to make the intended calculation observable.\n\n## Equal-precedence grouping and explicit formulas\n\nSeveral operators share precedence levels, and associativity rules determine how unparenthesized expressions at those levels group. Ordinary subtraction is not associative: ten minus three minus two follows a different calculation from ten minus the result of three minus two. When a formula carries business meaning, explicit grouping is often clearer than requiring readers to rely on the associativity rule.\n\nDo not rearrange arithmetic merely because algebraic intuition suggests equivalence. Numeric overflow, exact versus approximate types and rounding can influence SQL results. A transformation that is algebraically valid over unlimited real numbers may behave differently for a bounded or approximate database representation. Preserve the declared numeric contract when simplifying expressions and test representative boundary values.\n\n## Comparisons form conditions before Boolean combination\n\nOrdinary comparisons such as price less than one hundred produce conditions that [AND](/learning/dbms-sql-tutorial/logical-operators) and OR combine. A condition containing two comparisons therefore needs both the comparison semantics and the Boolean grouping understood. Numeric equality boundaries remain important even after parentheses are correct. Fixing grouping does not repair an accidental less-than-or-equal where the requirement said strictly below.\n\nBETWEEN has an internal AND connecting its bounds. That token serves the range syntax rather than an independent top-level conjunction. An additional AND can still connect the complete range predicate with another condition. Read the syntactic construct as a whole and use clarifying parentheses when a mix of ranges, alternatives and missing-value checks makes the expression difficult to follow.\n\n## Negation needs a visible scope\n\nNOT applies to a condition and changes its truth value according to SQL's three-valued logic. Negating the conjunction of overdue and exempt differs from negating overdue alone and then requiring exemption. Write parentheses around the complete condition being denied when the English requirement negates a phrase. A negative policy is especially easy to misread when several nested clauses follow it.\n\nUNKNOWN does not disappear because a condition is negated. NOT UNKNOWN remains UNKNOWN, and WHERE excludes it. If a report needs missing values included, add that policy explicitly instead of assume a negative comparison captures every excluded known value plus [NULL](/learning/dbms-sql-tutorial/null-values). A truth table should include unknown inputs when the underlying columns can be missing.\n\n## Mode-dependent symbols deserve separate verification\n\nMySQL's keyword forms avoid some confusion created by symbolic alternatives. A pair of vertical bars can have concatenation meaning under an SQL mode rather than the ordinary interpretation a learner expects. The precedence of certain negation forms can also depend on SQL mode. Use the documented MySQL precedence table for the actual operators and settings rather than extrapolate a simplified keyword rule to every symbol.\n\nApplication code should preserve the known dialect and mode contract. Copying an expression from a programming language can introduce syntax that looks familiar but has different meaning in SQL. Avoid symbolic tricks when AND, OR, NOT and explicit parentheses state the policy plainly. A query shared across engines needs representative tests for each target rather than a promise based only on visual similarity.\n\n## Logical grouping is not an error guard\n\nA predicate written with a safe-looking first condition does not create a general guarantee that the next textual expression is never evaluated. The optimizer and expression rules can affect physical work. Do not use presumed left-to-right Boolean evaluation as the only protection for an invalid conversion or dangerous arithmetic. Construct a safe expression under documented engine behaviour instead.\n\nLikewise, parentheses do not force an index or guarantee faster execution. They specify meaning. A plan can still scan many candidates, evaluate supported transformations or use an index according to available data and statistics. First establish the correct result population, then investigate access cost separately. Changing a grouping for speed is not an optimization if it changes which rows the feature permits.\n\n## Universal access scope must survive every branch\n\nA trusted query can combine an ownership restriction with two business alternatives. If written as owned and eligible or exceptional, the exceptional branch can bypass ownership under default grouping. When ownership is universal, group the alternatives and combine them with ownership outside that group. The same reasoning applies to campus, tenant or publication constraints that every accepted row must satisfy.\n\nCorrect predicate grouping complements actual authorization enforcement at the trusted boundary. A client-only expression cannot protect data from a caller who bypasses the interface. Include denied-actor tests at the enforcement point whenever an implementation changes access logic. This topic's synthetic examples teach expression meaning without asserting that a display filter establishes a complete production security policy.\n\n## Test the disputed grouping directly\n\nThe first exercise requires one price ceiling for two categories, including an expensive permitted-category product that must be excluded. The second computes a booking total where one fee is fixed and two fees are per item. Its fixtures use quantities greater than one so a misplaced arithmetic group changes the expected answer rather than coincidentally preserving it.\n\nFor each expression, rewrite the intended grouping in plain language and calculate one row manually. Then construct a counterexample for a plausible incorrect grouping. This makes precedence bugs visible as differences in population or arithmetic, not just differences in punctuation. Clear grouping preserves the contract during later edits and gives reviewers evidence beyond the reassuring fact that the SQL parser accepted the query.\n",
+  "references": [
+    {
+      "title": "MySQL 8.4 operator precedence and SQL-mode exceptions",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/operator-precedence.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-12-operator-precedence",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-12-operator-precedence-1",
+          "test_id": "pt-dbms-sql-12-operator-precedence",
+          "question_text": "What does operator precedence determine?",
+          "options": [
+            "Which result row is displayed first",
+            "Default grouping of mixed operators without explicit parentheses",
+            "The number of indexes",
+            "A guaranteed physical execution schedule"
+          ],
+          "correct_index": 1,
+          "explanation": "Semantic grouping differs from row ordering and evaluation strategy.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-12-operator-precedence-2",
+          "test_id": "pt-dbms-sql-12-operator-precedence",
+          "question_text": "Which keyword binds more tightly, AND or OR?",
+          "options": [
+            "OR",
+            "AND",
+            "Neither has a defined relation",
+            "Both always group left to right regardless of precedence"
+          ],
+          "correct_index": 1,
+          "explanation": "Thus a OR b AND c means a OR (b AND c).",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-12-operator-precedence-3",
+          "test_id": "pt-dbms-sql-12-operator-precedence",
+          "question_text": "How does Books OR Stationery AND cheap group?",
+          "options": [
+            "(Books OR Stationery) AND cheap",
+            "Books OR (Stationery AND cheap)",
+            "Books AND (Stationery OR cheap)",
+            "It is always invalid syntax"
+          ],
+          "correct_index": 1,
+          "explanation": "A Books row can qualify without the cheap condition.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-12-operator-precedence-4",
+          "test_id": "pt-dbms-sql-12-operator-precedence",
+          "question_text": "What is a useful defensive style for mixed policy conditions?",
+          "options": [
+            "Alphabetize all operators",
+            "Explicitly group meaningful alternatives and shared restrictions",
+            "Remove every compound condition",
+            "Assume the optimizer fixes the policy"
+          ],
+          "correct_index": 1,
+          "explanation": "Parentheses communicate policy structure.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-12-operator-precedence-5",
+          "test_id": "pt-dbms-sql-12-operator-precedence",
+          "question_text": "Which arithmetic operation binds more tightly than addition?",
+          "options": [
+            "Ordinary subtraction at every position",
+            "Multiplication",
+            "OR",
+            "An output alias"
+          ],
+          "correct_index": 1,
+          "explanation": "Use parentheses when the intended sum must occur first.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-12-operator-precedence-6",
+          "test_id": "pt-dbms-sql-12-operator-precedence",
+          "question_text": "Why can a precedence bug be hard to notice?",
+          "options": [
+            "It always raises a clear syntax error",
+            "The query can execute and return plausible but incorrect rows",
+            "It only changes whitespace",
+            "It always removes every row"
+          ],
+          "correct_index": 1,
+          "explanation": "Counterexample fixtures expose the semantic difference.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-12-operator-precedence-7",
+          "test_id": "pt-dbms-sql-12-operator-precedence",
+          "question_text": "What do ordinary comparisons supply to AND and OR?",
+          "options": [
+            "Always stored integers only",
+            "Conditions with logical results",
+            "Output ordering directives",
+            "Primary-key definitions"
+          ],
+          "correct_index": 1,
+          "explanation": "Comparison boundaries and Boolean grouping both matter.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-12-operator-precedence-8",
+          "test_id": "pt-dbms-sql-12-operator-precedence",
+          "question_text": "Do parentheses matching default grouping necessarily change the answer?",
+          "options": [
+            "Yes, every pair reverses the result",
+            "No",
+            "Only when output is text",
+            "Only for indexed columns"
+          ],
+          "correct_index": 1,
+          "explanation": "They can simply make existing meaning explicit.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-12-operator-precedence-new-9",
+          "test_id": "pt-dbms-sql-12-operator-precedence",
+          "question_text": "Which fixture exposes a missing shared price ceiling?",
+          "options": [
+            "An expensive Books row",
+            "Only cheap Stationery rows",
+            "Only an empty source table",
+            "Only a cheap Books row"
+          ],
+          "correct_index": 0,
+          "explanation": "It qualifies incorrectly through the ungrouped Books branch.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-12-operator-precedence-new-10",
+          "test_id": "pt-dbms-sql-12-operator-precedence",
+          "question_text": "What does base_fee + quantity * unit_fee mean under normal arithmetic precedence?",
+          "options": [
+            "Quantity times the sum of both fees",
+            "One base fee plus quantity times the unit fee",
+            "The sum divided by quantity",
+            "A sorted fee list"
+          ],
+          "correct_index": 1,
+          "explanation": "Multiplication groups before the addition.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-12-operator-precedence-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-12-operator-precedence-application-new-1",
+          "test_id": "pt-dbms-sql-12-operator-precedence-application",
+          "question_text": "Why can quantity one hide a per-item fee grouping error?",
+          "options": [
+            "Quantity one is invalid SQL",
+            "Different formulas may coincide at that input",
+            "All operators have equal precedence at one",
+            "A fee cannot be zero"
+          ],
+          "correct_index": 1,
+          "explanation": "Use a larger quantity with distinct fee roles.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-12-operator-precedence-application-new-2",
+          "test_id": "pt-dbms-sql-12-operator-precedence-application",
+          "question_text": "Why parenthesize a negated phrase?",
+          "options": [
+            "To make UNKNOWN always TRUE",
+            "To force an index",
+            "To show the complete condition to which NOT applies",
+            "To remove every condition"
+          ],
+          "correct_index": 2,
+          "explanation": "Negation scope changes meaning.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-12-operator-precedence-application-new-3",
+          "test_id": "pt-dbms-sql-12-operator-precedence-application",
+          "question_text": "What is NOT UNKNOWN?",
+          "options": [
+            "TRUE",
+            "FALSE",
+            "An automatic exception",
+            "UNKNOWN"
+          ],
+          "correct_index": 3,
+          "explanation": "Parentheses do not remove three-valued logic.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-12-operator-precedence-application-new-4",
+          "test_id": "pt-dbms-sql-12-operator-precedence-application",
+          "question_text": "Does writing a guard first guarantee an unsafe second expression is never evaluated?",
+          "options": [
+            "No, do not treat text order as a universal error guard",
+            "Yes, every SQL condition short-circuits left to right",
+            "Only for indexed fields",
+            "Only if parentheses are added"
+          ],
+          "correct_index": 0,
+          "explanation": "Build safe expressions under actual engine rules.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-12-operator-precedence-application-new-5",
+          "test_id": "pt-dbms-sql-12-operator-precedence-application",
+          "question_text": "What can MySQL SQL modes affect for symbolic operators?",
+          "options": [
+            "The English meaning of every requirement",
+            "Meaning or precedence of some symbolic forms",
+            "Every primary key automatically",
+            "Only comments"
+          ],
+          "correct_index": 1,
+          "explanation": "Check actual operators and mode settings.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-12-operator-precedence-application-new-6",
+          "test_id": "pt-dbms-sql-12-operator-precedence-application",
+          "question_text": "Do parentheses guarantee a faster plan?",
+          "options": [
+            "Yes, for every SELECT",
+            "Only if there are two pairs",
+            "No, they specify semantic grouping",
+            "Only when columns are numeric"
+          ],
+          "correct_index": 2,
+          "explanation": "Measure physical access separately.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-12-operator-precedence-application-new-7",
+          "test_id": "pt-dbms-sql-12-operator-precedence-application",
+          "question_text": "How should universal ownership combine with two allowed routes?",
+          "options": [
+            "(owned AND route_a) OR route_b",
+            "owned OR route_a OR route_b",
+            "NOT owned OR route_b",
+            "owned AND (route_a OR route_b)"
+          ],
+          "correct_index": 3,
+          "explanation": "Every branch stays under the universal restriction.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-12-operator-precedence-application-new-8",
+          "test_id": "pt-dbms-sql-12-operator-precedence-application",
+          "question_text": "Why not simplify bounded numeric expressions solely by algebraic intuition?",
+          "options": [
+            "Overflow, approximation and rounding can affect SQL results",
+            "SQL has no arithmetic",
+            "Every algebraic identity is false",
+            "Parentheses change all types randomly"
+          ],
+          "correct_index": 0,
+          "explanation": "Preserve the actual numeric representation contract.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-12-operator-precedence-application-new-9",
+          "test_id": "pt-dbms-sql-12-operator-precedence-application",
+          "question_text": "What is the role of AND inside BETWEEN low AND high?",
+          "options": [
+            "It always starts an independent top-level condition",
+            "It connects the range bounds as part of that syntax",
+            "It sorts the endpoints",
+            "It makes the range exclusive"
+          ],
+          "correct_index": 1,
+          "explanation": "Read the complete range construct before combining it further.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-12-operator-precedence-application-new-10",
+          "test_id": "pt-dbms-sql-12-operator-precedence-application",
+          "question_text": "What is strong evidence that a grouping matches a requirement?",
+          "options": [
+            "Only successful parsing",
+            "Only a shorter expression",
+            "A manual trace plus fixtures distinguishing plausible wrong groupings",
+            "Only one comfortable qualifying sample"
+          ],
+          "correct_index": 2,
+          "explanation": "The tests should make disputed semantics observable.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cx-precedence-shared-price-ceiling",
+      "slug": "precedence-shared-price-ceiling",
+      "title": "Apply one ceiling to two catalogue categories",
+      "difficulty": "Easy",
+      "task": "Return id,name for products in Books or Stationery with price strictly below 100 in either category. Order by id.",
+      "schema_sql": "CREATE TABLE products(id INT PRIMARY KEY,name VARCHAR(40) NOT NULL,category VARCHAR(30) NOT NULL,price INT NOT NULL);",
+      "seed_sql": "INSERT INTO products VALUES (1,'Expensive Book','Books',500),(2,'Budget Book','Books',90),(3,'Pen','Stationery',20),(4,'Boundary','Stationery',100),(5,'Lamp','Home',10);",
+      "expected": "id\tname\n2\tBudget Book\n3\tPen",
+      "ordering": "As explicitly ordered in the result query.",
+      "constraints": [
+        "Use only the supplied synthetic tables and requested transition.",
+        "Preserve unrelated rows."
+      ],
+      "edge_cases": [
+        "An expensive Book cannot bypass price.",
+        "Exactly 100 is excluded."
+      ],
+      "hints": [
+        "Group the allowed categories before applying price.",
+        "Keep the comparison strict."
+      ],
+      "solution_sql": "SELECT id,name FROM products WHERE (category='Books' OR category='Stationery') AND price<100 ORDER BY id;",
+      "explanation": "The parentheses make the price ceiling universal across both category alternatives. Exactly 100 remains outside the strict bound.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO products VALUES (1,'Book','Books',100),(2,'Pen','Stationery',99);",
+          "expected": "id\tname\n2\tPen"
+        },
+        {
+          "seed_sql": "INSERT INTO products VALUES (1,'Book','Books',1000);",
+          "expected": ""
+        }
+      ]
+    },
+    {
+      "id": "cx-precedence-booking-fee",
+      "slug": "precedence-booking-fee",
+      "title": "Separate one-time and per-item booking costs",
+      "difficulty": "Medium",
+      "task": "Return booking_id,total_cost computed as one base_fee plus quantity times the sum of unit_fee and handling_fee. All values are nonnegative integers small enough to avoid overflow. Order by booking_id.",
+      "schema_sql": "CREATE TABLE booking_costs(booking_id INT PRIMARY KEY,base_fee INT NOT NULL,quantity INT NOT NULL,unit_fee INT NOT NULL,handling_fee INT NOT NULL);",
+      "seed_sql": "INSERT INTO booking_costs VALUES (1,10,3,4,2),(2,5,2,7,1),(3,8,0,9,3);",
+      "expected": "booking_id\ttotal_cost\n1\t28\n2\t21\n3\t8",
+      "ordering": "As explicitly ordered in the result query.",
+      "constraints": [
+        "Use only the supplied synthetic tables and requested transition.",
+        "Preserve unrelated rows."
+      ],
+      "edge_cases": [
+        "Zero quantity leaves only the base fee.",
+        "A handling fee is still per item when unit_fee is zero."
+      ],
+      "hints": [
+        "Group the two per-item fees.",
+        "Do not multiply the one-time base fee by quantity."
+      ],
+      "solution_sql": "SELECT booking_id,base_fee+quantity*(unit_fee+handling_fee) AS total_cost FROM booking_costs ORDER BY booking_id;",
+      "explanation": "The inner sum combines two per-item costs. Quantity multiplies that sum, while the base fee is added once outside the product.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO booking_costs VALUES (7,4,4,3,2);",
+          "expected": "booking_id\ttotal_cost\n7\t24"
+        },
+        {
+          "seed_sql": "INSERT INTO booking_costs VALUES (1,0,2,0,5);",
+          "expected": "booking_id\ttotal_cost\n1\t10"
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-12-operator-precedence-1",
+      "test_id": "pt-dbms-sql-12-operator-precedence",
+      "question_text": "What does operator precedence determine?",
+      "options": [
+        "The order columns appear in the result",
+        "Which operators are evaluated first when an expression combines several without explicit parentheses",
+        "How fast a query executes",
+        "Which rows are returned first"
+      ],
+      "correct_index": 1,
+      "explanation": "Precedence resolves ambiguity in expressions with multiple operators and no parentheses.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-12-operator-precedence-2",
+      "test_id": "pt-dbms-sql-12-operator-precedence",
+      "question_text": "Between AND and OR, which binds tighter (is evaluated first)?",
+      "options": [
+        "OR",
+        "AND",
+        "They have identical precedence",
+        "Neither has defined precedence in SQL"
+      ],
+      "correct_index": 1,
+      "explanation": "AND has higher precedence than OR in SQL's operator precedence rules.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-12-operator-precedence-3",
+      "test_id": "pt-dbms-sql-12-operator-precedence",
+      "question_text": "How does `WHERE category = 'Books' OR category = 'Stationery' AND price < 100` actually get evaluated?",
+      "options": [
+        "As (category = 'Books' OR category = 'Stationery') AND price < 100",
+        "As category = 'Books' OR (category = 'Stationery' AND price < 100)",
+        "Left to right with no precedence applied",
+        "This is a syntax error"
+      ],
+      "correct_index": 1,
+      "explanation": "AND binding tighter than OR means the AND clause groups first.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-12-operator-precedence-4",
+      "test_id": "pt-dbms-sql-12-operator-precedence",
+      "question_text": "What is the safest general practice given how easy precedence mistakes are to make?",
+      "options": [
+        "Never use more than one operator per WHERE clause",
+        "Use explicit parentheses around compound conditions, even when default precedence would already give the intended result",
+        "Avoid AND and OR entirely, using only single conditions",
+        "Always write conditions in alphabetical order"
+      ],
+      "correct_index": 1,
+      "explanation": "Explicit parentheses remove ambiguity and protect against subtle precedence bugs.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-12-operator-precedence-5",
+      "test_id": "pt-dbms-sql-12-operator-precedence",
+      "question_text": "In arithmetic expressions within SQL, which is evaluated first: * or +?",
+      "options": [
+        "+ is always evaluated first",
+        "* (and /) are evaluated before + (and -), matching ordinary math rules",
+        "They have equal precedence, evaluated left to right always",
+        "This depends entirely on the SQL dialect with no general rule"
+      ],
+      "correct_index": 1,
+      "explanation": "SQL arithmetic precedence mirrors standard mathematical convention.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-12-operator-precedence-6",
+      "test_id": "pt-dbms-sql-12-operator-precedence",
+      "question_text": "Why is the AND-before-OR precedence trap considered dangerous in practice?",
+      "options": [
+        "It always causes an obvious syntax error",
+        "The query 'runs fine' and returns plausible-looking rows while actually answering a different question than intended — making the bug hard to notice",
+        "It only affects performance, not correctness",
+        "Modern SQL engines automatically detect and warn about this pattern"
+      ],
+      "correct_index": 1,
+      "explanation": "The silent-wrong-answer nature (no error, just wrong logic) is what makes this mistake particularly insidious.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-12-operator-precedence-7",
+      "test_id": "pt-dbms-sql-12-operator-precedence",
+      "question_text": "Where does comparison operator precedence (=, <, BETWEEN, IN, etc.) generally fall relative to AND/OR?",
+      "options": [
+        "Comparisons are evaluated after AND and OR",
+        "Comparisons are evaluated before AND, NOT, and OR",
+        "Comparisons and AND/OR are evaluated simultaneously",
+        "There is no defined relationship between them"
+      ],
+      "correct_index": 1,
+      "explanation": "Comparisons resolve to TRUE/FALSE/UNKNOWN first; the logical operators then combine those results.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-12-operator-precedence-8",
+      "test_id": "pt-dbms-sql-12-operator-precedence",
+      "question_text": "Does adding parentheses that match the DEFAULT precedence order change a query's behavior?",
+      "options": [
+        "Yes, it always changes the result",
+        "No — such parentheses are purely for clarity and don't change behavior, since they match what would happen anyway",
+        "It causes a syntax error",
+        "It always makes the query slower"
+      ],
+      "correct_index": 1,
+      "explanation": "Redundant-but-clarifying parentheses are free from a correctness standpoint — they just make intent explicit.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "coordinator",
+    "independent_review": "passed",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Independent manual review passed; native MySQL fixture evidence recorded separately; provider/browser/Supabase release gates remain separate.",
+    "existing_question_corrections": [
+      "tq-dbms-sql-12-operator-precedence-1",
+      "tq-dbms-sql-12-operator-precedence-2",
+      "tq-dbms-sql-12-operator-precedence-3",
+      "tq-dbms-sql-12-operator-precedence-4",
+      "tq-dbms-sql-12-operator-precedence-5",
+      "tq-dbms-sql-12-operator-precedence-6",
+      "tq-dbms-sql-12-operator-precedence-7",
+      "tq-dbms-sql-12-operator-precedence-8"
+    ],
+    "canonical_answer_indices_preserved": true,
+    "editorial_record": "Original snapshots retained. Questions rewritten for precise dialect and topic coverage while preserving identities and canonical answer positions; technical and independent review pending.",
+    "independent_reviewer": "Codex reviewer, current 2026-10-30 session",
+    "independent_review_scope": "Read full notes, all 640 MCQ stems/options/canonical answers/explanations, 64 exercise contracts/solutions/fixtures, and all 32 diagrams. Verified retained identities/answers through source-continuity tests; SQL execution evidence is recorded separately. No external originality, provider, live application or Supabase authorization clearance.",
+    "independent_review_record": "reports/independent-review-2026-10-30.json",
+    "content_sha256": "714892cbd49ecb95430c8bb472d02abcba9163c973ce152a2929b83d4827513d"
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-12-operator-precedence",
+    "original_note_sha256": "ec1a7af65cbb93b750f05401eb7013c45b59cc6b95a64cef30b767e643f13be5",
+    "status": "drafted; not yet included in prepared paired migrations"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "The same row separates two plausible category groupings",
+      "description": "An expensive book demonstrates why a shared ceiling needs a grouped category alternative.",
+      "columns": [
+        "Category",
+        "Price",
+        "Books OR (Stationery AND cheap)",
+        "(Books OR Stationery) AND cheap"
+      ],
+      "rows": [
+        [
+          "Books",
+          "500",
+          "TRUE",
+          "FALSE"
+        ],
+        [
+          "Books",
+          "90",
+          "TRUE",
+          "TRUE"
+        ],
+        [
+          "Stationery",
+          "20",
+          "TRUE",
+          "TRUE"
+        ],
+        [
+          "Home",
+          "10",
+          "FALSE",
+          "FALSE"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "drafted — verification pending",
+    "server_rendering": "pending",
+    "browser_rendering": "unverified",
+    "independent_review": "pending"
+  },
+  "authoring_status": "drafted — verification pending",
+  "sql_verification": {
+    "scope": "not executed; exact MySQL/provider verification pending",
+    "all_passed": false,
+    "cases": []
+  }
+}

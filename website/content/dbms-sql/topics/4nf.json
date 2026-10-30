@@ -1,0 +1,510 @@
+{
+  "source_ref": "chapter-21-normalization-and-functional-dependencies/4nf",
+  "slug": "4nf",
+  "title": "4NF",
+  "description": "Understand multivalued dependencies, test independent collections, distinguish BCNF from 4NF, and verify lossless decomposition without inventing relationship facts.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Separate collections whose choices are independent\n\nFourth normal form addresses multivalued dependencies. A student can have several hobbies and several contact numbers. If the domain records those as independent collections, pairing each hobby with every number repeats information without describing a separate hobby-number relationship. The problem survives even when every cell contains one scalar value and every complete row is unique.\n\nRead [BCNF](/learning/dbms-sql-tutorial/bcnf), [functional dependencies](/learning/dbms-sql-tutorial/functional-dependency) and [5NF](/learning/dbms-sql-tutorial/5nf) alongside this topic. Independence must come from the domain rules. A table with several columns and repeated student identifiers does not, by appearance alone, prove that its collections are independent or that decomposition is appropriate.\n\n## State the dependency over a precise relation\n\nConsider Contact(Student, Hobby, Phone) with nonnull scalar values and set semantics. For one student, the set of hobbies is independent of the set of phone numbers. Whenever two valid rows share Student, the relation must also allow the swapped combinations of their Hobby and Phone values. This closure under swapping is the useful intuition for Student multivalued-determines Hobby.\n\nThe remaining attributes matter. In a larger relation, a multivalued dependency separates a chosen attribute set from the rest after fixing its determinant. It does not say every attribute is independent of every other attribute. Always name the full relation and which attributes belong on each side before translating an informal statement such as several hobbies into a dependency.\n\n## Trace the product required by the rule\n\nSuppose learner S1 has hobbies Drawing and Running and numbers P1 and P2. A combined three-column relation satisfying the independence rule contains four combinations. Drawing appears with P1 and P2; Running appears with P1 and P2. The combinations are redundant representations of two independent lists rather than four separately chosen contact permissions.\n\n| Student | Hobby | Phone |\n|---|---|---|\n| S1 | Drawing | P1 |\n| S1 | Drawing | P2 |\n| S1 | Running | P1 |\n| S1 | Running | P2 |\n\nAdding Reading requires two more rows while both phone numbers remain. Adding another phone requires one row for every hobby. Removing only one combination can leave an incomplete product that violates the intended independence constraint. The database does not infer missing combinations merely because the developer believes the lists are independent; an actual representation or enforcement strategy must express that rule.\n\nThe product rows are not false under the specified independence interpretation. Calling them spurious facts without explanation is misleading: they are required combinations in that combined representation. A different problem occurs when a domain tracks selected hobby-phone pairs and a decomposition reconstructs additional unauthorized pairs. Distinguish redundant independent combinations from genuinely invented relationships.\n\n## Apply the formal normal-form condition\n\nAn MVD X multivalued-determines Y is trivial when Y is contained in X or when X together with Y covers all relation attributes. Fourth normal form requires every nontrivial MVD holding on the relation to have a superkey determinant. In Contact, Student determines several Hobby values and several Phone values, so Student is not a superkey under the stated permissions. Its nontrivial MVD therefore violates 4NF.\n\nA functional dependency is a special case of a multivalued dependency. Consequently 4NF implies BCNF: a nontrivial functional dependency with a nonsuperkey determinant would already violate the stronger requirement. The converse does not hold. A design can have no problematic nontrivial functional dependency and still have the independent-collection redundancy described here.\n\nDo not replace the formal rule with a universal test that exactly two collection columns must be visible. Attributes can be sets, larger relations can contain several dependencies, and functional dependencies themselves matter. The hobby-phone example teaches one common case; it does not exhaust the formal condition or exempt other BCNF violations from 4NF analysis.\n\n## Explain why BCNF can miss this example\n\nAssume the only candidate key of Contact is the complete Student,Hobby,Phone triple and there are no nontrivial functional dependencies. Neither Student,Hobby nor Student,Phone determines the remaining attribute, because multiple values are permitted. BCNF holds vacuously for those stated functional dependencies, yet Student's nontrivial MVD fails the 4NF determinant condition.\n\nThe assumptions are essential. Merely declaring the full triple as PRIMARY KEY does not prove that it is the only candidate key or that no other functional dependencies hold. If every phone were globally assigned to a single student, additional dependencies would need consideration. State the permitted facts rather than derive a normal-form verdict from the chosen SQL primary-key declaration alone.\n\n## Decompose along the independent fact boundary\n\nRepresent StudentHobbies(Student,Hobby) and StudentPhones(Student,Phone) separately. Each row now records one membership in one collection. The hobby list can grow without copying phone numbers, and the phone list can change without rewriting hobbies. Appropriate keys prevent repeated set memberships when the domain forbids them; a student entity relation can exist independently of both lists.\n\n```sql\nSELECT h.student_id, h.hobby_code, p.phone_code\nFROM student_hobbies AS h\nJOIN student_phones AS p\n  ON p.student_id = h.student_id\nORDER BY h.student_id, h.hobby_code, p.phone_code;\n```\n\nFor the original relation under the MVD, joining its two projections reconstructs exactly the combined relation. That is the lossless-decomposition argument. It relies on the required product, not on the join keyword magically preserving every domain. Comparing a reconstruction with the original facts is a useful finite example check, while the universal proof comes from the dependency.\n\n## Keep a real pairing when the domain requires it\n\nSuppose one phone is authorized for messages about Drawing and another for messages about Running. The selected Hobby,Phone pairing is now a fact. The two independent projections lose which number belongs with which hobby; joining them invents extra permissions. The independence MVD is not justified for that relationship, so the previous decomposition cannot be accepted merely because the resulting tables are smaller.\n\nA mixed domain can need independent hobby membership plus a separate selected notification-permission relation. Do not force a contact authorization into a simplified classroom model. Ask which combinations are allowed, which must exist whenever their components exist, and which remain independently selected. A counterexample that satisfies the actual requirements is more valuable than a picture with repeated values.\n\n## Handle empty collections and missing information explicitly\n\nThe original complete-product representation cannot show a hobby for a student with zero phones without inventing a placeholder. Separate collection relations can represent that hobby directly. A separate Students relation preserves a student with neither collection. This is an expressive benefit, but it is additional information beyond reconstructing a populated original triple relation through an inner join.\n\nAn inner join of hobbies and phones omits a student with either side empty. That can be correct for a combined-pair report and wrong for a student roster. Choose the report's candidate population explicitly. Likewise, zero phone rows might mean no recorded numbers or an incomplete verification process; an additional status may be needed if the domain distinguishes those states.\n\nClassical MVD reasoning assumes set relations without SQL NULL complications. Replacing an absent collection with a fake null-bearing tuple changes the interpretation. Explain missingness at the model boundary, then separately review SQL joins, duplicate memberships, comparison rules and constraints. A mathematically lossless decomposition does not settle every practical absence policy.\n\n## Construct the dependency and its counterexample\n\nFor a first exercise, write the four hobby-phone combinations above and add Reading. List the two required new rows under independence. Then represent the same lists in two relations and identify the single membership insertion needed there. Explain why the original product expansion is redundant rather than evidence of six separately chosen permissions.\n\nFor a second exercise, begin with only Drawing,P1 and Running,P2 as allowed selected pairs. Project them and join the projections. Identify the two extra combinations and explain why their appearance refutes the proposed lossless decomposition for that domain. These exercises test the difference between a declared independence constraint and an unjustified assumption based on column names.\n\nContinue with [denormalization](/learning/dbms-sql-tutorial/denormalization) when a measured workload deliberately stores derived combinations. Preserve the authoritative independent facts and define how any redundant representation is maintained. A sound 4NF analysis states the full relation, nontrivial MVD, determinant key status and the domain argument supporting reconstruction.",
+  "references": [
+    {
+      "title": "Database System Concepts: relational design teaching materials",
+      "url": "https://www.db-book.com/slides-dir/index.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-21-4nf",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-21-4nf-1",
+          "test_id": "pt-dbms-sql-21-4nf",
+          "question_text": "Under the independence rule and a complete nonnull triple representation, why do two hobbies and two phone numbers yield four rows?",
+          "options": [
+            "Because the database engine requires at least 4 rows per student",
+            "Every hobby combines with every phone under the declared MVD, redundantly representing the two independent lists",
+            "Because Hobby and PhoneNumber must always be paired one-to-one",
+            "Because StudentID is not unique"
+          ],
+          "correct_index": 1,
+          "explanation": "The four combinations are required under that interpretation; they are not separately selected hobby-phone permissions.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-21-4nf-2",
+          "test_id": "pt-dbms-sql-21-4nf",
+          "question_text": "Assume Contact(Student,Hobby,Phone) has no nontrivial functional dependencies and only its full triple is a candidate key. Does it satisfy BCNF?",
+          "options": [
+            "No, because its only key is not a superkey",
+            "Yes — its only candidate key is the full {StudentID, Hobby, PhoneNumber}, which is trivially a superkey, yet the design is still badly flawed",
+            "No, because it has a transitive dependency",
+            "Yes, but only because it has no functional dependencies at all"
+          ],
+          "correct_index": 1,
+          "explanation": "Every nontrivial FD has a superkey determinant vacuously because none are assumed. This does not establish4NF when a nonsuperkey Student has a nontrivial MVD.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-21-4nf-3",
+          "test_id": "pt-dbms-sql-21-4nf",
+          "question_text": "What is the correct 4NF decomposition of StudentContact?",
+          "options": [
+            "Keep it as one table but add a UNIQUE constraint",
+            "Split into StudentHobby(StudentID, Hobby) and StudentPhone(StudentID, PhoneNumber), separating the two independent multi-valued facts",
+            "Merge Hobby and PhoneNumber into a single combined column",
+            "Add a fourth attribute to disambiguate the pairing"
+          ],
+          "correct_index": 1,
+          "explanation": "Since hobbies and phone numbers are independent facts about a student, each gets its own relation keyed by StudentID plus that one fact, eliminating the spurious cross-product.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-21-4nf-4",
+          "test_id": "pt-dbms-sql-21-4nf",
+          "question_text": "Under the complete product rule, S1 has two phone numbers and gains a third hobby. How many new triple rows maintain that independence representation?",
+          "options": [
+            "Nothing unusual happens — one row is simply added",
+            "Two new rows must be inserted (one per existing phone number) just to represent one new fact (a new hobby), or the data becomes inconsistent",
+            "The insert is rejected automatically",
+            "The PhoneNumber column is deleted"
+          ],
+          "correct_index": 1,
+          "explanation": "Because the design forces a cross-product, adding one new independent fact (a hobby) requires duplicating it across every existing value of the other independent fact (phone numbers) to keep the (meaningless) pairing consistent.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-21-4nf-5",
+          "test_id": "pt-dbms-sql-21-4nf",
+          "question_text": "What formally defines a multi-valued dependency X ->> Y?",
+          "options": [
+            "X and Y must always be the same data type",
+            "For a fixed X, the Y values vary independently of the remaining attributes outside X and Y",
+            "X must be a foreign key referencing Y",
+            "Y must always be a single atomic value"
+          ],
+          "correct_index": 1,
+          "explanation": "Independence is relative to the specified attribute partition of the full relation.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-21-4nf-6",
+          "test_id": "pt-dbms-sql-21-4nf",
+          "question_text": "Would StudentHobby(StudentID, Hobby) alone, with no PhoneNumber column, be a 4NF violation?",
+          "options": [
+            "Yes, any multi-valued attribute always violates 4NF",
+            "No under the stated binary model: Student multivalued-determines Hobby is trivial because together they cover the relation",
+            "Yes, because Hobby is not atomic",
+            "No, because 4NF only applies to numeric attributes"
+          ],
+          "correct_index": 1,
+          "explanation": "The formal nontrivial-MVD/superkey test governs4NF; do not replace it with a universal count of visible collection columns.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-21-4nf-7",
+          "test_id": "pt-dbms-sql-21-4nf",
+          "question_text": "Suppose, contrary to the chapter's assumption, the school actually DOES track which specific phone number is used to discuss which specific hobby (a real business rule linking the two). What does this imply?",
+          "options": [
+            "The pairing must be preserved; the proposed independent decomposition can lose real information",
+            "The two facts are still independent and should always be split",
+            "This scenario is impossible in a relational database",
+            "It would require adding a fourth normal form violation"
+          ],
+          "correct_index": 0,
+          "explanation": "A selected pairing refutes the assumed independence. Other dependencies still need their own design review.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-21-4nf-8",
+          "test_id": "pt-dbms-sql-21-4nf",
+          "question_text": "Which of the following best summarizes the telltale symptom that signals a 4NF violation?",
+          "options": [
+            "The table has a composite primary key",
+            "The row count for an entity multiplies as the cross-product of two or more independent multi-valued facts, even though those facts have no real connection to each other",
+            "The table contains a NULL value",
+            "The table has more than three columns"
+          ],
+          "correct_index": 1,
+          "explanation": "The defining red flag is the cross-product row explosion (e.g., 2 hobbies x 2 phones = 4 rows) representing facts that are logically unrelated to each other.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-21-4nf-new-9",
+          "test_id": "pt-dbms-sql-21-4nf",
+          "question_text": "What is required of each nontrivial MVD determinant in 4NF?",
+          "options": [
+            "It must be numeric",
+            "It must be a superkey",
+            "It must have exactly two columns",
+            "It must be named id"
+          ],
+          "correct_index": 1,
+          "explanation": "The formal condition concerns determination of the whole relation.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-21-4nf-new-10",
+          "test_id": "pt-dbms-sql-21-4nf",
+          "question_text": "When is X multivalued-determines Y trivial?",
+          "options": [
+            "Whenever X is a foreign key",
+            "Whenever two rows exist",
+            "When Y is contained in X or X union Y covers the relation",
+            "Whenever Y has one column"
+          ],
+          "correct_index": 2,
+          "explanation": "Triviality depends on the attribute sets and full schema.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-21-4nf-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-21-4nf-application-new-1",
+          "test_id": "pt-dbms-sql-21-4nf-application",
+          "question_text": "Does 4NF imply BCNF?",
+          "options": [
+            "No, the concepts are unrelated",
+            "Only if all keys are singletons",
+            "Only with a SQL index",
+            "Yes, an FD is a special case of an MVD"
+          ],
+          "correct_index": 3,
+          "explanation": "The stronger MVD condition also constrains functional dependencies.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-21-4nf-application-new-2",
+          "test_id": "pt-dbms-sql-21-4nf-application",
+          "question_text": "Are independent product rows necessarily unauthorized relationships?",
+          "options": [
+            "No, they are required combinations under the independence interpretation",
+            "Yes, every repeated pair is false",
+            "Only when they contain text",
+            "Only for one student"
+          ],
+          "correct_index": 0,
+          "explanation": "Unjustified reconstruction of selected pairs is the separate spurious-tuple problem.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-21-4nf-application-new-3",
+          "test_id": "pt-dbms-sql-21-4nf-application",
+          "question_text": "A student has3 independent hobbies and2 phones. How many complete product combinations are required?",
+          "options": [
+            "5",
+            "6",
+            "3",
+            "2"
+          ],
+          "correct_index": 1,
+          "explanation": "Each hobby combines with each phone.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-21-4nf-application-new-4",
+          "test_id": "pt-dbms-sql-21-4nf-application",
+          "question_text": "What does a StudentHobby relation need to record a hobby when there are no phones?",
+          "options": [
+            "One fake phone per hobby",
+            "A full triple with a fabricated code",
+            "Only its student-hobby membership row",
+            "A DELETE of the student"
+          ],
+          "correct_index": 2,
+          "explanation": "Separate facts need not wait for another collection.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-21-4nf-application-new-5",
+          "test_id": "pt-dbms-sql-21-4nf-application",
+          "question_text": "Which report can an inner hobby-phone reconstruction omit?",
+          "options": [
+            "Every student with both lists",
+            "Only duplicate names",
+            "Only rows with numeric codes",
+            "A student with a hobby but zero phones"
+          ],
+          "correct_index": 3,
+          "explanation": "No pair exists when either collection is empty.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-21-4nf-application-new-6",
+          "test_id": "pt-dbms-sql-21-4nf-application",
+          "question_text": "What invalidates the independence assumption?",
+          "options": [
+            "Only selected hobby-phone combinations are authorized",
+            "One student has two phones",
+            "Two students share a hobby",
+            "The query uses ORDER BY"
+          ],
+          "correct_index": 0,
+          "explanation": "The pairing itself then carries information lost by independent projections.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-21-4nf-application-new-7",
+          "test_id": "pt-dbms-sql-21-4nf-application",
+          "question_text": "Does declaring a full-triple primary key prove BCNF?",
+          "options": [
+            "Yes, always",
+            "No, other domain dependencies must be examined",
+            "Only for short strings",
+            "Only with NOT NULL"
+          ],
+          "correct_index": 1,
+          "explanation": "The declared implementation key does not establish all candidate keys or dependencies.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-21-4nf-application-new-8",
+          "test_id": "pt-dbms-sql-21-4nf-application",
+          "question_text": "What must a lossless claim cover?",
+          "options": [
+            "Only one convenient sample",
+            "Only the SQL execution time",
+            "Every relation permitted by the stated dependency",
+            "Only the number of tables"
+          ],
+          "correct_index": 2,
+          "explanation": "Sample agreement alone is not a universal proof.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-21-4nf-application-new-9",
+          "test_id": "pt-dbms-sql-21-4nf-application",
+          "question_text": "What does adding one hobby require in the separated representation?",
+          "options": [
+            "One row for every phone",
+            "A new SQL column",
+            "A rewrite of all students",
+            "One membership row under the set-membership contract"
+          ],
+          "correct_index": 3,
+          "explanation": "The representation stores the independent fact directly.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-21-4nf-application-new-10",
+          "test_id": "pt-dbms-sql-21-4nf-application",
+          "question_text": "What should a4NF review state before choosing a decomposition?",
+          "options": [
+            "The full relation, domain MVD and key status",
+            "Only a repeated cell count",
+            "Only the table name",
+            "Only a graph color"
+          ],
+          "correct_index": 0,
+          "explanation": "The formal conclusion depends on those inputs.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [],
+  "coding_not_applicable": "The objective is multivalued-dependency modeling and universal lossless decomposition. Two explicit construction/counterexample exercises and a bounded reconstruction query are supplied in the notes. A row-output judge alone cannot prove independence over all permitted states.",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-21-4nf-1",
+      "test_id": "pt-dbms-sql-21-4nf",
+      "question_text": "Why does StudentContact(StudentID, Hobby, PhoneNumber) require 4 rows for a student with 2 hobbies and 2 phone numbers?",
+      "options": [
+        "Because the database engine requires at least 4 rows per student",
+        "Because combining two independent multi-valued facts in one table forces a spurious cross-product of every hobby with every phone number, even though they have no real connection",
+        "Because Hobby and PhoneNumber must always be paired one-to-one",
+        "Because StudentID is not unique"
+      ],
+      "correct_index": 1,
+      "explanation": "Since hobbies and phone numbers are independent facts about the student, the relational model is forced to enumerate every combination to represent 'both facts are true,' producing a spurious cross-product.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-21-4nf-2",
+      "test_id": "pt-dbms-sql-21-4nf",
+      "question_text": "Is StudentContact(StudentID, Hobby, PhoneNumber) in BCNF?",
+      "options": [
+        "No, because its only key is not a superkey",
+        "Yes — its only candidate key is the full {StudentID, Hobby, PhoneNumber}, which is trivially a superkey, yet the design is still badly flawed",
+        "No, because it has a transitive dependency",
+        "Yes, but only because it has no functional dependencies at all"
+      ],
+      "correct_index": 1,
+      "explanation": "Since every attribute is needed to uniquely identify a row, the whole-attribute set is the only key, trivially satisfying BCNF — this shows that BCNF alone does not catch multi-valued dependency problems; that requires 4NF.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-21-4nf-3",
+      "test_id": "pt-dbms-sql-21-4nf",
+      "question_text": "What is the correct 4NF decomposition of StudentContact?",
+      "options": [
+        "Keep it as one table but add a UNIQUE constraint",
+        "Split into StudentHobby(StudentID, Hobby) and StudentPhone(StudentID, PhoneNumber), separating the two independent multi-valued facts",
+        "Merge Hobby and PhoneNumber into a single combined column",
+        "Add a fourth attribute to disambiguate the pairing"
+      ],
+      "correct_index": 1,
+      "explanation": "Since hobbies and phone numbers are independent facts about a student, each gets its own relation keyed by StudentID plus that one fact, eliminating the spurious cross-product.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-21-4nf-4",
+      "test_id": "pt-dbms-sql-21-4nf",
+      "question_text": "What insertion anomaly occurs in the unsplit StudentContact table when Asha (S1) gains a third hobby, 'Reading'?",
+      "options": [
+        "Nothing unusual happens — one row is simply added",
+        "Two new rows must be inserted (one per existing phone number) just to represent one new fact (a new hobby), or the data becomes inconsistent",
+        "The insert is rejected automatically",
+        "The PhoneNumber column is deleted"
+      ],
+      "correct_index": 1,
+      "explanation": "Because the design forces a cross-product, adding one new independent fact (a hobby) requires duplicating it across every existing value of the other independent fact (phone numbers) to keep the (meaningless) pairing consistent.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-21-4nf-5",
+      "test_id": "pt-dbms-sql-21-4nf",
+      "question_text": "What formally defines a multi-valued dependency X ->> Y?",
+      "options": [
+        "X and Y must always be the same data type",
+        "For a given value of X, the set of Y values associated with it is independent of any other attribute in the relation",
+        "X must be a foreign key referencing Y",
+        "Y must always be a single atomic value"
+      ],
+      "correct_index": 1,
+      "explanation": "An MVD captures that Y's multiple values for a given X don't depend on any other attribute present — which is exactly what causes the spurious cross-product when two such MVDs are combined in one table.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-21-4nf-6",
+      "test_id": "pt-dbms-sql-21-4nf",
+      "question_text": "Would StudentHobby(StudentID, Hobby) alone, with no PhoneNumber column, be a 4NF violation?",
+      "options": [
+        "Yes, any multi-valued attribute always violates 4NF",
+        "No — a single multi-valued fact about an entity is just a normal one-to-many relationship; 4NF violations require two or more INDEPENDENT multi-valued facts combined in the same table",
+        "Yes, because Hobby is not atomic",
+        "No, because 4NF only applies to numeric attributes"
+      ],
+      "correct_index": 1,
+      "explanation": "4NF's concern is specifically about combining multiple independent multi-valued facts, causing a cross-product; a single multi-valued attribute in its own table is unproblematic and normal.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-21-4nf-7",
+      "test_id": "pt-dbms-sql-21-4nf",
+      "question_text": "Suppose, contrary to the chapter's assumption, the school actually DOES track which specific phone number is used to discuss which specific hobby (a real business rule linking the two). What does this imply?",
+      "options": [
+        "The original combined table was correctly designed, and splitting it would lose real information",
+        "The two facts are still independent and should always be split",
+        "This scenario is impossible in a relational database",
+        "It would require adding a fourth normal form violation"
+      ],
+      "correct_index": 0,
+      "explanation": "If the hobby-phone pairing is a genuine tracked fact rather than an artifact of independent lists, then it isn't a spurious MVD at all — forcing a 4NF-style split in that case would actually destroy real, meaningful information.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-21-4nf-8",
+      "test_id": "pt-dbms-sql-21-4nf",
+      "question_text": "Which of the following best summarizes the telltale symptom that signals a 4NF violation?",
+      "options": [
+        "The table has a composite primary key",
+        "The row count for an entity multiplies as the cross-product of two or more independent multi-valued facts, even though those facts have no real connection to each other",
+        "The table contains a NULL value",
+        "The table has more than three columns"
+      ],
+      "correct_index": 1,
+      "explanation": "The defining red flag is the cross-product row explosion (e.g., 2 hobbies x 2 phones = 4 rows) representing facts that are logically unrelated to each other.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "/root",
+    "independent_review": "passed",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Independent manual content review passed within independent_review_scope; engine/browser/release gates separate.",
+    "canonical_answer_indices_preserved": true,
+    "independent_reviewer": "/root/content_c",
+    "independent_review_scope": "Full notes, all20 MCQs/answers/explanations, diagram and no-coding rationale. Nontrivial MVD condition, required cross product versus spurious pairs, BCNF implication and lossless domain assumptions sound. Manual editorial/math review only; engine, browser, originality and AdSense clearance separate."
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-21-4nf",
+    "original_note_sha256": "4888357b8797b20eb60374be77cbff5f120ce25f5677848d72f67a4b000f5798",
+    "status": "drafted; not included in prepared paired migrations"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Two independent collections need not be stored as paired memberships",
+      "description": "The complete product follows the stated MVD; selected notification pairs would require a different model.",
+      "columns": [
+        "Representation",
+        "Rows for2 hobbies and2 phones",
+        "Fact meaning"
+      ],
+      "rows": [
+        [
+          "Combined triple",
+          "4",
+          "Required product combinations"
+        ],
+        [
+          "StudentHobbies",
+          "2",
+          "Independent hobby memberships"
+        ],
+        [
+          "StudentPhones",
+          "2",
+          "Independent phone memberships"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "provided",
+    "technical_review": "author review; independent review pending",
+    "server_rendering": "passed",
+    "browser_rendering": "unverified",
+    "independent_review": "pending",
+    "server_rendering_evidence": "2026-10-29 full Vitest:1310 passed/12 skipped; actual LessonBlock/TopicDiagrams render over230 packages. Browser visual QA remains unverified."
+  },
+  "authoring_status": "drafted; verification pending",
+  "sql_verification": {
+    "scope": "not executed; exact MySQL/provider verification pending",
+    "all_passed": false,
+    "cases": []
+  }
+}

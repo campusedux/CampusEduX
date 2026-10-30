@@ -1,0 +1,573 @@
+{
+  "source_ref": "chapter-16-joins/right-join",
+  "slug": "right-join",
+  "title": "Right Join",
+  "description": "Preserve every right-side row, predict NULL-extension and multiplicity, place eligibility predicates correctly and count matches without losing empty departments.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Preserve the relation on the right\n\nA RIGHT JOIN returns matching row combinations and preserves every row from its right input when no left row matches. For an unmatched right row, the left-side output columns are filled with NULL. The keyword describes which input must remain represented, not which table is more important or which side the optimizer reads first. Begin by naming the population the report promises to retain.\n\nSuppose a department directory must include departments that currently have no employees. If employees appears on the left and departments on the right, a right outer join can express that requirement. An inner join would omit empty departments, while a cross join would pair every employee with every department regardless of membership. Those operations answer different questions even if a tiny fixture happens to hide their differences.\n\n## Build an example containing an empty department\n\nUse departments Engineering, Support and Marketing, with identifiers one, two and three. Put employees Ada and Bo in Engineering, Cy in Support and Dee in no department. Marketing intentionally has no employee. This fixture tests both a preserved unmatched department and an unmatched employee on the nonpreserved side. Without both cases, it is easy to confuse right preservation with retaining every row from both tables.\n\n```sql\nSELECT d.department_id, d.department_name,\n       e.employee_id, e.employee_name\nFROM employees AS e\nRIGHT JOIN departments AS d ON e.department_id = d.department_id\nORDER BY d.department_id, e.employee_id;\n```\n\nThe ordered output contains two Engineering employee rows, one Support employee row and one Marketing row with NULL employee fields. Dee does not appear because no department matches that employee's missing membership. Marketing appears precisely because departments is the preserved right input. The report contains four rows, not three, because preservation does not collapse multiple matching employees into one department row.\n\n## Predict row multiplicity before summarizing\n\nEach right row can match zero, one or several left rows. Zero matches produce one NULL-extended row; one match produces one joined row; several matches produce several joined rows. A department with five employees therefore contributes five rows. Do not assume an outer join produces exactly one row per preserved key unless the match cardinality proves that property.\n\nIf a later report sums a department budget repeated across its employees, the join can multiply that amount. A DISTINCT added at the end may conceal a modeling mistake rather than repair the measure. Decide whether the desired output is one row per employee, one row per department or one row per department with an aggregate. Then choose a query shape that maintains that grain deliberately.\n\n## Rewrite with LEFT JOIN when it improves readability\n\nThe same matching and preservation relationship can be expressed by putting departments first and using LEFT JOIN employees with the corresponding predicate. Preserve the explicit output projection and aliases when comparing the two queries. SELECT star can change column order after the inputs are swapped, and USING can affect the combined output columns, so a textual rewrite deserves a contract check rather than blind substitution.\n\n```sql\nSELECT d.department_id, d.department_name,\n       e.employee_id, e.employee_name\nFROM departments AS d\nLEFT JOIN employees AS e ON e.department_id = d.department_id\nORDER BY d.department_id, e.employee_id;\n```\n\nA team may choose this form as a reading convention that keeps the retained population first. That preference is about maintainability, not a universal performance guarantee. RIGHT JOIN is not inherently slower simply because it is less common in a particular codebase. Compare actual plans and results when a change is motivated by performance instead of style.\n\n## Put optional matching conditions in the correct place\n\nSuppose the directory should retain every department but list only active employees when available. Add the employee activity condition to ON. A department with no active employee then still receives a NULL-extended output row. If that condition is instead applied as a null-rejecting WHERE predicate, the unmatched department row can be removed after the join has preserved it.\n\n```sql\nSELECT d.department_id, e.employee_id\nFROM employees AS e\nRIGHT JOIN departments AS d\n  ON e.department_id = d.department_id AND e.active_flag = 1\nORDER BY d.department_id, e.employee_id;\n```\n\nA WHERE condition on the preserved department input can be entirely appropriate, such as selecting only departments in a named campus. The issue is not that WHERE is forbidden with outer joins. The issue is which population and match eligibility the condition is intended to restrict, together with how NULL-extended rows evaluate under three-valued logic.\n\n## Read NULL-extended values without inventing facts\n\nA missing employee identifier in the directory row indicates that no eligible employee row matched the department under the predicate. It does not mean a real employee exists with unknown identity. Choose a known nonnullable employee key when testing for lack of a match; testing a nullable descriptive field could mistake a matched employee with missing text for an unmatched row.\n\nA display fallback such as No active employee can make the report readable, but keep it separate from actual employee names and identifiers. A NULL originating in an existing employee column differs from a NULL introduced by the outer join. The selected key and predicate should provide the evidence needed to interpret the output accurately.\n\n## Count matches with the nonnullable key\n\nTo count employees per department while retaining empty departments, group by the department identity and count the matched employee key. COUNT star would count the NULL-extended Marketing row as one output row, incorrectly suggesting one employee if it were labeled employee_count. Counting the nonnullable employee identifier yields zero for a department without a match.\n\n```sql\nSELECT d.department_id, COUNT(e.employee_id) AS employee_count\nFROM employees AS e\nRIGHT JOIN departments AS d ON e.department_id = d.department_id\nGROUP BY d.department_id\nORDER BY d.department_id;\n```\n\nThe fixture gives Engineering two, Support one and Marketing zero. Additional predicates on activity change which employees qualify, so the aggregate label should reflect that policy. A count of eligible active employees is not automatically the total number of historical assignments or all people associated with the department in other systems.\n\n## Check missing keys and empty inputs\n\nAn equality predicate does not match two NULL membership keys as if they were an ordinary shared department. The department primary key is normally nonnullable, making that issue clear in the fixture. If the preserved input is empty, the right join returns no rows even when employees contains records. If employees is empty but departments is populated, every department still appears with NULL employee fields.\n\nThese cases show why preservation is directional. A right join is not a full outer join and does not promise to retain Dee's unmatched employee row. If the requirement includes unmatched rows from both populations, revisit the appropriate operation and its dialect support rather than chaining display fallbacks onto an incorrect join type.\n\n## Review longer join chains deliberately\n\nMixing several outer joins can change which intermediate relation is preserved. Parentheses and explicit aliases help communicate the intended grouping, especially when a later predicate references a column introduced earlier. Do not reorder a multi-join expression merely because one isolated two-table rewrite looked equivalent. Outer-join transformations require attention to NULL-extension and subsequent filtering.\n\nAccess controls also remain at the trusted data boundary. Preserving a department does not authorize exposing every employee row that can be joined to it. Use the application's established access policy and return only permitted fields. A query can be mathematically correct as a join and still violate the product's privacy contract if its inputs are not appropriately controlled.\n\n## Solve two preservation exercises\n\nBeginner exercise: return every department with each matching employee identifier, using minus one solely as an explicit display sentinel for no match. The solution preserves departments and orders department then employee. Intermediate exercise: count active employees per department while keeping departments with none. Its solution places active eligibility in ON and counts the employee key rather than output rows.\n\nFor a useful regression fixture, include a department whose only employees fail the eligibility condition and another department with no source employees at all. Both should remain, but their underlying data differs. Also include two matching employees so an accidental DISTINCT or premature grouping cannot pass unnoticed. These small counterexamples test the promised population more effectively than a fixture containing only perfect one-to-one matches.\n\nContinue with [left joins](/learning/dbms-sql-tutorial/left-join), [join predicates](/learning/dbms-sql-tutorial/join-predicate) and [join cardinality](/learning/dbms-sql-tutorial/join-cardinality). Compare equivalent projections, null behavior and empty inputs before discussing execution plans. A local result fixture is narrower evidence than complete provider or browser verification.",
+  "references": [
+    {
+      "title": "MySQL 8.4 JOIN clause",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/join.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-16-right-join",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-16-right-join-1",
+          "test_id": "pt-dbms-sql-16-right-join",
+          "question_text": "What does RIGHT JOIN guarantee?",
+          "options": [
+            "Every row from the left table is preserved",
+            "Every row from the right table is preserved, regardless of a left-side match",
+            "Only matched rows from both sides appear",
+            "Every possible row combination appears"
+          ],
+          "correct_index": 1,
+          "explanation": "RIGHT JOIN mirrors LEFT JOIN, preserving the right table's rows instead.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-16-right-join-2",
+          "test_id": "pt-dbms-sql-16-right-join",
+          "question_text": "With the corresponding predicate, explicit projection and output aliases preserved, is employees RIGHT JOIN departments equivalent to departments LEFT JOIN employees?",
+          "options": [
+            "No, they are unrelated queries",
+            "Yes — RIGHT JOIN can always be rewritten as a LEFT JOIN with the table order swapped",
+            "Only if both tables have the same number of rows",
+            "This equivalence only holds for INNER JOIN"
+          ],
+          "correct_index": 1,
+          "explanation": "The same matches and preserved department rows result. SELECT star column order and later clauses still require attention when swapping input order.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-16-right-join-3",
+          "test_id": "pt-dbms-sql-16-right-join",
+          "question_text": "In the running example, does Marketing appear under a RIGHT JOIN from employees to departments?",
+          "options": [
+            "No, it's excluded since it has no employees",
+            "Yes — with NULL employee columns, since departments is the preserved (right) side",
+            "Yes, but only if it has a manager",
+            "This cannot be determined without more data"
+          ],
+          "correct_index": 1,
+          "explanation": "RIGHT JOIN preserves every department row, including ones with no matching employees.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-16-right-join-4",
+          "test_id": "pt-dbms-sql-16-right-join",
+          "question_text": "Why might a team choose to standardize on LEFT JOIN and avoid RIGHT JOIN entirely in their codebase?",
+          "options": [
+            "RIGHT JOIN doesn't actually work in most databases",
+            "For consistency and readability — since any RIGHT JOIN can be rewritten as an equivalent LEFT JOIN with reordered tables",
+            "RIGHT JOIN is always slower to execute",
+            "RIGHT JOIN cannot be combined with WHERE clauses"
+          ],
+          "correct_index": 1,
+          "explanation": "This is a stylistic consistency choice, not a technical limitation of RIGHT JOIN.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-16-right-join-5",
+          "test_id": "pt-dbms-sql-16-right-join",
+          "question_text": "Is RIGHT JOIN a deprecated or non-standard SQL feature?",
+          "options": [
+            "Yes, it's non-standard and rarely supported",
+            "No — it's fully standard SQL, just used less often in practice than LEFT JOIN",
+            "RIGHT JOIN only exists in MySQL",
+            "RIGHT JOIN was removed from modern SQL standards"
+          ],
+          "correct_index": 1,
+          "explanation": "RIGHT JOIN is standard and broadly supported; it's simply a less common stylistic choice.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-16-right-join-6",
+          "test_id": "pt-dbms-sql-16-right-join",
+          "question_text": "In a RIGHT JOIN, which table's unmatched rows are excluded?",
+          "options": [
+            "The right table's",
+            "The left table's",
+            "Both tables' unmatched rows are excluded",
+            "Neither — RIGHT JOIN never excludes any rows"
+          ],
+          "correct_index": 1,
+          "explanation": "Since the right side is preserved, unmatched left-side rows are the ones dropped.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-16-right-join-7",
+          "test_id": "pt-dbms-sql-16-right-join",
+          "question_text": "Can filtering the LEFT table's column in WHERE (instead of ON) silently undo a RIGHT JOIN's purpose?",
+          "options": [
+            "No, this issue only affects LEFT JOIN",
+            "Yes — the same WHERE-vs-ON pitfall applies, mirrored to the non-preserved (left) side",
+            "RIGHT JOIN cannot be combined with WHERE at all",
+            "This only happens with CROSS JOIN"
+          ],
+          "correct_index": 1,
+          "explanation": "The underlying mechanism (WHERE running after the join, excluding NULL rows) applies symmetrically.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-16-right-join-8",
+          "test_id": "pt-dbms-sql-16-right-join",
+          "question_text": "Does RIGHT JOIN require the OUTER keyword to function as described?",
+          "options": [
+            "Yes, OUTER is mandatory",
+            "No — OUTER is optional, just like with LEFT JOIN",
+            "RIGHT JOIN and RIGHT OUTER JOIN are different operations",
+            "OUTER is only needed for CROSS JOIN"
+          ],
+          "correct_index": 1,
+          "explanation": "RIGHT OUTER JOIN and RIGHT JOIN are the same thing, exactly mirroring LEFT JOIN's optional OUTER.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-16-right-join-new-9",
+          "test_id": "pt-dbms-sql-16-right-join",
+          "question_text": "Which input is preserved in employees RIGHT JOIN departments?",
+          "options": [
+            "Departments",
+            "Employees only",
+            "Neither input",
+            "Every table in the database"
+          ],
+          "correct_index": 0,
+          "explanation": "The right input supplies the retained population.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-16-right-join-new-10",
+          "test_id": "pt-dbms-sql-16-right-join",
+          "question_text": "How many joined rows does a department with two matching employees contribute?",
+          "options": [
+            "0",
+            "2",
+            "1",
+            "Exactly the department count"
+          ],
+          "correct_index": 1,
+          "explanation": "Outer preservation does not collapse multiple matches.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-16-right-join-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-16-right-join-application-new-1",
+          "test_id": "pt-dbms-sql-16-right-join-application",
+          "question_text": "Why count employee_id instead of COUNT(*) for empty departments?",
+          "options": [
+            "COUNT(*) is invalid SQL",
+            "employee_id is always NULL",
+            "COUNT(*) counts the NULL-extended output row",
+            "Right joins cannot aggregate"
+          ],
+          "correct_index": 2,
+          "explanation": "A nonnullable matched key distinguishes actual matches.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-16-right-join-application-new-2",
+          "test_id": "pt-dbms-sql-16-right-join-application",
+          "question_text": "Where should an active-employee eligibility condition go when all departments must remain?",
+          "options": [
+            "Only in a null-rejecting WHERE",
+            "In ORDER BY only",
+            "In the department primary key name",
+            "In the ON match predicate"
+          ],
+          "correct_index": 3,
+          "explanation": "ON limits eligible matches before unmatched right rows are retained.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-16-right-join-application-new-3",
+          "test_id": "pt-dbms-sql-16-right-join-application",
+          "question_text": "What happens when departments is empty?",
+          "options": [
+            "The right join returns no rows",
+            "Every unmatched employee is preserved",
+            "One synthetic department appears",
+            "All employees receive NULL department names"
+          ],
+          "correct_index": 0,
+          "explanation": "The preserved population itself is empty.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-16-right-join-application-new-4",
+          "test_id": "pt-dbms-sql-16-right-join-application",
+          "question_text": "What happens when employees is empty but departments has three rows?",
+          "options": [
+            "No rows",
+            "Three department rows with NULL employee columns",
+            "One grand total",
+            "Every possible employee row"
+          ],
+          "correct_index": 1,
+          "explanation": "Each unmatched right row is retained once.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-16-right-join-application-new-5",
+          "test_id": "pt-dbms-sql-16-right-join-application",
+          "question_text": "Does a NULL employee field necessarily represent a real employee with missing data?",
+          "options": [
+            "Yes, always",
+            "Only after a count",
+            "No, it may be a NULL-extended unmatched row",
+            "Only with two departments"
+          ],
+          "correct_index": 2,
+          "explanation": "Use a nonnullable matched key to distinguish absence.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-16-right-join-application-new-6",
+          "test_id": "pt-dbms-sql-16-right-join-application",
+          "question_text": "What must be checked when rewriting RIGHT JOIN as LEFT JOIN?",
+          "options": [
+            "Only keyword length",
+            "Only the number of tables",
+            "Only whether names are uppercase",
+            "Projection, aliases, predicate and later filtering"
+          ],
+          "correct_index": 3,
+          "explanation": "Swapping inputs can alter SELECT star output shape.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-16-right-join-application-new-7",
+          "test_id": "pt-dbms-sql-16-right-join-application",
+          "question_text": "Is RIGHT JOIN inherently slower than its equivalent LEFT JOIN?",
+          "options": [
+            "No universal performance conclusion follows",
+            "Yes, always",
+            "Only on empty tables",
+            "Only with numeric keys"
+          ],
+          "correct_index": 0,
+          "explanation": "Inspect actual plans rather than inferring cost from spelling.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-16-right-join-application-new-8",
+          "test_id": "pt-dbms-sql-16-right-join-application",
+          "question_text": "Does the directory right join preserve an employee with no matching department?",
+          "options": [
+            "Yes, every unmatched left row survives",
+            "No",
+            "Only if its name is nonempty",
+            "Only after ORDER BY"
+          ],
+          "correct_index": 1,
+          "explanation": "Preservation applies to the right side.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-16-right-join-application-new-9",
+          "test_id": "pt-dbms-sql-16-right-join-application",
+          "question_text": "Why can summing a department budget after joining employees inflate totals?",
+          "options": [
+            "The amount becomes NULL automatically",
+            "SUM ignores duplicates always",
+            "The department amount is repeated per matching employee",
+            "Right joins round numbers"
+          ],
+          "correct_index": 2,
+          "explanation": "The join changes row multiplicity.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-16-right-join-application-new-10",
+          "test_id": "pt-dbms-sql-16-right-join-application",
+          "question_text": "What makes an employee key useful for detecting no match?",
+          "options": [
+            "It has a long alias",
+            "It appears last in SELECT",
+            "It is a string rather than integer",
+            "It is nonnullable in actual matched employee rows"
+          ],
+          "correct_index": 3,
+          "explanation": "A NULL key in the output then identifies a NULL-extended row.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cx-right-join-directory",
+      "slug": "right-join-directory",
+      "title": "Preserve empty departments in a directory",
+      "difficulty": "Easy",
+      "task": "Return department_id, employee_id for every department and each matching employee. All actual employee IDs are positive; display -1 for no match. Order by department_id, employee_id.",
+      "schema_sql": "CREATE TABLE team_departments(department_id INT PRIMARY KEY,department_name VARCHAR(30)); CREATE TABLE team_employees(employee_id INT PRIMARY KEY,department_id INT,active_flag INT NOT NULL);",
+      "seed_sql": "INSERT INTO team_departments VALUES (1,'Engineering'),(2,'Support'),(3,'Marketing'); INSERT INTO team_employees VALUES (11,1,1),(12,1,0),(13,2,1),(14,NULL,1);",
+      "expected": "department_id\temployee_id\n1\t11\n1\t12\n2\t13\n3\t-1",
+      "ordering": "Use the explicit ORDER BY in the requested result.",
+      "edge_cases": [
+        "Empty preserved input returns no rows.",
+        "Unmatched employee does not create a department."
+      ],
+      "hints": [
+        "Preserve departments as the right input."
+      ],
+      "solution_sql": "SELECT d.department_id,COALESCE(e.employee_id,-1) AS employee_id FROM team_employees e RIGHT JOIN team_departments d ON e.department_id=d.department_id ORDER BY d.department_id,employee_id;",
+      "explanation": "The right input retains departments without employees; unmatched employees do not survive.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO team_departments VALUES (5,'Empty');",
+          "expected": "department_id\temployee_id\n5\t-1"
+        },
+        {
+          "seed_sql": "INSERT INTO team_employees VALUES (1,NULL,1);",
+          "expected": ""
+        }
+      ]
+    },
+    {
+      "id": "cx-right-join-active-count",
+      "slug": "right-join-active-count",
+      "title": "Count eligible employees without dropping empty departments",
+      "difficulty": "Medium",
+      "task": "Return department_id, active_count for every department. Count only employees with active_flag=1; keep departments with zero qualifying employees. Order by department_id.",
+      "schema_sql": "CREATE TABLE team_departments(department_id INT PRIMARY KEY,department_name VARCHAR(30)); CREATE TABLE team_employees(employee_id INT PRIMARY KEY,department_id INT,active_flag INT NOT NULL);",
+      "seed_sql": "INSERT INTO team_departments VALUES (1,'Engineering'),(2,'Support'),(3,'Marketing'); INSERT INTO team_employees VALUES (11,1,1),(12,1,0),(13,2,1),(14,NULL,1);",
+      "expected": "department_id\tactive_count\n1\t1\n2\t1\n3\t0",
+      "ordering": "Use the explicit ORDER BY in the requested result.",
+      "edge_cases": [
+        "A department with only inactive employees still returns zero."
+      ],
+      "hints": [
+        "COUNT the matched key rather than COUNT star."
+      ],
+      "solution_sql": "SELECT d.department_id,COUNT(e.employee_id) AS active_count FROM team_employees e RIGHT JOIN team_departments d ON e.department_id=d.department_id AND e.active_flag=1 GROUP BY d.department_id ORDER BY d.department_id;",
+      "explanation": "Eligibility belongs in ON; counting the nonnullable matched employee key avoids counting the synthetic unmatched row.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO team_departments VALUES (1,'Closed'); INSERT INTO team_employees VALUES (1,1,0);",
+          "expected": "department_id\tactive_count\n1\t0"
+        },
+        {
+          "seed_sql": "",
+          "expected": ""
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": null,
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-16-right-join-1",
+      "test_id": "pt-dbms-sql-16-right-join",
+      "question_text": "What does RIGHT JOIN guarantee?",
+      "options": [
+        "Every row from the left table is preserved",
+        "Every row from the right table is preserved, regardless of a left-side match",
+        "Only matched rows from both sides appear",
+        "Every possible row combination appears"
+      ],
+      "correct_index": 1,
+      "explanation": "RIGHT JOIN mirrors LEFT JOIN, preserving the right table's rows instead.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-16-right-join-2",
+      "test_id": "pt-dbms-sql-16-right-join",
+      "question_text": "Is `employees RIGHT JOIN departments` equivalent to `departments LEFT JOIN employees`?",
+      "options": [
+        "No, they are unrelated queries",
+        "Yes — RIGHT JOIN can always be rewritten as a LEFT JOIN with the table order swapped",
+        "Only if both tables have the same number of rows",
+        "This equivalence only holds for INNER JOIN"
+      ],
+      "correct_index": 1,
+      "explanation": "This is the direct mirror-image relationship between LEFT and RIGHT JOIN.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-16-right-join-3",
+      "test_id": "pt-dbms-sql-16-right-join",
+      "question_text": "In the running example, does Marketing appear under a RIGHT JOIN from employees to departments?",
+      "options": [
+        "No, it's excluded since it has no employees",
+        "Yes — with NULL employee columns, since departments is the preserved (right) side",
+        "Yes, but only if it has a manager",
+        "This cannot be determined without more data"
+      ],
+      "correct_index": 1,
+      "explanation": "RIGHT JOIN preserves every department row, including ones with no matching employees.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-16-right-join-4",
+      "test_id": "pt-dbms-sql-16-right-join",
+      "question_text": "Why might a team choose to standardize on LEFT JOIN and avoid RIGHT JOIN entirely in their codebase?",
+      "options": [
+        "RIGHT JOIN doesn't actually work in most databases",
+        "For consistency and readability — since any RIGHT JOIN can be rewritten as an equivalent LEFT JOIN with reordered tables",
+        "RIGHT JOIN is always slower to execute",
+        "RIGHT JOIN cannot be combined with WHERE clauses"
+      ],
+      "correct_index": 1,
+      "explanation": "This is a stylistic consistency choice, not a technical limitation of RIGHT JOIN.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-16-right-join-5",
+      "test_id": "pt-dbms-sql-16-right-join",
+      "question_text": "Is RIGHT JOIN a deprecated or non-standard SQL feature?",
+      "options": [
+        "Yes, it's non-standard and rarely supported",
+        "No — it's fully standard SQL, just used less often in practice than LEFT JOIN",
+        "RIGHT JOIN only exists in MySQL",
+        "RIGHT JOIN was removed from modern SQL standards"
+      ],
+      "correct_index": 1,
+      "explanation": "RIGHT JOIN is standard and broadly supported; it's simply a less common stylistic choice.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-16-right-join-6",
+      "test_id": "pt-dbms-sql-16-right-join",
+      "question_text": "In a RIGHT JOIN, which table's unmatched rows are excluded?",
+      "options": [
+        "The right table's",
+        "The left table's",
+        "Both tables' unmatched rows are excluded",
+        "Neither — RIGHT JOIN never excludes any rows"
+      ],
+      "correct_index": 1,
+      "explanation": "Since the right side is preserved, unmatched left-side rows are the ones dropped.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-16-right-join-7",
+      "test_id": "pt-dbms-sql-16-right-join",
+      "question_text": "Can filtering the LEFT table's column in WHERE (instead of ON) silently undo a RIGHT JOIN's purpose?",
+      "options": [
+        "No, this issue only affects LEFT JOIN",
+        "Yes — the same WHERE-vs-ON pitfall applies, mirrored to the non-preserved (left) side",
+        "RIGHT JOIN cannot be combined with WHERE at all",
+        "This only happens with CROSS JOIN"
+      ],
+      "correct_index": 1,
+      "explanation": "The underlying mechanism (WHERE running after the join, excluding NULL rows) applies symmetrically.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-16-right-join-8",
+      "test_id": "pt-dbms-sql-16-right-join",
+      "question_text": "Does RIGHT JOIN require the OUTER keyword to function as described?",
+      "options": [
+        "Yes, OUTER is mandatory",
+        "No — OUTER is optional, just like with LEFT JOIN",
+        "RIGHT JOIN and RIGHT OUTER JOIN are different operations",
+        "OUTER is only needed for CROSS JOIN"
+      ],
+      "correct_index": 1,
+      "explanation": "RIGHT OUTER JOIN and RIGHT JOIN are the same thing, exactly mirroring LEFT JOIN's optional OUTER.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "/root/content_b",
+    "independent_review": "passed",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "canonical_answer_indices_preserved": true,
+    "independent_reviewer": "/root/review_d_and_programs",
+    "independent_review_scope": "Full notes,20MCQs with every option,canonical answer position and explanation,original diagrams,and all exercise contracts/fixtures or solved conceptual labs. Original identities/indices checked against public seed cache where applicable. Reported substantive findings corrected by coordinator and filtered recheck accepted;identified learner-facing spacing polished. Manual technical/editorial reasoning only;engine,provider,browser,external originality and AdSense evidence separate."
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-16-right-join",
+    "original_note_sha256": "061a997c8f09d5b23dc4abc995f40a43c34383908538610432bef595de45a360",
+    "status": "drafted; not included in prepared paired migrations"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Departments remain even when no employee matches",
+      "description": "Two employees produce two Engineering rows; unmatched Marketing produces one NULL-extended row.",
+      "columns": [
+        "Department",
+        "Employee match",
+        "Output rows"
+      ],
+      "rows": [
+        [
+          "Engineering",
+          "Ada and Bo",
+          "Two matched rows"
+        ],
+        [
+          "Support",
+          "Cy",
+          "One matched row"
+        ],
+        [
+          "Marketing",
+          "None",
+          "One row with NULL employee fields"
+        ],
+        [
+          "No matching department for Dee",
+          "Nonpreserved left row",
+          "Excluded"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "provided",
+    "technical_review": "Independent manual diagram/content consistency review passed;actual static/browser rendering tracked separately.",
+    "server_rendering": "unverified",
+    "browser_rendering": "unverified",
+    "independent_review": "passed"
+  },
+  "authoring_status": "drafted; verification pending",
+  "sql_verification": {
+    "scope": "not executed; exact MySQL/provider verification pending",
+    "all_passed": false,
+    "cases": []
+  }
+}

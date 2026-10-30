@@ -1,0 +1,605 @@
+{
+  "source_ref": "chapter-14-sql-functions/aggregate-functions",
+  "slug": "aggregate-functions",
+  "title": "Aggregate Functions",
+  "description": "Build meaningful SQL summaries with correct row grain, null handling, grouping, denominators and join multiplicity across counts, totals and averages.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Turn many facts into a summary\n\nAn aggregate function combines values from a population of rows into a summary. A campus shop can count orders, total revenue or find the smallest order amount. The summary answers a question about the population rather than describing one arbitrary order. State what one input row represents and which rows belong before choosing a function.\n\nA scalar function such as an uppercase conversion works on a value in a row. An ordinary aggregate instead considers a collection of values. A window aggregate can attach a population summary while retaining detail rows, but that is a separate query shape. This overview builds the ordinary whole-population and grouped forms before later analytic patterns.\n\n## Choose the measure that matches the question\n\nCOUNT(*) counts rows. COUNT(amount) counts rows whose amount expression is not null. SUM(amount) adds known amounts, AVG(amount) averages known amounts, and MIN or MAX select an extreme known value. These functions differ in both meaning and how they treat missing input. Do not replace one with another just because a small fixture happens to produce equal numbers.\n\nThe retained exercise uses an orders table whose amount is NOT NULL. Consequently every row contributes to both its row count and its amount count. The general rule still matters: if a later design allows unknown amounts, dividing the sum by every row no longer computes the average of known amounts. Match the denominator to the requested measure.\n\n## Produce one whole-table summary\n\nWithout GROUP BY, the shown aggregate query summarizes the entire qualifying population into one result row:\n\n```sql\nSELECT COUNT(*) AS order_count,\n       SUM(amount) AS total_revenue,\n       SUM(amount) DIV NULLIF(COUNT(*), 0) AS avg_amount\nFROM orders;\n```\n\nThe retained exercise explicitly asks for an integer average using MySQL DIV. This is not the same interface as AVG returning a fractional result. NULLIF makes a zero row count an explicit missing denominator. For the supplied positive amounts, integer division drops any fractional remainder. Explain that choice instead of presenting the truncated value as the exact arithmetic mean.\n\nThe source fixture has four order amounts: five hundred, three hundred, seven hundred and two hundred. Their total is seventeen hundred and their integer average is four hundred twenty-five. These are predicted fixture outputs to verify with execution, not evidence of a hosted database run. The original exercise identity, setup and existing hidden fixture remain retained.\n\n## Decide which rows enter the calculation\n\nA revenue summary for completed orders should filter out cancelled orders before aggregation. WHERE defines the input population. Applying a condition to a final total is a different step and cannot repair a sum that already included the wrong rows. Keep date ranges, tenant scope and other eligibility rules visible in the population definition.\n\nThe same principle applies to trusted access checks. An aggregate can reveal sensitive information even when it returns only one number. Counting inaccessible rows is still a disclosure. Preserve access enforcement at the server or database boundary, and do not treat the absence of individual names in the output as permission to broaden the summarized population.\n\n## Group facts at the required grain\n\nGROUP BY event_code produces one summary per represented event rather than one summary across all responses. The intermediate exercise uses donation responses, with an unknown amount allowed. It reports response rows, known amounts and known-value totals for each event. Several responses from one event contribute to the same output row.\n\n```sql\nSELECT event_code,\n       COUNT(*) AS response_count,\n       COUNT(amount) AS known_count,\n       SUM(amount) AS total_amount\nFROM responses\nGROUP BY event_code\nORDER BY event_code ASC;\n```\n\nThe event code identifies the group, and each aggregate describes that group's population. Explicit ORDER BY defines display order; GROUP BY does not promise it. A group containing only unknown amounts still exists because its response rows exist, even though its known-value sum is null.\n\n## Preserve the distinction between absence and zero\n\nA sum of zero can describe real values that cancel each other or actual recorded zero contributions. A null sum can indicate no known amount entered the calculation. Replacing every null with zero may be appropriate for a particular report, but it changes how missingness is communicated. Keep the known-value count when that distinction matters.\n\nAn ungrouped aggregate over no input rows still returns a summary row: COUNT is zero while SUM, AVG, MIN and MAX are null. An ordinary GROUP BY over an empty input has no represented groups and returns no group rows. To display every configured event, including ones with no responses, start from an event catalogue and design an outer join deliberately.\n\n## Filter rows and groups at different stages\n\nWHERE excludes input rows before ordinary grouping. HAVING excludes result groups according to conditions such as a minimum response count or total. Putting an aggregate condition into the same-level WHERE is not the correct way to express a group threshold. Describe which population or summary is being filtered before choosing a clause.\n\nFor example, retaining only positive contributions before summarizing changes the meaning of the total by excluding refunds or adjustments. Retaining groups whose net total is positive includes those adjustments in the calculation. The two reports answer different questions. A useful review contrasts a group containing both positive and negative amounts rather than only a happy-path collection of positive values.\n\n## Avoid multiplying facts through joins\n\nJoining one order to several tags creates several joined rows for that order. Summing the order amount after that multiplication can overstate revenue. COUNT(*) counts joined rows rather than silently deduplicating original orders. Decide the measure's grain before joining, and pre-aggregate or use an appropriate existence condition when necessary.\n\nSUM(DISTINCT amount) is usually not a repair for duplicated order facts. Two legitimate orders can share the same amount, and DISTINCT would collapse those equal values even though both should contribute. Deduplicate by the intended fact identity or restructure the query. The measure value itself is not a substitute for an order's identity.\n\n## Keep detail columns meaningful\n\nA grouped report should select group keys, aggregates and other values whose relationship to the group is established. Selecting an arbitrary customer_name alongside a whole-table revenue sum suggests that one customer owns the total. MySQL's ONLY_FULL_GROUP_BY rules reject many ambiguous forms, with recognized functional dependencies allowing some valid cases.\n\nDo not disable those checks to make a questionable report run. Instead decide whether the requested output should be one row per customer or one global row without a customer label. Grouping is a change of result grain, not permission to attach a random detail row to every calculated measure. Explain that change to the person consuming the report.\n\n## Consider arithmetic and operational limits\n\nChoose numeric types that represent the amounts and their expected total range. Currency reports commonly need exact decimal or scaled integer policies rather than accidental floating-point rounding. State units: a total of one thousand could mean rupees, cents or points. Never combine incompatible units merely because every source column is numeric.\n\nAggregates can examine many rows despite producing few output rows. Indexes, filtering, grouping cardinality and the chosen plan affect work. Do not describe COUNT or SUM as free operations. Measure representative queries when performance matters, and separate a static fixture's correctness from evidence about resource cost under the application's real workload.\n\n## Check the summary using contrasting populations\n\nThe exercises isolate a retained whole-order summary and a grouped missing-value report. Test repeated amounts, zeros, negative adjustments and groups whose amounts are all unknown. Verify both the output row count and each measure's input population, rather than checking only that the total looks plausible.\n\nRecap every report with four statements: one input row represents a particular fact, eligibility chooses its population, group keys define one output row, and each aggregate uses a stated expression. Continue with [COUNT](/learning/dbms-sql-tutorial/count), [SUM](/learning/dbms-sql-tutorial/sum) and [AVG](/learning/dbms-sql-tutorial/avg) for their individual edge cases and arithmetic choices.\n\nA reconciliation step can compare a whole-population sum with the sum of disjoint group totals when their filters and null policies match. If the numbers differ, inspect whether groups overlap, some inputs were excluded or a join multiplied facts. This is a diagnostic check, not proof that every underlying amount is correct. A report can reconcile internally while still using an incorrect business definition, so confirm the intended units and population with the requirement as well.\n",
+  "references": [
+    {
+      "title": "MySQL 8.4 aggregate function descriptions",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/aggregate-functions.html"
+    },
+    {
+      "title": "MySQL 8.4 handling of GROUP BY",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/group-by-handling.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-14-aggregate-functions",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-14-aggregate-functions-1",
+          "test_id": "pt-dbms-sql-14-aggregate-functions",
+          "question_text": "What does an ordinary aggregate describe?",
+          "options": [
+            "A random input row",
+            "A summary over an input population",
+            "A table rename",
+            "A client-side font choice"
+          ],
+          "correct_index": 1,
+          "explanation": "The measure combines facts rather than choosing arbitrary detail.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-14-aggregate-functions-2",
+          "test_id": "pt-dbms-sql-14-aggregate-functions",
+          "question_text": "How does COUNT(*) differ from COUNT(amount)?",
+          "options": [
+            "Both always count only positive amounts",
+            "COUNT(*) ignores rows with any null",
+            "COUNT(*) counts rows; COUNT(amount) excludes null expression values",
+            "COUNT(amount) totals monetary values"
+          ],
+          "correct_index": 2,
+          "explanation": "The counted expression changes the population.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-14-aggregate-functions-3",
+          "test_id": "pt-dbms-sql-14-aggregate-functions",
+          "question_text": "Which values enter AVG(amount) normally?",
+          "options": [
+            "All nulls as zero automatically",
+            "Only distinct amounts automatically",
+            "Known nonnull amounts",
+            "Only the largest amount"
+          ],
+          "correct_index": 2,
+          "explanation": "Missing values do not become measured zero.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-14-aggregate-functions-4",
+          "test_id": "pt-dbms-sql-14-aggregate-functions",
+          "question_text": "What does GROUP BY event_code establish?",
+          "options": [
+            "A descending display order automatically",
+            "One row per original response",
+            "One output group for each represented event code",
+            "A physical table for every event"
+          ],
+          "correct_index": 2,
+          "explanation": "Grouping changes the result grain.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-14-aggregate-functions-5",
+          "test_id": "pt-dbms-sql-14-aggregate-functions",
+          "question_text": "What distinguishes a scalar UPPER function from an ordinary aggregate?",
+          "options": [
+            "UPPER counts all rows",
+            "UPPER transforms a row value rather than summarizing a population",
+            "Aggregates can never return numbers",
+            "Scalar functions require GROUP BY"
+          ],
+          "correct_index": 1,
+          "explanation": "The functions operate at different scopes.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-14-aggregate-functions-6",
+          "test_id": "pt-dbms-sql-14-aggregate-functions",
+          "question_text": "Which clause filters ordinary grouped results by aggregate thresholds?",
+          "options": [
+            "An aggregate in same-level WHERE",
+            "A table comment",
+            "HAVING",
+            "LIMIT alone"
+          ],
+          "correct_index": 2,
+          "explanation": "Row eligibility and group eligibility occur at different logical stages.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-14-aggregate-functions-7",
+          "test_id": "pt-dbms-sql-14-aggregate-functions",
+          "question_text": "What does an ungrouped COUNT(*) return over empty input?",
+          "options": [
+            "No result row necessarily",
+            "One summary row with count zero",
+            "A null count",
+            "A negative count"
+          ],
+          "correct_index": 1,
+          "explanation": "Ungrouped aggregate output differs from grouped empty output.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-14-aggregate-functions-8",
+          "test_id": "pt-dbms-sql-14-aggregate-functions",
+          "question_text": "Why is SUM(DISTINCT amount) usually a wrong repair for duplicated joined orders?",
+          "options": [
+            "DISTINCT always doubles totals",
+            "SUM cannot use DISTINCT",
+            "Different legitimate orders can share an amount",
+            "Order identities are irrelevant"
+          ],
+          "correct_index": 2,
+          "explanation": "Deduplicate facts by identity, not coincidentally equal measures.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-14-aggregate-functions-new-9",
+          "test_id": "pt-dbms-sql-14-aggregate-functions",
+          "question_text": "Which query step defines which completed orders enter revenue?",
+          "options": [
+            "The input eligibility filter",
+            "The final heading",
+            "An unrelated display sort",
+            "Renaming the sum alias"
+          ],
+          "correct_index": 0,
+          "explanation": "Aggregation cannot undo wrong input membership.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-14-aggregate-functions-new-10",
+          "test_id": "pt-dbms-sql-14-aggregate-functions",
+          "question_text": "Does one aggregate output row imply cheap execution?",
+          "options": [
+            "Yes, only one input row is read",
+            "No",
+            "Only for sums",
+            "Only if the alias is short"
+          ],
+          "correct_index": 1,
+          "explanation": "Input work is distinct from output size.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-14-aggregate-functions-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-14-aggregate-functions-application-new-1",
+          "test_id": "pt-dbms-sql-14-aggregate-functions-application",
+          "question_text": "What does SUM over only unknown amounts normally return?",
+          "options": [
+            "Zero necessarily",
+            "NULL",
+            "The number of rows",
+            "The maximum possible integer"
+          ],
+          "correct_index": 1,
+          "explanation": "No known amount contributes.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-14-aggregate-functions-application-new-2",
+          "test_id": "pt-dbms-sql-14-aggregate-functions-application",
+          "question_text": "Which result distinguishes known zero from all-unknown input?",
+          "options": [
+            "A bigger page size",
+            "An arbitrary customer name",
+            "A known-value count alongside the sum",
+            "Removing nulls from the schema description"
+          ],
+          "correct_index": 2,
+          "explanation": "A zero known count identifies absent measurements.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-14-aggregate-functions-application-new-3",
+          "test_id": "pt-dbms-sql-14-aggregate-functions-application",
+          "question_text": "What happens to ordinary grouped output when no rows enter?",
+          "options": [
+            "One group for every possible key automatically",
+            "A random group returns",
+            "All group names become NULL",
+            "No represented groups are returned"
+          ],
+          "correct_index": 3,
+          "explanation": "A catalogue outer join is needed to include absent groups.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-14-aggregate-functions-application-new-4",
+          "test_id": "pt-dbms-sql-14-aggregate-functions-application",
+          "question_text": "Does GROUP BY specify final display order?",
+          "options": [
+            "No",
+            "Yes, always ascending",
+            "Only for amounts",
+            "Only when COUNT is used"
+          ],
+          "correct_index": 0,
+          "explanation": "Add explicit ORDER BY.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-14-aggregate-functions-application-new-5",
+          "test_id": "pt-dbms-sql-14-aggregate-functions-application",
+          "question_text": "Why can a one-to-many join inflate a revenue sum?",
+          "options": [
+            "Joins make every amount zero",
+            "A source order's amount can appear on several joined rows",
+            "SUM ignores all duplicated identities automatically",
+            "All child rows must have missing amounts"
+          ],
+          "correct_index": 1,
+          "explanation": "Grain changes before aggregation.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-14-aggregate-functions-application-new-6",
+          "test_id": "pt-dbms-sql-14-aggregate-functions-application",
+          "question_text": "Should ONLY_FULL_GROUP_BY be disabled to attach an arbitrary customer to a global total?",
+          "options": [
+            "Yes, every report needs one random customer",
+            "Only if the total is positive",
+            "No, redesign the output grain",
+            "Only when a test fails"
+          ],
+          "correct_index": 2,
+          "explanation": "A label must have a meaningful relationship to its group.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-14-aggregate-functions-application-new-7",
+          "test_id": "pt-dbms-sql-14-aggregate-functions-application",
+          "question_text": "What is the retained exercise's avg_amount policy?",
+          "options": [
+            "Always preserve every fractional digit",
+            "Return the largest order",
+            "Count distinct customers",
+            "MySQL integer division of sum by row count"
+          ],
+          "correct_index": 3,
+          "explanation": "The exercise deliberately requests an integer measure.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-14-aggregate-functions-application-new-8",
+          "test_id": "pt-dbms-sql-14-aggregate-functions-application",
+          "question_text": "Why use NULLIF(COUNT(*),0) as a denominator guard?",
+          "options": [
+            "To represent an empty denominator as NULL explicitly",
+            "To turn every count into one",
+            "To exclude all positive orders",
+            "To sort rows"
+          ],
+          "correct_index": 0,
+          "explanation": "The guard makes the empty-input policy explicit.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-14-aggregate-functions-application-new-9",
+          "test_id": "pt-dbms-sql-14-aggregate-functions-application",
+          "question_text": "Can an aggregate reveal protected information?",
+          "options": [
+            "No, only names can be private",
+            "Yes, inaccessible row counts or totals can disclose facts",
+            "Only if the output has ten columns",
+            "Only when all amounts are negative"
+          ],
+          "correct_index": 1,
+          "explanation": "Access boundaries still apply to summary queries.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-14-aggregate-functions-application-new-10",
+          "test_id": "pt-dbms-sql-14-aggregate-functions-application",
+          "question_text": "What should be stated before summing numeric columns?",
+          "options": [
+            "Only their font size",
+            "Only the table's creation date",
+            "Their units and numeric representation policy",
+            "Only an unrelated page title"
+          ],
+          "correct_index": 2,
+          "explanation": "Numeric compatibility alone does not establish meaningful arithmetic.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cp-dbms-sql-order-summary-stats",
+      "slug": "order-summary-stats",
+      "title": "Order Summary Stats",
+      "difficulty": "Easy",
+      "task": "Return order_count, total_revenue and avg_amount over all orders. avg_amount uses MySQL integer division of SUM(amount) by COUNT(*), with an explicitly guarded empty denominator.",
+      "schema_sql": "CREATE TABLE orders (\n  id INTEGER PRIMARY KEY,\n  customer_name TEXT NOT NULL,\n  amount INTEGER NOT NULL,\n  order_date DATE NOT NULL\n);",
+      "seed_sql": "INSERT INTO orders (id, customer_name, amount, order_date) VALUES\n(1, 'Asha', 500, '2026-03-05'),\n(2, 'Rohan', 300, '2026-03-20'),\n(3, 'Neha', 700, '2026-04-02'),\n(4, 'Asha', 200, '2026-03-28');",
+      "expected": "order_count\ttotal_revenue\tavg_amount\n4\t1700\t425",
+      "ordering": "As explicitly required by the task and solution query.",
+      "constraints": [
+        "Use only supplied synthetic data.",
+        "Preserve unrelated rows."
+      ],
+      "edge_cases": [
+        "Repeated amounts are separate orders.",
+        "Zero is a known amount."
+      ],
+      "hints": [
+        "Combine all three measures in one ungrouped SELECT.",
+        "The average policy is integer division, not AVG formatting."
+      ],
+      "solution_sql": "SELECT COUNT(*) AS order_count,SUM(amount) AS total_revenue,SUM(amount) DIV NULLIF(COUNT(*),0) AS avg_amount FROM orders;",
+      "explanation": "All nonnull order amounts contribute. The sample total is 1700 across four rows, giving integer average 425.",
+      "validation_cases": [
+        {
+          "seed_sql": "",
+          "expected": "order_count\ttotal_revenue\tavg_amount\n0\tNULL\tNULL"
+        },
+        {
+          "seed_sql": "INSERT INTO orders (id, customer_name, amount, order_date) VALUES\n(1, 'Zara', 1000, '2026-05-01'),\n(2, 'Omar', 400, '2026-05-15'),\n(3, 'Leo', 250, '2026-06-01');",
+          "expected": "order_count\ttotal_revenue\tavg_amount\n3\t1650\t550"
+        },
+        {
+          "seed_sql": "INSERT INTO orders VALUES (10,'Lab',0,'2026-01-01'),(20,'Club',5,'2026-01-02');",
+          "expected": "order_count\ttotal_revenue\tavg_amount\n2\t5\t2"
+        }
+      ],
+      "existing_problem": true,
+      "original_description_md5": "dbaaaebb657e5db2f14b8a6dd0f8a058",
+      "check_sql": "",
+      "original_check_sql": ""
+    },
+    {
+      "id": "cx-aggregate-event-known-amounts",
+      "slug": "aggregate-event-known-amounts",
+      "title": "Summarize response rows and known amounts",
+      "difficulty": "Medium",
+      "task": "Return event_code,response_count,known_count,total_amount for each represented event. Count all responses, count known amount values separately and sum known amounts without replacing an all-unknown total with zero. Order by event_code ascending.",
+      "schema_sql": "CREATE TABLE responses(response_id INT PRIMARY KEY,event_code VARCHAR(10) NOT NULL,amount INT NULL);",
+      "seed_sql": "INSERT INTO responses VALUES (1,'A',10),(2,'A',NULL),(3,'A',-2),(4,'B',NULL),(5,'B',NULL),(6,'C',0);",
+      "expected": "event_code\tresponse_count\tknown_count\ttotal_amount\nA\t3\t2\t8\nB\t2\t0\tNULL\nC\t1\t1\t0",
+      "ordering": "As explicitly required by the task and solution query.",
+      "constraints": [
+        "Use only supplied synthetic data.",
+        "Preserve unrelated rows."
+      ],
+      "edge_cases": [
+        "All unknown differs from known zero.",
+        "Negative adjustments affect the net total."
+      ],
+      "hints": [
+        "COUNT(*) and COUNT(amount) answer different questions.",
+        "Do not use DISTINCT on legitimate repeated amounts."
+      ],
+      "solution_sql": "SELECT event_code,COUNT(*) AS response_count,COUNT(amount) AS known_count,SUM(amount) AS total_amount FROM responses GROUP BY event_code ORDER BY event_code ASC;",
+      "explanation": "A has three responses but two known amounts totaling eight. B has no known amounts; C records a real zero.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO responses VALUES (1,'A',5),(2,'A',5),(3,'B',-3);",
+          "expected": "event_code\tresponse_count\tknown_count\ttotal_amount\nA\t2\t2\t10\nB\t1\t1\t-3"
+        },
+        {
+          "seed_sql": "INSERT INTO responses VALUES (1,'X',NULL);",
+          "expected": "event_code\tresponse_count\tknown_count\ttotal_amount\nX\t1\t0\tNULL"
+        },
+        {
+          "seed_sql": "",
+          "expected": ""
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-14-aggregate-functions-1",
+      "test_id": "pt-dbms-sql-14-aggregate-functions",
+      "question_text": "What is the defining characteristic of an aggregate function in SQL?",
+      "options": [
+        "It transforms a single row's value into another value",
+        "It collapses multiple rows into a single summary value",
+        "It only works on VARCHAR columns",
+        "It must always be used with a WHERE clause"
+      ],
+      "correct_index": 1,
+      "explanation": "Aggregate functions (COUNT, SUM, AVG, MIN, MAX) take a set of rows and produce one summary value, unlike scalar functions which act row by row.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-14-aggregate-functions-2",
+      "test_id": "pt-dbms-sql-14-aggregate-functions",
+      "question_text": "Which of these is NOT one of the five core aggregate functions?",
+      "options": [
+        "COUNT",
+        "AVG",
+        "ROUND",
+        "MAX"
+      ],
+      "correct_index": 2,
+      "explanation": "ROUND is a numeric (scalar) function, not an aggregate function. COUNT, AVG, and MAX are aggregates.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-14-aggregate-functions-3",
+      "test_id": "pt-dbms-sql-14-aggregate-functions",
+      "question_text": "Using the orders table (amounts: 250, NULL, 400, 150, 300), what does a plain aggregate query without GROUP BY return?",
+      "options": [
+        "One row per customer",
+        "One row per status",
+        "A single summary row for the whole table",
+        "Five rows, one per order"
+      ],
+      "correct_index": 2,
+      "explanation": "Without GROUP BY, aggregate functions collapse the entire result set into one row.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-14-aggregate-functions-4",
+      "test_id": "pt-dbms-sql-14-aggregate-functions",
+      "question_text": "Which statement about NULL and aggregate functions is TRUE?",
+      "options": [
+        "SUM() treats NULL as 0 when adding values",
+        "All aggregate functions, including COUNT(*), ignore NULL rows entirely",
+        "SUM, AVG, MIN, and MAX ignore NULL values in the target column; only COUNT(*) does not look at a specific column's NULL status",
+        "AVG() divides by the total row count including NULLs"
+      ],
+      "correct_index": 2,
+      "explanation": "COUNT(*), SUM, AVG, MIN, MAX all skip NULLs when evaluating a column, but COUNT(*) counts every row regardless of column contents since it isn't examining a column value.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-14-aggregate-functions-5",
+      "test_id": "pt-dbms-sql-14-aggregate-functions",
+      "question_text": "What does SUM(amount) return if every row in a table has a NULL amount?",
+      "options": [
+        "0",
+        "NULL",
+        "An error",
+        "-1"
+      ],
+      "correct_index": 1,
+      "explanation": "If there are no non-NULL values to sum, SUM() returns NULL, not zero.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-14-aggregate-functions-6",
+      "test_id": "pt-dbms-sql-14-aggregate-functions",
+      "question_text": "Which SQL statement is invalid (or dialect-risky) in standard SQL because it mixes an aggregate with a non-aggregated column without GROUP BY?",
+      "options": [
+        "SELECT COUNT(*) FROM orders;",
+        "SELECT SUM(amount) FROM orders;",
+        "SELECT customer_name, SUM(amount) FROM orders;",
+        "SELECT MAX(amount) FROM orders;"
+      ],
+      "correct_index": 2,
+      "explanation": "Mixing a plain column (customer_name) with an aggregate (SUM) without a GROUP BY is invalid in standard SQL; some dialects allow it but return an arbitrary row for customer_name, which is unreliable.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-14-aggregate-functions-7",
+      "test_id": "pt-dbms-sql-14-aggregate-functions",
+      "question_text": "Why is AVG(amount) on the example orders table 275.00 rather than 220.00?",
+      "options": [
+        "Because AVG rounds up automatically",
+        "Because AVG divides the sum (1100) by the count of non-NULL values (4), not by the total row count (5)",
+        "Because the NULL row is treated as amount = 0",
+        "Because AVG excludes the highest and lowest values"
+      ],
+      "correct_index": 1,
+      "explanation": "1100 / 4 = 275.00. AVG ignores the NULL row entirely rather than treating it as zero or including it in the row count.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-14-aggregate-functions-8",
+      "test_id": "pt-dbms-sql-14-aggregate-functions",
+      "question_text": "Which pair of functions from the core five works meaningfully on non-numeric columns such as VARCHAR or DATE?",
+      "options": [
+        "SUM and AVG",
+        "COUNT(*) and SUM",
+        "MIN and MAX",
+        "AVG and COUNT(column)"
+      ],
+      "correct_index": 2,
+      "explanation": "MIN and MAX can operate on dates (earliest/latest) and strings (alphabetically first/last), while SUM and AVG only make sense on numeric data.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "content_author",
+    "independent_review": "passed",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "drafted; verification pending",
+    "canonical_answer_indices_preserved": true,
+    "editorial_record": "Original seeded MCQ snapshots and canonical answer identities preserved. Newly authored prose, exercises and diagram; third-party references verify facts only.",
+    "independent_review_scope": "2026-10-29 /root/technical_qa: Full notes, all 20 MCQs including all options/explanations, two reference queries and all eight manually traced fixture outputs, and diagram reviewed. SQL execution, browser QA and migration integration remain unverified."
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-14-aggregate-functions",
+    "original_note_sha256": "1d775bc5046656f58840fbe4b41c56d1f503867203bb90505cc3f159d444322a",
+    "status": "drafted; not included in prepared paired migrations"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Response count and known-value measures differ",
+      "description": "The same grouped input produces separate row counts, known counts and sums; absent measurements are not silently treated as zero.",
+      "columns": [
+        "Event",
+        "Input amounts",
+        "Response count",
+        "Known count",
+        "Total"
+      ],
+      "rows": [
+        [
+          "A",
+          "10, NULL, -2",
+          "3",
+          "2",
+          "8"
+        ],
+        [
+          "B",
+          "NULL, NULL",
+          "2",
+          "0",
+          "NULL"
+        ],
+        [
+          "C",
+          "0",
+          "1",
+          "1",
+          "0"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "author review; independent review pending",
+    "server_rendering": "pending",
+    "browser_rendering": "unverified",
+    "independent_review": "pending"
+  },
+  "authoring_status": "drafted; verification pending",
+  "sql_verification": {
+    "scope": "not executed; native interpreter blocked by command policy; exact MySQL/provider execution pending",
+    "all_passed": false,
+    "cases": []
+  }
+}
+

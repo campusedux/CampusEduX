@@ -1,0 +1,607 @@
+{
+  "slug": "conditional-aggregation",
+  "source_ref": "chapter-15-group-by-and-aggregation/conditional-aggregation",
+  "title": "Conditional Aggregation",
+  "description": "Build side-by-side conditional sums and counts, choose correct NULL and denominator policies, and preserve grouped report grain across CASE and FILTER dialects.",
+  "dialect": "MySQL 8.4; engine-specific behavior labeled",
+  "references": [
+    {
+      "title": "MySQL8.4 aggregate functions",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/aggregate-functions.html"
+    },
+    {
+      "title": "PostgreSQL aggregate FILTER expressions",
+      "url": "https://www.postgresql.org/docs/current/sql-expressions.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-15-conditional-aggregation",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-15-conditional-aggregation-1",
+          "test_id": "pt-dbms-sql-15-conditional-aggregation",
+          "question_text": "What is the purpose of putting a CASE WHEN expression inside an aggregate function like SUM?",
+          "options": [
+            "To sort aggregate results",
+            "To express several differently qualified measures at one grouping grain; physical work remains plan-dependent",
+            "To remove every NULL row",
+            "To convert aggregates to text"
+          ],
+          "correct_index": 1,
+          "explanation": "A grouped expression states contribution rules logically; it does not guarantee a particular physical scan count.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-15-conditional-aggregation-2",
+          "test_id": "pt-dbms-sql-15-conditional-aggregation",
+          "question_text": "East has Widget orders 100 and 60 and a Gadget order 150. What is SUM(CASE WHEN product='Widget' THEN amount ELSE 0 END) for East?",
+          "options": [
+            "310 (all East orders)",
+            "160 (East's Widget-only orders: 100 + 60)",
+            "150 (East's Gadget order)",
+            "0"
+          ],
+          "correct_index": 1,
+          "explanation": "The two Widget amounts contribute 160 and the Gadget contributes zero.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-15-conditional-aggregation-3",
+          "test_id": "pt-dbms-sql-15-conditional-aggregation",
+          "question_text": "With nullable amounts, does ELSE 0 in conditional SUM universally guarantee a nonnull result?",
+          "options": [
+            "Yes, even empty input has a zero row",
+            "No; all matching amounts can be NULL, and empty ungrouped input also yields NULL; choose an explicit missing-value policy",
+            "NULL causes a CASE syntax error",
+            "ELSE 0 always makes SUM textual"
+          ],
+          "correct_index": 1,
+          "explanation": "ELSE 0 handles evaluated nonmatching rows, but cannot supply a value for absent rows or replace NULL selected by a matching branch.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-15-conditional-aggregation-4",
+          "test_id": "pt-dbms-sql-15-conditional-aggregation",
+          "question_text": "Why should COUNT(CASE WHEN product='Widget' THEN 1 END) omit the ELSE clause rather than using ELSE 0?",
+          "options": [
+            "ELSE 0 causes a syntax error in COUNT",
+            "COUNT(expr) skips NULLs but counts every non-NULL value including 0, so ELSE 0 would incorrectly count non-matching rows too",
+            "COUNT cannot be used with CASE at all",
+            "Omitting ELSE makes the query run faster with no functional difference"
+          ],
+          "correct_index": 1,
+          "explanation": "COUNT(expr) counts all non-NULL values. If ELSE 0 is used, non-matching rows produce 0 (not NULL) and get counted, inflating the result; omitting ELSE defaults to NULL, which COUNT correctly skips.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-15-conditional-aggregation-5",
+          "test_id": "pt-dbms-sql-15-conditional-aggregation",
+          "question_text": "West has two Widget orders and one Gadget order. What is COUNT(CASE WHEN product='Widget' THEN 1 END)?",
+          "options": [
+            "3",
+            "1",
+            "2",
+            "0"
+          ],
+          "correct_index": 2,
+          "explanation": "The two matching constants are counted; the Gadget produces NULL and is skipped.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-15-conditional-aggregation-6",
+          "test_id": "pt-dbms-sql-15-conditional-aggregation",
+          "question_text": "Which PostgreSQL FILTER form selects Widget contributions, and what no-match caveat applies?",
+          "options": [
+            "SUM(amount) WHERE product='Widget'",
+            "SUM(amount) FILTER (WHERE product='Widget'), with NULL rather than an automatic zero when no values qualify",
+            "SUM(amount) GROUP BY product='Widget'",
+            "SUM(amount) HAVING product='Widget'"
+          ],
+          "correct_index": 1,
+          "explanation": "FILTER is also supported by some other engines; the MySQL exercises use CASE. COALESCE can supply zero when the result contract requires it.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-15-conditional-aggregation-7",
+          "test_id": "pt-dbms-sql-15-conditional-aggregation",
+          "question_text": "Why is `AVG(CASE WHEN product = 'Widget' THEN amount ELSE 0 END)` typically WRONG for computing 'average Widget order amount'?",
+          "options": [
+            "AVG cannot accept CASE expressions",
+            "The ELSE 0 rows count toward the denominator, dragging the average down artificially for non-matching rows",
+            "AVG always ignores CASE WHEN entirely",
+            "It's actually correct as written"
+          ],
+          "correct_index": 1,
+          "explanation": "AVG divides by the count of non-NULL values it sees. Using ELSE 0 makes every non-matching row count as a zero-valued entry in that average, skewing it low; omitting ELSE (defaulting to NULL) correctly excludes non-matching rows from both the sum and the count.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-15-conditional-aggregation-8",
+          "test_id": "pt-dbms-sql-15-conditional-aggregation",
+          "question_text": "If the eligible input contains exactly three represented regions, how many rows does GROUP BY region with two conditional sum columns produce?",
+          "options": [
+            "8, one per raw order row",
+            "6, one per (region, product) pair",
+            "3, one per region, with both revenue figures as columns",
+            "1, a single grand total row"
+          ],
+          "correct_index": 2,
+          "explanation": "One output row per represented group, giving three rows with measures as columns.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "cx-conditional-aggregation-fundamentals-9",
+          "test_id": "pt-dbms-sql-15-conditional-aggregation",
+          "question_text": "What is the stated output grain of the retained report?",
+          "options": [
+            "One row per represented region",
+            "One row per product only",
+            "One row per input order",
+            "One universal row"
+          ],
+          "correct_index": 0,
+          "explanation": "GROUP BY region defines the output identity.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "cx-conditional-aggregation-fundamentals-10",
+          "test_id": "pt-dbms-sql-15-conditional-aggregation",
+          "question_text": "Does WHERE product='Widget' allow the Gadget measure to see removed Gadget rows?",
+          "options": [
+            "Yes, CASE restores removed rows",
+            "No",
+            "Only with ORDER BY",
+            "Only if amounts are equal"
+          ],
+          "correct_index": 1,
+          "explanation": "WHERE filters the input before the aggregate contributions are computed logically.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "cx-conditional-aggregation-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "cx-conditional-aggregation-application-1",
+          "test_id": "cx-conditional-aggregation-application",
+          "question_text": "What does COUNT(CASE WHEN matches THEN 1 ELSE 0 END) count?",
+          "options": [
+            "Only matching rows",
+            "Every input row because both branches are nonnull",
+            "Only zero amounts",
+            "No rows"
+          ],
+          "correct_index": 1,
+          "explanation": "COUNT counts nonnull zero as well as one.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "cx-conditional-aggregation-application-2",
+          "test_id": "cx-conditional-aggregation-application",
+          "question_text": "What does COUNT(CASE WHEN matches THEN amount END) omit?",
+          "options": [
+            "Every matching known value",
+            "Only nonmatching positive values",
+            "Matching rows whose amount is NULL",
+            "All rows with identifiers"
+          ],
+          "correct_index": 2,
+          "explanation": "A nullable measure changes row counting into known-value counting.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "cx-conditional-aggregation-application-3",
+          "test_id": "cx-conditional-aggregation-application",
+          "question_text": "Can SUM with ELSE 0 still be NULL when all matching amounts are NULL and no nonmatching row exists?",
+          "options": [
+            "No, ELSE 0 always guarantees zero",
+            "Only after a commit",
+            "Only for strings",
+            "Yes"
+          ],
+          "correct_index": 3,
+          "explanation": "Every evaluated contribution can still be NULL.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "cx-conditional-aggregation-application-4",
+          "test_id": "cx-conditional-aggregation-application",
+          "question_text": "What does an empty grouped input produce?",
+          "options": [
+            "No groups and no rows",
+            "One row for every possible region",
+            "One NULL region automatically",
+            "A syntax error"
+          ],
+          "correct_index": 0,
+          "explanation": "Grouping does not invent a missing dimension population.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "cx-conditional-aggregation-application-5",
+          "test_id": "cx-conditional-aggregation-application",
+          "question_text": "Why is AVG with ELSE 0 wrong for a Widget-only known-amount mean?",
+          "options": [
+            "AVG cannot use CASE",
+            "Nonmatching zeros enter the denominator",
+            "It changes every amount to text",
+            "It removes all matching rows"
+          ],
+          "correct_index": 1,
+          "explanation": "The denominator includes rows that do not belong to the selected population.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "cx-conditional-aggregation-application-6",
+          "test_id": "cx-conditional-aggregation-application",
+          "question_text": "Is PostgreSQL FILTER spelling accepted unchanged by the MySQL 8.4 exercise syntax here?",
+          "options": [
+            "Yes, all SQL engines share it",
+            "Only for North",
+            "No",
+            "Only with a primary key"
+          ],
+          "correct_index": 2,
+          "explanation": "Logical techniques and supported dialect syntax must be separated.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "cx-conditional-aggregation-application-7",
+          "test_id": "cx-conditional-aggregation-application",
+          "question_text": "Is filtered SUM always identical to SUM CASE ELSE 0 on no-match groups?",
+          "options": [
+            "Yes, always",
+            "Only if ordered",
+            "Only for integer regions",
+            "No, the former can be NULL while the latter is zero"
+          ],
+          "correct_index": 3,
+          "explanation": "No-match and empty behavior require an explicit policy.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "cx-conditional-aggregation-application-8",
+          "test_id": "cx-conditional-aggregation-application",
+          "question_text": "Does one grouped SQL statement prove one physical scan?",
+          "options": [
+            "No",
+            "Yes, always",
+            "Only with two columns",
+            "Only after EXPLAIN without execution"
+          ],
+          "correct_index": 0,
+          "explanation": "Plan and workload evidence establish actual execution work.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "cx-conditional-aggregation-application-9",
+          "test_id": "cx-conditional-aggregation-application",
+          "question_text": "Does SUM DISTINCT preserve separate equal-valued orders?",
+          "options": [
+            "Yes, it knows order identities",
+            "No, it collapses equal measure values",
+            "Only for Widgets",
+            "Only when sorted"
+          ],
+          "correct_index": 1,
+          "explanation": "Distinct amounts are not distinct business rows.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "cx-conditional-aggregation-application-10",
+          "test_id": "cx-conditional-aggregation-application",
+          "question_text": "What happens when a new product arrives in a fixed CASE pivot?",
+          "options": [
+            "The engine adds a column by itself",
+            "All old columns disappear",
+            "It does not automatically create a new result column",
+            "Every total becomes NULL"
+          ],
+          "correct_index": 2,
+          "explanation": "The fixed query needs an explicit other policy or a reviewed reporting change.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-15-conditional-aggregation-1",
+      "test_id": "pt-dbms-sql-15-conditional-aggregation",
+      "question_text": "What is the purpose of putting a CASE WHEN expression inside an aggregate function like SUM?",
+      "options": [
+        "To sort the aggregate results",
+        "To compute multiple differently-conditioned aggregate values in a single GROUP BY pass, one per column",
+        "To filter out NULL rows automatically",
+        "To convert the aggregate to a string"
+      ],
+      "correct_index": 1,
+      "explanation": "Conditional aggregation lets one query produce several conditionally-computed aggregate columns per group, avoiding multiple separate queries.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-15-conditional-aggregation-2",
+      "test_id": "pt-dbms-sql-15-conditional-aggregation",
+      "question_text": "Given `SUM(CASE WHEN product = 'Widget' THEN amount ELSE 0 END)` grouped by region, what is the East region's result?",
+      "options": [
+        "310 (all East orders)",
+        "160 (East's Widget-only orders: 100 + 60)",
+        "150 (East's Gadget order)",
+        "0"
+      ],
+      "correct_index": 1,
+      "explanation": "Only East's two Widget orders (100 and 60) contribute their amount; the Gadget order contributes 0, so the sum is 160.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-15-conditional-aggregation-3",
+      "test_id": "pt-dbms-sql-15-conditional-aggregation",
+      "question_text": "Why must the ELSE branch of a CASE inside SUM use 0, not NULL?",
+      "options": [
+        "SUM ignores 0 just like NULL, so it doesn't matter",
+        "SUM ignores NULLs when summing, so using NULL for non-matching rows works too, and either can be defensible — but 0 makes the additive intent explicit and guarantees a non-NULL result even if a group has zero matches",
+        "NULL would cause a syntax error inside CASE",
+        "0 makes SUM return a string instead of a number"
+      ],
+      "correct_index": 1,
+      "explanation": "SUM ignores NULLs during aggregation, so ELSE NULL(default) also works for SUM; ELSE 0 is the conventional choice because it also guarantees SUM never returns NULL for a group with zero matches.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-15-conditional-aggregation-4",
+      "test_id": "pt-dbms-sql-15-conditional-aggregation",
+      "question_text": "Why should COUNT(CASE WHEN product='Widget' THEN 1 END) omit the ELSE clause rather than using ELSE 0?",
+      "options": [
+        "ELSE 0 causes a syntax error in COUNT",
+        "COUNT(expr) skips NULLs but counts every non-NULL value including 0, so ELSE 0 would incorrectly count non-matching rows too",
+        "COUNT cannot be used with CASE at all",
+        "Omitting ELSE makes the query run faster with no functional difference"
+      ],
+      "correct_index": 1,
+      "explanation": "COUNT(expr) counts all non-NULL values. If ELSE 0 is used, non-matching rows produce 0 (not NULL) and get counted, inflating the result; omitting ELSE defaults to NULL, which COUNT correctly skips.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-15-conditional-aggregation-5",
+      "test_id": "pt-dbms-sql-15-conditional-aggregation",
+      "question_text": "What does `COUNT(CASE WHEN product = 'Widget' THEN 1 END)` return for the West region, given West has orders 3 (Widget), 4 (Widget), and 5 (Gadget)?",
+      "options": [
+        "3",
+        "1",
+        "2",
+        "0"
+      ],
+      "correct_index": 2,
+      "explanation": "West has exactly 2 Widget orders (id 3 and id 4); the Gadget order (id 5) produces NULL and is skipped by COUNT.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-15-conditional-aggregation-6",
+      "test_id": "pt-dbms-sql-15-conditional-aggregation",
+      "question_text": "What is the PostgreSQL-specific shorthand equivalent to `SUM(CASE WHEN product = 'Widget' THEN amount ELSE 0 END)`?",
+      "options": [
+        "SUM(amount) WHERE product = 'Widget'",
+        "SUM(amount) FILTER (WHERE product = 'Widget')",
+        "SUM(amount) GROUP BY product = 'Widget'",
+        "SUM(amount) HAVING product = 'Widget'"
+      ],
+      "correct_index": 1,
+      "explanation": "The FILTER clause (standard SQL:2003, well-supported in PostgreSQL) is a more readable alternative to CASE WHEN for conditional aggregation, though it's not portable to every dialect.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-15-conditional-aggregation-7",
+      "test_id": "pt-dbms-sql-15-conditional-aggregation",
+      "question_text": "Why is `AVG(CASE WHEN product = 'Widget' THEN amount ELSE 0 END)` typically WRONG for computing 'average Widget order amount'?",
+      "options": [
+        "AVG cannot accept CASE expressions",
+        "The ELSE 0 rows count toward the denominator, dragging the average down artificially for non-matching rows",
+        "AVG always ignores CASE WHEN entirely",
+        "It's actually correct as written"
+      ],
+      "correct_index": 1,
+      "explanation": "AVG divides by the count of non-NULL values it sees. Using ELSE 0 makes every non-matching row count as a zero-valued entry in that average, skewing it low; omitting ELSE (defaulting to NULL) correctly excludes non-matching rows from both the sum and the count.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-15-conditional-aggregation-8",
+      "test_id": "pt-dbms-sql-15-conditional-aggregation",
+      "question_text": "How many total output rows does the conditional-aggregation query `SELECT region, SUM(CASE...) AS widget_revenue, SUM(CASE...) AS gadget_revenue FROM orders GROUP BY region` produce?",
+      "options": [
+        "8, one per raw order row",
+        "6, one per (region, product) pair",
+        "3, one per region, with both revenue figures as columns",
+        "1, a single grand total row"
+      ],
+      "correct_index": 2,
+      "explanation": "The GROUP BY is still just by region (3 groups); conditional aggregation pivots the product breakdown into separate columns within each region's single row, rather than creating extra rows.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cx-conditional-regional-counts",
+      "slug": "conditional-regional-counts",
+      "title": "Count selected and all regional orders",
+      "difficulty": "Easy",
+      "task": "Return region, widget_orders, all_orders for each represented region. Count order rows, not distinct amounts. Order by region.",
+      "schema_sql": "CREATE TABLE order_counts(order_id INT PRIMARY KEY,region VARCHAR(12) NOT NULL,product VARCHAR(20) NOT NULL);",
+      "seed_sql": "INSERT INTO order_counts VALUES(1,'East','Widget'),(2,'East','Widget'),(3,'East','Gadget'),(4,'West','Gadget');",
+      "solution_sql": "SELECT region,COUNT(CASE WHEN product='Widget' THEN 1 END) AS widget_orders,COUNT(*) AS all_orders FROM order_counts GROUP BY region ORDER BY region;",
+      "expected": "region\twidget_orders\tall_orders\nEast\t2\t3\nWest\t0\t1",
+      "ordering": "Order by region.",
+      "edge_cases": [
+        "Only nonmatching products.",
+        "Empty input.",
+        "Repeated qualifying rows with distinct identities."
+      ],
+      "hints": [
+        "Omit ELSE inside the selected COUNT."
+      ],
+      "explanation": "The selected CASE is NULL for nonwidgets while COUNT star includes every source order in the region.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO order_counts VALUES(1,'North','Gadget'),(2,'North','Gadget');",
+          "expected": "region\twidget_orders\tall_orders\nNorth\t0\t2"
+        },
+        {
+          "seed_sql": "",
+          "expected": ""
+        }
+      ]
+    },
+    {
+      "id": "cp-dbms-sql-widget-vs-gadget-revenue-by-region",
+      "slug": "widget-vs-gadget-revenue-by-region",
+      "title": "Widget vs Gadget Revenue by Region",
+      "difficulty": "Hard",
+      "existing_problem": true,
+      "original_problem": {
+        "id": "cp-dbms-sql-widget-vs-gadget-revenue-by-region",
+        "topic_id": null,
+        "title": "Widget vs Gadget Revenue by Region",
+        "difficulty": "Hard",
+        "slug": "widget-vs-gadget-revenue-by-region",
+        "description": "Write a query returning `region`, `widget_total` (sum of amount where product is 'Widget', else 0), and `gadget_total` (sum of amount where product is 'Gadget', else 0) — one row per region, ordered by `region`.\n\n```sql\nCREATE TABLE orders (\n  id INTEGER PRIMARY KEY,\n  region TEXT NOT NULL,\n  product TEXT NOT NULL,\n  amount INTEGER NOT NULL\n);\n```\n\n**Sample data**:\n\n```sql\nINSERT INTO orders (id, region, product, amount) VALUES\n(1, 'North', 'Widget', 200),\n(2, 'North', 'Gadget', 150),\n(3, 'South', 'Widget', 100),\n(4, 'South', 'Gadget', 50),\n(5, 'North', 'Widget', 300),\n(6, 'East', 'Widget', 400);\n```\n",
+        "examples": "[{\"input\": \"\", \"output\": \"region\\twidget_total\\tgadget_total\\nEast\\t400\\t0\\nNorth\\t500\\t150\\nSouth\\t100\\t50\"}]",
+        "test_cases": "[{\"hidden\": true, \"seed_sql\": \"INSERT INTO orders (id, region, product, amount) VALUES\\n(1, 'West', 'Widget', 500),\\n(2, 'West', 'Gadget', 200),\\n(3, 'East', 'Widget', 100),\\n(4, 'East', 'Gadget', 300);\", \"expected\": \"region\\twidget_total\\tgadget_total\\nEast\\t100\\t300\\nWest\\t500\\t200\"}]",
+        "starter_code": null,
+        "editorial": "A CASE expression inside SUM computes a conditional total without needing separate queries. Reference: `SELECT region, SUM(CASE WHEN product = 'Widget' THEN amount ELSE 0 END) AS widget_total, SUM(CASE WHEN product = 'Gadget' THEN amount ELSE 0 END) AS gadget_total FROM orders GROUP BY region ORDER BY region;`",
+        "supported_languages": null,
+        "sql_schema_sql": "CREATE TABLE orders (\n  id INTEGER PRIMARY KEY,\n  region TEXT NOT NULL,\n  product TEXT NOT NULL,\n  amount INTEGER NOT NULL\n);",
+        "sql_seed_sql": "INSERT INTO orders (id, region, product, amount) VALUES\n(1, 'North', 'Widget', 200),\n(2, 'North', 'Gadget', 150),\n(3, 'South', 'Widget', 100),\n(4, 'South', 'Gadget', 50),\n(5, 'North', 'Widget', 300),\n(6, 'East', 'Widget', 400);",
+        "sql_check_sql": "",
+        "learning_topic_id": null,
+        "status": "published",
+        "is_premium": null,
+        "show_on_website": null,
+        "show_on_mobile": null,
+        "sort_order": 1
+      },
+      "original_description_md5": "4fa3f3e524a62cfb6de750969ac43128",
+      "schema_sql": "CREATE TABLE orders (\n  id INTEGER PRIMARY KEY,\n  region TEXT NOT NULL,\n  product TEXT NOT NULL,\n  amount INTEGER NOT NULL\n);",
+      "seed_sql": "INSERT INTO orders (id, region, product, amount) VALUES\n(1, 'North', 'Widget', 200),\n(2, 'North', 'Gadget', 150),\n(3, 'South', 'Widget', 100),\n(4, 'South', 'Gadget', 50),\n(5, 'North', 'Widget', 300),\n(6, 'East', 'Widget', 400);",
+      "task": "Write a query returning `region`, `widget_total` (sum of amount where product is 'Widget', else 0), and `gadget_total` (sum of amount where product is 'Gadget', else 0) — one row per region, ordered by `region`.",
+      "solution_sql": "SELECT region,SUM(CASE WHEN product='Widget' THEN amount ELSE 0 END) AS widget_total,SUM(CASE WHEN product='Gadget' THEN amount ELSE 0 END) AS gadget_total FROM orders GROUP BY region ORDER BY region;",
+      "expected": "region\twidget_total\tgadget_total\nEast\t400\t0\nNorth\t500\t150\nSouth\t100\t50",
+      "ordering": "Use the explicit ORDER BY required by the task.",
+      "edge_cases": [
+        "Empty input.",
+        "Different valid fixture.",
+        "Repeated contributing values."
+      ],
+      "hints": [
+        "Preserve the requested result grain and aliases."
+      ],
+      "explanation": "The query preserves the required source identities and evaluates the requested operation on all eligible fixture rows.",
+      "validation_cases": [
+        {
+          "hidden": true,
+          "seed_sql": "INSERT INTO orders (id, region, product, amount) VALUES\n(1, 'West', 'Widget', 500),\n(2, 'West', 'Gadget', 200),\n(3, 'East', 'Widget', 100),\n(4, 'East', 'Gadget', 300);",
+          "expected": "region\twidget_total\tgadget_total\nEast\t100\t300\nWest\t500\t200"
+        },
+        {
+          "seed_sql": "",
+          "expected": ""
+        }
+      ],
+      "check_sql": "",
+      "original_check_sql": ""
+    }
+  ],
+  "coding_not_applicable": "",
+  "review": {
+    "reviewer": "/root",
+    "independent_review": "passed",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Independent manual content review passed within independent_review_scope; engine/browser/release gates separate.",
+    "editorial_record": "Original scenario-led prose and assessments. External originality and AdSense review unperformed.",
+    "canonical_answer_indices_preserved": true,
+    "independent_reviewer": "/root/review_d_and_programs",
+    "independent_review_scope": "Full notes,20MCQs with every option,canonical answer position and explanation,original diagrams,and all exercise contracts/fixtures or solved conceptual labs. Original identities/indices checked against public seed cache where applicable. Reported substantive findings corrected by coordinator and filtered recheck accepted;identified learner-facing spacing polished. Manual technical/editorial reasoning only;engine,provider,browser,external originality and AdSense evidence separate."
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-15-conditional-aggregation",
+    "original_note_sha256": "b4f24a133745fba7fde6afe5b39f3ffcdb1300c93193414f751b5aada8caf692",
+    "status": "drafted; not included in prepared paired migrations"
+  },
+  "notes": "## Compute several measures over one defined population\n\nConditional aggregation combines an aggregate such as SUM, COUNT or AVG with a condition that selects each measure's contribution. It is useful when a report needs several differently qualified columns at the same output grain. Instead of grouping separately by product and returning one row for every region-product pair, a regional report can show Widget and Gadget totals side by side on one row per region.\n\nStart by naming the report population, grouping identity and measure rules. The population might be all approved orders in a date range. The grain might be one row per region. Each measure then decides which eligible rows contribute and how missing values are interpreted. A correct CASE inside SUM cannot repair an upstream join that duplicated every order, so verify the input grain before calculating the report columns.\n\n## Follow the retained Widget and Gadget exercise\n\nThe seeded order fixture contains North Widget amounts two hundred and three hundred, a North Gadget amount one hundred fifty, South Widget one hundred, South Gadget fifty, and East Widget four hundred. Each row is a separate order. Equal amounts would still represent separate contributions; SUM(DISTINCT amount) would change the question by collapsing equal numeric values rather than preserving order identity.\n\n```sql\nSELECT region,\n       SUM(CASE WHEN product='Widget' THEN amount ELSE 0 END)\n         AS widget_total,\n       SUM(CASE WHEN product='Gadget' THEN amount ELSE 0 END)\n         AS gadget_total\nFROM orders\nGROUP BY region\nORDER BY region;\n```\n\nThe ordered output is East 400/0, North 500/150, and South 100/50 for Widget/Gadget totals. East has no Gadget row, but its represented regional group contains a Widget row whose Gadget CASE contributes zero. The query produces one row per represented region, not one row per original order and not one row per region-product pair. It does not create a region absent from the entire input.\n\n## Distinguish global filters from measure filters\n\nWHERE defines which source rows enter the aggregation. A WHERE product='Widget' filter removes Gadget rows before either measure can see them. If the report needs both products, the product distinction belongs inside each measure expression rather than a global Widget-only filter. Global approval or date eligibility can still belong in WHERE when it applies equally to every measure.\n\nHAVING filters groups after their aggregate values are computed logically. A requirement to show only regions with Widget revenue at least five hundred belongs at that level, while a requirement to exclude cancelled orders belongs before grouping. State whether a region with only cancelled orders should disappear or appear with zero through an independently preserved region dimension. Those are different population contracts.\n\n## Understand zero, NULL and empty groups\n\nSUM ignores NULL input expressions but returns NULL when it has no nonnull contribution. An ELSE 0 can give a represented group zero contributions for nonmatching rows. It does not guarantee a nonnull sum in every possible case: if every row matches the condition but every matching amount is NULL, the selected expressions are all NULL. An empty ungrouped aggregate also has no rows from which to obtain an ELSE 0.\n\nDecide whether missing measurements should remain unknown or be interpreted as zero. Applying COALESCE to the final sum expresses one policy; replacing each missing amount before summing expresses another, especially when known-value counts or averages accompany the total. The retained exercise has NOT NULL integer amounts, so its zero-for-absent-product result is well defined. Do not transfer that assumption silently to a nullable production measure.\n\n| Input situation | Conditional expression values | SUM meaning |\n|---|---|---|\n| Represented region, only other products | Zeros through ELSE 0 | Zero selected revenue |\n| All rows match, amounts all NULL | All NULL | Unknown total unless policy replaces it |\n| No rows, ungrouped aggregate | No contributions | NULL sum |\n| No rows, grouped query | No groups | No output row |\n\n## Count qualifying rows with a nullable marker\n\nCOUNT(expression) counts nonnull expression values, including numeric zero. Therefore COUNT(CASE WHEN condition THEN 1 ELSE 0 END) counts every input row, not only matches. Omitting ELSE returns NULL for nonmatches and lets COUNT count the qualifying ones. SUM(CASE WHEN condition THEN 1 ELSE 0 END) is another useful count pattern for represented groups, with empty-input behavior still considered separately.\n\n```sql\nSELECT region,\n       COUNT(CASE WHEN product='Widget' THEN 1 END) AS widget_orders,\n       COUNT(CASE WHEN product='Widget' THEN amount END)\n         AS widget_orders_with_known_amount\nFROM nullable_orders\nGROUP BY region;\n```\n\nThe first count includes every matching Widget row, even if its amount is missing. The second counts only matching rows with known amounts. These columns answer different questions. A row count should not accidentally become a known-value count because a convenient nullable measure was used as its marker. Use a nonnull identifier or constant when the requirement counts qualifying rows.\n\n## Preserve the correct denominator for averages\n\nAVG(CASE WHEN product='Widget' THEN amount END) averages known Widget amounts. Adding ELSE 0 includes non-Widget rows in the denominator and generally lowers the value relative to the intended Widget-only mean. A missing Widget amount remains excluded by AVG unless a separate policy deliberately substitutes a value. Write the denominator in words before choosing the expression.\n\nA weighted rate can require SUM(numerator)/SUM(denominator), not an unweighted average of per-row percentages. Guard an empty or zero denominator with the intended NULL or fallback behavior. Numeric types and scale affect division across dialects, so verify formatting and precision on the target engine. A plausible two-row sample is insufficient when unequal weights or missing values change the intended result.\n\n## Compare portable CASE with dialect-specific FILTER\n\nPostgreSQL supports aggregate FILTER syntax that attaches a condition directly to a measure. Other engines, including some SQLite versions, also support FILTER, so it should not be labeled exclusively PostgreSQL. MySQL 8.4 uses the CASE forms in this lesson rather than that aggregate FILTER spelling. Explicit dialect labels help learners separate a logical reporting technique from the syntax their judge accepts.\n\n```sql\n-- PostgreSQL form; not the MySQL exercise syntax:\nSELECT region,\n       SUM(amount) FILTER (WHERE product='Widget') AS widget_total\nFROM orders\nGROUP BY region;\n```\n\nThis filtered SUM normally returns NULL for a represented group with no qualifying values, whereas the shown CASE with ELSE 0 can return zero. COALESCE can reconcile that difference when zero is the stated requirement. Calling the forms equivalent without checking empty, nonmatching and all-NULL cases can teach a result contract that changes when the query is ported.\n\n## Treat execution claims as measurable hypotheses\n\nPutting several conditional aggregates in one grouped query exposes a compact logical computation. It does not prove one physical table scan under every plan or guarantee a speed improvement over every alternative. Joins, derived relations, optimizer transformations and indexes influence actual work. Inspect EXPLAIN and controlled measurements on representative data before making performance claims.\n\nConditional aggregation is also a small fixed-column pivot. Adding a new product does not automatically add a new output column. The unknown category may contribute to none of the defined measures while still affecting a total or count. Decide whether to include an other measure and a reconciliation total. Dynamic category generation requires an explicitly designed query-generation or reporting layer, not an unexplained promise that CASE discovers new columns.\n\n## Reconcile measures against the source grain\n\nAdd a report-level check that the defined product measures reconcile with the intended total when the category domain is complete. If an Other product is allowed, the two named measures alone need not equal all revenue. A discrepancy can therefore indicate either a missing category policy or duplicated/missing source rows. Inspect identities and category membership before treating every difference as arithmetic failure.\n\nInclude a cancelled order, a negative adjustment and two equal amounts in a teaching fixture when the domain permits them. Explain whether each is eligible and how its sign contributes. A test should challenge the actual policy instead of silently assuming every row is positive, approved and uniquely valued.\n\n## Solve two reporting exercises\n\nFor the beginner task, return every represented region's Widget order count and all-order count. A region with only Gadgets has zero Widget orders and a positive total count. Empty input has no regional rows. Add two equal-valued Widget orders and verify that both count independently; the amount does not define their identity.\n\nFor the retained advanced task, calculate the side-by-side Widget and Gadget sums on both supplied order fixtures. Explain East's zero Gadget total in the original fixture and preserve all original exercise identifiers and setup. Then predict an all-NULL nullable variant without pretending it matches the retained NOT NULL contract. Continue with [CASE](/learning/dbms-sql-tutorial/case), [aggregate functions](/learning/dbms-sql-tutorial/aggregate-functions) and [WHERE versus HAVING](/learning/dbms-sql-tutorial/where-vs-having) to keep contribution, population and group qualification distinct.\n",
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "One regional group can feed several different measures",
+      "description": "Widget and Gadget rows remain in one regional population. Each CASE selects its own contribution; global filtering would remove rows before another measure could use them.",
+      "columns": [
+        "North input",
+        "Widget sum contribution",
+        "Gadget sum contribution"
+      ],
+      "rows": [
+        [
+          "Widget 200",
+          "200",
+          "0"
+        ],
+        [
+          "Gadget 150",
+          "0",
+          "150"
+        ],
+        [
+          "Widget 300",
+          "300",
+          "0"
+        ],
+        [
+          "Regional result",
+          "500",
+          "150"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "technical_review": "Independent manual diagram/content consistency review passed;actual static/browser rendering tracked separately.",
+    "server_rendering": "pending",
+    "browser_rendering": "unverified",
+    "independent_review": "passed"
+  },
+  "sql_verification": {
+    "scope": "not executed; concurrency/recovery/provider verification separate",
+    "all_passed": false,
+    "cases": []
+  }
+}

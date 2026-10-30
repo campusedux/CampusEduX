@@ -1,0 +1,589 @@
+{
+  "source_ref": "chapter-14-sql-functions/conversion-functions",
+  "slug": "conversion-functions",
+  "title": "Conversion Functions",
+  "description": "Learn MySQL CAST, CONVERT and date parsing with explicit input contracts, decimal capacity, null handling and examples that distinguish validation from conversion.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Convert meaning as well as representation\n\nConversion functions ask the database to interpret an expression using another SQL type. A campus payments import might supply amounts as text even though reports need decimal arithmetic. An explicit conversion makes that interpretation visible in the query. It does not establish that every incoming string represents a valid amount, and it does not repair an incorrectly designed storage contract by itself.\n\nBegin by separating three questions: what information arrived, what type the calculation requires, and what should happen when the information cannot be interpreted safely. Changing a value into text for display has different consequences from parsing untrusted text into a date. Both use conversion syntax, but only the second operation introduces a new claim about the meaning of the original characters.\n\n## Use MySQL target types deliberately\n\nThe general form is CAST(expression AS target_type). Although CAST belongs to standard SQL, accepted target type names and detailed behavior differ across engines. MySQL uses SIGNED or UNSIGNED for integer conversion and CHAR for character conversion. Do not copy PostgreSQL INTEGER or SQL Server VARCHAR examples into a MySQL exercise and assume the exact spelling is portable.\n\n```sql\nSELECT CAST('123' AS SIGNED) AS item_count,\n       CAST('19.75' AS DECIMAL(8,2)) AS amount,\n       CAST('2026-04-12' AS DATE) AS event_date,\n       CAST(42 AS CHAR) AS label;\n```\n\nThese inputs intentionally use uncomplicated valid representations. The decimal declaration provides a precision of eight digits with two after the decimal point. Choose that capacity from the domain, rather than choosing an arbitrarily small type because the initial fixture fits. A later value can exceed the intended range even when the first conversion succeeds.\n\n## Distinguish numeric and lexical ordering\n\nText compares under character comparison rules. Numeric values compare by numeric magnitude. With simple digit strings, lexical ordering can put '100' before '20', while numeric ordering puts twenty before one hundred. Leading zeros also carry different information depending on the domain. A room code such as '0012' may be an identifier whose exact text must survive, rather than an integer that should become twelve.\n\nBefore converting a key, ask whether anyone performs arithmetic on it and whether formatting carries identity. Postal codes, telephone numbers and external reference numbers usually need textual storage. Converting them merely because their current examples contain digits can remove meaningful zeros and exclude future letters. Conversion should follow a semantic decision, not a visual guess about the characters.\n\n```sql\nSELECT raw_value, CAST(raw_value AS UNSIGNED) AS numeric_value\nFROM import_counts\nORDER BY numeric_value, raw_value;\n```\n\nThis example assumes import_counts contains already validated nonnegative integer text. The secondary ordering makes equal converted numbers deterministic. Different strings such as '7' and '007' can produce the same numeric value, so the conversion is not necessarily reversible and should not replace the original import evidence.\n\n## Treat malformed input as a validation problem\n\nMySQL can produce a converted value accompanied by a warning when a string is not a clean numeric representation. For example, numeric conversion can consume a valid numeric prefix or produce zero for nonnumeric text. Whether a particular operation is rejected also depends on context, target type and SQL mode. A SELECT conversion and an INSERT into a strict table do not provide interchangeable evidence.\n\nNever teach the universal rule that an invalid cast always raises an error. Equally, never teach that successful statement completion proves a valid value. If your workflow accepts '12books' as twelve, the arithmetic might be numerically plausible while the import contract has already been violated. Validate the entire representation before loading the typed destination, and inspect diagnostics in the environment where the import actually runs.\n\n## Separate accepted syntax from complete validation\n\nA staging table can retain raw values and an application can validate them against a documented grammar before conversion. For a tightly defined amount format, that grammar might allow only a nonnegative integer followed by exactly two fractional digits. Negative values, whitespace, exponent notation, thousands separators and currency symbols then require explicit product decisions rather than accidental acceptance by a conversion routine.\n\n```sql\nSELECT raw_amount,\n       CASE\n         WHEN REGEXP_LIKE(raw_amount, '^[0-9]{1,6}[.][0-9]{2}$')\n          AND NOT REGEXP_LIKE(raw_amount, '[^0-9.]')\n         THEN CAST(raw_amount AS DECIMAL(8,2))\n         ELSE NULL\n       END AS parsed_amount\nFROM staged_amounts;\n```\n\nThe six integer digits match the selected destination capacity. The second predicate rejects every character outside ASCII digits and the decimal point, including a final line terminator that an end anchor can otherwise permit. This narrow example is a policy for a small synthetic import, not a universal money parser. A null result can mean the source was absent or its syntax was rejected. Preserve a separate validation status when those meanings must be distinguished, and retain the raw string for correction instead of silently treating rejection as measured zero.\n\n## Understand nulls and decimal precision\n\nCasting NULL normally yields a null result of the requested type. A null conversion result is not automatically a zero, an empty string or a real calendar date. If a report needs a display fallback, apply that policy after preserving the distinction between missing information and an actual measured value. COALESCE is a separate operation with a separate business purpose.\n\nConverting a decimal into a narrower scale can change its represented value. Conversion into an integer may round or otherwise behave according to the relevant type conversion rules; it is unsafe to infer truncation from the word integer. For an explicit downward or truncation policy, choose the appropriate numeric function and document its behavior for negative values before converting the final result.\n\n## Parse dates without hiding their format\n\nA canonical year-month-day string is easier to interpret consistently than a local slash-separated date. For other documented formats MySQL provides STR_TO_DATE, which takes an explicit format string. Format parsing still requires attention to valid calendar values, SQL mode and version behavior. A date parser should not be presented as proof that every raw date was valid in every engine release.\n\n```sql\nSELECT STR_TO_DATE('18/04/2026', '%d/%m/%Y') AS booking_date;\n```\n\nHere eighteen is the day and four is the month because the format says so. A string such as '04/05/2026' is ambiguous without that contract. Do not let a server locale, a spreadsheet export setting or a developer's home region decide the meaning silently. Store valid dates as dates once accepted; repeatedly parsing presentation strings makes future filtering and validation harder.\n\n## Compare CAST and CONVERT precisely\n\nMySQL supports CONVERT(expression, type), and also CONVERT(expression USING character_set) for character set conversion. SQL Server has a different CONVERT signature and optional style codes. A tutorial should label those engine differences rather than mixing them into one executable example. Converting a character set also differs from merely changing a string's collation or formatting a number for a report.\n\nFor ordinary typed expressions, CAST often communicates the intended target clearly. That readability does not guarantee identical behavior on every database. Review supported targets, numeric boundaries and diagnostics during a migration. Keep formatting at an appropriate presentation boundary when the database still needs to compare, aggregate or index the underlying typed value.\n\n## Inspect boundaries before accepting a parser\n\nA useful conversion fixture includes the smallest and largest permitted magnitudes, a value just beyond capacity, a negative value when negatives are forbidden, and a source null. Add whitespace and a numeric prefix followed by letters to expose permissive parsing. Compare the accepted status with the expected business decision before comparing the numeric result. Two wrong import policies can produce the same total on a friendly fixture. Retain rejected rows for an authorized correction workflow so that a failed conversion cannot silently disappear from the population being reconciled.\n\n## Keep conversions out of unnecessary hot paths\n\nA predicate that converts every stored string may require work for many rows and may prevent an ordinary index on that string from serving the intended typed lookup efficiently. Prefer correctly typed storage and compatible parameter types. When legacy data requires a conversion, measure the real plan and investigate an approved schema improvement separately instead of claiming that every CAST is slow.\n\nContinue with [null functions](/learning/dbms-sql-tutorial/null-functions) to define missing-value policies, and [date functions](/learning/dbms-sql-tutorial/date-functions) for calendar calculations. For review, test valid boundaries, malformed text, null input, preserved identifiers and duplicate converted values. Those cases reveal whether the conversion preserves the domain meaning that the query intends to use.\n",
+  "references": [
+    {
+      "title": "MySQL 8.4 reference manual",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/cast-functions.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-14-conversion-functions",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-14-conversion-functions-1",
+          "test_id": "pt-dbms-sql-14-conversion-functions",
+          "question_text": "What does CAST explicitly declare?",
+          "options": [
+            "The table owner",
+            "The requested result type",
+            "The transaction isolation level",
+            "The physical row order"
+          ],
+          "correct_index": 1,
+          "explanation": "The target type makes the intended interpretation visible.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-14-conversion-functions-2",
+          "test_id": "pt-dbms-sql-14-conversion-functions",
+          "question_text": "Which MySQL target requests a signed integer?",
+          "options": [
+            "VARCHAR(10)",
+            "SIGNED",
+            "BOOL",
+            "INTEGER ARRAY"
+          ],
+          "correct_index": 1,
+          "explanation": "MySQL CAST supports SIGNED as an integer target.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-14-conversion-functions-3",
+          "test_id": "pt-dbms-sql-14-conversion-functions",
+          "question_text": "Which target preserves two fractional decimal places?",
+          "options": [
+            "CHAR(8)",
+            "DATE",
+            "DECIMAL(8,2)",
+            "UNSIGNED"
+          ],
+          "correct_index": 2,
+          "explanation": "The scale specifies fractional digits.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-14-conversion-functions-4",
+          "test_id": "pt-dbms-sql-14-conversion-functions",
+          "question_text": "Why keep a room code such as 0012 as text?",
+          "options": [
+            "Arithmetic always requires zeros",
+            "Leading zeros may carry identity",
+            "Text cannot contain digits",
+            "Integer types preserve original spelling"
+          ],
+          "correct_index": 1,
+          "explanation": "Identifiers need not be numeric measures.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-14-conversion-functions-5",
+          "test_id": "pt-dbms-sql-14-conversion-functions",
+          "question_text": "What is CAST(NULL AS SIGNED)?",
+          "options": [
+            "0",
+            "An empty string",
+            "NULL",
+            "Always an exception"
+          ],
+          "correct_index": 2,
+          "explanation": "Missing input remains missing through the conversion.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-14-conversion-functions-6",
+          "test_id": "pt-dbms-sql-14-conversion-functions",
+          "question_text": "Which rule is safe for malformed numeric strings in MySQL?",
+          "options": [
+            "Every invalid cast always errors",
+            "Every invalid cast always returns NULL",
+            "Behavior can include warnings and depends on context",
+            "Strictness never matters"
+          ],
+          "correct_index": 2,
+          "explanation": "Do not confuse successful execution with valid input.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-14-conversion-functions-7",
+          "test_id": "pt-dbms-sql-14-conversion-functions",
+          "question_text": "Why retain raw imported values?",
+          "options": [
+            "To disable type checks",
+            "To preserve evidence when conversion loses information",
+            "To avoid all validation",
+            "To force numeric sorting"
+          ],
+          "correct_index": 1,
+          "explanation": "A conversion may not be reversible.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-14-conversion-functions-8",
+          "test_id": "pt-dbms-sql-14-conversion-functions",
+          "question_text": "Which function parses a documented noncanonical date format?",
+          "options": [
+            "DATE_FORMAT alone",
+            "STR_TO_DATE",
+            "COUNT",
+            "LAST_INSERT_ID"
+          ],
+          "correct_index": 1,
+          "explanation": "STR_TO_DATE interprets text under a supplied format.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "cx-q-conversion-functions-9",
+          "test_id": "pt-dbms-sql-14-conversion-functions",
+          "question_text": "In %d/%m/%Y, what does %d describe?",
+          "options": [
+            "The day",
+            "The month",
+            "The year",
+            "The time zone"
+          ],
+          "correct_index": 0,
+          "explanation": "The explicit format resolves the date order.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "cx-q-conversion-functions-10",
+          "test_id": "pt-dbms-sql-14-conversion-functions",
+          "question_text": "What does CHAR request in MySQL CAST?",
+          "options": [
+            "A new database",
+            "A character result",
+            "A table constraint",
+            "A binary tree"
+          ],
+          "correct_index": 1,
+          "explanation": "CHAR is a supported character target.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "cx-test-conversion-functions-2",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "cx-q-conversion-functions-11",
+          "test_id": "cx-test-conversion-functions-2",
+          "question_text": "What may happen when two strings convert to the same integer?",
+          "options": [
+            "The table loses a row automatically",
+            "Both casts must fail",
+            "They become equal numerically despite different spelling",
+            "One becomes a different primary key automatically"
+          ],
+          "correct_index": 2,
+          "explanation": "For example 7 and 007 have equal numeric magnitude.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "cx-q-conversion-functions-12",
+          "test_id": "cx-test-conversion-functions-2",
+          "question_text": "Which amount fits the shown six-digit integer grammar?",
+          "options": [
+            "1234567.89",
+            "12books",
+            "12,345.67",
+            "123456.78"
+          ],
+          "correct_index": 3,
+          "explanation": "The grammar permits at most six digits before the decimal point.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "cx-q-conversion-functions-13",
+          "test_id": "cx-test-conversion-functions-2",
+          "question_text": "Why distinguish missing from rejected input?",
+          "options": [
+            "They require different correction and reporting actions",
+            "Both always mean measured zero",
+            "Rejected strings are valid dates",
+            "SQL cannot store status labels"
+          ],
+          "correct_index": 0,
+          "explanation": "A null parsed result can hide multiple causes without a status.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "cx-q-conversion-functions-14",
+          "test_id": "cx-test-conversion-functions-2",
+          "question_text": "Which MySQL CONVERT form changes character set?",
+          "options": [
+            "CONVERT(INT,value,101)",
+            "CONVERT(value USING utf8mb4)",
+            "CONVERT DATABASE value",
+            "CONVERT(value GROUP BY charset)"
+          ],
+          "correct_index": 1,
+          "explanation": "USING introduces the requested character set.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "cx-q-conversion-functions-15",
+          "test_id": "cx-test-conversion-functions-2",
+          "question_text": "Why avoid casting every stored value in a search without review?",
+          "options": [
+            "Every CAST disables every index",
+            "CAST always changes the table schema",
+            "It can add per-row work and complicate index use",
+            "CAST removes duplicate rows"
+          ],
+          "correct_index": 2,
+          "explanation": "Measure the actual plan rather than applying a universal claim.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "cx-q-conversion-functions-16",
+          "test_id": "cx-test-conversion-functions-2",
+          "question_text": "Which type should normally store accepted calendar dates?",
+          "options": [
+            "Unspecified local date text",
+            "An arbitrary integer label",
+            "A formatted currency string",
+            "DATE"
+          ],
+          "correct_index": 3,
+          "explanation": "Typed dates avoid repeated interpretation of display text.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "cx-q-conversion-functions-17",
+          "test_id": "cx-test-conversion-functions-2",
+          "question_text": "What should decide a decimal target capacity?",
+          "options": [
+            "The accepted domain range and scale",
+            "The first sample only",
+            "The heading length",
+            "The current row count"
+          ],
+          "correct_index": 0,
+          "explanation": "Future legitimate values must fit the target.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "cx-q-conversion-functions-18",
+          "test_id": "cx-test-conversion-functions-2",
+          "question_text": "Does standard CAST imply identical target spelling in all engines?",
+          "options": [
+            "Yes, every type name is universal",
+            "No, accepted targets and details differ",
+            "Only if tables are empty",
+            "Only for all text values"
+          ],
+          "correct_index": 1,
+          "explanation": "SQL portability still requires engine-specific review.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "cx-q-conversion-functions-19",
+          "test_id": "cx-test-conversion-functions-2",
+          "question_text": "What should a report do before replacing failed conversions with zero?",
+          "options": [
+            "Assume rejection is a measured zero",
+            "Delete the raw evidence",
+            "Define whether zero is a legitimate fallback",
+            "Change every identifier to an integer"
+          ],
+          "correct_index": 2,
+          "explanation": "Missing information and measured zero are different facts.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "cx-q-conversion-functions-20",
+          "test_id": "cx-test-conversion-functions-2",
+          "question_text": "Which case best tests loss of identifier formatting?",
+          "options": [
+            "Counting all tables",
+            "Sorting already typed dates",
+            "Changing the query alias",
+            "Converting 0007 and comparing retained raw text"
+          ],
+          "correct_index": 3,
+          "explanation": "Leading zeros expose a potentially irreversible transformation.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cx-conversion-clean-amounts",
+      "slug": "conversion-clean-amounts",
+      "title": "Convert validated decimal text",
+      "difficulty": "Easy",
+      "task": "Return row_id and amount as DECIMAL(8,2), ordered by row_id. All fixture amounts already satisfy the import grammar.",
+      "schema_sql": "CREATE TABLE staged_amounts(row_id INT PRIMARY KEY, raw_amount VARCHAR(20));",
+      "seed_sql": "INSERT INTO staged_amounts VALUES (1,'12.50'),(2,'0.00'),(3,'105.25');",
+      "solution_sql": "SELECT row_id, CAST(raw_amount AS DECIMAL(8,2)) AS amount FROM staged_amounts ORDER BY row_id;",
+      "expected": "row_id\tamount\n1\t12.50\n2\t0.00\n3\t105.25",
+      "ordering": "Use explicit ORDER BY when the task requests ordered rows.",
+      "constraints": [
+        "Input strings use the stated grammar; row_id is the stable output key.",
+        "Return numeric DECIMAL(8,2) values, retaining NULL for rejected inputs where requested."
+      ],
+      "edge_cases": [
+        "Empty input emits no data rows.",
+        "Maximum accepted magnitude, zero-padded values and explicit malformed inputs are covered by the supplied cases."
+      ],
+      "hints": [
+        "Convert the validated representation without introducing formatting text."
+      ],
+      "explanation": "Convert the validated representation without introducing formatting text.",
+      "validation_cases": [
+        {
+          "name": "empty input",
+          "seed_sql": "",
+          "expected": ""
+        },
+        {
+          "name": "zero padding and capacity boundary",
+          "seed_sql": "INSERT INTO staged_amounts VALUES (1,'999999.99'),(2,'000.25'),(3,'0.00');",
+          "expected": "row_id\tamount\n1\t999999.99\n2\t0.25\n3\t0.00"
+        }
+      ]
+    },
+    {
+      "id": "cx-conversion-reject-malformed",
+      "slug": "conversion-reject-malformed",
+      "title": "Separate accepted and rejected amounts",
+      "difficulty": "Medium",
+      "task": "Return row_id and parsed_amount, ordered by row_id. Accept only one to six digits, a decimal point and exactly two digits. Return NULL otherwise.",
+      "schema_sql": "CREATE TABLE staged_amounts(row_id INT PRIMARY KEY, raw_amount VARCHAR(20));",
+      "seed_sql": "INSERT INTO staged_amounts VALUES (1,'12.50'),(2,'12books'),(3,NULL),(4,'1234567.89'),(5,'000.25');",
+      "solution_sql": "SELECT row_id, CASE WHEN REGEXP_LIKE(raw_amount,'^[0-9]{1,6}[.][0-9]{2}$') AND NOT REGEXP_LIKE(raw_amount,'[^0-9.]') THEN CAST(raw_amount AS DECIMAL(8,2)) ELSE NULL END AS parsed_amount FROM staged_amounts ORDER BY row_id;",
+      "expected": "row_id\tparsed_amount\n1\t12.50\n2\tNULL\n3\tNULL\n4\tNULL\n5\t0.25",
+      "ordering": "Use explicit ORDER BY when the task requests ordered rows.",
+      "constraints": [
+        "Input strings use the stated grammar; row_id is the stable output key.",
+        "Return numeric DECIMAL(8,2) values, retaining NULL for rejected inputs where requested."
+      ],
+      "edge_cases": [
+        "Empty input emits no data rows.",
+        "Maximum accepted magnitude, zero-padded values and explicit malformed inputs are covered by the supplied cases."
+      ],
+      "hints": [
+        "Validate the entire permitted representation before numeric interpretation."
+      ],
+      "explanation": "Validate the entire permitted representation before numeric interpretation.",
+      "validation_cases": [
+        {
+          "name": "empty input",
+          "seed_sql": "",
+          "expected": ""
+        },
+        {
+          "name": "capacity signs whitespace null and final line break",
+          "seed_sql": "INSERT INTO staged_amounts VALUES (1,'999999.99'),(2,'1000000.00'),(3,'-1.00'),(4,' 1.00'),(5,'1.00 '),(6,NULL),(7,'000.25'),(8,CONCAT('1.00',CHAR(10))),(9,'1e2'),(10,'1.00x');",
+          "expected": "row_id\tparsed_amount\n1\t999999.99\n2\tNULL\n3\tNULL\n4\tNULL\n5\tNULL\n6\tNULL\n7\t0.25\n8\tNULL\n9\tNULL\n10\tNULL"
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-14-conversion-functions-1",
+      "test_id": "pt-dbms-sql-14-conversion-functions",
+      "question_text": "What does CAST('123' AS INTEGER) return?",
+      "options": [
+        "The string '123' unchanged",
+        "The integer 123",
+        "NULL",
+        "An error"
+      ],
+      "correct_index": 1,
+      "explanation": "CAST converts the numeric-looking string '123' into a true integer value, 123.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-14-conversion-functions-2",
+      "test_id": "pt-dbms-sql-14-conversion-functions",
+      "question_text": "Which function/syntax is standard SQL and portable across most major database engines?",
+      "options": [
+        "CONVERT()",
+        "CAST(expr AS type)",
+        "TO_TYPE()",
+        "TRANSFORM()"
+      ],
+      "correct_index": 1,
+      "explanation": "CAST(expression AS target_type) is standard SQL, supported identically across PostgreSQL, MySQL, SQL Server, Oracle, and SQLite.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-14-conversion-functions-3",
+      "test_id": "pt-dbms-sql-14-conversion-functions",
+      "question_text": "Which database's CONVERT() function places the target type as the FIRST argument, unlike CAST?",
+      "options": [
+        "MySQL",
+        "PostgreSQL",
+        "SQL Server",
+        "SQLite"
+      ],
+      "correct_index": 2,
+      "explanation": "SQL Server's CONVERT(type, expression) puts the type first, in reversed order compared to CAST(expression AS type).",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-14-conversion-functions-4",
+      "test_id": "pt-dbms-sql-14-conversion-functions",
+      "question_text": "What extra capability does SQL Server's CONVERT() offer that CAST() does not?",
+      "options": [
+        "The ability to convert NULL values",
+        "An optional 'style' argument for formatting output, commonly used with dates",
+        "The ability to convert between numeric types only",
+        "Automatic error suppression on invalid input"
+      ],
+      "correct_index": 1,
+      "explanation": "SQL Server's CONVERT() accepts a third, optional style argument that controls output formatting (especially for dates), a feature standard CAST does not have.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-14-conversion-functions-5",
+      "test_id": "pt-dbms-sql-14-conversion-functions",
+      "question_text": "What happens when you run CAST('abc' AS INTEGER)?",
+      "options": [
+        "It returns 0",
+        "It returns NULL",
+        "It raises a conversion error",
+        "It returns the ASCII code of 'a'"
+      ],
+      "correct_index": 2,
+      "explanation": "'abc' is not a valid numeric string, so attempting to CAST it to INTEGER raises a conversion error in virtually every SQL dialect.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-14-conversion-functions-6",
+      "test_id": "pt-dbms-sql-14-conversion-functions",
+      "question_text": "What does CAST(NULL AS INTEGER) return?",
+      "options": [
+        "0",
+        "An error",
+        "A typed NULL value",
+        "The string 'NULL'"
+      ],
+      "correct_index": 2,
+      "explanation": "Casting NULL to any type succeeds and simply produces a NULL of that target type — there's no value to convert, so no error occurs.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-14-conversion-functions-7",
+      "test_id": "pt-dbms-sql-14-conversion-functions",
+      "question_text": "Which SQL Server function returns NULL instead of raising an error when a conversion fails on invalid input?",
+      "options": [
+        "SAFE_CAST()",
+        "TRY_CAST()",
+        "NULL_CAST()",
+        "SOFT_CONVERT()"
+      ],
+      "correct_index": 1,
+      "explanation": "SQL Server's TRY_CAST() (and TRY_CONVERT()) attempts the conversion and returns NULL on failure instead of throwing an error, which is useful for cleaning messy data.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-14-conversion-functions-8",
+      "test_id": "pt-dbms-sql-14-conversion-functions",
+      "question_text": "Why might relying on implicit type conversion (instead of an explicit CAST) be risky in a WHERE clause comparing a column to a literal?",
+      "options": [
+        "Implicit conversion is not supported by any engine",
+        "It can silently produce unexpected results and, on some engines, prevent efficient index usage on that column",
+        "It always causes a syntax error",
+        "It converts every value to VARCHAR regardless of context"
+      ],
+      "correct_index": 1,
+      "explanation": "Implicit conversion can behave unpredictably across engines and data, and in some cases keeps the query planner from using an index efficiently on the converted column — explicit CAST makes intent clear and behavior predictable.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "worker_3",
+    "independent_review": "passed",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "independent editorial and predicted fixture review passed after additional boundary fixtures",
+    "canonical_answer_indices_preserved": true,
+    "editorial_record": "Original prose and assessments; seeded identities and answer positions retained. No external originality clearance.",
+    "independent_reviewer": "/root",
+    "independent_review_scope": "Full notes, 20 MCQs/options/explanations, both exercises with six manually traced sample/alternative fixtures and table diagram; input-boundary corrections verified statically. Exact MySQL execution pending."
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-14-conversion-functions",
+    "original_note_sha256": "080ae057c440169cda7afa1f0fe3c013488b028bcd55a187fabc2dd578c9fcf5",
+    "status": "drafted; not included in prepared paired migrations"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Representation can change meaning",
+      "description": "Text that looks numeric may be a measure or an identifier; only the intended domain decides.",
+      "columns": [
+        "Raw value",
+        "Domain",
+        "Treatment"
+      ],
+      "rows": [
+        [
+          "0012",
+          "Room identifier",
+          "Preserve text"
+        ],
+        [
+          "12.50",
+          "Validated amount",
+          "DECIMAL(8,2)"
+        ],
+        [
+          "12books",
+          "Malformed amount",
+          "Reject under stated grammar"
+        ],
+        [
+          "NULL",
+          "Missing amount",
+          "Preserve missing status"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "coordinator independent manual review passed",
+    "server_rendering": "passed",
+    "browser_rendering": "unverified",
+    "independent_review": "passed",
+    "server_rendering_evidence": "2026-10-29 full Vitest:1310 passed/12 skipped; actual LessonBlock/TopicDiagrams render over230 packages. Browser visual QA remains unverified."
+  },
+  "authoring_status": "drafted; verification pending",
+  "sql_verification": {
+    "scope": "not executed; exact MySQL/provider execution pending",
+    "all_passed": false,
+    "cases": []
+  }
+}

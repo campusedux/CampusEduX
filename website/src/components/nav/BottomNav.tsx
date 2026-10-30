@@ -17,7 +17,7 @@ export function BottomNav() {
 
   return (
     <nav
-      className="fixed inset-x-0 bottom-0 z-40 flex border-t border-line/70 bg-card/90 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl md:hidden"
+      className="fixed inset-x-0 bottom-0 z-bottom-nav flex h-[calc(var(--bottom-nav-height)+env(safe-area-inset-bottom))] gap-2 border-t border-line/70 bg-card/95 pb-[env(safe-area-inset-bottom)] pl-[max(0.25rem,env(safe-area-inset-left))] pr-[max(0.25rem,env(safe-area-inset-right))] backdrop-blur-xl md:hidden"
       aria-label="Primary"
     >
       {BOTTOM_TABS.map((tab) => {
@@ -29,17 +29,17 @@ export function BottomNav() {
             href={tab.href}
             aria-current={active ? "page" : undefined}
             className={cn(
-              "flex flex-1 flex-col items-center gap-0.5 pb-1.5 pt-1.5 text-[11px] font-semibold transition-colors",
-              active ? "text-primary" : "text-ink-muted hover:text-ink",
+              "flex min-h-11 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-lg px-1 py-1 text-[11px] leading-4 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary",
+              active ? "font-bold text-primary" : "font-medium text-ink-muted hover:text-ink",
             )}
           >
             <span
               className={cn(
-                "flex h-7 w-12 items-center justify-center rounded-full transition-colors",
-                active && "bg-primary-50",
+                "flex h-7 w-11 items-center justify-center rounded-lg transition-colors",
+                active && "bg-primary/10 ring-1 ring-inset ring-primary/20 dark:bg-primary/20",
               )}
             >
-              <Icon className="h-5 w-5" strokeWidth={active ? 2.4 : 2} aria-hidden />
+              <Icon className="h-5 w-5" strokeWidth={2} aria-hidden />
             </span>
             {tab.label}
           </Link>

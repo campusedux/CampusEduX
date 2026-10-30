@@ -1,0 +1,618 @@
+{
+  "source_ref": "chapter-6-er-and-eer-modeling/aggregation",
+  "slug": "aggregation",
+  "title": "Aggregation",
+  "description": "Treat a specific enrollment association as a participant in monitoring, preserve its independent identity, and map references without inventing student-course combinations.",
+  "dialect": "MySQL 8.4",
+  "notes": "## An association can become the subject of another fact\n\nAggregation in EER modeling allows a relationship and its participants to be treated as a higher-level unit for another relationship. In a campus example, Student enrolls in Course, and Faculty monitors that specific enrollment. The monitoring assignment concerns the particular student-course participation, not simply the student independently or the course independently. Aggregation makes that distinction explicit in the conceptual model.\n\nThis use of aggregation is different from SQL aggregate functions such as SUM and COUNT. Both terms involve collecting information in some sense, but they solve different problems. EER aggregation abstracts an association occurrence so it can participate in further facts. SQL aggregation calculates grouped results over rows. A monitoring model can use EER aggregation even when its implementation never calculates a numeric total.\n\n## Begin with the fact being monitored\n\nSuppose Student 17 is enrolled in Course 10 and Course 20. Student 24 is enrolled in Course 10. Faculty 7 monitors Student 17's enrollment in Course 10, while Faculty 9 monitors Student 24's enrollment in Course 10. Nothing in those facts says Faculty 7 monitors Student 17 in every course or every student enrolled in Course 10.\n\nThe enrollment population exists independently of monitoring under this example's policy. Student 17's Course 20 enrollment can remain unmonitored. That fact still has its participants and any enrollment-specific properties such as status or score. The higher-level relationship adds a particular monitoring connection without replacing or manufacturing the original enrollment association.\n\n## Separate independent links from a joint association\n\nA Faculty-Student relationship and a Faculty-Course relationship would not necessarily identify which enrollment is monitored. If Faculty 7 is linked to Student 17 and to Courses 10 and 20 through separate facts, inferring both monitored enrollments would be unjustified unless the domain explicitly defines that combination rule. The association occurrence is the actual subject of monitoring.\n\nAn ordinary ternary representation can express some related joint facts, but its constraints must preserve the intended existence dependency on Enrollment. Merely storing faculty_id, student_id, and course_id together does not automatically require the student-course pair to be an existing enrollment. The key question is which facts are independently meaningful and which references or dependencies the mapping must enforce.\n\n## Diagram boundaries communicate abstraction\n\nIn a common EER presentation, a boundary groups Student, the EnrollsIn relationship, and Course. A further Monitors relationship connects Faculty to that aggregated unit. Exact boundary styling varies by notation, so a dashed box is a convention used by some diagrams rather than a universal physical schema requirement. Explain what is grouped and which occurrence the higher-level link names.\n\nThe grouping is not a subtype hierarchy. It does not say Enrollment is a kind of Faculty or Student is a kind of Course. Generalization and specialization express is-a relationships between entity types. Aggregation instead lets an association be treated as a referenceable unit in a further relationship. Keeping those meanings separate prevents similar-looking diagram abstractions from being mapped as interchangeable structures.\n\n## Give the association a complete identity\n\nIf the policy permits one current enrollment per student-course pair, that pair can identify Enrollment. A separate enrollment_id can also serve as a convenient identity while the required pair uniqueness remains protected. If repeated attempts or offerings are distinct, the identity needs the appropriate additional role or occurrence identifier. Define that grain before linking any monitor.\n\nThe exercises use enrollment_id to identify one recorded enrollment occurrence and retain student_id and course_id as its participants. That avoids assuming a course catalogue pair uniquely identifies every historical attempt. Monitoring rows refer to the chosen enrollment identity. Different enrollment identifiers must still reflect the intended domain facts; surrogate identity alone does not validate contradictory or duplicate business participation.\n\n## Choose the monitoring multiplicity deliberately\n\nThe model can allow several faculty monitors per enrollment, one monitor per enrollment, or another explicit policy. Aggregation itself does not select among those maximums or require every enrollment to have a monitor. The example allows zero or several monitors, with one membership per faculty-enrollment pair. That makes an enrollment with no monitor a valid and useful report case.\n\nA junction relation Monitoring(faculty_id, enrollment_id) can represent those memberships. A combined key can prevent the same monitor membership being repeated while permitting different faculty members for one enrollment. A scalar faculty_id column directly on Enrollment would instead limit the representation to one stored monitor at a time. That alternative can fit another policy, but it is not a universally correct aggregation mapping.\n\n## Preserve the original association through references\n\nA supported foreign key from Monitoring.enrollment_id to Enrollment can protect existence of the original association. A separate faculty reference can protect monitor identity. Required values and membership uniqueness address other parts of the contract. These rules should be named individually rather than treating the abstraction boundary as executable validation.\n\n```sql\nSELECT m.faculty_id, e.enrollment_id, e.student_id, e.course_id\nFROM monitoring m\nJOIN enrollments e ON e.enrollment_id = m.enrollment_id\nORDER BY m.faculty_id, e.enrollment_id;\n```\n\nThe query follows actual enrollment identities and does not form arbitrary student-course combinations from independent links. It lists one monitoring membership per matching fact under the supplied keys. A repeated student in several rows can be correct because that student has several enrollment occurrences or those enrollments have different monitors.\n\n## Relationship properties stay at their own grain\n\nEnrollment can own a score, registration date, and enrollment status. Monitoring can own an assignment date or review status if the domain requires those properties for each monitor-enrollment connection. A review comment should not become the student's universal comment merely because the monitoring query displays the student's name alongside it.\n\nIf the same faculty member can perform several distinct review events for one enrollment, a current membership pair may no longer identify each event. A review occurrence identifier or a defined time/version component can be needed. Distinguish ongoing assignment from individual review history. Aggregation provides an abstraction, while the actual fact grain determines which identities and properties must be preserved.\n\n## Reporting can preserve unmonitored enrollments\n\nA report asking for all enrollments and their monitor counts must start from Enrollment and preserve rows with no matching Monitoring membership. Count a nonmissing monitor identity or membership key so an unmatched preserved row contributes zero. COUNT(*) can incorrectly report one monitor for an enrollment with no monitoring rows under that join.\n\nThe result should retain enrollment_id, student_id, and course_id when those are part of its stated output contract. Grouping only by course_id would combine many student participation occurrences. Grouping only by student_id would combine that student's different courses or attempts. An apparently reasonable total can answer the wrong question if the aggregation grain is not the particular association being monitored.\n\n## Lifecycle rules protect dependent facts\n\nRemoving an enrollment can affect monitoring assignments that refer to it. A real schema needs a deliberate supported restriction, cascade, retention, or other authorized lifecycle design consistent with its references. Aggregation does not automatically choose a deletion action. Retained review history may require keeping an archived enrollment identity rather than deleting every related fact.\n\nLikewise, reassigning a monitor is a domain operation with authorization requirements. Knowing faculty_id and enrollment_id does not grant permission to create or change the monitoring membership. The learning fixtures use synthetic records and verify query meaning, not production authority. A correct relational join and a safe application write boundary need different evidence.\n\n## Validate the abstraction with counterexamples\n\nUse one student in two courses, another student in one of those courses, an unmonitored enrollment, and several monitors for one enrollment. Confirm that the query neither invents monitoring for the other course nor collapses different enrollment identities. Repeated names should not alter association matching because the mapping follows identifiers.\n\nThe exercises verify monitoring membership and zero-inclusive enrollment summaries on isolated SQL data. Temporary mirrors do not themselves execute native participant-reference constraints, and MariaDB results remain distinct from exact MySQL/provider verification. A useful aggregation explanation makes the association occurrence, its independent existence, higher-level participants, and chosen multiplicity explicit. That preserves the meaning of monitoring a particular fact rather than vaguely linking its participants and hoping their combinations imply the intended relationship.\n",
+  "references": [],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-6-aggregation",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-6-aggregation-1",
+          "test_id": "pt-dbms-sql-6-aggregation",
+          "question_text": "What problem does aggregation solve in EER modeling?",
+          "options": [
+            "It merges two similar entity sets that share attributes into one",
+            "It lets an entire relationship (with its connected entities) be treated as a higher-level entity so a third entity set can relate to it",
+            "It restricts the values an attribute can take",
+            "It converts a weak entity into a strong entity"
+          ],
+          "correct_index": 1,
+          "explanation": "Aggregation elevates a relationship into an entity-like construct so it can itself participate in further relationships.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-6-aggregation-2",
+          "test_id": "pt-dbms-sql-6-aggregation",
+          "question_text": "In the example of Faculty needing to be linked to a specific (Student, Course) enrollment pairing, why is aggregation used instead of connecting Faculty directly to Student and Course separately?",
+          "options": [
+            "Because Faculty cannot have relationships to Student or Course at all",
+            "Because Faculty needs to relate specifically to the enrollment combination as a whole, not independently to any Student or any Course",
+            "Because aggregation is required whenever three entity sets exist in a schema",
+            "Because Student and Course are weak entities"
+          ],
+          "correct_index": 1,
+          "explanation": "The intended meaning is tied to the specific enrollment instance, which aggregation captures by treating Enrolls_In as a unit.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-6-aggregation-3",
+          "test_id": "pt-dbms-sql-6-aggregation",
+          "question_text": "In the EER aggregation convention used here, what does a boundary around Student, EnrollsIn and Course communicate?",
+          "options": [
+            "As a double-line diamond",
+            "The enrollment association is treated as a unit for a further relationship; boundary styling depends on the notation",
+            "As an ISA triangle",
+            "As a double-line rectangle"
+          ],
+          "correct_index": 1,
+          "explanation": "The semantic grouping matters; a dashed boundary is one drawing convention, not a universal database implementation.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-6-aggregation-4",
+          "test_id": "pt-dbms-sql-6-aggregation",
+          "question_text": "Which statement correctly distinguishes aggregation from generalization/specialization?",
+          "options": [
+            "They are the same EER concept under different names",
+            "Aggregation abstracts an association occurrence; generalization and specialization express an is-a hierarchy",
+            "Generalization is only used with weak entities; aggregation is only used with strong entities",
+            "Aggregation always requires a recursive relationship"
+          ],
+          "correct_index": 1,
+          "explanation": "The abstractions have different purposes and must preserve their respective identity meanings.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-6-aggregation-5",
+          "test_id": "pt-dbms-sql-6-aggregation",
+          "question_text": "Why can't the basic ER model directly connect a relationship diamond to another relationship diamond?",
+          "options": [
+            "Because relationships can only connect to entity sets, not to other relationships, in the basic ER model — aggregation is specifically introduced to work around this limitation",
+            "Because diamonds can only have one line coming out of them",
+            "Because relationships never have cardinality",
+            "Because this is actually allowed without needing aggregation"
+          ],
+          "correct_index": 0,
+          "explanation": "The basic ER model restricts relationships to connecting entity sets; aggregation is the EER extension that allows a relationship to be treated like an entity so it can connect further.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-6-aggregation-6",
+          "test_id": "pt-dbms-sql-6-aggregation",
+          "question_text": "In relational mapping, how is an aggregation-derived relationship (like Monitored_By) typically implemented?",
+          "options": [
+            "It is discarded entirely since aggregation cannot be mapped to tables",
+            "By referencing the key of the junction table that already represents the aggregated relationship (e.g., the Enrollment table's key), treating its rows as referenceable entities",
+            "By duplicating all attributes of Student and Course into a new table",
+            "By making Faculty a weak entity"
+          ],
+          "correct_index": 1,
+          "explanation": "The aggregated relationship's table (e.g., Enrollment) becomes referenceable, letting the new relationship point to specific enrollment rows.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-6-aggregation-7",
+          "test_id": "pt-dbms-sql-6-aggregation",
+          "question_text": "Would a plain ternary relationship (Faculty, Student, Course) capture exactly the same meaning as the aggregation example?",
+          "options": [
+            "Yes, they are always semantically identical",
+            "Not automatically; the mapping must preserve that monitoring refers to an existing enrollment association, not merely arbitrary participant triples",
+            "No, because ternary relationships cannot involve Faculty",
+            "No, because ternary relationships require weak entities"
+          ],
+          "correct_index": 1,
+          "explanation": "A ternary encoding can carry additional constraints, but its column list alone does not preserve the original association dependency.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-6-aggregation-8",
+          "test_id": "pt-dbms-sql-6-aggregation",
+          "question_text": "Which everyday phrase best captures the core idea of aggregation?",
+          "options": [
+            "'Is-a' relationship between similar entity sets",
+            "'Has-a' composition of sub-attributes",
+            "'Treating a relationship as a thing' so it can have its own further relationships",
+            "'One entity depends on another for identity'"
+          ],
+          "correct_index": 2,
+          "explanation": "Aggregation is memorably summarized as relationship-as-entity, distinct from is-a (generalization) or dependency (weak entity/identifying relationship).",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-6-aggregation-new-9",
+          "test_id": "pt-dbms-sql-6-aggregation",
+          "question_text": "Does Faculty 7 monitoring Student 17 in Course 10 imply monitoring that student in Course 20?",
+          "options": [
+            "Yes; every monitor is global to the student",
+            "No; the particular enrollment matters",
+            "Only if titles match",
+            "Only if the query is sorted"
+          ],
+          "correct_index": 1,
+          "explanation": "Independent participant links do not establish every combination.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-6-aggregation-new-10",
+          "test_id": "pt-dbms-sql-6-aggregation",
+          "question_text": "Is EER aggregation the same operation as SQL SUM?",
+          "options": [
+            "Yes; every aggregation totals numbers",
+            "Only if no faculty exists",
+            "No; association abstraction and numeric calculation are different concepts",
+            "Only if rows are grouped"
+          ],
+          "correct_index": 2,
+          "explanation": "The term has distinct modeling and query uses.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-6-aggregation-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-6-aggregation-application-new-1",
+          "test_id": "pt-dbms-sql-6-aggregation-application",
+          "question_text": "What must a monitor reference identify under the exercise mapping?",
+          "options": [
+            "Only a student name",
+            "Only a course title",
+            "The intended enrollment_id",
+            "Only a displayed row position"
+          ],
+          "correct_index": 2,
+          "explanation": "The specific participation occurrence is the monitoring subject.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-6-aggregation-application-new-2",
+          "test_id": "pt-dbms-sql-6-aggregation-application",
+          "question_text": "Does aggregation itself require exactly one monitor per enrollment?",
+          "options": [
+            "Yes; every aggregate has one owner",
+            "Only if there are two courses",
+            "Only if scores are present",
+            "No; multiplicity needs a separate policy"
+          ],
+          "correct_index": 3,
+          "explanation": "The abstraction does not choose maximum or minimum participation.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-6-aggregation-application-new-3",
+          "test_id": "pt-dbms-sql-6-aggregation-application",
+          "question_text": "Which mapping supports several monitors per enrollment?",
+          "options": [
+            "A Monitoring relation containing faculty-enrollment memberships",
+            "One scalar faculty_id with no other representation",
+            "A unique student name only",
+            "A course description field"
+          ],
+          "correct_index": 0,
+          "explanation": "The relation can preserve the many-side memberships.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-6-aggregation-application-new-4",
+          "test_id": "pt-dbms-sql-6-aggregation-application",
+          "question_text": "Why can a scalar faculty_id on Enrollment be insufficient?",
+          "options": [
+            "It always creates all possible monitors",
+            "It limits stored monitoring to one value under that mapping",
+            "It prevents enrollment identity",
+            "It proves every faculty member exists"
+          ],
+          "correct_index": 1,
+          "explanation": "Its suitability depends on the required multiplicity.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-6-aggregation-application-new-5",
+          "test_id": "pt-dbms-sql-6-aggregation-application",
+          "question_text": "Where can an enrollment-specific score belong?",
+          "options": [
+            "As the universal faculty score",
+            "On the student name",
+            "On the enrollment occurrence",
+            "On a diagram boundary"
+          ],
+          "correct_index": 2,
+          "explanation": "Attribute ownership follows the fact grain.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-6-aggregation-application-new-6",
+          "test_id": "pt-dbms-sql-6-aggregation-application",
+          "question_text": "What can distinguish repeated review events by the same faculty member?",
+          "options": [
+            "Only the current membership pair always",
+            "An unrelated display alias",
+            "The largest course title",
+            "A defined event identity or appropriate additional occurrence component"
+          ],
+          "correct_index": 3,
+          "explanation": "Assignment membership and review history can have different identities.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-6-aggregation-application-new-7",
+          "test_id": "pt-dbms-sql-6-aggregation-application",
+          "question_text": "How should an all-enrollment monitor summary handle unmonitored rows?",
+          "options": [
+            "Preserve them and count actual nonmissing memberships as zero",
+            "Invent one monitor with COUNT(*)",
+            "Delete their enrollment facts",
+            "Match any faculty teaching the course"
+          ],
+          "correct_index": 0,
+          "explanation": "The population includes valid unmonitored associations.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-6-aggregation-application-new-8",
+          "test_id": "pt-dbms-sql-6-aggregation-application",
+          "question_text": "Does a diagram boundary implement foreign-key enforcement?",
+          "options": [
+            "Yes; drawing it prevents invalid writes",
+            "No; actual supported constraints need their own definition and tests",
+            "Only if dashed",
+            "Only if double-lined"
+          ],
+          "correct_index": 1,
+          "explanation": "Conceptual communication and runtime enforcement differ.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-6-aggregation-application-new-9",
+          "test_id": "pt-dbms-sql-6-aggregation-application",
+          "question_text": "What should guide owner-association deletion consequences?",
+          "options": [
+            "A universal automatic CASCADE rule",
+            "The diagram font",
+            "The explicit lifecycle and retention policy",
+            "The number of selected columns"
+          ],
+          "correct_index": 2,
+          "explanation": "Aggregation does not dictate every referential action.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-6-aggregation-application-new-10",
+          "test_id": "pt-dbms-sql-6-aggregation-application",
+          "question_text": "Which fixture exposes arbitrary pairwise inference?",
+          "options": [
+            "Only one enrollment and monitor",
+            "Only a blank table",
+            "Only a unique faculty name",
+            "One student enrolled in two courses but monitored in only one"
+          ],
+          "correct_index": 3,
+          "explanation": "The report must retain the exact monitored association.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cx-aggregation-memberships",
+      "slug": "aggregation-memberships",
+      "title": "List the enrollment associations actually monitored",
+      "difficulty": "Easy",
+      "task": "Return faculty_id, enrollment_id, student_id and course_id for each matching monitoring membership. Do not invent other enrollments for the same student.",
+      "schema_sql": "CREATE TABLE enrollments (enrollment_id INT PRIMARY KEY, student_id INT NOT NULL, course_id INT NOT NULL);\nCREATE TABLE monitoring (faculty_id INT NOT NULL, enrollment_id INT NOT NULL, PRIMARY KEY(faculty_id,enrollment_id));",
+      "seed_sql": "INSERT INTO enrollments VALUES (1,17,10),(2,17,20),(3,24,10); INSERT INTO monitoring VALUES (7,1),(9,3),(8,1);",
+      "expected": "faculty_id\tenrollment_id\tstudent_id\tcourse_id\n7\t1\t17\t10\n8\t1\t17\t10\n9\t3\t24\t10",
+      "ordering": "Memberships sort by faculty_id, enrollment_id; summaries by enrollment_id.",
+      "constraints": [
+        "All supplied monitoring references match enrollments.",
+        "Temporary mirrors demonstrate query semantics, not native participant-reference enforcement or production monitoring authority."
+      ],
+      "edge_cases": [
+        "A student can have several distinct enrollments.",
+        "An enrollment can have no monitor or several monitors."
+      ],
+      "hints": [
+        "Follow enrollment_id rather than independent student/course combinations.",
+        "Preserve enrollment identities and count actual memberships."
+      ],
+      "solution_sql": "SELECT m.faculty_id, e.enrollment_id, e.student_id, e.course_id FROM monitoring m JOIN enrollments e ON e.enrollment_id = m.enrollment_id ORDER BY m.faculty_id, e.enrollment_id;",
+      "explanation": "The report treats the recorded enrollment association as the subject of monitoring and preserves its complete occurrence identity.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO enrollments VALUES (1,17,10),(2,17,20); INSERT INTO monitoring VALUES (7,2);",
+          "expected": "faculty_id\tenrollment_id\tstudent_id\tcourse_id\n7\t2\t17\t20"
+        },
+        {
+          "seed_sql": "INSERT INTO enrollments VALUES (1,17,10);",
+          "expected": ""
+        }
+      ]
+    },
+    {
+      "id": "cx-aggregation-counts",
+      "slug": "aggregation-counts",
+      "title": "Preserve unmonitored enrollment occurrences",
+      "difficulty": "Medium",
+      "task": "Return every enrollment_id, student_id, course_id and monitor_count. An enrollment with no monitoring membership has count zero.",
+      "schema_sql": "CREATE TABLE enrollments (enrollment_id INT PRIMARY KEY, student_id INT NOT NULL, course_id INT NOT NULL);\nCREATE TABLE monitoring (faculty_id INT NOT NULL, enrollment_id INT NOT NULL, PRIMARY KEY(faculty_id,enrollment_id));",
+      "seed_sql": "INSERT INTO enrollments VALUES (1,17,10),(2,17,20),(3,24,10); INSERT INTO monitoring VALUES (7,1),(8,1),(9,3);",
+      "expected": "enrollment_id\tstudent_id\tcourse_id\tmonitor_count\n1\t17\t10\t2\n2\t17\t20\t0\n3\t24\t10\t1",
+      "ordering": "Memberships sort by faculty_id, enrollment_id; summaries by enrollment_id.",
+      "constraints": [
+        "All supplied monitoring references match enrollments.",
+        "Temporary mirrors demonstrate query semantics, not native participant-reference enforcement or production monitoring authority."
+      ],
+      "edge_cases": [
+        "A student can have several distinct enrollments.",
+        "An enrollment can have no monitor or several monitors."
+      ],
+      "hints": [
+        "Follow enrollment_id rather than independent student/course combinations.",
+        "Preserve enrollment identities and count actual memberships."
+      ],
+      "solution_sql": "SELECT e.enrollment_id, e.student_id, e.course_id, COUNT(m.faculty_id) AS monitor_count FROM enrollments e LEFT JOIN monitoring m ON m.enrollment_id = e.enrollment_id GROUP BY e.enrollment_id, e.student_id, e.course_id ORDER BY e.enrollment_id;",
+      "explanation": "The report treats the recorded enrollment association as the subject of monitoring and preserves its complete occurrence identity.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO enrollments VALUES (2,17,20),(1,17,10);",
+          "expected": "enrollment_id\tstudent_id\tcourse_id\tmonitor_count\n1\t17\t10\t0\n2\t17\t20\t0"
+        },
+        {
+          "seed_sql": "",
+          "expected": ""
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-6-aggregation-1",
+      "test_id": "pt-dbms-sql-6-aggregation",
+      "question_text": "What problem does aggregation solve in EER modeling?",
+      "options": [
+        "It merges two similar entity sets that share attributes into one",
+        "It lets an entire relationship (with its connected entities) be treated as a higher-level entity so a third entity set can relate to it",
+        "It restricts the values an attribute can take",
+        "It converts a weak entity into a strong entity"
+      ],
+      "correct_index": 1,
+      "explanation": "Aggregation elevates a relationship into an entity-like construct so it can itself participate in further relationships.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-6-aggregation-2",
+      "test_id": "pt-dbms-sql-6-aggregation",
+      "question_text": "In the example of Faculty needing to be linked to a specific (Student, Course) enrollment pairing, why is aggregation used instead of connecting Faculty directly to Student and Course separately?",
+      "options": [
+        "Because Faculty cannot have relationships to Student or Course at all",
+        "Because Faculty needs to relate specifically to the enrollment combination as a whole, not independently to any Student or any Course",
+        "Because aggregation is required whenever three entity sets exist in a schema",
+        "Because Student and Course are weak entities"
+      ],
+      "correct_index": 1,
+      "explanation": "The intended meaning is tied to the specific enrollment instance, which aggregation captures by treating Enrolls_In as a unit.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-6-aggregation-3",
+      "test_id": "pt-dbms-sql-6-aggregation",
+      "question_text": "How is aggregation typically drawn in an EER diagram?",
+      "options": [
+        "As a double-line diamond",
+        "As a dashed rectangle/boundary enclosing the original entity sets and relationship, with a new relationship line from that boundary",
+        "As an ISA triangle",
+        "As a double-line rectangle"
+      ],
+      "correct_index": 1,
+      "explanation": "The boundary box notation visually shows the relationship-plus-entities being treated as one aggregate unit.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-6-aggregation-4",
+      "test_id": "pt-dbms-sql-6-aggregation",
+      "question_text": "Which statement correctly distinguishes aggregation from generalization/specialization?",
+      "options": [
+        "They are the same EER concept under different names",
+        "Aggregation treats a relationship as a higher-level entity; generalization/specialization builds ISA (superclass/subclass) hierarchies from shared attributes of similar entity sets — entirely different problems",
+        "Generalization is only used with weak entities; aggregation is only used with strong entities",
+        "Aggregation always requires a recursive relationship"
+      ],
+      "correct_index": 1,
+      "explanation": "This is the classic sibling-confusion in EER modeling: aggregation and generalization/specialization solve unrelated problems despite both being 'advanced' EER constructs.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-6-aggregation-5",
+      "test_id": "pt-dbms-sql-6-aggregation",
+      "question_text": "Why can't the basic ER model directly connect a relationship diamond to another relationship diamond?",
+      "options": [
+        "Because relationships can only connect to entity sets, not to other relationships, in the basic ER model — aggregation is specifically introduced to work around this limitation",
+        "Because diamonds can only have one line coming out of them",
+        "Because relationships never have cardinality",
+        "Because this is actually allowed without needing aggregation"
+      ],
+      "correct_index": 0,
+      "explanation": "The basic ER model restricts relationships to connecting entity sets; aggregation is the EER extension that allows a relationship to be treated like an entity so it can connect further.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-6-aggregation-6",
+      "test_id": "pt-dbms-sql-6-aggregation",
+      "question_text": "In relational mapping, how is an aggregation-derived relationship (like Monitored_By) typically implemented?",
+      "options": [
+        "It is discarded entirely since aggregation cannot be mapped to tables",
+        "By referencing the key of the junction table that already represents the aggregated relationship (e.g., the Enrollment table's key), treating its rows as referenceable entities",
+        "By duplicating all attributes of Student and Course into a new table",
+        "By making Faculty a weak entity"
+      ],
+      "correct_index": 1,
+      "explanation": "The aggregated relationship's table (e.g., Enrollment) becomes referenceable, letting the new relationship point to specific enrollment rows.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-6-aggregation-7",
+      "test_id": "pt-dbms-sql-6-aggregation",
+      "question_text": "Would a plain ternary relationship (Faculty, Student, Course) capture exactly the same meaning as the aggregation example?",
+      "options": [
+        "Yes, they are always semantically identical",
+        "Not necessarily — a ternary relationship treats all three as equal co-participants, whereas aggregation specifically ties Faculty to a particular EXISTING Enrolls_In relationship instance, preserving its independent meaning",
+        "No, because ternary relationships cannot involve Faculty",
+        "No, because ternary relationships require weak entities"
+      ],
+      "correct_index": 1,
+      "explanation": "The two constructs can look superficially similar but express different semantics; aggregation is preferred when the binary relationship already has standalone meaning.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-6-aggregation-8",
+      "test_id": "pt-dbms-sql-6-aggregation",
+      "question_text": "Which everyday phrase best captures the core idea of aggregation?",
+      "options": [
+        "'Is-a' relationship between similar entity sets",
+        "'Has-a' composition of sub-attributes",
+        "'Treating a relationship as a thing' so it can have its own further relationships",
+        "'One entity depends on another for identity'"
+      ],
+      "correct_index": 2,
+      "explanation": "Aggregation is memorably summarized as relationship-as-entity, distinct from is-a (generalization) or dependency (weak entity/identifying relationship).",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "coordinator",
+    "independent_review": "unavailable; no agent tools",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Definitions and examples checked against questions; no plagiarism certification.",
+    "existing_question_corrections": [
+      "tq-dbms-sql-6-aggregation-3",
+      "tq-dbms-sql-6-aggregation-4",
+      "tq-dbms-sql-6-aggregation-7"
+    ],
+    "canonical_answer_indices_preserved": true,
+    "batch_review": {
+      "reviewer": "coordinator",
+      "independent": false,
+      "scope": "New package only: notes, keyed examples, original question identities and canonical indices, every correct answer, exercises and recorded fixture outputs, diagram trace, content-only paired integration.",
+      "findings_resolved": "Outer Join retained absence question clarified: missing parent is a violation only when the modeled relationship requires it. Division retains its original Hard exercise; validator permits retained Hard alongside Easy while rejecting a new Hard substitute.",
+      "remaining": "Exact MySQL/provider execution, browser QA, independent review and applied-migration behavior unverified; output fixtures do not prove required source technique."
+    }
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-6-aggregation",
+    "original_note_sha256": "5a8df07c714a7c4a049c499814a9f588d134068acc76b514b784a6bf8e5bd4cd",
+    "status": "paired migration prepared; not applied"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Faculty monitors a particular enrollment association",
+      "description": "The enrollment unit contains its student and course participants. Monitoring refers to that unit, so Student 17’s other enrollment is not implicitly monitored.",
+      "columns": [
+        "Aggregated enrollment unit",
+        "Participants",
+        "Higher-level monitoring"
+      ],
+      "rows": [
+        [
+          "Enrollment 1",
+          "Student 17 + Course 10",
+          "Faculty 7 and Faculty 8 monitor this unit"
+        ],
+        [
+          "Enrollment 2",
+          "Student 17 + Course 20",
+          "No monitor under the partial-participation policy"
+        ],
+        [
+          "Enrollment 3",
+          "Student 24 + Course 10",
+          "Faculty 9 monitors this different unit"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "coordinator traced association occurrence identity, monitor multiplicity and zero-inclusive counts",
+    "server_rendering": "passed",
+    "browser_rendering": "unverified",
+    "independent_review": "unavailable; no agent tools",
+    "server_rendering_evidence": "Focused Vitest actual LessonBlock rendering: 3 selected packages passed; other 102 packages intentionally skipped."
+  },
+  "sql_verification": {
+    "engine": "11.8.6-MariaDB-0+deb13u1 from Debian",
+    "scope": "MariaDB compatibility execution; exact MySQL 8.4/provider execution unverified",
+    "fingerprint": "aed08bd200e7653fef4a157ffe5e5b845ec5b494e14728e5f104719a48384526",
+    "cases": [
+      {
+        "problem": "aggregation-memberships",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "aggregation-memberships",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "aggregation-memberships",
+        "case": 2,
+        "passed": true
+      },
+      {
+        "problem": "aggregation-counts",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "aggregation-counts",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "aggregation-counts",
+        "case": 2,
+        "passed": true
+      }
+    ],
+    "all_passed": true
+  }
+}

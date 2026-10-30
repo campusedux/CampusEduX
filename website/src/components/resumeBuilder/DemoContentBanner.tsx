@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Info, Loader2 } from "lucide-react";
-import { Button, Modal } from "@/components/ui";
+import { Button, Modal, toast } from "@/components/ui";
 import { clearResumeContentAction, setResumeDemoDismissedAction } from "@/lib/actions/resumeBuilder";
 
 /**
@@ -28,18 +28,36 @@ export default function DemoContentBanner({
 
   async function clearDemo() {
     setBusy("clear");
-    await clearResumeContentAction(resumeId);
-    setBusy(null);
-    setConfirmClear(false);
-    onDismiss();
-    router.refresh();
+    try {
+      const result = await clearResumeContentAction(resumeId);
+      if ("error" in result) {
+        toast({ title: "Something went wrong", description: result.error, tone: "error" });
+        return;
+      }
+      setConfirmClear(false);
+      onDismiss();
+      router.refresh();
+    } catch (err) {
+      toast({ title: "Something went wrong", description: err instanceof Error ? err.message : undefined, tone: "error" });
+    } finally {
+      setBusy(null);
+    }
   }
 
   async function keep() {
     setBusy("keep");
-    await setResumeDemoDismissedAction(resumeId);
-    setBusy(null);
-    onDismiss();
+    try {
+      const result = await setResumeDemoDismissedAction(resumeId);
+      if ("error" in result) {
+        toast({ title: "Something went wrong", description: result.error, tone: "error" });
+        return;
+      }
+      onDismiss();
+    } catch (err) {
+      toast({ title: "Something went wrong", description: err instanceof Error ? err.message : undefined, tone: "error" });
+    } finally {
+      setBusy(null);
+    }
   }
 
   return (

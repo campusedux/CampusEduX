@@ -1,0 +1,468 @@
+{
+  "slug": "equipment-loan-database-project",
+  "source_ref": "chapter-42-database-design-projects/equipment-loan-database-project",
+  "section_slug": "chapter-42-database-design-projects",
+  "sort_order": 0,
+  "title": "Equipment Loan Database Project",
+  "description": "Design a normalized equipment-loan database from requirements, test constraints and checkout races, write reports, inspect indexes, and plan a restore drill.",
+  "dialect": "MySQL 8.4; engine-specific behavior labeled",
+  "new_coverage": true,
+  "references": [
+    {
+      "title": "MySQL foreign key constraints",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/create-table-foreign-keys.html"
+    },
+    {
+      "title": "MySQL locking reads",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/innodb-locking-reads.html"
+    },
+    {
+      "title": "MySQL recovery methods",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/recovery-methods.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "cx-equipment-loan-database-project-fundamentals",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "cx-equipment-loan-database-project-fundamentals-1",
+          "test_id": "cx-equipment-loan-database-project-fundamentals",
+          "question_text": "What is one equipment item in this project?",
+          "options": [
+            "One physical borrowable object",
+            "An arbitrary stock quantity",
+            "Every object in a category",
+            "One borrower profile"
+          ],
+          "correct_index": 0,
+          "explanation": "Identity represents one physical item.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "cx-equipment-loan-database-project-fundamentals-2",
+          "test_id": "cx-equipment-loan-database-project-fundamentals",
+          "question_text": "What makes a loan active?",
+          "options": [
+            "due_on is NULL",
+            "returned_on is NULL",
+            "borrower_name is empty",
+            "category_name is duplicated"
+          ],
+          "correct_index": 1,
+          "explanation": "The project defines an unfinished return as an active loan.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "cx-equipment-loan-database-project-fundamentals-3",
+          "test_id": "cx-equipment-loan-database-project-fundamentals",
+          "question_text": "Why retain returned loan rows?",
+          "options": [
+            "To guarantee every item remains unavailable",
+            "To avoid all constraints",
+            "To preserve borrowing history",
+            "To remove borrower identities"
+          ],
+          "correct_index": 2,
+          "explanation": "A return is a state transition rather than deletion of history.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "cx-equipment-loan-database-project-fundamentals-4",
+          "test_id": "cx-equipment-loan-database-project-fundamentals",
+          "question_text": "Where does category_name belong in the declared normalized model?",
+          "options": [
+            "Every historical loan only",
+            "Every borrower",
+            "Only a client cache",
+            "Category"
+          ],
+          "correct_index": 3,
+          "explanation": "The category identifier determines the category name.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "cx-equipment-loan-database-project-fundamentals-5",
+          "test_id": "cx-equipment-loan-database-project-fundamentals",
+          "question_text": "Which rule does the loan borrower foreign key enforce?",
+          "options": [
+            "The referenced borrower exists",
+            "Only one active loan per item",
+            "Every due date is in the future",
+            "Every borrower name is unique"
+          ],
+          "correct_index": 0,
+          "explanation": "Referential integrity is distinct from business exclusivity.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "cx-equipment-loan-database-project-fundamentals-6",
+          "test_id": "cx-equipment-loan-database-project-fundamentals",
+          "question_text": "Which check prevents a due date before checkout?",
+          "options": [
+            "due_on IS NULL",
+            "due_on >= checked_out_on",
+            "borrower_id > item_id",
+            "loan_id = category_id"
+          ],
+          "correct_index": 1,
+          "explanation": "The date ordering is an explicit row constraint.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "cx-equipment-loan-database-project-fundamentals-7",
+          "test_id": "cx-equipment-loan-database-project-fundamentals",
+          "question_text": "Do loan primary keys alone enforce one active loan per item?",
+          "options": [
+            "Yes, all rows have unique identifiers",
+            "Only when identifiers are positive",
+            "No, different loan identifiers can reference the same item",
+            "Yes, when names are indexed"
+          ],
+          "correct_index": 2,
+          "explanation": "Row identity uniqueness does not enforce the aggregate active rule.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "cx-equipment-loan-database-project-fundamentals-8",
+          "test_id": "cx-equipment-loan-database-project-fundamentals",
+          "question_text": "Why lock a shared equipment row during checkout?",
+          "options": [
+            "To hide borrower names",
+            "To delete loan history",
+            "To make every query a table scan",
+            "To serialize competing decisions for that item"
+          ],
+          "correct_index": 3,
+          "explanation": "A shared serialization point coordinates the check and insert.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "cx-equipment-loan-database-project-fundamentals-9",
+          "test_id": "cx-equipment-loan-database-project-fundamentals",
+          "question_text": "What is wrong with an uncoordinated snapshot count followed by insert?",
+          "options": [
+            "Two requests can both observe zero and insert",
+            "COUNT always returns NULL",
+            "INSERT cannot use identifiers",
+            "It prevents all concurrency"
+          ],
+          "correct_index": 0,
+          "explanation": "The decision window can admit two competing active loans.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "cx-equipment-loan-database-project-fundamentals-10",
+          "test_id": "cx-equipment-loan-database-project-fundamentals",
+          "question_text": "What should a repeated return have?",
+          "options": [
+            "Automatic deletion of every borrower",
+            "An explicit already-returned or idempotent response contract",
+            "A new active loan",
+            "An ignored affected row count"
+          ],
+          "correct_index": 1,
+          "explanation": "State transition outcomes must be defined for retries.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "cx-equipment-loan-database-project-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "cx-equipment-loan-database-project-application-1",
+          "test_id": "cx-equipment-loan-database-project-application",
+          "question_text": "What is the grain of the overdue report?",
+          "options": [
+            "One row per borrower name",
+            "One row per qualifying active loan",
+            "One row per category only",
+            "One row per SQL statement"
+          ],
+          "correct_index": 1,
+          "explanation": "Loan identity determines the overdue report row.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "cx-equipment-loan-database-project-application-2",
+          "test_id": "cx-equipment-loan-database-project-application",
+          "question_text": "Under due_on < as_of, is a loan due on as_of overdue?",
+          "options": [
+            "Yes, always",
+            "Only if its identifier is odd",
+            "No",
+            "Only if it was returned"
+          ],
+          "correct_index": 2,
+          "explanation": "Strict inequality excludes the as-of date itself.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "cx-equipment-loan-database-project-application-3",
+          "test_id": "cx-equipment-loan-database-project-application",
+          "question_text": "Why use a fixed as-of date in fixtures?",
+          "options": [
+            "Dates cannot be compared",
+            "Current time is always UTC",
+            "It removes all overdue loans",
+            "Expected results remain reproducible"
+          ],
+          "correct_index": 3,
+          "explanation": "A moving current date would make expected results drift.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "cx-equipment-loan-database-project-application-4",
+          "test_id": "cx-equipment-loan-database-project-application",
+          "question_text": "Why start availability reporting from Category?",
+          "options": [
+            "To retain categories with no items",
+            "To exclude empty categories",
+            "To guarantee all items are available",
+            "To remove grouping"
+          ],
+          "correct_index": 0,
+          "explanation": "The preserved relation determines whether zero categories remain.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "cx-equipment-loan-database-project-application-5",
+          "test_id": "cx-equipment-loan-database-project-application",
+          "question_text": "Which count returns zero for a left join placeholder?",
+          "options": [
+            "COUNT(*)",
+            "COUNT of the nullable matched item identifier",
+            "COUNT of the preserved category identifier",
+            "COUNT of a nonnull literal"
+          ],
+          "correct_index": 1,
+          "explanation": "COUNT(expression) excludes null placeholders.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "cx-equipment-loan-database-project-application-6",
+          "test_id": "cx-equipment-loan-database-project-application",
+          "question_text": "How treat two returned historical loans for one available item?",
+          "options": [
+            "Count it twice",
+            "Mark it active forever",
+            "Count the item once",
+            "Delete the item"
+          ],
+          "correct_index": 2,
+          "explanation": "Availability is item grain and depends on absence of an active loan.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "cx-equipment-loan-database-project-application-7",
+          "test_id": "cx-equipment-loan-database-project-application",
+          "question_text": "Which test exercises denied database behavior?",
+          "options": [
+            "Only select a valid borrower",
+            "Only format JSON",
+            "Only count schema files",
+            "Attempt a loan with a nonexistent borrower and expect rejection"
+          ],
+          "correct_index": 3,
+          "explanation": "A negative foreign key fixture checks the actual constraint boundary.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "cx-equipment-loan-database-project-application-8",
+          "test_id": "cx-equipment-loan-database-project-application",
+          "question_text": "Which test exercises checkout competition?",
+          "options": [
+            "A coordinated two-session race with a final active-loan check",
+            "Two unrelated sequential SELECT statements",
+            "A screenshot of the form",
+            "A valid CREATE TABLE statement only"
+          ],
+          "correct_index": 0,
+          "explanation": "The competing decision window must actually be exercised.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "cx-equipment-loan-database-project-application-9",
+          "test_id": "cx-equipment-loan-database-project-application",
+          "question_text": "What evidence supports an index recommendation?",
+          "options": [
+            "Only that the index name is descriptive",
+            "A relevant plan and representative workload measurement",
+            "Only that the fixture has three rows",
+            "Only a successful COMMIT"
+          ],
+          "correct_index": 1,
+          "explanation": "Index benefit depends on access pattern, selectivity, and workload.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "cx-equipment-loan-database-project-application-10",
+          "test_id": "cx-equipment-loan-database-project-application",
+          "question_text": "Does creating a backup prove it can be restored?",
+          "options": [
+            "Yes, backup filenames prove recovery",
+            "Only if it is compressed",
+            "No, restoration and reconciliation need testing",
+            "Yes, when the table has a key"
+          ],
+          "correct_index": 2,
+          "explanation": "A restore drill checks a separate operational behavior.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "original_questions": [],
+  "coding_problems": [
+    {
+      "id": "cx-equipment-overdue-active",
+      "slug": "equipment-overdue-active",
+      "title": "List Overdue Active Equipment Loans",
+      "difficulty": "Easy",
+      "task": "Return loan_id, borrower_name, item_id, due_on for active loans due strictly before 2026-10-29. Order by due_on then loan_id. Returned loans are excluded even when their due date is old.",
+      "schema_sql": "CREATE TABLE borrower (borrower_id INT PRIMARY KEY, borrower_name VARCHAR(80) NOT NULL);\nCREATE TABLE category (category_id INT PRIMARY KEY, category_name VARCHAR(60) NOT NULL);\nCREATE TABLE equipment (item_id INT PRIMARY KEY, category_id INT NOT NULL);\nCREATE TABLE equipment_loan (loan_id INT PRIMARY KEY, item_id INT NOT NULL, borrower_id INT NOT NULL, checked_out_on DATE NOT NULL, due_on DATE NOT NULL, returned_on DATE NULL);",
+      "seed_sql": "INSERT INTO borrower VALUES (1,'Mira'),(2,'Noah');\nINSERT INTO category VALUES (1,'Camera'),(2,'Audio'),(3,'Lighting');\nINSERT INTO equipment VALUES (10,1),(11,1),(20,2);\nINSERT INTO equipment_loan VALUES (100,10,1,'2026-10-01','2026-10-20',NULL),(101,11,2,'2026-10-01','2026-10-10','2026-10-09'),(102,20,2,'2026-10-01','2026-10-29',NULL);",
+      "solution_sql": "SELECT l.loan_id, b.borrower_name, l.item_id, l.due_on FROM equipment_loan AS l JOIN borrower AS b ON b.borrower_id=l.borrower_id WHERE l.returned_on IS NULL AND l.due_on < '2026-10-29' ORDER BY l.due_on,l.loan_id;",
+      "expected": "loan_id\tborrower_name\titem_id\tdue_on\n100\tMira\t10\t2026-10-20",
+      "ordering": "due_on ascending, then loan_id ascending",
+      "edge_cases": [
+        "A loan due on the as-of date is not overdue.",
+        "Returned overdue loans are excluded.",
+        "Empty loan input returns no rows."
+      ],
+      "hints": [
+        "Filter returned_on with IS NULL.",
+        "Use a strict date comparison."
+      ],
+      "explanation": "The predicate selects active loans before the fixed deadline, then joins borrower identity for display without grouping by a possibly repeated name.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO borrower VALUES (1,'Same'),(2,'Same'); INSERT INTO equipment_loan VALUES (1,10,1,'2026-10-01','2026-10-29',NULL),(2,11,2,'2026-10-01','2026-10-28',NULL),(3,12,1,'2026-10-01','2026-10-01','2026-10-02');",
+          "expected": "loan_id\tborrower_name\titem_id\tdue_on\n2\tSame\t11\t2026-10-28"
+        },
+        {
+          "seed_sql": "",
+          "expected": ""
+        }
+      ]
+    },
+    {
+      "id": "cx-equipment-category-availability",
+      "slug": "equipment-category-availability",
+      "title": "Count Available Equipment by Category",
+      "difficulty": "Medium",
+      "task": "Return category_id, category_name, available_items for every category, including categories with no items or no available items. An item is available if no loan for that item has returned_on IS NULL. Count each item once regardless of returned history. Order by category_id.",
+      "schema_sql": "CREATE TABLE borrower (borrower_id INT PRIMARY KEY, borrower_name VARCHAR(80) NOT NULL);\nCREATE TABLE category (category_id INT PRIMARY KEY, category_name VARCHAR(60) NOT NULL);\nCREATE TABLE equipment (item_id INT PRIMARY KEY, category_id INT NOT NULL);\nCREATE TABLE equipment_loan (loan_id INT PRIMARY KEY, item_id INT NOT NULL, borrower_id INT NOT NULL, checked_out_on DATE NOT NULL, due_on DATE NOT NULL, returned_on DATE NULL);",
+      "seed_sql": "INSERT INTO borrower VALUES (1,'Mira'),(2,'Noah');\nINSERT INTO category VALUES (1,'Camera'),(2,'Audio'),(3,'Lighting');\nINSERT INTO equipment VALUES (10,1),(11,1),(20,2);\nINSERT INTO equipment_loan VALUES (100,10,1,'2026-10-01','2026-10-20',NULL),(101,11,2,'2026-10-01','2026-10-10','2026-10-09'),(102,20,2,'2026-10-01','2026-10-29',NULL);",
+      "solution_sql": "SELECT c.category_id, c.category_name, COUNT(e.item_id) AS available_items FROM category AS c LEFT JOIN equipment AS e ON e.category_id=c.category_id AND NOT EXISTS (SELECT 1 FROM equipment_loan AS l WHERE l.item_id=e.item_id AND l.returned_on IS NULL) GROUP BY c.category_id,c.category_name ORDER BY c.category_id;",
+      "expected": "category_id\tcategory_name\tavailable_items\n1\tCamera\t1\n2\tAudio\t0\n3\tLighting\t0",
+      "ordering": "category_id ascending",
+      "edge_cases": [
+        "Empty categories remain with zero.",
+        "Multiple returned loans do not multiply item counts.",
+        "Any active loan makes the item unavailable."
+      ],
+      "hints": [
+        "Preserve categories with a LEFT JOIN.",
+        "Use NOT EXISTS to test active loans without multiplying history.",
+        "Count a nullable matched item identifier."
+      ],
+      "explanation": "The join admits only available items using an anti-existence predicate. The category is preserved even when no item qualifies, and COUNT(item_id) excludes its null placeholder.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO category VALUES (1,'Kit'),(2,'Empty'); INSERT INTO equipment VALUES (1,1),(2,1); INSERT INTO equipment_loan VALUES (1,1,9,'2026-01-01','2026-01-02','2026-01-02'),(2,1,9,'2026-01-03','2026-01-04','2026-01-04'),(3,2,9,'2026-01-01','2026-01-02',NULL);",
+          "expected": "category_id\tcategory_name\tavailable_items\n1\tKit\t1\n2\tEmpty\t0"
+        },
+        {
+          "seed_sql": "",
+          "expected": ""
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "review": {
+    "reviewer": "/root/finish_e_transactions",
+    "independent_review": "passed",
+    "original_questions_retained": 0,
+    "new_questions": 20,
+    "notes_review": "Independent manual content review passed within independent_review_scope; engine/browser/release gates separate.",
+    "editorial_record": "Original scenario-led prose and assessments. External originality and AdSense review unperformed.",
+    "independent_reviewer": "/root/review_e_and_gaps",
+    "independent_review_scope": "Full notes,20MCQs with every option,canonical answer position and explanation,original diagrams,and all exercise contracts/fixtures or solved conceptual labs. Original identities/indices checked against public seed cache where applicable. Reported substantive findings corrected by coordinator and filtered recheck accepted;identified learner-facing spacing polished. Manual technical/editorial reasoning only;engine,provider,browser,external originality and AdSense evidence separate."
+  },
+  "integration": {
+    "new_topic_id": "86ad493b-f91e-57ff-854f-c4e63784e762",
+    "new_content_id": "0efb573c-bca8-52ef-a0b2-3eeb04eb52f6",
+    "status": "drafted; not included in prepared paired migrations"
+  },
+  "notes": "## Turn requirements into checkable rules\n\nBuild a small equipment loan database for a campus media desk. A borrower can borrow several items, each physical item belongs to one category, and each loan records a checkout and due date. Returning an item finishes that loan without deleting history. The critical rule is that one physical item cannot have two active loans at the same time. A report must identify overdue active loans and count available items by category, including categories whose available count is zero.\n\nClarify the vocabulary before drawing tables. An item is one physical camera or microphone, not a product model or a quantity in stock. An active loan has no return timestamp. A due date is a calendar deadline in this bounded project; a production service would need an explicit time zone and cutoff policy. A category may exist without any items. Borrowers and items remain recorded after returns so historical loans continue to reference stable identities.\n\n## Derive the conceptual model\n\nThe entities are Borrower, Category, Item, and Loan. Category has many items, an item has many historical loans, and a borrower has many loans. Each loan references exactly one item and one borrower. These relationships distinguish historical multiplicity from current exclusivity: many loans per item across time do not imply several simultaneous active loans. Record that active exclusivity separately instead of marking the historical relationship as one to one in an ER drawing.\n\nBorrower name belongs to Borrower and category name belongs to Category. Repeating those names in every Loan row would create unnecessary update obligations. Item stores its category reference, while Loan stores the event specific borrower, item, and dates. This structure follows the declared dependencies and separates independent facts. It does not imply every future requirement is solved: preserving a historical category label at checkout, for example, would require a deliberate snapshot or temporal model.\n\n## Implement a bounded relational schema\n\n```sql\nCREATE TABLE borrower (\n  borrower_id INT PRIMARY KEY,\n  borrower_name VARCHAR(80) NOT NULL\n) ENGINE=InnoDB;\nCREATE TABLE category (\n  category_id INT PRIMARY KEY,\n  category_name VARCHAR(60) NOT NULL UNIQUE\n) ENGINE=InnoDB;\nCREATE TABLE equipment (\n  item_id INT PRIMARY KEY,\n  category_id INT NOT NULL,\n  FOREIGN KEY (category_id) REFERENCES category(category_id)\n) ENGINE=InnoDB;\nCREATE TABLE equipment_loan (\n  loan_id INT PRIMARY KEY,\n  item_id INT NOT NULL,\n  borrower_id INT NOT NULL,\n  checked_out_on DATE NOT NULL,\n  due_on DATE NOT NULL,\n  returned_on DATE NULL,\n  CHECK (due_on >= checked_out_on),\n  CHECK (returned_on IS NULL OR returned_on >= checked_out_on),\n  FOREIGN KEY (item_id) REFERENCES equipment(item_id),\n  FOREIGN KEY (borrower_id) REFERENCES borrower(borrower_id)\n) ENGINE=InnoDB;\n```\n\nThe example targets modern MySQL with enforced CHECK constraints and InnoDB foreign keys. A primary key prevents duplicate row identities. Foreign keys reject references to nonexistent borrowers or equipment. Date checks reject impossible local date ordering. These constraints are useful, but none alone enforces the active loan rule. A schema review should explicitly list both the rules already enforced and those requiring transaction design, rather than assuming a long DDL script is a complete correctness proof.\n\n## Protect checkout and return transactions\n\nFor checkout, begin a transaction and lock the target equipment row using a suitable locking read. Every checkout path must use the same serialization point. Check for an active loan while that protection is held, then insert the new loan if allowed and commit. Competing checkout requests for the same item must not both pass the check. An ordinary snapshot count without this coordination can let both requests see zero and insert two different loan identifiers.\n\nThe exact implementation should use the engine's documented read semantics consistently; mixing an old snapshot with a current locking decision can produce surprising results. A production design can also use an active allocation table keyed by item_id or an appropriate engine supported uniqueness design. This lab asks the learner to analyze alternatives rather than silently inventing a universal partial unique index syntax for MySQL. The trusted server must also authorize who may create or return loans.\n\nFor return, update only the identified active loan and check the affected row count. A repeated return should have an explicit idempotency or already returned response. Do not delete the row to make an item available, because that erases history. If recording a return and a condition assessment must succeed together, put both in one transaction. External notification is a separate delivery concern and should not hold item locks while a remote service responds.\n\n## Build reports at an explicit grain\n\nAn overdue report has one row per active loan whose due date is strictly before a specified as of date. A loan due today is not overdue under that rule. Use a fixed parameter in tests rather than the machine's current date so expected output stays reproducible. Join Borrower only to display borrower_name; do not group by names because two borrowers can share a name. The loan identifier defines row identity in this report.\n\nAn availability report has one row per category. Start from Category to retain categories with no equipment. Include an item only when no active loan exists for it. COUNT of the matched item identifier returns zero when a left join finds no item; COUNT of every joined row would incorrectly count the placeholder. An anti existence condition avoids multiplying equipment rows when several historical loans exist. Reporting grain is a design decision, not something DISTINCT should guess afterward.\n\n## Test rejection as well as success\n\nInsert one valid borrower, category, and item, then verify that a valid checkout succeeds. Try a loan referencing a missing borrower, a due date before checkout, and a duplicate loan identifier. Each should be rejected by the corresponding trusted constraint. Run negative tests in disposable fixtures or transactions that are intentionally rolled back; do not mutate a production database to demonstrate a lesson. Record which constraint rejected each case rather than merely reporting that something failed.\n\nThen use two sessions to race checkout of the same item. The expected business result is one active loan, with the other request rejected or retried according to the contract. Record waiting, affected row counts, errors, and final state. A single session test cannot prove this invariant under competition. Also test returning a loan twice and attempting a checkout after a committed return, because state transitions expose different paths from the initial insertion test.\n\n## Add operational evidence\n\nCandidate indexes follow the operations: active lookup by item, borrower loan history, and the overdue filter. An index beginning with item_id can support item specific existence checks, while a due date index may help an overdue scan depending on selectivity and the full predicate. Do not claim an index is faster without examining the plan and measuring a representative fixture. Small datasets can favor scans, so record row counts, parameters, and observed plans before drawing conclusions.\n\nA restore exercise completes the project. In an isolated environment, restore a known backup, verify foreign key integrity and loan counts, and reconcile an agreed report total or list of identifiers. If later committed work must be recovered, include the documented log recovery procedure. Backup creation alone does not demonstrate restoration. State the recovery point and recovery time objectives, and keep test data free of private borrower information.\n\n## Solved project checkpoints\n\nCheckpoint one: a category has no equipment. The availability report must still show it with zero, so Category is the leftmost preserved relation. Checkpoint two: one item has two returned historical loans and no active loan. It is available exactly once; counting joined historical rows would be wrong. Use the absence of an active loan instead of counting all loan history. Checkpoint three: two requests both observe no active loan without coordination. Both can insert unless the trusted design serializes or otherwise rejects the conflict.\n\nThe exercises attached to this project test deterministic reporting only. Their results do not establish constraint rejection, checkout concurrency, or restore behavior. Those require the separate failure and operational labs described above. Revisit [3NF](/learning/dbms-sql-tutorial/3nf), [transaction boundaries](/learning/dbms-sql-tutorial/transaction-boundaries), and [phantom reads](/learning/dbms-sql-tutorial/phantom-read) to explain why the design needs more than correct SELECT statements.\n\n\nMaintain a small acceptance matrix linking each requirement to its evidence. Borrower existence maps to a foreign key rejection test, date ordering maps to a CHECK rejection test, and exclusive checkout maps to a coordinated race. Report correctness maps to deterministic fixtures, while recovery maps to a restored dataset and reconciliation. This makes missing evidence visible before release and prevents one successful query from standing in for the entire project.\n",
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Separate identities from loan events",
+      "description": "Independent borrower, category, and equipment facts connect through loan events, while active exclusivity requires an additional trusted mechanism.",
+      "columns": [
+        "Relation",
+        "Key",
+        "Relationship or rule"
+      ],
+      "rows": [
+        [
+          "Borrower",
+          "borrower_id",
+          "One borrower has many loans"
+        ],
+        [
+          "Category",
+          "category_id",
+          "One category has many items"
+        ],
+        [
+          "Equipment",
+          "item_id",
+          "Each item belongs to one category"
+        ],
+        [
+          "EquipmentLoan",
+          "loan_id",
+          "One item and borrower per event; active exclusivity separate"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "technical_review": "Independent manual diagram/content consistency review passed;actual static/browser rendering tracked separately.",
+    "server_rendering": "pending",
+    "browser_rendering": "unverified",
+    "independent_review": "passed"
+  },
+  "sql_verification": {
+    "scope": "not executed; concurrency/recovery/provider verification separate",
+    "all_passed": false,
+    "cases": []
+  }
+}

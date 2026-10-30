@@ -7,7 +7,7 @@ import { cn } from "@/lib/cn";
  * Scroll-into-view entrance (spec §15). SSR renders children fully visible, so
  * there is no flash of hidden content and no dependency on JS for the page to
  * read correctly. On mount, only elements that are still below the fold get
- * armed: they fade + rise 12px the first time they scroll into view.
+ * armed: they fade + rise 8px the first time they scroll into view.
  *
  * Users with "reduce motion", or browsers without IntersectionObserver, keep
  * the plain visible render and nothing animates.
@@ -51,8 +51,8 @@ export function Reveal({
     <div
       ref={ref}
       className={cn(
-        state === "hidden" && "opacity-0 translate-y-3",
-        state === "shown" && "translate-y-0 opacity-100 transition-all duration-500 ease-out",
+        state === "hidden" && "opacity-0 translate-y-2",
+        state === "shown" && "translate-y-0 opacity-100 transition-all duration-200 ease-out",
         className,
       )}
     >

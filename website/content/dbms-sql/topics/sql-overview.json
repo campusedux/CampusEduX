@@ -1,0 +1,588 @@
+{
+  "source_ref": "chapter-8-sql-fundamentals/sql-overview",
+  "slug": "sql-overview",
+  "title": "SQL Overview",
+  "description": "Learn what SQL statements do, how MySQL queries describe results, why collations and dialects matter, and how to verify lists, summaries, and transaction boundaries.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Describing the information you want\n\nSQL is a language for working with relational databases. Its name is commonly expanded as Structured Query Language. You can use it to define database objects, retrieve records, change data, control access, and manage transactions. Those responsibilities are different, so learning SQL means more than memorizing SELECT. Start by asking whether a task needs to inspect information, change stored facts, change definitions, or manage a related group of operations.\n\nSQL is largely declarative. A query describes the result you want, while the database engine chooses how to obtain it. If you request course offerings with available seats, you do not normally write a loop that opens each disk page and tests every record yourself. The optimizer chooses an execution plan based on the statement, database objects, statistics, and available access paths.\n\nDeclarative does not mean that every correctly written query is equally efficient. Two formulations can produce the same result using different amounts of work. Results, ordering requirements, and treatment of missing values determine correctness; execution plans and measurements help evaluate performance. Avoid changing a query solely because it looks shorter, or claiming that a query is faster without examining an appropriate workload.\n\n## Using a stated dialect\n\nThis course's executable examples use the MySQL dialect, with MySQL 8.4 as the reference for documented behavior. Relational systems share many core SQL ideas, but vendor-specific functions, data types, transaction details, and advanced features can differ. PostgreSQL, SQL Server, and Oracle also support SQL, yet a statement accepted by one product is not automatically portable to another without inspection.\n\nThe website's existing SQL runner is mapped to a MySQL execution provider. That mapping is not a guarantee of a particular hosted server version. Features requiring a recent release should be identified and verified in the intended environment. A successful test on a related engine can provide useful compatibility evidence, but it must not be presented as proof of the hosted provider's version or behavior.\n\nSQL keywords such as SELECT and WHERE are not made into different commands by changing their capitalization. Writing keywords in uppercase is a readability convention, not a requirement to shout at the database. String comparisons are different: their case and accent behavior depends on data type and collation. In MySQL, common collations are case-insensitive. Never infer string-comparison behavior merely from how a keyword is written.\n\n## Defining structure and changing data\n\nData definition language, often called DDL, covers statements such as CREATE TABLE and ALTER TABLE. These describe or change database objects. Creating a column is different from inserting a value into an existing column. Definition changes deserve particular care because other queries and applications may depend on the current structure. Always distinguish an example executed in an isolated practice database from a command intended for a shared deployment.\n\nData manipulation language, or DML, covers changes such as INSERT, UPDATE, and DELETE. These commands add, modify, or remove stored rows. The labels are useful study categories, but terminology varies: SELECT is often discussed separately as data query language, or DQL, and is also classified within DML in some descriptions. Understand what a statement does instead of treating one course's category names as a universal difference in execution behavior.\n\nData control language, or DCL, concerns permissions through commands such as GRANT and REVOKE. Transaction control language, or TCL, includes commands such as COMMIT and ROLLBACK. These educational categories describe different responsibilities. A program that can retrieve a public course list should not automatically receive permission to grant access or modify private records. Learning syntax does not itself authorize an operation against a real database.\n\n## Reading a small query from its clauses\n\nSuppose a table records course offerings and their remaining seats. Each offering has a unique identifier, a required course name, and a nonnegative seat count. The following example supplies three records and then retrieves the two offerings with available places. The zero-seat offering remains stored in the table; the query simply does not include it in the result.\n\n```sql\nCREATE TABLE course_offerings (\n  offering_id INT PRIMARY KEY,\n  course_name VARCHAR(40) NOT NULL,\n  seats_remaining INT NOT NULL CHECK (seats_remaining BETWEEN 0 AND 100)\n);\nINSERT INTO course_offerings VALUES\n  (10, 'Databases', 3),\n  (20, 'Networks', 0),\n  (30, 'Operating Systems', 2);\nSELECT offering_id, course_name\nFROM course_offerings\nWHERE seats_remaining > 0\nORDER BY offering_id;\n```\n\nThe SELECT list supplies the output columns. FROM identifies the source table. WHERE states a condition that qualifying rows must satisfy. ORDER BY requests a defined result order. For the supplied data, offering 10 appears before offering 30. Without the ordering clause, do not rely on a particular sequence even if a small test repeatedly appears to produce the same one.\n\nAn identifier names an object such as a table or column. A literal supplies a value, such as the number zero or the string Databases. In these examples, text literals use single quotes. Confusing a name with a literal can cause an error or a query that returns a constant instead of the desired column. Use consistent naming and inspect each expression's intended role when debugging.\n\n## Knowing what one record represents\n\nA course offering is not necessarily the same thing as a course name. The same course can be offered in two terms or taught to two groups, with a different offering identifier for each occurrence. Counting distinct names would answer a different question from counting offerings. Likewise, summing available seats is meaningful only if each row describes one relevant offering and the same offering has not accidentally been duplicated in the report's source.\n\nThis distinction is called the grain of the data: what one record represents. Establish that meaning before choosing a count or total. Otherwise, a syntactically correct aggregate can summarize the wrong entities while still producing a plausible number.\n\n## Producing a summary rather than individual records\n\nA query can calculate a summary across several rows. COUNT(*) counts the offerings, including those with zero seats. SUM(seats_remaining) adds their available places. For the example, those values are three offerings and five seats. This is a different result shape from the earlier list: it answers an overall question rather than returning one row per qualifying offering.\n\n```sql\nSELECT COUNT(*) AS offering_count,\n       COALESCE(SUM(seats_remaining), 0) AS total_seats\nFROM course_offerings;\n```\n\nAS supplies readable output names. COALESCE returns the first non-NULL argument. Here it makes the required empty-table policy explicit: COUNT returns zero for no rows, whereas SUM over no input rows returns NULL. Replacing that aggregate result with zero is appropriate for this stated report. It is not a general rule that every unknown value in every database should be treated as zero.\n\n## Keeping scripts and transactions understandable\n\nA semicolon commonly terminates a statement in SQL scripts and interactive clients. Put a terminator between separate statements rather than assuming that a tool will infer your intended boundaries. Missing delimiters can cause parsing failures or client-specific interpretation problems. Do not claim that a missing semicolon always fails in one precise way across every interface. Client behavior and the surrounding text both matter.\n\nA transaction groups related changes under appropriate guarantees. If recording a payment reference and its receipt must succeed together, the application needs suitable transaction boundaries and storage-engine support. COMMIT requests completion of the transaction, while ROLLBACK cancels its uncommitted changes where supported. Transaction control cannot repair an application that groups the wrong operations or ignores errors returned during the work.\n\nIn MySQL, many definition statements cause implicit commits. Do not assume that wrapping an arbitrary schema-changing script in a transaction makes every change reversible. This distinction is especially important when adapting examples to existing systems. Practice retrieval and modification against deliberately isolated sample data, and use the repository's approved migration workflow for changes to application definitions.\n\n## Building confidence through observable results\n\nFor a retrieval exercise, identify the expected columns, qualifying records, treatment of NULL, and required ordering before writing the query. Test an ordinary input and at least one boundary case, such as an empty table or zero available seats. Compare actual results with the stated expectation rather than inventing a successful execution message. A query that runs without an error can still answer the wrong question.\n\nAs your queries grow, keep syntax, semantics, permissions, and performance as separate checks. Syntax asks whether the statement is accepted. Semantics asks whether it produces the intended information. Permissions ask whether this actor may perform the operation. Performance asks whether the work meets the workload's needs. This approach turns SQL from a collection of memorized commands into a practical tool for reasoning about data responsibly.",
+  "references": [
+    {
+      "title": "MySQL SELECT statement",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/select.html"
+    },
+    {
+      "title": "MySQL string comparison case sensitivity",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/case-sensitivity.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-8-sql-overview",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-8-sql-overview-1",
+          "test_id": "pt-dbms-sql-8-sql-overview",
+          "question_text": "SQL is best described as which kind of language?",
+          "options": [
+            "A declarative language — you state what result you want",
+            "A purely procedural language like C",
+            "A markup language for formatting text",
+            "An assembly-level language"
+          ],
+          "correct_index": 0,
+          "explanation": "SQL is declarative: the query says what data is wanted, and the database engine decides how to retrieve it.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-8-sql-overview-2",
+          "test_id": "pt-dbms-sql-8-sql-overview",
+          "question_text": "Which SQL sub-language is used to change the structure of a table (e.g. add a column)?",
+          "options": [
+            "DML",
+            "DQL",
+            "DDL",
+            "TCL"
+          ],
+          "correct_index": 2,
+          "explanation": "DDL (Data Definition Language) covers CREATE/ALTER/DROP — structural changes.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-8-sql-overview-3",
+          "test_id": "pt-dbms-sql-8-sql-overview",
+          "question_text": "Which statement directly modifies existing rows in this tutorial's DML grouping?",
+          "options": [
+            "SELECT",
+            "CREATE TABLE",
+            "UPDATE",
+            "GRANT"
+          ],
+          "correct_index": 2,
+          "explanation": "UPDATE changes stored rows. SELECT retrieves results; CREATE TABLE defines an object; GRANT manages permissions. DML/DQL category terminology can vary, so focus on the operation.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-8-sql-overview-4",
+          "test_id": "pt-dbms-sql-8-sql-overview",
+          "question_text": "Why can two SQL queries that return identical results still be meaningfully different?",
+          "options": [
+            "SQL forbids more than one correct query per problem",
+            "They may have very different performance even though the output rows are the same",
+            "Only one of them can ever be syntactically valid",
+            "SQL results are always ordered by performance"
+          ],
+          "correct_index": 1,
+          "explanation": "Because SQL is declarative, different query formulations can produce the same rows via very different, more or less efficient, execution plans.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-8-sql-overview-5",
+          "test_id": "pt-dbms-sql-8-sql-overview",
+          "question_text": "How do SQL keyword case and MySQL string-comparison case rules differ?",
+          "options": [
+            "Both are always case-insensitive",
+            "Both are always case-sensitive",
+            "Keywords are case-insensitive; string comparisons depend on data type and collation",
+            "Keywords are case-sensitive; string data is never compared"
+          ],
+          "correct_index": 2,
+          "explanation": "Keyword spelling case does not choose a different SQL command. String equality depends on the actual type and collation; common MySQL collations are case-insensitive.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-8-sql-overview-6",
+          "test_id": "pt-dbms-sql-8-sql-overview",
+          "question_text": "A college portal needs a payment and its receipt to be recorded together, or not at all. Which SQL sub-language governs that guarantee?",
+          "options": [
+            "DDL",
+            "DQL",
+            "DML only",
+            "TCL"
+          ],
+          "correct_index": 3,
+          "explanation": "TCL (COMMIT/ROLLBACK) controls transaction boundaries, which is exactly the all-or-nothing guarantee described.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-8-sql-overview-7",
+          "test_id": "pt-dbms-sql-8-sql-overview",
+          "question_text": "What should an author do between separate statements in a SQL script?",
+          "options": [
+            "Always remove all delimiters",
+            "Use the statement terminator expected by the client rather than assuming boundaries are inferred",
+            "Assume every interface inserts missing semicolons",
+            "Treat semicolons as forbidden characters"
+          ],
+          "correct_index": 1,
+          "explanation": "Use appropriate statement terminators. A missing delimiter can cause parsing or client interpretation problems; no single failure shape is guaranteed across every interface.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-8-sql-overview-8",
+          "test_id": "pt-dbms-sql-8-sql-overview",
+          "question_text": "Why does learning SQL transfer well between MySQL, PostgreSQL, SQL Server, and Oracle?",
+          "options": [
+            "They all use exactly identical syntax with zero differences",
+            "The core statement types (DDL/DML/DQL/DCL/TCL) and declarative model are shared across relational engines, even though dialect details differ",
+            "SQL is not actually used by most of these products",
+            "Only one of them actually supports SQL"
+          ],
+          "correct_index": 1,
+          "explanation": "The core declarative querying model and common SQL responsibilities transfer between relational products, while particular syntax, types, functions and behavior still need dialect checks.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "question_text": "What does FROM identify in the example retrieval query?",
+          "options": [
+            "The sort direction only",
+            "The source table supplying the records",
+            "The final commit decision",
+            "A grant of administrative permission"
+          ],
+          "correct_index": 1,
+          "explanation": "FROM supplies the query's source. WHERE filters rows and ORDER BY defines the requested result order.",
+          "marks": 1,
+          "id": "tq-dbx2-sql-overview-1-9",
+          "test_id": "pt-dbms-sql-8-sql-overview",
+          "sort_order": 8
+        },
+        {
+          "question_text": "Why does the summary use COALESCE(SUM(seats_remaining), 0)?",
+          "options": [
+            "COUNT(*) always returns NULL",
+            "Every unknown value must always be zero",
+            "COALESCE deletes offerings with no seats",
+            "SUM returns NULL for an empty input, while this report requires zero"
+          ],
+          "correct_index": 3,
+          "explanation": "The replacement is a stated report policy for an empty aggregate, not a universal rule about missing values.",
+          "marks": 1,
+          "id": "tq-dbx2-sql-overview-1-10",
+          "test_id": "pt-dbms-sql-8-sql-overview",
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbx2-sql-overview-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "question_text": "The supplied offerings have seat counts 3, 0, and 2. Which identifiers appear in the available-course query?",
+          "options": [
+            "10 and 30",
+            "10, 20, and 30",
+            "Only 20",
+            "No identifiers"
+          ],
+          "correct_index": 0,
+          "explanation": "The WHERE condition retains counts greater than zero, so the zero-seat offering is not returned.",
+          "marks": 1,
+          "id": "tq-dbx2-sql-overview-2-1",
+          "test_id": "pt-dbx2-sql-overview-application",
+          "sort_order": 0
+        },
+        {
+          "question_text": "What offering_count and total_seats does the unfiltered summary produce for the supplied data?",
+          "options": [
+            "3 and 5",
+            "2 and 5",
+            "3 and 3",
+            "5 and 3"
+          ],
+          "correct_index": 0,
+          "explanation": "COUNT(*) includes all three offerings, while SUM adds 3 + 0 + 2 to produce five seats.",
+          "marks": 1,
+          "id": "tq-dbx2-sql-overview-2-2",
+          "test_id": "pt-dbx2-sql-overview-application",
+          "sort_order": 1
+        },
+        {
+          "question_text": "What result does the summary produce when course_offerings is empty?",
+          "options": [
+            "No rows at all",
+            "One row containing 0 and 0",
+            "One row containing 1 and NULL",
+            "A fabricated course offering"
+          ],
+          "correct_index": 1,
+          "explanation": "An aggregate without GROUP BY produces one summary row. COUNT is zero and COALESCE changes the empty SUM to zero.",
+          "marks": 1,
+          "id": "tq-dbx2-sql-overview-2-3",
+          "test_id": "pt-dbx2-sql-overview-application",
+          "sort_order": 2
+        },
+        {
+          "question_text": "Which command changes the definition of an existing table rather than a stored student value?",
+          "options": [
+            "UPDATE",
+            "SELECT",
+            "ALTER TABLE",
+            "COMMIT"
+          ],
+          "correct_index": 2,
+          "explanation": "ALTER TABLE is a definition statement. UPDATE changes rows; SELECT retrieves results; COMMIT controls a transaction boundary.",
+          "marks": 1,
+          "id": "tq-dbx2-sql-overview-2-4",
+          "test_id": "pt-dbx2-sql-overview-application",
+          "sort_order": 3
+        },
+        {
+          "question_text": "A developer assumes that SELECT and select are different commands. Which correction is appropriate?",
+          "options": [
+            "Every string comparison is case-sensitive",
+            "Every identifier behaves identically on every operating system",
+            "Keyword capitalization is a readability choice, while string comparisons depend on collation",
+            "Lowercase keywords always delete records"
+          ],
+          "correct_index": 2,
+          "explanation": "Keywords and string data have different case-handling rules. Inspect the actual collation for string comparisons.",
+          "marks": 1,
+          "id": "tq-dbx2-sql-overview-2-5",
+          "test_id": "pt-dbx2-sql-overview-application",
+          "sort_order": 4
+        },
+        {
+          "question_text": "Two queries return the same required rows in the same required order. Can their performance differ?",
+          "options": [
+            "No; equal results force identical plans",
+            "Yes; their execution plans and work can differ",
+            "No; SQL permits only one valid query per result",
+            "Yes; one must therefore be syntactically invalid"
+          ],
+          "correct_index": 1,
+          "explanation": "Declarative queries can have equivalent results while leading to different execution strategies.",
+          "marks": 1,
+          "id": "tq-dbx2-sql-overview-2-6",
+          "test_id": "pt-dbx2-sql-overview-application",
+          "sort_order": 5
+        },
+        {
+          "question_text": "A script combines CREATE TABLE with other work inside a transaction. What MySQL behavior must be checked?",
+          "options": [
+            "All DDL is guaranteed to roll back with ROLLBACK",
+            "COMMIT removes the need to inspect errors",
+            "Every SELECT changes the table definition",
+            "Many DDL statements cause implicit commits"
+          ],
+          "correct_index": 3,
+          "explanation": "MySQL definition statements can commit implicitly. Do not promise transactional reversal of an arbitrary DDL script.",
+          "marks": 1,
+          "id": "tq-dbx2-sql-overview-2-7",
+          "test_id": "pt-dbx2-sql-overview-application",
+          "sort_order": 6
+        },
+        {
+          "question_text": "An available-course query returns the correct two records but no ORDER BY. What remains unspecified?",
+          "options": [
+            "The order in which those result rows are returned",
+            "Which table was named in FROM",
+            "Whether the two qualifying identifiers exist",
+            "The spelling of the SELECT keyword"
+          ],
+          "correct_index": 0,
+          "explanation": "A stable-looking current output order is not a substitute for requesting the required order.",
+          "marks": 1,
+          "id": "tq-dbx2-sql-overview-2-8",
+          "test_id": "pt-dbx2-sql-overview-application",
+          "sort_order": 7
+        },
+        {
+          "question_text": "A user who can read public courses tries to grant themselves administrative access. Which concern is involved?",
+          "options": [
+            "Only whether the query uses uppercase keywords",
+            "Authorization for the requested control operation",
+            "Only the number of available seats",
+            "Whether a string literal contains a space"
+          ],
+          "correct_index": 1,
+          "explanation": "Knowing SQL syntax and having read access do not grant permission for privileged control operations.",
+          "marks": 1,
+          "id": "tq-dbx2-sql-overview-2-9",
+          "test_id": "pt-dbx2-sql-overview-application",
+          "sort_order": 8
+        },
+        {
+          "question_text": "A query executes without an error but includes sold-out offerings in a requested available-course report. What failed?",
+          "options": [
+            "The lack of a syntax error proves correctness",
+            "The server must have granted every permission",
+            "The report must be faster than all alternatives",
+            "The query's semantics do not match the requested filter"
+          ],
+          "correct_index": 3,
+          "explanation": "Successful parsing/execution is separate from producing the information the task requested.",
+          "marks": 1,
+          "id": "tq-dbx2-sql-overview-2-10",
+          "test_id": "pt-dbx2-sql-overview-application",
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cp-dbx2-sql-overview-open-courses",
+      "slug": "dbx2-sql-overview-open-courses",
+      "title": "Find Courses with Available Seats",
+      "difficulty": "Easy",
+      "task": "Return offering_id and course_name for offerings with seats_remaining greater than zero. Do not modify any records.",
+      "schema_sql": "CREATE TABLE course_offerings (offering_id INT PRIMARY KEY, course_name VARCHAR(40) NOT NULL, seats_remaining INT NOT NULL CHECK (seats_remaining BETWEEN 0 AND 100));",
+      "seed_sql": "INSERT INTO course_offerings VALUES (10,'Databases',3),(20,'Networks',0),(30,'Operating Systems',2);",
+      "expected": "offering_id\tcourse_name\n10\tDatabases\n30\tOperating Systems",
+      "ordering": "Ascending offering_id.",
+      "constraints": [
+        "offering_id is a unique non-NULL integer.",
+        "course_name is required.",
+        "seats_remaining is an integer between 0 and 100."
+      ],
+      "edge_cases": [
+        "Zero seats means the offering is not returned.",
+        "Multiple offerings can share a course_name.",
+        "An empty table returns no rows."
+      ],
+      "hints": [
+        "Use SELECT for retrieval.",
+        "Filter with WHERE seats_remaining > 0."
+      ],
+      "solution_sql": "SELECT offering_id, course_name FROM course_offerings WHERE seats_remaining > 0 ORDER BY offering_id;",
+      "explanation": "The query requests two explicit columns and filters on the stored seat count. Ordering by the unique offering identifier makes the result deterministic. It does not reserve a seat or update a row.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO course_offerings VALUES (9,'Databases',0),(3,'Databases',1),(5,'Databases',2);",
+          "expected": "offering_id\tcourse_name\n3\tDatabases\n5\tDatabases"
+        },
+        {
+          "seed_sql": "",
+          "expected": ""
+        }
+      ]
+    },
+    {
+      "id": "cp-dbx2-sql-overview-seat-summary",
+      "slug": "dbx2-sql-overview-seat-summary",
+      "title": "Summarize Available Course Places",
+      "difficulty": "Medium",
+      "task": "Return one row with offering_count and total_seats for all offerings, including offerings with zero seats. For an empty table, both values must be zero.",
+      "schema_sql": "CREATE TABLE course_offerings (offering_id INT PRIMARY KEY, course_name VARCHAR(40) NOT NULL, seats_remaining INT NOT NULL CHECK (seats_remaining BETWEEN 0 AND 100));",
+      "seed_sql": "INSERT INTO course_offerings VALUES (10,'Databases',3),(20,'Networks',0),(30,'Operating Systems',2);",
+      "expected": "offering_count\ttotal_seats\n3\t5",
+      "ordering": "Exactly one summary row; no row ordering is needed.",
+      "constraints": [
+        "offering_id is unique and non-NULL.",
+        "seats_remaining is required and between 0 and 100."
+      ],
+      "edge_cases": [
+        "Include offerings with zero seats in offering_count.",
+        "Use zero for total_seats when there are no rows.",
+        "Duplicate course names still represent distinct offerings."
+      ],
+      "hints": [
+        "COUNT(*) counts rows.",
+        "Use COALESCE(SUM(seats_remaining), 0) for the empty-table case."
+      ],
+      "solution_sql": "SELECT COUNT(*) AS offering_count, COALESCE(SUM(seats_remaining), 0) AS total_seats FROM course_offerings;",
+      "explanation": "An aggregate query without GROUP BY produces one summary row. COUNT(*) counts every offering. SUM adds the seat counts and returns NULL for an empty input, so COALESCE replaces that unknown aggregate with the explicitly required zero.",
+      "validation_cases": [
+        {
+          "seed_sql": "",
+          "expected": "offering_count\ttotal_seats\n0\t0"
+        },
+        {
+          "seed_sql": "INSERT INTO course_offerings VALUES (1,'Same',0),(2,'Same',0);",
+          "expected": "offering_count\ttotal_seats\n2\t0"
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": null,
+  "review": {
+    "reviewer": "coordinator",
+    "independent_review": "unavailable; no agent tools",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "definitions, worked examples and question coverage checked; no external plagiarism certification",
+    "existing_question_corrections": [
+      "tq-dbms-sql-8-sql-overview-3",
+      "tq-dbms-sql-8-sql-overview-5",
+      "tq-dbms-sql-8-sql-overview-7",
+      "tq-dbms-sql-8-sql-overview-8"
+    ],
+    "canonical_answer_indices_preserved": true,
+    "answer_position_policy": "Original eight canonical indices retained for saved attempts; new questions use shuffled positions; the website shuffles displayed positions separately for each inline attempt."
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-8-sql-overview",
+    "original_note_sha256": "cc2402bdd39dca29b3eea0050f1dc12a8927f4cdfc79d3172f2eef8eccd5a9dc",
+    "status": "paired migration prepared; not applied"
+  },
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-8-sql-overview-1",
+      "test_id": "pt-dbms-sql-8-sql-overview",
+      "question_text": "SQL is best described as which kind of language?",
+      "options": [
+        "A declarative language — you state what result you want",
+        "A purely procedural language like C",
+        "A markup language for formatting text",
+        "An assembly-level language"
+      ],
+      "correct_index": 0,
+      "explanation": "SQL is declarative: the query says what data is wanted, and the database engine decides how to retrieve it.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-8-sql-overview-2",
+      "test_id": "pt-dbms-sql-8-sql-overview",
+      "question_text": "Which SQL sub-language is used to change the structure of a table (e.g. add a column)?",
+      "options": [
+        "DML",
+        "DQL",
+        "DDL",
+        "TCL"
+      ],
+      "correct_index": 2,
+      "explanation": "DDL (Data Definition Language) covers CREATE/ALTER/DROP — structural changes.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-8-sql-overview-3",
+      "test_id": "pt-dbms-sql-8-sql-overview",
+      "question_text": "Which statement type belongs to DML?",
+      "options": [
+        "SELECT",
+        "CREATE TABLE",
+        "UPDATE",
+        "GRANT"
+      ],
+      "correct_index": 2,
+      "explanation": "UPDATE modifies existing data, which is DML's job; SELECT is DQL, CREATE TABLE is DDL, GRANT is DCL.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-8-sql-overview-4",
+      "test_id": "pt-dbms-sql-8-sql-overview",
+      "question_text": "Why can two SQL queries that return identical results still be meaningfully different?",
+      "options": [
+        "SQL forbids more than one correct query per problem",
+        "They may have very different performance even though the output rows are the same",
+        "Only one of them can ever be syntactically valid",
+        "SQL results are always ordered by performance"
+      ],
+      "correct_index": 1,
+      "explanation": "Because SQL is declarative, different query formulations can produce the same rows via very different, more or less efficient, execution plans.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-8-sql-overview-5",
+      "test_id": "pt-dbms-sql-8-sql-overview",
+      "question_text": "In most default database collations, how are SQL keywords and string literal data treated?",
+      "options": [
+        "Both are always case-insensitive",
+        "Both are always case-sensitive",
+        "Keywords are typically case-insensitive; string data comparisons are typically case-sensitive",
+        "Keywords are case-sensitive; string data is never compared at all"
+      ],
+      "correct_index": 2,
+      "explanation": "SELECT and select behave the same, but 'Asha' and 'asha' are usually treated as different string values.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-8-sql-overview-6",
+      "test_id": "pt-dbms-sql-8-sql-overview",
+      "question_text": "A college portal needs a payment and its receipt to be recorded together, or not at all. Which SQL sub-language governs that guarantee?",
+      "options": [
+        "DDL",
+        "DQL",
+        "DML only",
+        "TCL"
+      ],
+      "correct_index": 3,
+      "explanation": "TCL (COMMIT/ROLLBACK) controls transaction boundaries, which is exactly the all-or-nothing guarantee described.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-8-sql-overview-7",
+      "test_id": "pt-dbms-sql-8-sql-overview",
+      "question_text": "A multi-statement SQL script is missing a semicolon between two statements. What is the most likely risk?",
+      "options": [
+        "The script always fails to parse with an obvious error",
+        "The two statements may be merged, silently changing what actually runs",
+        "SQL automatically inserts the missing semicolon",
+        "Nothing — semicolons are purely cosmetic in every database"
+      ],
+      "correct_index": 1,
+      "explanation": "A missing statement terminator can cause statements to run together, changing behavior in a way that may not be an obvious syntax error.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-8-sql-overview-8",
+      "test_id": "pt-dbms-sql-8-sql-overview",
+      "question_text": "Why does learning SQL transfer well between MySQL, PostgreSQL, SQL Server, and Oracle?",
+      "options": [
+        "They all use exactly identical syntax with zero differences",
+        "The core statement types (DDL/DML/DQL/DCL/TCL) and declarative model are shared across relational engines, even though dialect details differ",
+        "SQL is not actually used by most of these products",
+        "Only one of them actually supports SQL"
+      ],
+      "correct_index": 1,
+      "explanation": "The fundamental structure — the four sub-languages and the declarative query model — is common to relational databases generally, even though specific functions/syntax vary by vendor.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "sql_verification": {
+    "engine": "11.8.6-MariaDB-0+deb13u1 from Debian",
+    "scope": "MariaDB compatibility execution; exact MySQL 8.4/provider execution unverified",
+    "fingerprint": "a92864176d0e95e6e79907c89def00c948021617f1ddea558a692c65a031810a",
+    "cases": [
+      {
+        "problem": "dbx2-sql-overview-open-courses",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "dbx2-sql-overview-open-courses",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "dbx2-sql-overview-open-courses",
+        "case": 2,
+        "passed": true
+      },
+      {
+        "problem": "dbx2-sql-overview-seat-summary",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "dbx2-sql-overview-seat-summary",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "dbx2-sql-overview-seat-summary",
+        "case": 2,
+        "passed": true
+      }
+    ],
+    "all_passed": true
+  }
+}

@@ -1,0 +1,603 @@
+{
+  "source_ref": "chapter-12-select-and-filtering/logical-operators",
+  "slug": "logical-operators",
+  "title": "Logical Operators",
+  "description": "Combine SQL predicates with AND, OR and NOT using truth tables, NULL reasoning, parentheses, and examples of shared eligibility requirements.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Combine conditions to express a policy\n\nLogical operators combine predicates into a condition that describes a business rule. A campus equipment desk might allow a request when equipment is available and the requester has completed training. A different rule might accept either a staff authorization or a supervised appointment. The choice between AND and OR changes which requests qualify, so begin with the intended policy rather than a memorized operator pattern.\n\nGive each component condition a clear meaning. Available stock, valid training and staff authorization are distinct facts. Write down which combinations should be accepted before constructing SQL. That small decision table can reveal an ambiguity in the requirement, such as whether staff authorization replaces training or whether every requester must satisfy training regardless of their role.\n\n## AND requires every condition to succeed\n\nFor known TRUE and FALSE operands, AND is true only when both sides are true. If positive stock and completed training are both required, a row with stock but no training must fail. A row with training but no stock also fails. This seems straightforward until examples contain only rows where the two conditions happen to agree.\n\nTest the near misses independently. One fixture should satisfy only the stock rule, another only training and a third both. A fourth can satisfy neither. Those cases distinguish AND from OR directly. If the output is meant to be one row per request, retain request identity so different requesters with the same eligibility state are not accidentally merged by an unrelated DISTINCT.\n\n## OR describes alternative ways to qualify\n\nOR is true when at least one operand is true, including when both are true. It is inclusive rather than exclusive. If staff approval or supervisor approval is sufficient, a request with both approvals still qualifies. A requirement saying exactly one approval is present needs a different explicit condition; ordinary OR does not reject the both-approved case.\n\nAlternatives can share a restriction. Equipment can belong to either the camera category or the microphone category, while all admitted rows must have positive stock. The allowed-category expression is one logical group, and the stock expression restricts that whole group. This structure is easier to review when written with parentheses that reflect the policy's natural boundaries.\n\n```sql\nSELECT request_id\nFROM equipment_requests\nWHERE (staff_approved = 1 OR supervisor_approved = 1)\n  AND available_quantity > 0\nORDER BY request_id;\n```\n\n## NOT reverses a known truth value\n\nNOT turns TRUE into FALSE and FALSE into TRUE. It applies to a condition, so parentheses can make the intended scope explicit. Saying not both overdue and exempt differs from saying not overdue and exempt. Translate the complete phrase into its logical grouping before applying negation, especially when eligibility or an exclusion rule affects access to a resource.\n\nA negative requirement often benefits from a positive restatement. Instead of struggling with several nested negations, identify the combinations that qualify and compare the two expressions against a small table. This is a readability technique, not permission to change the policy. Keep [NULL](/learning/dbms-sql-tutorial/null-values) cases in the table because ordinary Boolean intuition is incomplete when a fact can be unknown.\n\n## UNKNOWN is a separate logical state\n\nA comparison involving NULL commonly yields UNKNOWN. If training_completed is NULL, the predicate training_completed equals one is unknown rather than false. That means the system lacks a known positive training fact. In [WHERE](/learning/dbms-sql-tutorial/where), only TRUE survives, so an unknown required condition normally prevents eligibility unless another explicit branch makes the overall expression true.\n\nNOT UNKNOWN remains UNKNOWN. Therefore, negating training_completed equals one does not automatically select missing training values as known failures. If a report needs both known failures and missing records, describe those cases separately. The report's purpose determines whether absence means investigate, reject, allow or preserve an unknown state; SQL should express that policy rather than silently guess it.\n\n## Decisive operands explain three-valued results\n\nFALSE AND UNKNOWN is FALSE because a known failing requirement already prevents both requirements from being true. TRUE AND UNKNOWN is UNKNOWN because the missing fact still determines whether both succeed. Similarly, TRUE OR UNKNOWN is TRUE because one accepted alternative is already sufficient. FALSE OR UNKNOWN remains UNKNOWN because the unknown alternative could decide the outcome.\n\nThese are semantic results, not a promise about expression execution order. Do not rely on a left operand to prevent all evaluation of an unsafe right-side expression. The optimizer and engine's documented rules determine physical evaluation. Construct safe expressions and test the actual dialect rather than use logical notation as a general-purpose exception guard.\n\n## Precedence does not replace readable grouping\n\nIn the ordinary SQL keyword forms used here, NOT binds more tightly than AND, and AND more tightly than OR. Thus a or b and c means a or the conjunction of b and c. If c is supposed to restrict both alternatives, the unparenthesized form is wrong. Parentheses make that shared requirement explicit and reduce the chance of a later edit changing its scope.\n\nMySQL has additional symbolic forms and SQL-mode-dependent behaviour. Prefer the clear AND, OR and NOT keywords in these examples. A pair of vertical bars can mean something different under a mode that enables concatenation semantics. Portable intent is easier to maintain when the chosen syntax is documented and avoids unnecessary dependence on nonstandard operator aliases.\n\n## Membership can make repeated alternatives clearer\n\nSeveral equality alternatives on the same value can often be expressed with IN. A category in a list of known allowed categories communicates a membership policy without repeating the column name. It does not mean a range, pattern or regular expression. Keep a deliberate missing-value policy because NULL inside a list or in the tested value can still produce UNKNOWN.\n\nIN is not a substitute for arbitrary mixed conditions. Staff approval or a scheduled appointment compares different facts and may involve different state requirements. Collapsing that policy into a convenient numeric list can obscure meaning. Reuse concise forms when they preserve the actual predicate structure, and explain why each listed value belongs to the accepted set.\n\n## Missingness needs an explicit policy branch\n\nSuppose a reminder report needs requests with training not completed, including missing training records. A comparison with zero captures known failure but excludes NULL. Adding OR training_completed IS NULL makes the unknown case deliberate. Conversely, a borrowing eligibility query might require a known one and exclude unknowns. The same source column supports different valid reports depending on the stated purpose.\n\nAvoid replacing NULL with a default merely to simplify every predicate. Converting unknown stock into zero may be appropriate for one display but can destroy the difference between a confirmed empty store and an uncounted store in another report. Preserve that distinction in storage and choose report-level handling that communicates the intended meaning.\n\n## Access restrictions must apply to every branch\n\nA trusted query that combines an ownership restriction with business alternatives must keep ownership outside the grouped alternatives when it is universally required. An expression shaped as owned and eligible or exceptional can let exceptional rows bypass the ownership condition. Parentheses should show that every admitted branch remains within the caller's authorized scope.\n\nThis logical review complements actual server or database authorization. A client-side condition cannot be the sole protection for private rows, because the client can be bypassed. Test denied actors at the authoritative enforcement boundary as well as testing the SQL condition's truth table. A correct Boolean expression in an interface is not evidence that unauthorized reads are impossible elsewhere.\n\n## Trace accepted and excluded combinations\n\nThe first exercise combines approval alternatives with a universal stock requirement. Its fixtures include an approved request without stock and an unapproved request with stock, exposing a misplaced OR. The second produces a reminder list that deliberately includes missing training values while excluding completed training. Both return request identities in a deterministic order.\n\nWhen reviewing a compound predicate, name each component, calculate its truth value and combine those values according to the written parentheses. Explain an accepted row and an almost-accepted row. Include at least one UNKNOWN case where the policy permits missing input. This method makes logical SQL a precise description of eligibility instead of a collection of symbols that happens to match one sample.\n",
+  "references": [
+    {
+      "title": "MySQL 8.4 logical operators",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/logical-operators.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-12-logical-operators",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-12-logical-operators-1",
+          "test_id": "pt-dbms-sql-12-logical-operators",
+          "question_text": "What do AND, OR and NOT operate on in a WHERE condition?",
+          "options": [
+            "Only table names",
+            "Predicates and their logical results",
+            "Only sort directions",
+            "Only integer primary keys"
+          ],
+          "correct_index": 1,
+          "explanation": "They combine or negate conditions.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-12-logical-operators-2",
+          "test_id": "pt-dbms-sql-12-logical-operators",
+          "question_text": "How does a OR b AND c group with keyword precedence?",
+          "options": [
+            "(a OR b) AND c",
+            "a OR (b AND c)",
+            "(a OR b) OR c",
+            "It is always invalid SQL"
+          ],
+          "correct_index": 1,
+          "explanation": "AND binds more tightly than OR.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-12-logical-operators-3",
+          "test_id": "pt-dbms-sql-12-logical-operators",
+          "question_text": "What is TRUE AND UNKNOWN?",
+          "options": [
+            "TRUE",
+            "UNKNOWN",
+            "FALSE",
+            "A syntax error"
+          ],
+          "correct_index": 1,
+          "explanation": "The missing condition still determines whether both requirements hold.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-12-logical-operators-4",
+          "test_id": "pt-dbms-sql-12-logical-operators",
+          "question_text": "What is TRUE OR UNKNOWN?",
+          "options": [
+            "UNKNOWN",
+            "TRUE",
+            "FALSE",
+            "NULL converted to zero"
+          ],
+          "correct_index": 1,
+          "explanation": "One known true alternative is sufficient.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-12-logical-operators-5",
+          "test_id": "pt-dbms-sql-12-logical-operators",
+          "question_text": "What is NOT UNKNOWN?",
+          "options": [
+            "TRUE",
+            "UNKNOWN",
+            "FALSE",
+            "An empty string"
+          ],
+          "correct_index": 1,
+          "explanation": "Negation does not create knowledge of a missing fact.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-12-logical-operators-6",
+          "test_id": "pt-dbms-sql-12-logical-operators",
+          "question_text": "How can repeated category equality alternatives be shortened?",
+          "options": [
+            "Use BETWEEN for arbitrary names",
+            "Use category IN a list of allowed values",
+            "Use one random category",
+            "Use ORDER BY category"
+          ],
+          "correct_index": 1,
+          "explanation": "Membership expresses repeated equality alternatives on the same operand.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-12-logical-operators-7",
+          "test_id": "pt-dbms-sql-12-logical-operators",
+          "question_text": "Why add explicit parentheses around policy alternatives?",
+          "options": [
+            "To remove NULL from all columns",
+            "To show which shared restrictions apply to every branch",
+            "To guarantee short-circuit evaluation",
+            "Because OR is otherwise illegal"
+          ],
+          "correct_index": 1,
+          "explanation": "Grouping communicates the intended condition structure.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-12-logical-operators-8",
+          "test_id": "pt-dbms-sql-12-logical-operators",
+          "question_text": "Is NOT fully described only by TRUE and FALSE cases when inputs can be NULL?",
+          "options": [
+            "Yes, NULL is always FALSE",
+            "No, UNKNOWN remains UNKNOWN",
+            "Yes, NULL is always TRUE",
+            "Only if the table has an index"
+          ],
+          "correct_index": 1,
+          "explanation": "SQL's third truth state must be considered.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-12-logical-operators-new-9",
+          "test_id": "pt-dbms-sql-12-logical-operators",
+          "question_text": "Does ordinary OR reject a row where both alternatives are TRUE?",
+          "options": [
+            "No, OR is inclusive",
+            "Yes, OR always means exactly one",
+            "Only when both operands are indexed",
+            "Always if stock is positive"
+          ],
+          "correct_index": 0,
+          "explanation": "Exclusive alternatives require an explicit different rule.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-12-logical-operators-new-10",
+          "test_id": "pt-dbms-sql-12-logical-operators",
+          "question_text": "What is FALSE AND UNKNOWN?",
+          "options": [
+            "UNKNOWN",
+            "FALSE",
+            "TRUE",
+            "A permission error"
+          ],
+          "correct_index": 1,
+          "explanation": "A known failing requirement determines the conjunction.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-12-logical-operators-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-12-logical-operators-application-new-1",
+          "test_id": "pt-dbms-sql-12-logical-operators-application",
+          "question_text": "What is FALSE OR UNKNOWN?",
+          "options": [
+            "FALSE",
+            "UNKNOWN",
+            "TRUE",
+            "Zero by definition"
+          ],
+          "correct_index": 1,
+          "explanation": "The unknown alternative can still determine qualification.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-12-logical-operators-application-new-2",
+          "test_id": "pt-dbms-sql-12-logical-operators-application",
+          "question_text": "For (a OR b) AND stock_positive, which stock state prevents acceptance regardless of approvals?",
+          "options": [
+            "Known TRUE",
+            "A positive integer",
+            "Known FALSE",
+            "A known successful comparison"
+          ],
+          "correct_index": 2,
+          "explanation": "The universal stock requirement must hold.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-12-logical-operators-application-new-3",
+          "test_id": "pt-dbms-sql-12-logical-operators-application",
+          "question_text": "Why is approval OR supervisor_approval AND stock_positive risky when stock is universal?",
+          "options": [
+            "AND binds less tightly than OR",
+            "The expression always rejects every row",
+            "Approval cannot be stored in SQL",
+            "The first approval branch can bypass the stock restriction"
+          ],
+          "correct_index": 3,
+          "explanation": "Use parentheses around approval alternatives.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-12-logical-operators-application-new-4",
+          "test_id": "pt-dbms-sql-12-logical-operators-application",
+          "question_text": "What is required to include both known incomplete and missing training records?",
+          "options": [
+            "A deliberate incomplete predicate OR training IS NULL",
+            "Only NOT(training=1)",
+            "Only training=NULL",
+            "A sort on training"
+          ],
+          "correct_index": 0,
+          "explanation": "Ordinary negation does not retain UNKNOWN in WHERE.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-12-logical-operators-application-new-5",
+          "test_id": "pt-dbms-sql-12-logical-operators-application",
+          "question_text": "Does a truth-table result guarantee left-to-right short-circuit execution?",
+          "options": [
+            "Yes, in every query",
+            "No, physical evaluation is a separate engine matter",
+            "Only for inexpensive operands",
+            "Only for WHERE clauses"
+          ],
+          "correct_index": 1,
+          "explanation": "Use safe expressions under documented evaluation rules.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-12-logical-operators-application-new-6",
+          "test_id": "pt-dbms-sql-12-logical-operators-application",
+          "question_text": "Why prefer AND and OR keywords over mode-sensitive symbols here?",
+          "options": [
+            "They always force faster plans",
+            "They bypass required-value checks",
+            "They express intent without unnecessary symbolic mode dependence",
+            "They turn UNKNOWN into FALSE"
+          ],
+          "correct_index": 2,
+          "explanation": "MySQL symbolic forms can have different mode-dependent meaning.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-12-logical-operators-application-new-7",
+          "test_id": "pt-dbms-sql-12-logical-operators-application",
+          "question_text": "What can NULL in an IN expression affect?",
+          "options": [
+            "It always creates a table",
+            "It always makes every value match",
+            "It is automatically removed without effect",
+            "The resulting truth value can be UNKNOWN"
+          ],
+          "correct_index": 3,
+          "explanation": "Membership still participates in three-valued logic.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-12-logical-operators-application-new-8",
+          "test_id": "pt-dbms-sql-12-logical-operators-application",
+          "question_text": "How should universal ownership be grouped with two eligible alternatives?",
+          "options": [
+            "owned AND (eligible OR exceptional)",
+            "(owned AND eligible) OR exceptional",
+            "owned OR eligible OR exceptional",
+            "NOT owned OR eligible"
+          ],
+          "correct_index": 0,
+          "explanation": "Every accepted branch must remain within the universal ownership condition.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-12-logical-operators-application-new-9",
+          "test_id": "pt-dbms-sql-12-logical-operators-application",
+          "question_text": "What fixture distinguishes a required conjunction from alternatives?",
+          "options": [
+            "Only rows satisfying both",
+            "A row satisfying exactly one component condition",
+            "Only duplicate identities",
+            "No rows"
+          ],
+          "correct_index": 1,
+          "explanation": "Near misses expose an accidental OR.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-12-logical-operators-application-new-10",
+          "test_id": "pt-dbms-sql-12-logical-operators-application",
+          "question_text": "Why preserve the difference between zero and NULL stock?",
+          "options": [
+            "They are always identical facts",
+            "NULL is automatically positive",
+            "Confirmed emptiness and an unknown count can support different policies",
+            "Zero cannot be stored in SQL"
+          ],
+          "correct_index": 2,
+          "explanation": "Choose missing-value treatment according to the report contract.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cx-logical-approved-with-stock",
+      "slug": "logical-approved-with-stock",
+      "title": "Require stock for either approval route",
+      "difficulty": "Easy",
+      "task": "Return request_id when either staff_approved=1 or supervisor_approved=1, and available_quantity>0 is also TRUE. Unknown conditions follow ordinary SQL logic. Order by request_id.",
+      "schema_sql": "CREATE TABLE equipment_requests(request_id INT PRIMARY KEY,staff_approved INT,supervisor_approved INT,available_quantity INT,training_completed INT);",
+      "seed_sql": "INSERT INTO equipment_requests VALUES (1,1,0,0,1),(2,0,1,3,1),(3,0,0,4,1),(4,1,NULL,2,1),(5,NULL,0,2,1);",
+      "expected": "request_id\n2\n4",
+      "ordering": "As explicitly ordered in the result query.",
+      "constraints": [
+        "Use only the supplied synthetic tables and requested transition.",
+        "Preserve unrelated rows."
+      ],
+      "edge_cases": [
+        "Known approval does not bypass zero or unknown stock.",
+        "One known true approval can outweigh an unknown alternative."
+      ],
+      "hints": [
+        "Group the two approval comparisons.",
+        "Apply the stock requirement to that whole group."
+      ],
+      "solution_sql": "SELECT request_id FROM equipment_requests WHERE (staff_approved=1 OR supervisor_approved=1) AND available_quantity>0 ORDER BY request_id;",
+      "explanation": "The grouped approval alternatives share the stock restriction. TRUE OR UNKNOWN is TRUE for request 4; request 5 has no known true approval.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO equipment_requests VALUES (8,1,1,NULL,1),(9,0,1,1,1);",
+          "expected": "request_id\n9"
+        },
+        {
+          "seed_sql": "INSERT INTO equipment_requests VALUES (1,0,0,2,1);",
+          "expected": ""
+        }
+      ]
+    },
+    {
+      "id": "cx-logical-training-reminders",
+      "slug": "logical-training-reminders",
+      "title": "Include missing training in reminders",
+      "difficulty": "Medium",
+      "task": "Return request_id for rows whose training_completed is 0 or NULL. Only the values 0,1,NULL occur in this fixture contract. Other columns do not affect reminders. Order by request_id.",
+      "schema_sql": "CREATE TABLE equipment_requests(request_id INT PRIMARY KEY,staff_approved INT,supervisor_approved INT,available_quantity INT,training_completed INT);",
+      "seed_sql": "INSERT INTO equipment_requests VALUES (1,1,0,2,1),(2,1,0,2,0),(3,1,0,2,NULL),(4,0,0,0,0);",
+      "expected": "request_id\n2\n3\n4",
+      "ordering": "As explicitly ordered in the result query.",
+      "constraints": [
+        "Use only the supplied synthetic tables and requested transition.",
+        "Preserve unrelated rows."
+      ],
+      "edge_cases": [
+        "Missing training requires a reminder.",
+        "A known zero qualifies even when other fields fail unrelated policies."
+      ],
+      "hints": [
+        "Known failure and missing information are separate alternatives.",
+        "Do not add approval or stock eligibility conditions to this reminder report."
+      ],
+      "solution_sql": "SELECT request_id FROM equipment_requests WHERE training_completed=0 OR training_completed IS NULL ORDER BY request_id;",
+      "explanation": "A separate IS NULL alternative includes missing records rather than treating NOT(training_completed=1) as a complete missing-value policy.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO equipment_requests VALUES (7,0,0,0,1);",
+          "expected": ""
+        },
+        {
+          "seed_sql": "INSERT INTO equipment_requests VALUES (8,NULL,NULL,NULL,NULL),(9,1,1,3,0);",
+          "expected": "request_id\n8\n9"
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-12-logical-operators-1",
+      "test_id": "pt-dbms-sql-12-logical-operators",
+      "question_text": "What do AND, OR, and NOT do in a WHERE clause?",
+      "options": [
+        "They sort the result",
+        "They combine multiple conditions into a single compound condition",
+        "They rename columns",
+        "They limit the number of returned rows"
+      ],
+      "correct_index": 1,
+      "explanation": "These are SQL's logical operators for building compound conditions.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-12-logical-operators-2",
+      "test_id": "pt-dbms-sql-12-logical-operators",
+      "question_text": "In `WHERE a OR b AND c` with no parentheses, how is this actually evaluated?",
+      "options": [
+        "As (a OR b) AND c",
+        "As a OR (b AND c), since AND binds tighter than OR",
+        "Left to right with no precedence rules",
+        "This is always a syntax error"
+      ],
+      "correct_index": 1,
+      "explanation": "AND has higher precedence than OR, so it binds first — a common source of unintended filter logic.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-12-logical-operators-3",
+      "test_id": "pt-dbms-sql-12-logical-operators",
+      "question_text": "What does TRUE AND UNKNOWN evaluate to?",
+      "options": [
+        "TRUE",
+        "UNKNOWN",
+        "FALSE",
+        "This combination is undefined in SQL"
+      ],
+      "correct_index": 1,
+      "explanation": "AND requires both sides to be definitely TRUE; an UNKNOWN side keeps the result UNKNOWN.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-12-logical-operators-4",
+      "test_id": "pt-dbms-sql-12-logical-operators",
+      "question_text": "What does TRUE OR UNKNOWN evaluate to?",
+      "options": [
+        "UNKNOWN",
+        "TRUE — a known TRUE side is enough regardless of the other side",
+        "FALSE",
+        "This combination causes an error"
+      ],
+      "correct_index": 1,
+      "explanation": "OR only needs one side to be TRUE, so a TRUE side guarantees a TRUE result even if the other side is UNKNOWN.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-12-logical-operators-5",
+      "test_id": "pt-dbms-sql-12-logical-operators",
+      "question_text": "What does NOT UNKNOWN evaluate to?",
+      "options": [
+        "TRUE",
+        "Still UNKNOWN — NOT does not convert UNKNOWN into a definite value",
+        "FALSE",
+        "It depends on the specific SQL dialect"
+      ],
+      "correct_index": 1,
+      "explanation": "This is a genuinely counter-intuitive but important three-valued-logic fact: NOT UNKNOWN remains UNKNOWN.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-12-logical-operators-6",
+      "test_id": "pt-dbms-sql-12-logical-operators",
+      "question_text": "What is a more concise way to write `category = 'Books' OR category = 'Stationery' OR category = 'Home'`?",
+      "options": [
+        "category BETWEEN 'Books' AND 'Home'",
+        "category IN ('Books', 'Stationery', 'Home')",
+        "category LIKE 'Books|Stationery|Home'",
+        "There is no more concise equivalent"
+      ],
+      "correct_index": 1,
+      "explanation": "IN is designed exactly for this repeated-OR-equality pattern against one column.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-12-logical-operators-7",
+      "test_id": "pt-dbms-sql-12-logical-operators",
+      "question_text": "Why should mixed AND/OR conditions generally be parenthesized explicitly?",
+      "options": [
+        "Parentheses are required by SQL syntax in every case",
+        "To make the intended evaluation order unambiguous and avoid precedence-related bugs",
+        "Parenthesized conditions run faster",
+        "Parentheses convert three-valued logic into two-valued logic"
+      ],
+      "correct_index": 1,
+      "explanation": "Explicit parentheses remove any ambiguity about which operator binds first, preventing subtle logic bugs.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-12-logical-operators-8",
+      "test_id": "pt-dbms-sql-12-logical-operators",
+      "question_text": "Does NOT simply invert TRUE to FALSE and FALSE to TRUE, with no other cases to consider?",
+      "options": [
+        "Yes, that's the complete behavior",
+        "No — NOT UNKNOWN remains UNKNOWN, a third case beyond the simple TRUE/FALSE inversion",
+        "NOT can only be applied to TRUE, never FALSE",
+        "NOT is not supported in standard SQL"
+      ],
+      "correct_index": 1,
+      "explanation": "Three-valued logic means NOT has three possible outcomes to consider, not just two.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "coordinator",
+    "independent_review": "passed",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Independent manual review passed; native MySQL fixture evidence recorded separately; provider/browser/Supabase release gates remain separate.",
+    "existing_question_corrections": [
+      "tq-dbms-sql-12-logical-operators-1",
+      "tq-dbms-sql-12-logical-operators-2",
+      "tq-dbms-sql-12-logical-operators-3",
+      "tq-dbms-sql-12-logical-operators-4",
+      "tq-dbms-sql-12-logical-operators-5",
+      "tq-dbms-sql-12-logical-operators-6",
+      "tq-dbms-sql-12-logical-operators-7",
+      "tq-dbms-sql-12-logical-operators-8"
+    ],
+    "canonical_answer_indices_preserved": true,
+    "editorial_record": "Original snapshots retained. Questions rewritten for precise dialect and topic coverage while preserving identities and canonical answer positions; technical and independent review pending.",
+    "independent_reviewer": "Codex reviewer, current 2026-10-30 session",
+    "independent_review_scope": "Read full notes, all 640 MCQ stems/options/canonical answers/explanations, 64 exercise contracts/solutions/fixtures, and all 32 diagrams. Verified retained identities/answers through source-continuity tests; SQL execution evidence is recorded separately. No external originality, provider, live application or Supabase authorization clearance.",
+    "independent_review_record": "reports/independent-review-2026-10-30.json",
+    "content_sha256": "d2993fc25f31d0a5667adf88729061677b332c356c644b9f77bc9ff76766cbac"
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-12-logical-operators",
+    "original_note_sha256": "ec7cbd98a5afe3d865422ce8dfee069cd6fef3f1a860e38890d184efcfe75950",
+    "status": "drafted; not yet included in prepared paired migrations"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "A decisive operand can determine a three-valued result",
+      "description": "UNKNOWN represents a missing fact rather than a known false fact.",
+      "columns": [
+        "Left",
+        "Right",
+        "AND result",
+        "OR result"
+      ],
+      "rows": [
+        [
+          "TRUE",
+          "UNKNOWN",
+          "UNKNOWN",
+          "TRUE"
+        ],
+        [
+          "FALSE",
+          "UNKNOWN",
+          "FALSE",
+          "UNKNOWN"
+        ],
+        [
+          "UNKNOWN",
+          "UNKNOWN",
+          "UNKNOWN",
+          "UNKNOWN"
+        ],
+        [
+          "TRUE",
+          "FALSE",
+          "FALSE",
+          "TRUE"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "drafted — verification pending",
+    "server_rendering": "pending",
+    "browser_rendering": "unverified",
+    "independent_review": "pending"
+  },
+  "authoring_status": "drafted — verification pending",
+  "sql_verification": {
+    "scope": "not executed; exact MySQL/provider verification pending",
+    "all_passed": false,
+    "cases": []
+  }
+}

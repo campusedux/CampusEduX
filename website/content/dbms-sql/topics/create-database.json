@@ -1,0 +1,636 @@
+{
+  "source_ref": "chapter-9-ddl-and-schema-design/create-database",
+  "slug": "create-database",
+  "title": "CREATE DATABASE",
+  "description": "Create a MySQL database with deliberate text defaults, understand session targeting and privileges, and detect configuration drift without assuming IF NOT EXISTS repairs it.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Creation establishes a named database container\n\nCREATE DATABASE introduces a named database on the connected server. In MySQL, that database groups objects such as tables and views and carries defaults used when objects are created without their own explicit settings. It does not populate a complete application, copy an existing dataset, or automatically give every account permission to read the new objects.\n\nFor a campus reporting project, campus_reporting is a meaningful database name, while students is a likely table inside it. The difference matters because creating the database does not create the students table. Describe the intended object level before writing SQL: server connection, database container, table definition, and rows represent different decisions and different operations.\n\n## State the target dialect before using the syntax\n\nIn MySQL, CREATE SCHEMA is a synonym for CREATE DATABASE. A script using CREATE SCHEMA campus_reporting does not introduce an additional namespace inside the current MySQL database. It creates the same kind of database container. PostgreSQL instead has schemas inside a database, so importing a namespace-oriented script without checking the dialect can change its meaning.\n\nPostgreSQL database creation also has its own supported options and execution restrictions. In particular, CREATE DATABASE cannot execute inside a transaction block. Do not generalize that restriction into a claim that all database systems implement DDL identically. The executable exercises here target MySQL-style syntax, while the comparisons identify why an engine-specific reading is necessary.\n\n## Choose stable names and quote identifiers correctly\n\nUse a clear naming convention with consistent lowercase spelling and a documented environment suffix when appropriate. A database name is an identifier, not a text value. In ordinary MySQL syntax, backticks quote identifiers; single quotes denote strings in expressions. Avoid making generated identifiers from unchecked input or treating value-parameter binding as automatic support for arbitrary identifier substitution.\n\nCase behaviour for MySQL database and table names depends on the platform and relevant server configuration. A spelling that works on one development machine can fail after transfer to another setup. Consistent spelling reduces this risk, but a migration still needs verification on its actual target. Do not infer identifier rules from the collation used for stored student names.\n\n## Text defaults deserve an explicit decision\n\nA character set determines the supported character representation, while a collation supplies comparison and ordering rules for character data. A database can define defaults inherited by new tables when their definitions do not override those choices. That inheritance is a convenience, not a promise that every existing column always matches the latest database default.\n\nThe example chooses utf8mb4 and a named supported collation deliberately. Different MySQL versions and compatible products can support different collation names and semantics. A local MariaDB run is therefore recorded separately from exact MySQL verification. Choose a collation for the application's equality and sorting needs rather than copying a name solely because it worked in a tutorial fixture.\n\n```sql\nCREATE DATABASE IF NOT EXISTS campus_reporting\n  DEFAULT CHARACTER SET utf8mb4\n  COLLATE utf8mb4_unicode_ci;\n```\n\n## Creating a database does not select it\n\nThe current default database is a session setting. CREATE DATABASE does not automatically change that setting. In MySQL, USE campus_reporting changes the default database for subsequent unqualified object references in that connection. An explicitly qualified name such as campus_reporting.students can also identify the intended object without changing the default database.\n\nThis distinction corrects an easy misconception: a new connection is not always required before creating a MySQL table in another database. The connection must have appropriate access and must target the object correctly. Other products use different connection and cross-database rules, so a portable explanation should identify the product instead of saying every engine requires the same switch operation.\n\n## IF NOT EXISTS handles a name collision only\n\nIf the requested name already exists, IF NOT EXISTS avoids the ordinary already-exists error for that creation statement. It does not compare the existing database with the proposed definition and reconcile differences. A database created earlier with another collation can retain that setting even when the repeated CREATE statement requests the new default.\n\nThat is why a provisioning workflow needs an inspection step. Query the relevant catalog metadata and compare the observed defaults with the expected contract. Report a mismatch rather than assuming successful command completion proves configuration agreement. Changing defaults, converting existing data, and checking application compatibility are separate tasks with different consequences; the exercises do not silently perform those changes.\n\n## Inspect the object that was actually created\n\nINFORMATION_SCHEMA.SCHEMATA exposes database metadata visible to the current account. Selecting the intended schema name, default character set and default collation makes the result more informative than merely seeing an acknowledgment. Keep the filter specific to the database being checked so unrelated system or application databases do not enter the report.\n\nCatalog visibility is also subject to access rules. An account seeing no matching catalog row should not automatically conclude the database is absent for every administrator. The verification task needs the correct connection, account and expected visibility. Likewise, observing an object does not establish that the application account has all the permissions needed for its later workload.\n\n## Separate provisioning authority from application use\n\nCreating a database requires the relevant MySQL privilege. A runtime account that can query selected application tables does not necessarily have permission to create another database, and it should not be described as broken merely because provisioning fails. Establish which actor owns that operation and which account the application will use afterward.\n\nDatabase creation is not an authorization shortcut. It does not make tenant isolation automatic or validate that a caller should see every table in the container. Object privileges and trusted application checks still govern access. These notes explain the operation; they do not recommend granting broad administrative authority to a normal exercise runner or to a browser-facing application account.\n\n## Cross-database references follow product boundaries\n\nOn a MySQL server, supported qualified table references can read objects from different databases in one query when the account has appropriate access. A blanket statement that ordinary joins across databases always need an external connector is inaccurate for that setting. Accessing another server introduces a different connectivity problem and cannot be inferred from a local database-qualified name.\n\nPostgreSQL normally connects a session to one database, with its schemas providing namespaces inside that connection. Additional cross-database mechanisms have their own configuration and semantics. Keep these contrasts scoped: knowing that one MySQL qualified join is possible does not prove every product, hosted service or cross-server arrangement offers the same capability.\n\n## Verification should include the already-existing case\n\nThe introductory exercise creates a specifically named disposable database with explicit defaults, builds a temporary table inside it, and copies supplied labels into that table. The result reports the observed catalog defaults and copied count. Empty input still requires the definition, while repeated labels still count as separate supplied occurrences under the stated input contract.\n\nThe second exercise starts from a deliberately existing database. It attempts the same guarded creation and reports whether the observed defaults agree with the requested ones. One fixture begins with an older text default so that a mismatch remains visible. Neither exercise treats IF NOT EXISTS as an ALTER DATABASE operation, and neither needs production records or credentials.\n\n## Treat creation and operational completion separately\n\nA successful CREATE DATABASE statement is one step in a broader lifecycle. Table definitions, compatible constraints, data loading, account permissions, application configuration and recovery procedures still require their own decisions. Avoid claiming a new database is ready for every workload merely because its name appears in a catalog. Likewise, deleting a database is a separate destructive operation, not an automatic response to a failed configuration comparison.\n\nThe exercise outputs verify observable results under their supplied setup. They do not prove every student submission used the required DDL, and a sandbox that forbids database creation cannot execute them without an appropriate administrative lab. Keep that runner capability requirement explicit. Local compatibility results, exact MySQL execution, hosted-provider support and application migration application remain distinct verification claims.\n",
+  "references": [
+    {
+      "title": "MySQL 8.4 CREATE DATABASE",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/create-database.html"
+    },
+    {
+      "title": "PostgreSQL 18 CREATE DATABASE",
+      "url": "https://www.postgresql.org/docs/18/sql-createdatabase.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-9-create-database",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-9-create-database-1",
+          "test_id": "pt-dbms-sql-9-create-database",
+          "question_text": "What does CREATE DATABASE establish in MySQL?",
+          "options": [
+            "To add a new column to an existing table",
+            "A named database container with defaults for objects created within it",
+            "To generate a new row of data",
+            "To create an index on a table"
+          ],
+          "correct_index": 1,
+          "explanation": "MySQL database and schema are synonymous; there is no extra required inner schema level.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-9-create-database-2",
+          "test_id": "pt-dbms-sql-9-create-database",
+          "question_text": "Which execution restriction applies to PostgreSQL CREATE DATABASE?",
+          "options": [
+            "It requires two-phase commit",
+            "It cannot execute inside a transaction block",
+            "It is deprecated syntax",
+            "It always requires superuser privileges"
+          ],
+          "correct_index": 1,
+          "explanation": "This is a product-defined execution restriction, not a general claim about every DDL implementation.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-9-create-database-3",
+          "test_id": "pt-dbms-sql-9-create-database",
+          "question_text": "What should precede a database-removal decision after a defaults mismatch?",
+          "options": [
+            "The database must contain at least one table",
+            "A separate explicit review of the target, dependent data and operation consequences",
+            "The database must be renamed first",
+            "All tables must be truncated first"
+          ],
+          "correct_index": 1,
+          "explanation": "A configuration mismatch does not authorize deletion; active-session restrictions differ by engine.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-9-create-database-4",
+          "test_id": "pt-dbms-sql-9-create-database",
+          "question_text": "In MySQL, what is the relationship between CREATE DATABASE and CREATE SCHEMA?",
+          "options": [
+            "CREATE SCHEMA creates a namespace inside a database created by CREATE DATABASE",
+            "They are unrelated commands",
+            "CREATE SCHEMA is only used for views",
+            "They are exact synonyms — both create the same kind of object"
+          ],
+          "correct_index": 3,
+          "explanation": "MySQL treats 'schema' and 'database' as synonyms, unlike PostgreSQL/SQL Server/Oracle where schema is a namespace inside a database.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-9-create-database-5",
+          "test_id": "pt-dbms-sql-9-create-database",
+          "question_text": "How can a MySQL connection target a newly created database for table creation?",
+          "options": [
+            "Nothing, tables can be created from any connection",
+            "Restart the database server",
+            "Select it with USE or use an appropriately qualified object name with the required privileges",
+            "Grant themselves superuser rights"
+          ],
+          "correct_index": 2,
+          "explanation": "CREATE DATABASE does not change the default database; a new connection is not inherently necessary.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-9-create-database-6",
+          "test_id": "pt-dbms-sql-9-create-database",
+          "question_text": "In MySQL, which clause avoids the already-existing-database error for guarded creation?",
+          "options": [
+            "CASCADE",
+            "IF NOT EXISTS",
+            "WITH CHECK OPTION",
+            "ON CONFLICT"
+          ],
+          "correct_index": 1,
+          "explanation": "The existing database is not reconciled with a changed proposed definition.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-9-create-database-7",
+          "test_id": "pt-dbms-sql-9-create-database",
+          "question_text": "Can MySQL join permitted tables in two databases on the same server using qualified names?",
+          "options": [
+            "JOIN syntax does not support more than one table",
+            "Yes; appropriate database-qualified names and access can support this directly",
+            "Databases cannot contain more than one table each",
+            "SQL does not support JOIN at all"
+          ],
+          "correct_index": 1,
+          "explanation": "Do not confuse MySQL database namespaces with PostgreSQL cross-database connectivity.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-9-create-database-8",
+          "test_id": "pt-dbms-sql-9-create-database",
+          "question_text": "A team creates a database on a case-insensitive Windows file system and later deploys the same script on a Linux server. What subtle issue can arise?",
+          "options": [
+            "Linux does not support CREATE DATABASE",
+            "Database name case sensitivity differs between operating systems, potentially causing name-mismatch bugs",
+            "SQL syntax differs entirely between operating systems",
+            "Windows does not allow more than one database"
+          ],
+          "correct_index": 1,
+          "explanation": "Case sensitivity of database names can differ by OS/file system, which is a real cross-environment migration pitfall.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-9-create-database-new-9",
+          "test_id": "pt-dbms-sql-9-create-database",
+          "question_text": "Does CREATE DATABASE also create a students table automatically?",
+          "options": [
+            "Yes, with default columns",
+            "No",
+            "Only if the name contains campus",
+            "Only with utf8mb4"
+          ],
+          "correct_index": 1,
+          "explanation": "Container creation and table definition are separate operations.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-9-create-database-new-10",
+          "test_id": "pt-dbms-sql-9-create-database",
+          "question_text": "What does a database default collation primarily influence?",
+          "options": [
+            "All existing columns are rewritten automatically",
+            "Every account gains access",
+            "Defaults for newly created objects that do not override it",
+            "Identifier case rules become identical everywhere"
+          ],
+          "correct_index": 2,
+          "explanation": "Default inheritance does not retroactively convert existing columns.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-9-create-database-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-9-create-database-application-new-1",
+          "test_id": "pt-dbms-sql-9-create-database-application",
+          "question_text": "An existing database uses latin1. Does IF NOT EXISTS with utf8mb4 repair it?",
+          "options": [
+            "Yes, including every stored value",
+            "Only if the SELECT is sorted",
+            "No",
+            "Only when the name is lowercase"
+          ],
+          "correct_index": 2,
+          "explanation": "A name collision is not a configuration reconciliation operation.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-9-create-database-application-new-2",
+          "test_id": "pt-dbms-sql-9-create-database-application",
+          "question_text": "Which MySQL statement changes a connection’s default database?",
+          "options": [
+            "CREATE TABLE alone",
+            "SELECT DISTINCT alone",
+            "ORDER BY alone",
+            "USE database_name"
+          ],
+          "correct_index": 3,
+          "explanation": "Creation does not select the new context.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-9-create-database-application-new-3",
+          "test_id": "pt-dbms-sql-9-create-database-application",
+          "question_text": "Why inspect SCHEMATA after guarded creation?",
+          "options": [
+            "To compare observed database defaults with the intended settings",
+            "To grant every user privileges",
+            "To copy every table",
+            "To prove all workloads are fast"
+          ],
+          "correct_index": 0,
+          "explanation": "Successful completion alone does not prove existing settings agree.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-9-create-database-application-new-4",
+          "test_id": "pt-dbms-sql-9-create-database-application",
+          "question_text": "Which MySQL quoting convention ordinarily denotes an identifier?",
+          "options": [
+            "Single-quoted text values",
+            "Backticks",
+            "A GPA decimal literal",
+            "An unescaped input string concatenated arbitrarily"
+          ],
+          "correct_index": 1,
+          "explanation": "Identifiers and values have different syntax and validation requirements.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-9-create-database-application-new-5",
+          "test_id": "pt-dbms-sql-9-create-database-application",
+          "question_text": "Does database creation grant every account access automatically?",
+          "options": [
+            "Yes, including anonymous callers",
+            "Only for student tables",
+            "No",
+            "Only if it is called schema"
+          ],
+          "correct_index": 2,
+          "explanation": "Privileges remain a separate access boundary.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-9-create-database-application-new-6",
+          "test_id": "pt-dbms-sql-9-create-database-application",
+          "question_text": "What can make a supported collation name differ between products?",
+          "options": [
+            "The number of labels copied",
+            "An output alias",
+            "The row ordering alone",
+            "The actual engine and version"
+          ],
+          "correct_index": 3,
+          "explanation": "Compatibility products do not necessarily expose the exact same collation inventory.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-9-create-database-application-new-7",
+          "test_id": "pt-dbms-sql-9-create-database-application",
+          "question_text": "Why can a catalog query return no visible database row?",
+          "options": [
+            "The target may be absent or not visible to that account",
+            "Every database must be empty",
+            "The server has no privileges system",
+            "CREATE DATABASE always failed globally"
+          ],
+          "correct_index": 0,
+          "explanation": "Interpret observations within connection and actor scope.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-9-create-database-application-new-8",
+          "test_id": "pt-dbms-sql-9-create-database-application",
+          "question_text": "Does a same-server qualified reference establish remote-server access?",
+          "options": [
+            "Yes, automatically",
+            "No",
+            "Only with DISTINCT",
+            "Only with uppercase names"
+          ],
+          "correct_index": 1,
+          "explanation": "Cross-server connectivity is a separate problem.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-9-create-database-application-new-9",
+          "test_id": "pt-dbms-sql-9-create-database-application",
+          "question_text": "Which account is appropriate for an administrative creation lab?",
+          "options": [
+            "Every production application account",
+            "Any anonymous browser user",
+            "One explicitly authorized for the isolated provisioning operation",
+            "An account whose denial is bypassed"
+          ],
+          "correct_index": 2,
+          "explanation": "Runner capability is a requirement, not a reason to widen ordinary access.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-9-create-database-application-new-10",
+          "test_id": "pt-dbms-sql-9-create-database-application",
+          "question_text": "What does a copied-label count verify?",
+          "options": [
+            "That arbitrary student code used CREATE DATABASE",
+            "Every provider supports the operation",
+            "All access rules are correct",
+            "The supplied copy result in that exercise setup"
+          ],
+          "correct_index": 3,
+          "explanation": "Recorded output checks have a limited observable scope.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cx-create-database-lab",
+      "slug": "create-database-lab",
+      "title": "Create a disposable database with explicit text defaults",
+      "difficulty": "Easy",
+      "task": "In an authorized administrative lab, create database cx_dbms_lab_catalog if absent, with utf8mb4 and utf8mb4_unicode_ci defaults. Create TEMPORARY table cx_dbms_lab_catalog.copied_labels(label VARCHAR(40) NOT NULL), copy labels from supplied lab_labels, and return database_name, character_set_name, collation_name and label_count. The database is initially absent or already has those exact defaults. Do not execute this against application databases.",
+      "schema_sql": "CREATE TABLE lab_labels (label VARCHAR(40) NOT NULL);",
+      "seed_sql": "INSERT INTO lab_labels VALUES ('Science'),('Arts');",
+      "expected": "database_name\tcharacter_set_name\tcollation_name\tlabel_count\ncx_dbms_lab_catalog\tutf8mb4\tutf8mb4_unicode_ci\t2",
+      "ordering": "Exactly one catalog row for the stated database.",
+      "constraints": [
+        "Requires CREATE DATABASE in an isolated administrative lab; restricted query runners may not support it.",
+        "Only cx_dbms_lab_catalog is the creation target."
+      ],
+      "edge_cases": [
+        "Empty labels still creates the requested structure.",
+        "Repeated input labels count as separate occurrences."
+      ],
+      "hints": [
+        "Create the database with explicit defaults before the qualified temporary table.",
+        "Inspect INFORMATION_SCHEMA.SCHEMATA for the named target."
+      ],
+      "solution_sql": "CREATE DATABASE IF NOT EXISTS cx_dbms_lab_catalog DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; CREATE TEMPORARY TABLE cx_dbms_lab_catalog.copied_labels (label VARCHAR(40) NOT NULL); INSERT INTO cx_dbms_lab_catalog.copied_labels SELECT label FROM lab_labels; SELECT SCHEMA_NAME AS database_name,DEFAULT_CHARACTER_SET_NAME AS character_set_name,DEFAULT_COLLATION_NAME AS collation_name,(SELECT COUNT(*) FROM cx_dbms_lab_catalog.copied_labels) AS label_count FROM information_schema.SCHEMATA WHERE SCHEMA_NAME='cx_dbms_lab_catalog';",
+      "explanation": "Database defaults and qualified table placement are explicit; catalog output and copied count expose the resulting definition and state.",
+      "validation_cases": [
+        {
+          "seed_sql": "",
+          "expected": "database_name\tcharacter_set_name\tcollation_name\tlabel_count\ncx_dbms_lab_catalog\tutf8mb4\tutf8mb4_unicode_ci\t0"
+        },
+        {
+          "seed_sql": "INSERT INTO lab_labels VALUES ('Science'),('Science'),('Arts');",
+          "expected": "database_name\tcharacter_set_name\tcollation_name\tlabel_count\ncx_dbms_lab_catalog\tutf8mb4\tutf8mb4_unicode_ci\t3"
+        }
+      ]
+    },
+    {
+      "id": "cx-create-database-drift",
+      "slug": "create-database-drift",
+      "title": "Detect defaults drift after guarded database creation",
+      "difficulty": "Medium",
+      "task": "The isolated fixture prepares cx_dbms_lab_existing. Attempt CREATE DATABASE IF NOT EXISTS with utf8mb4 and utf8mb4_unicode_ci, then compare the actual catalog defaults with requested_defaults. Return database_name and defaults_match as 1 only when both defaults match. Do not alter the existing database or remove it. The fixture setup deliberately selects the initial defaults for each case.",
+      "schema_sql": "CREATE TABLE requested_defaults (character_set_name VARCHAR(40) NOT NULL, collation_name VARCHAR(80) NOT NULL);",
+      "seed_sql": "CREATE DATABASE IF NOT EXISTS cx_dbms_lab_existing; ALTER DATABASE cx_dbms_lab_existing CHARACTER SET latin1 COLLATE latin1_swedish_ci; INSERT INTO requested_defaults VALUES ('utf8mb4','utf8mb4_unicode_ci');",
+      "expected": "database_name\tdefaults_match\ncx_dbms_lab_existing\t0",
+      "ordering": "Exactly one comparison row.",
+      "constraints": [
+        "Administrative lab only; fixed disposable database name.",
+        "The solution must not repair or remove an existing database."
+      ],
+      "edge_cases": [
+        "Existing latin1 defaults remain a mismatch.",
+        "Already matching defaults yield 1."
+      ],
+      "hints": [
+        "IF NOT EXISTS does not change existing defaults.",
+        "Compare both observed attributes rather than only the database name."
+      ],
+      "solution_sql": "CREATE DATABASE IF NOT EXISTS cx_dbms_lab_existing DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; SELECT s.SCHEMA_NAME AS database_name,(s.DEFAULT_CHARACTER_SET_NAME=r.character_set_name AND s.DEFAULT_COLLATION_NAME=r.collation_name) AS defaults_match FROM information_schema.SCHEMATA s CROSS JOIN requested_defaults r WHERE s.SCHEMA_NAME='cx_dbms_lab_existing';",
+      "explanation": "Guarded creation preserves existing defaults; the report exposes agreement rather than silently changing an existing object.",
+      "validation_cases": [
+        {
+          "seed_sql": "CREATE DATABASE IF NOT EXISTS cx_dbms_lab_existing; ALTER DATABASE cx_dbms_lab_existing CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; INSERT INTO requested_defaults VALUES ('utf8mb4','utf8mb4_unicode_ci');",
+          "expected": "database_name\tdefaults_match\ncx_dbms_lab_existing\t1"
+        },
+        {
+          "seed_sql": "CREATE DATABASE IF NOT EXISTS cx_dbms_lab_existing; ALTER DATABASE cx_dbms_lab_existing CHARACTER SET utf8mb4 COLLATE utf8mb4_bin; INSERT INTO requested_defaults VALUES ('utf8mb4','utf8mb4_unicode_ci');",
+          "expected": "database_name\tdefaults_match\ncx_dbms_lab_existing\t0"
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-9-create-database-1",
+      "test_id": "pt-dbms-sql-9-create-database",
+      "question_text": "What is the primary purpose of the CREATE DATABASE statement?",
+      "options": [
+        "To add a new column to an existing table",
+        "To provision a new top-level container that holds schemas, tables, and its own storage",
+        "To generate a new row of data",
+        "To create an index on a table"
+      ],
+      "correct_index": 1,
+      "explanation": "CREATE DATABASE provisions a brand-new top-level container with its own catalog metadata and storage.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-9-create-database-2",
+      "test_id": "pt-dbms-sql-9-create-database",
+      "question_text": "In PostgreSQL, why can't CREATE DATABASE normally be run inside a BEGIN...COMMIT transaction block?",
+      "options": [
+        "It requires two-phase commit",
+        "It involves file-system-level allocation that isn't easily made transactional",
+        "It is deprecated syntax",
+        "It always requires superuser privileges"
+      ],
+      "correct_index": 1,
+      "explanation": "Creating a database allocates physical files/storage, an operation PostgreSQL does not allow inside a regular transaction.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-9-create-database-3",
+      "test_id": "pt-dbms-sql-9-create-database",
+      "question_text": "Which of the following must generally be true before DROP DATABASE will succeed on most engines?",
+      "options": [
+        "The database must contain at least one table",
+        "No active sessions can be connected to that database",
+        "The database must be renamed first",
+        "All tables must be truncated first"
+      ],
+      "correct_index": 1,
+      "explanation": "Most engines refuse to drop a database while other sessions are still connected to it.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-9-create-database-4",
+      "test_id": "pt-dbms-sql-9-create-database",
+      "question_text": "In MySQL, what is the relationship between CREATE DATABASE and CREATE SCHEMA?",
+      "options": [
+        "CREATE SCHEMA creates a namespace inside a database created by CREATE DATABASE",
+        "They are unrelated commands",
+        "CREATE SCHEMA is only used for views",
+        "They are exact synonyms — both create the same kind of object"
+      ],
+      "correct_index": 3,
+      "explanation": "MySQL treats 'schema' and 'database' as synonyms, unlike PostgreSQL/SQL Server/Oracle where schema is a namespace inside a database.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-9-create-database-5",
+      "test_id": "pt-dbms-sql-9-create-database",
+      "question_text": "What must a client do immediately after creating a new database before creating tables in it?",
+      "options": [
+        "Nothing, tables can be created from any connection",
+        "Restart the database server",
+        "Connect to (switch into) the newly created database",
+        "Grant themselves superuser rights"
+      ],
+      "correct_index": 2,
+      "explanation": "You must connect to the new database before you can create objects inside it — CREATE DATABASE alone does not switch your session's context.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-9-create-database-6",
+      "test_id": "pt-dbms-sql-9-create-database",
+      "question_text": "Which clause prevents an error when CREATE DATABASE is run against a name that may already exist?",
+      "options": [
+        "CASCADE",
+        "IF NOT EXISTS",
+        "WITH CHECK OPTION",
+        "ON CONFLICT"
+      ],
+      "correct_index": 1,
+      "explanation": "IF NOT EXISTS makes the statement a no-op instead of erroring when the database name is already taken.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-9-create-database-7",
+      "test_id": "pt-dbms-sql-9-create-database",
+      "question_text": "Why is directly running SQL JOINs across two separate databases on the same server typically not possible without special setup?",
+      "options": [
+        "JOIN syntax does not support more than one table",
+        "Databases are isolated units; cross-database access needs mechanisms like linked servers, dblink, or foreign data wrappers",
+        "Databases cannot contain more than one table each",
+        "SQL does not support JOIN at all"
+      ],
+      "correct_index": 1,
+      "explanation": "Databases are designed as isolated containers, so cross-database querying needs special connectivity features rather than a plain JOIN.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-9-create-database-8",
+      "test_id": "pt-dbms-sql-9-create-database",
+      "question_text": "A team creates a database on a case-insensitive Windows file system and later deploys the same script on a Linux server. What subtle issue can arise?",
+      "options": [
+        "Linux does not support CREATE DATABASE",
+        "Database name case sensitivity differs between operating systems, potentially causing name-mismatch bugs",
+        "SQL syntax differs entirely between operating systems",
+        "Windows does not allow more than one database"
+      ],
+      "correct_index": 1,
+      "explanation": "Case sensitivity of database names can differ by OS/file system, which is a real cross-environment migration pitfall.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "coordinator",
+    "independent_review": "unavailable; no agent tools",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Definitions and examples checked against questions; no plagiarism certification.",
+    "existing_question_corrections": [
+      "tq-dbms-sql-9-create-database-1",
+      "tq-dbms-sql-9-create-database-2",
+      "tq-dbms-sql-9-create-database-3",
+      "tq-dbms-sql-9-create-database-5",
+      "tq-dbms-sql-9-create-database-6",
+      "tq-dbms-sql-9-create-database-7"
+    ],
+    "canonical_answer_indices_preserved": true,
+    "batch_review": {
+      "reviewer": "coordinator",
+      "independent": false,
+      "scope": "This new package: explained definitions and boundaries, retained source question identities/canonical indices, new correct answers and explanations, exercise solutions and recorded fixtures, diagram trace and prepared integration.",
+      "execution_evidence": "Focused MariaDB reference cases and selected actual LessonBlock rendering passed; no browser QA or exact MySQL/provider execution.",
+      "source_preservation": "Original snapshots retained; eight retained exercises across this continuation matched source identity, difficulty, schema, seed and trailing checker.",
+      "limits": "No independent worker available. Output fixtures do not prove arbitrary student submissions used a requested technique. Native PostgreSQL/other-engine concepts remain documented or explicitly mirrored, not verified by MariaDB."
+    }
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-9-create-database",
+    "original_note_sha256": "bfa331dc99a5793f902ec679f681f944dd917d2bb474f03bae0e7491da0d6fe5",
+    "status": "paired migration prepared; not applied"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Creation, session targeting and default verification answer different questions",
+      "description": "The database exists after creation, but the connection default and existing settings require separate observations.",
+      "columns": [
+        "Step",
+        "Object or state",
+        "What it establishes"
+      ],
+      "rows": [
+        [
+          "CREATE DATABASE",
+          "Named MySQL database",
+          "Container exists; tables still need definitions"
+        ],
+        [
+          "USE or database.table",
+          "Connection target or explicit reference",
+          "Where the next table reference resolves"
+        ],
+        [
+          "SCHEMATA comparison",
+          "Observed defaults",
+          "Whether settings match the requested contract"
+        ],
+        [
+          "IF NOT EXISTS on an existing name",
+          "Name collision handling",
+          "Does not reconcile drift"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "coordinator checked object levels, session context and defaults drift; native lab exercises require administrative runner capability",
+    "server_rendering": "passed",
+    "browser_rendering": "unverified",
+    "independent_review": "unavailable; no agent tools",
+    "server_rendering_evidence": "Selected actual LessonBlock Vitest rendering passed for this batch; no browser QA."
+  },
+  "sql_verification": {
+    "engine": "11.8.6-MariaDB-0+deb13u1 from Debian",
+    "scope": "MariaDB compatibility execution; exact MySQL 8.4/provider execution unverified",
+    "fingerprint": "01f38faa0add8afd193197254c9a1c7000ea95dea945dd668008ce5a1d5fb7a5",
+    "cases": [
+      {
+        "problem": "create-database-lab",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "create-database-lab",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "create-database-lab",
+        "case": 2,
+        "passed": true
+      },
+      {
+        "problem": "create-database-drift",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "create-database-drift",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "create-database-drift",
+        "case": 2,
+        "passed": true
+      }
+    ],
+    "all_passed": true
+  }
+}

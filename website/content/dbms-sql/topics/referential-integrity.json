@@ -1,0 +1,641 @@
+{
+  "source_ref": "chapter-5-keys-and-integrity/referential-integrity",
+  "slug": "referential-integrity",
+  "title": "Referential Integrity",
+  "description": "Reason about valid references across a database state, distinguish permitted absence from dangling values, and retain an original orphan-detection exercise with stronger fixtures.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Valid references depend on the database state\n\nReferential integrity is the rule that a declared reference must satisfy its defined relationship to an allowed parent key. A campus enrollment can name a student through student_id. For a required nonmissing reference, the appropriate student identity must exist in the parent relation. This connects the validity of one fact to another rather than treating every table as an independent collection.\n\nThe rule concerns the actual combined state. A child column can contain a type-compatible positive integer while still naming no existing parent. Local range rules do not establish parent existence. Conversely, a parent can exist even when its descriptive name is absent or repeated. A reliable check follows the identifying attributes defined by the relationship instead of guessing from convenient labels.\n\n## The concept and the SQL mechanism differ\n\nReferential integrity describes the intended invariant. A supported, enforced FOREIGN KEY is an SQL mechanism for protecting that invariant. A column ending in _id, a line in a diagram, or a client lookup can communicate intent without enforcing the same rule for every accepted write. Inspect the actual declaration and engine behaviour before describing a database relationship as protected.\n\nA simplified teaching fixture may intentionally omit foreign keys so invalid proposals can be loaded and diagnosed. That is useful for studying audit queries, but it is not evidence that an actual foreign key rejected an invalid insert. State whether the exercise demonstrates reference meaning, diagnosis of a current dataset, or enforcement at the trusted write boundary. These are complementary forms of evidence with different limits.\n\n## Optional absence can be a valid state\n\nA single-column optional department reference can be NULL when the employee is unassigned. If nullability and all other rules permit that absence, it is not a dangling ordinary identifier. A non-NULL value of ninety-nine with no department ninety-nine is a different situation: it asserts a reference that has no allowed parent under the defined mapping.\n\nAn orphan audit should distinguish these cases. Requiring a nonmissing child reference before reporting an unmatched parent avoids treating legitimate unassigned employees as violations. If the business relationship is mandatory, the absence is invalid through its required-value policy as well. Keep the two diagnostics clear instead of using one unexplained missing-parent label for every blank or unmatched field.\n\n## Composite relationships need their actual definition\n\nA parent identity can use several attributes, such as campus_code and local_number. A child reference must identify the intended combined parent rather than independently matching one campus and an unrelated number. Type compatibility, supported referenced keys, attribute correspondence, and engine-specific missing-component rules all matter to the legal declaration and resulting accepted states.\n\nAn all-or-none optional composite reference can require additional policy beyond a simple single-column analogy. Do not assert that every partially missing reference is always valid or always rejected across products. State the actual supported definition and intended absence contract, then test it on the target engine when possible. This keeps an introductory explanation accurate without pretending one short rule covers every composite edge case.\n\n## Child changes can introduce dangling references\n\nAn invalid reference can arrive through an INSERT or through an UPDATE that changes a valid child to an absent parent identity. Both paths should be considered when testing enforcement. A write accepted under proper constraints must preserve the applicable invariant. A preceding screen lookup alone can be insufficient if another operation changes the parent before the later write.\n\nReference validity also does not mean the choice is semantically correct. An employee can refer to an existing department while actually belonging to another one. A valid student-course reference can still be unauthorized or incorrect for the requested registration. Additional business validation and access checks decide those questions. Existence is an important guarantee, but it is narrower than complete domain truth or authority.\n\n## Parent changes need coordinated consequences\n\nA parent deletion or identity update can invalidate existing child references unless the relationship supplies a compatible action. An enforced definition can restrict the change or apply a deliberately configured supported referential action. A cascade can change or remove related facts; setting an optional reference to NULL can detach it. Those choices have different meanings for ownership and history.\n\nA course being retired from new enrollment does not necessarily justify deleting its historical enrollments. The intended product behaviour may use a status change while preserving parent and child identities. Referential integrity helps make invalid transitions visible, but it does not choose the retention policy automatically. Review the actual lifecycle before treating automatic cascading as the standard answer for every dependency.\n\n## Audit with a preserving join\n\nA LEFT JOIN from proposed children to parents keeps each child even when it has no match. The unmatched parent attributes are NULL in the result. Testing a parent identity that cannot be NULL for a matched row lets the query detect absent parents reliably. Testing an optional parent description instead could incorrectly flag a real parent whose description is unrecorded.\n\n```sql\nSELECT e.id, e.name, e.department_id\nFROM employees e\nLEFT JOIN departments d ON d.id = e.department_id\nWHERE e.department_id IS NOT NULL\n  AND d.id IS NULL\nORDER BY e.id;\n```\n\nThe child absence condition follows the optional-reference policy. Existing seed examples with only nonmissing references preserve their expected output under this correction. Adding a fixture with an unassigned employee makes the distinction observable and protects the exercise from teaching that every unmatched join row is automatically an invalid foreign reference.\n\n## Existence tests offer another formulation\n\nA correlated NOT EXISTS condition can ask whether a nonmissing child identifier has no allowed parent. It avoids projecting parent labels and expresses the existence question directly. The child population and absence policy still need the same care. Changing the syntax does not fix a wrong scope condition, incomplete composite identity, or mistaken interpretation of NULL.\n\nFor a grouped audit, first define which child rows are invalid, then count them at the requested reporting grain. Counting unmatched child references by proposed department_id can show how many proposals need each missing parent. It does not mean those parents should automatically be created. A correction workflow must distinguish typos, retired codes, wrong scopes, and genuinely new entities under the authorized domain process.\n\n## Other duplicate problems remain independent\n\nA child can have a valid parent reference while violating a separate email uniqueness policy. An employee can have a unique primary identity while pointing to an absent department. One successful integrity check therefore does not imply every rule passed. When an exercise focuses on reference existence, do not filter by unrelated uniqueness assumptions that would hide a relevant child fact.\n\nThe retained employee fixture intentionally includes duplicate emails and invalid department-style references so different audits can ask different questions over the same data. Preserve that setup and explain the chosen population. An inner join would discard the invalid-reference rows that the orphan exercise needs to report; adding DISTINCT unnecessarily can also conceal separate employee identities that require individual attention.\n\n## Verification needs both meaning and enforcement\n\nNative reference-enforcement checks should exercise valid child insertion, invalid insertion and update, relevant parent changes, and any configured actions. They require a supported isolated schema and appropriate engine. Temporary query mirrors without foreign keys verify result semantics only. Keep those results distinct from exact MySQL/provider execution, applied application migrations, and authorization evidence.\n\nA valid reference can remain valid across many child rows; foreign references need not be unique in the child relation. Also understand the source snapshot before diagnosing a live violation from exported data. Separately timed copies of parent and child relations can produce an inconsistent combined export that never existed as one live state. A trustworthy referential-integrity explanation identifies the relationship, optionality, relevant transitions, and actual evidence. It preserves the difference between an allowed absence, a current dangling proposal, and a real enforced write boundary.\n",
+  "references": [
+    {
+      "title": "MySQL 8.4 foreign-key constraints",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/create-table-foreign-keys.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-5-referential-integrity",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-5-referential-integrity-1",
+          "test_id": "pt-dbms-sql-5-referential-integrity",
+          "question_text": "What does referential integrity guarantee?",
+          "options": [
+            "That every column has a default value",
+            "A declared reference satisfies the defined parent-key relationship, with absence allowed only under its actual policy",
+            "That every table has a foreign key",
+            "That primary keys are always integers"
+          ],
+          "correct_index": 1,
+          "explanation": "Optional single-column absence and composite missing-component behaviour must follow the actual supported definition.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-5-referential-integrity-2",
+          "test_id": "pt-dbms-sql-5-referential-integrity",
+          "question_text": "Which SQL mechanism directly enforces referential integrity?",
+          "options": [
+            "UNIQUE constraint",
+            "FOREIGN KEY constraint",
+            "CHECK constraint",
+            "DEFAULT clause"
+          ],
+          "correct_index": 1,
+          "explanation": "The FOREIGN KEY constraint is SQL's implementation of the referential integrity rule.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-5-referential-integrity-3",
+          "test_id": "pt-dbms-sql-5-referential-integrity",
+          "question_text": "For an optional single-column department reference, which query finds nonmissing employee references with no real parent?",
+          "options": [
+            "SELECT * FROM employees WHERE department_id IS NOT NULL",
+            "SELECT e.* FROM employees e LEFT JOIN departments d ON d.id = e.department_id WHERE e.department_id IS NOT NULL AND d.id IS NULL",
+            "SELECT * FROM departments WHERE id IS NULL",
+            "SELECT * FROM employees INNER JOIN departments ON employees.department_id = departments.id"
+          ],
+          "correct_index": 1,
+          "explanation": "A permitted NULL child reference is not an orphan. The parent identity supplies the match test.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-5-referential-integrity-4",
+          "test_id": "pt-dbms-sql-5-referential-integrity",
+          "question_text": "Does referential integrity guarantee that a foreign key reference is semantically correct, not just that it exists?",
+          "options": [
+            "Yes, it guarantees full semantic correctness",
+            "No — it only guarantees the referenced row exists, not that it's the 'right' one for the business situation",
+            "It guarantees correctness only for numeric foreign keys",
+            "This distinction doesn't apply to referential integrity"
+          ],
+          "correct_index": 1,
+          "explanation": "Referential integrity is purely about existence of the reference, not about whether it makes business sense.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-5-referential-integrity-5",
+          "test_id": "pt-dbms-sql-5-referential-integrity",
+          "question_text": "In real systems, why is referential integrity sometimes violated despite the concept being well understood?",
+          "options": [
+            "It's impossible for this to happen in any real system",
+            "A FOREIGN KEY constraint may never have actually been declared, letting invalid references accumulate silently over time",
+            "Referential integrity is disabled by default in every SQL engine",
+            "SQL databases automatically ignore referential integrity after 1 million rows"
+          ],
+          "correct_index": 1,
+          "explanation": "Without an actual enforced constraint, the relationship exists only by convention, and violations can silently accumulate.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-5-referential-integrity-6",
+          "test_id": "pt-dbms-sql-5-referential-integrity",
+          "question_text": "What operation on a parent row does referential integrity most directly restrict?",
+          "options": [
+            "SELECT queries on the parent table",
+            "Deleting or updating a parent row that child rows still reference",
+            "Creating new columns on the parent table",
+            "Renaming the parent table"
+          ],
+          "correct_index": 1,
+          "explanation": "Parent deletions and identifying updates must respect the configured supported restrictions or referential actions.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-5-referential-integrity-7",
+          "test_id": "pt-dbms-sql-5-referential-integrity",
+          "question_text": "What is the relationship between referential integrity and the foreign key constraint?",
+          "options": [
+            "They are unrelated",
+            "Referential integrity is the conceptual/relational-model rule; FOREIGN KEY is the concrete SQL mechanism that enforces it",
+            "FOREIGN KEY is a stricter, unrelated concept",
+            "Referential integrity only applies to composite keys"
+          ],
+          "correct_index": 1,
+          "explanation": "This mirrors the pattern of entity integrity/PRIMARY KEY — a theoretical rule paired with its concrete SQL enforcement mechanism.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-5-referential-integrity-8",
+          "test_id": "pt-dbms-sql-5-referential-integrity",
+          "question_text": "If department_id is NULL for an employee row, does this violate referential integrity?",
+          "options": [
+            "Yes, always",
+            "No — NULL is a valid state (no reference yet) as long as the column allows it; only a non-NULL value pointing at a non-existent row would violate it",
+            "Only if department_id is also the primary key",
+            "This cannot be determined without more information about NULL handling in general"
+          ],
+          "correct_index": 1,
+          "explanation": "A NULL foreign key simply means 'not referencing anything yet,' which is compatible with referential integrity, not a violation of it.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-5-referential-integrity-new-9",
+          "test_id": "pt-dbms-sql-5-referential-integrity",
+          "question_text": "Does an existing parent prove a reference is the correct business choice?",
+          "options": [
+            "Yes; all existing choices are authorized",
+            "No; existence and semantic correctness differ",
+            "Only when numeric",
+            "Only if a name repeats"
+          ],
+          "correct_index": 1,
+          "explanation": "Business eligibility and authority require separate checks.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-5-referential-integrity-new-10",
+          "test_id": "pt-dbms-sql-5-referential-integrity",
+          "question_text": "Why does an orphan audit exclude permitted NULL child references?",
+          "options": [
+            "NULL always identifies parent zero",
+            "All nullable columns are invalid",
+            "They express optional absence rather than a dangling ordinary identity",
+            "LEFT JOIN cannot process NULL"
+          ],
+          "correct_index": 2,
+          "explanation": "The audit must match the relationship’s absence policy.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-5-referential-integrity-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-5-referential-integrity-application-new-1",
+          "test_id": "pt-dbms-sql-5-referential-integrity-application",
+          "question_text": "What can change a valid child into an invalid reference?",
+          "options": [
+            "Renaming a query alias",
+            "Sorting by child id",
+            "Updating its reference to an absent parent identity",
+            "Selecting only one description"
+          ],
+          "correct_index": 2,
+          "explanation": "Both INSERT and UPDATE paths can affect the invariant.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-5-referential-integrity-application-new-2",
+          "test_id": "pt-dbms-sql-5-referential-integrity-application",
+          "question_text": "Which parent attribute is suitable for an unmatched-parent test?",
+          "options": [
+            "An optional descriptive label",
+            "The child’s display name",
+            "The source file name",
+            "A guaranteed non-NULL identifying key"
+          ],
+          "correct_index": 3,
+          "explanation": "A missing optional description does not establish missing parent identity.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-5-referential-integrity-application-new-3",
+          "test_id": "pt-dbms-sql-5-referential-integrity-application",
+          "question_text": "Does a child primary key guarantee its parent references exist?",
+          "options": [
+            "No; local identity and reference existence are separate",
+            "Yes; every primary key searches all parents",
+            "Only if composite",
+            "Only if positive"
+          ],
+          "correct_index": 0,
+          "explanation": "Different constraints protect different invariants.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-5-referential-integrity-application-new-4",
+          "test_id": "pt-dbms-sql-5-referential-integrity-application",
+          "question_text": "Why might an export show a child lacking a parent despite enforced live constraints?",
+          "options": [
+            "Every foreign key is advisory",
+            "Related tables may have been copied at inconsistent times",
+            "Exports always delete parents",
+            "Parent keys cannot be integers"
+          ],
+          "correct_index": 1,
+          "explanation": "The combined export may not represent a consistent live state.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-5-referential-integrity-application-new-5",
+          "test_id": "pt-dbms-sql-5-referential-integrity-application",
+          "question_text": "Does an inner join suit an audit meant to list unmatched children?",
+          "options": [
+            "Yes; it always preserves orphans",
+            "Only if ordered",
+            "No; it discards the unmatched facts the audit needs",
+            "Only if DISTINCT is added"
+          ],
+          "correct_index": 2,
+          "explanation": "A preserving join or suitable anti-existence test is needed.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-5-referential-integrity-application-new-6",
+          "test_id": "pt-dbms-sql-5-referential-integrity-application",
+          "question_text": "What does NOT EXISTS ask in an orphan query?",
+          "options": [
+            "Whether the child has no columns",
+            "Whether every department name repeats",
+            "Whether a primary key was generated",
+            "Whether no allowed parent matches the child’s reference"
+          ],
+          "correct_index": 3,
+          "explanation": "It expresses an existence condition over the defined relationship.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-5-referential-integrity-application-new-7",
+          "test_id": "pt-dbms-sql-5-referential-integrity-application",
+          "question_text": "What does a grouped missing-parent count imply about automatic parent creation?",
+          "options": [
+            "Nothing by itself; correction needs the domain’s authorized process",
+            "Every missing id must be inserted automatically",
+            "All parent labels should be guessed",
+            "The audit grants creation permission"
+          ],
+          "correct_index": 0,
+          "explanation": "Diagnosis does not select a correction policy.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-5-referential-integrity-application-new-8",
+          "test_id": "pt-dbms-sql-5-referential-integrity-application",
+          "question_text": "Why assess composite references using their actual attributes?",
+          "options": [
+            "All composites behave identically in every engine",
+            "Partial or mismatched components can name the wrong identity",
+            "Only the first component matters",
+            "Each component must be an independent parent row"
+          ],
+          "correct_index": 1,
+          "explanation": "The whole intended reference must align with the parent identity.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-5-referential-integrity-application-new-9",
+          "test_id": "pt-dbms-sql-5-referential-integrity-application",
+          "question_text": "What can a temporary table mirror without foreign keys establish?",
+          "options": [
+            "Native reference rejection",
+            "Production cascade behaviour",
+            "Query semantics on the supplied cases",
+            "Every provider’s engine configuration"
+          ],
+          "correct_index": 2,
+          "explanation": "The fixture does not contain an enforcing FK boundary.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-5-referential-integrity-application-new-10",
+          "test_id": "pt-dbms-sql-5-referential-integrity-application",
+          "question_text": "Why avoid deleting a retired course automatically without reviewing history?",
+          "options": [
+            "Referential integrity always demands history deletion",
+            "Every parent status is a foreign key",
+            "An audit authorizes all deletions",
+            "Historical enrollments may need the preserved parent identity"
+          ],
+          "correct_index": 3,
+          "explanation": "Lifecycle and retention policy determine the appropriate transition.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cx-referential-integrity-count",
+      "slug": "referential-integrity-count",
+      "title": "Count nonmissing references that lack a department",
+      "difficulty": "Easy",
+      "task": "Return one row invalid_references counting employees with non-NULL department_id and no matching department. NULL is permitted as unassigned.",
+      "schema_sql": "CREATE TABLE departments (\n  id INTEGER PRIMARY KEY,\n  name TEXT NOT NULL\n);\nCREATE TABLE employees (\n  id INTEGER PRIMARY KEY,\n  name TEXT NOT NULL,\n  email TEXT NOT NULL,\n  department_id INTEGER\n);",
+      "seed_sql": "INSERT INTO departments (id, name) VALUES\n(1, 'Engineering'),\n(2, 'Sales'),\n(3, 'Marketing');\n\nINSERT INTO employees (id, name, email, department_id) VALUES\n(1, 'Asha', 'asha@co.com', 1),\n(2, 'Rohan', 'rohan@co.com', 1),\n(3, 'Neha', 'neha@co.com', 2),\n(4, 'Vikram', 'asha@co.com', 2),\n(5, 'Priya', 'priya@co.com', 99),\n(6, 'Karan', 'karan@co.com', 3),\n(7, 'Divya', 'karan@co.com', 3),\n(8, 'Aman', 'aman@co.com', 88);",
+      "expected": "invalid_references\n2",
+      "ordering": "One aggregate row.",
+      "constraints": [
+        "Temporary mirrors deliberately omit foreign keys.",
+        "This audit checks reference existence only, not email uniqueness."
+      ],
+      "edge_cases": [
+        "Unassigned employees are not invalid under the stated policy.",
+        "An empty employee population produces a zero count."
+      ],
+      "hints": [
+        "Filter absence separately from unmatched nonmissing references.",
+        "A NOT EXISTS condition can test parent existence directly."
+      ],
+      "solution_sql": "SELECT COUNT(*) AS invalid_references FROM employees e WHERE e.department_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM departments d WHERE d.id = e.department_id);",
+      "explanation": "The count follows optional single-column reference policy without asserting that an actual FK was executed.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO employees VALUES (1,'A','a@example.test',NULL),(2,'B','b@example.test',9);",
+          "expected": "invalid_references\n1"
+        },
+        {
+          "seed_sql": "",
+          "expected": "invalid_references\n0"
+        }
+      ]
+    },
+    {
+      "id": "cp-dbms-sql-employees-with-no-real-department",
+      "slug": "employees-with-no-real-department",
+      "title": "Employees With No Real Department",
+      "difficulty": "Medium",
+      "existing_problem": true,
+      "original_description_md5": "41ceb5a9b3f43ac79d0baf39ba579b74",
+      "task": "Return id, name and department_id for employees whose nonmissing department reference lacks a parent. department_id NULL is permitted as unassigned and is not an orphan. Preserve the original schema and setup.",
+      "schema_sql": "CREATE TABLE departments (\n  id INTEGER PRIMARY KEY,\n  name TEXT NOT NULL\n);\nCREATE TABLE employees (\n  id INTEGER PRIMARY KEY,\n  name TEXT NOT NULL,\n  email TEXT NOT NULL,\n  department_id INTEGER\n);",
+      "seed_sql": "INSERT INTO departments (id, name) VALUES\n(1, 'Engineering'),\n(2, 'Sales'),\n(3, 'Marketing');\n\nINSERT INTO employees (id, name, email, department_id) VALUES\n(1, 'Asha', 'asha@co.com', 1),\n(2, 'Rohan', 'rohan@co.com', 1),\n(3, 'Neha', 'neha@co.com', 2),\n(4, 'Vikram', 'asha@co.com', 2),\n(5, 'Priya', 'priya@co.com', 99),\n(6, 'Karan', 'karan@co.com', 3),\n(7, 'Divya', 'karan@co.com', 3),\n(8, 'Aman', 'aman@co.com', 88);",
+      "expected": "id\tname\tdepartment_id\n5\tPriya\t99\n8\tAman\t88",
+      "ordering": "Ascending employee id.",
+      "constraints": [
+        "Retained original problem identity, schema and setup are unchanged.",
+        "The intentionally unconstrained fixture allows diagnosis of invalid proposals."
+      ],
+      "edge_cases": [
+        "Permitted unassigned employees must be excluded.",
+        "Repeated email values do not remove employees from this reference audit."
+      ],
+      "hints": [
+        "Preserve children when joining parents.",
+        "Require a nonmissing child reference and an unmatched parent key."
+      ],
+      "solution_sql": "SELECT e.id, e.name, e.department_id FROM employees e LEFT JOIN departments d ON d.id = e.department_id WHERE e.department_id IS NOT NULL AND d.id IS NULL ORDER BY e.id;",
+      "explanation": "The added nonmissing-reference predicate corrects optional-reference handling while preserving all original sample results and source setup. Native FK enforcement remains unverified.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO departments (id, name) VALUES\n(10, 'Finance'),\n(20, 'Legal');\n\nINSERT INTO employees (id, name, email, department_id) VALUES\n(1, 'Zara', 'zara@co.com', 10),\n(2, 'Omar', 'omar@co.com', 20),\n(3, 'Leo', 'zara@co.com', 10),\n(4, 'Mia', 'mia@co.com', 77),\n(5, 'Sam', 'sam@co.com', 20);",
+          "expected": "id\tname\tdepartment_id\n4\tMia\t77"
+        },
+        {
+          "seed_sql": "INSERT INTO departments VALUES (1,'Art'); INSERT INTO employees VALUES (1,'Unassigned','same@example.test',NULL),(2,'Valid','same@example.test',1),(3,'Invalid','same@example.test',9);",
+          "expected": "id\tname\tdepartment_id\n3\tInvalid\t9"
+        },
+        {
+          "seed_sql": "",
+          "expected": ""
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-5-referential-integrity-1",
+      "test_id": "pt-dbms-sql-5-referential-integrity",
+      "question_text": "What does referential integrity guarantee?",
+      "options": [
+        "That every column has a default value",
+        "That a foreign key value matches an existing parent row, or is NULL",
+        "That every table has a foreign key",
+        "That primary keys are always integers"
+      ],
+      "correct_index": 1,
+      "explanation": "Referential integrity is specifically about foreign key values always corresponding to a real (or absent) parent row.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-5-referential-integrity-2",
+      "test_id": "pt-dbms-sql-5-referential-integrity",
+      "question_text": "Which SQL mechanism directly enforces referential integrity?",
+      "options": [
+        "UNIQUE constraint",
+        "FOREIGN KEY constraint",
+        "CHECK constraint",
+        "DEFAULT clause"
+      ],
+      "correct_index": 1,
+      "explanation": "The FOREIGN KEY constraint is SQL's implementation of the referential integrity rule.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-5-referential-integrity-3",
+      "test_id": "pt-dbms-sql-5-referential-integrity",
+      "question_text": "Which query correctly finds employees whose department_id doesn't correspond to any real department?",
+      "options": [
+        "SELECT * FROM employees WHERE department_id IS NOT NULL",
+        "SELECT e.* FROM employees e LEFT JOIN departments d ON d.id = e.department_id WHERE d.id IS NULL",
+        "SELECT * FROM departments WHERE id IS NULL",
+        "SELECT * FROM employees INNER JOIN departments ON employees.department_id = departments.id"
+      ],
+      "correct_index": 1,
+      "explanation": "A LEFT JOIN followed by filtering for a NULL on the parent side is the standard anti-join pattern for finding orphaned references.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-5-referential-integrity-4",
+      "test_id": "pt-dbms-sql-5-referential-integrity",
+      "question_text": "Does referential integrity guarantee that a foreign key reference is semantically correct, not just that it exists?",
+      "options": [
+        "Yes, it guarantees full semantic correctness",
+        "No — it only guarantees the referenced row exists, not that it's the 'right' one for the business situation",
+        "It guarantees correctness only for numeric foreign keys",
+        "This distinction doesn't apply to referential integrity"
+      ],
+      "correct_index": 1,
+      "explanation": "Referential integrity is purely about existence of the reference, not about whether it makes business sense.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-5-referential-integrity-5",
+      "test_id": "pt-dbms-sql-5-referential-integrity",
+      "question_text": "In real systems, why is referential integrity sometimes violated despite the concept being well understood?",
+      "options": [
+        "It's impossible for this to happen in any real system",
+        "A FOREIGN KEY constraint may never have actually been declared, letting invalid references accumulate silently over time",
+        "Referential integrity is disabled by default in every SQL engine",
+        "SQL databases automatically ignore referential integrity after 1 million rows"
+      ],
+      "correct_index": 1,
+      "explanation": "Without an actual enforced constraint, the relationship exists only by convention, and violations can silently accumulate.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-5-referential-integrity-6",
+      "test_id": "pt-dbms-sql-5-referential-integrity",
+      "question_text": "What operation on a parent row does referential integrity most directly restrict?",
+      "options": [
+        "SELECT queries on the parent table",
+        "Deleting or updating a parent row that child rows still reference",
+        "Creating new columns on the parent table",
+        "Renaming the parent table"
+      ],
+      "correct_index": 1,
+      "explanation": "Referential integrity blocks operations that would orphan existing child references, unless a cascading action is configured.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-5-referential-integrity-7",
+      "test_id": "pt-dbms-sql-5-referential-integrity",
+      "question_text": "What is the relationship between referential integrity and the foreign key constraint?",
+      "options": [
+        "They are unrelated",
+        "Referential integrity is the conceptual/relational-model rule; FOREIGN KEY is the concrete SQL mechanism that enforces it",
+        "FOREIGN KEY is a stricter, unrelated concept",
+        "Referential integrity only applies to composite keys"
+      ],
+      "correct_index": 1,
+      "explanation": "This mirrors the pattern of entity integrity/PRIMARY KEY — a theoretical rule paired with its concrete SQL enforcement mechanism.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-5-referential-integrity-8",
+      "test_id": "pt-dbms-sql-5-referential-integrity",
+      "question_text": "If department_id is NULL for an employee row, does this violate referential integrity?",
+      "options": [
+        "Yes, always",
+        "No — NULL is a valid state (no reference yet) as long as the column allows it; only a non-NULL value pointing at a non-existent row would violate it",
+        "Only if department_id is also the primary key",
+        "This cannot be determined without more information about NULL handling in general"
+      ],
+      "correct_index": 1,
+      "explanation": "A NULL foreign key simply means 'not referencing anything yet,' which is compatible with referential integrity, not a violation of it.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "coordinator",
+    "independent_review": "unavailable; no agent tools",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Definitions and examples checked against questions; no plagiarism certification.",
+    "existing_question_corrections": [
+      "tq-dbms-sql-5-referential-integrity-1",
+      "tq-dbms-sql-5-referential-integrity-3",
+      "tq-dbms-sql-5-referential-integrity-6"
+    ],
+    "canonical_answer_indices_preserved": true,
+    "verification_gaps": [
+      "Exact MySQL/provider execution, application authorization, rollback and concurrency remain unverified. Native synthetic MariaDB reference-action checks are recorded separately from these temporary query exercises."
+    ],
+    "native_reference_review": {
+      "date": "2026-10-29",
+      "engine": "11.8.6-MariaDB-0+deb13u1 from Debian",
+      "result": "13 synthetic native InnoDB checks passed; see progress.native_reference_verification for cases and verifier fingerprint.",
+      "scope": "Native InnoDB referential-action checks on synthetic persistent tables in isolated MariaDB scratch database; exact MySQL/provider, application authorization, rollback and concurrency unverified"
+    }
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-5-referential-integrity",
+    "original_note_sha256": "ccfea687adf9f2270e9933afed66ef27ec414bd16771fdb5dfddc74f3b1df348",
+    "status": "paired migration prepared; not applied"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Classify references before reporting invalid facts",
+      "description": "Under the stated optional single-column relationship, absence is allowed, an existing parent is valid, and an unmatched nonmissing identity is the orphan case.",
+      "columns": [
+        "Child reference",
+        "Matching parent",
+        "Reference interpretation"
+      ],
+      "rows": [
+        [
+          "NULL",
+          "No match requested",
+          "Allowed unassigned state"
+        ],
+        [
+          "1",
+          "Parent key 1 exists",
+          "Valid reference, regardless of other business questions"
+        ],
+        [
+          "99",
+          "Parent key 99 absent",
+          "Invalid nonmissing reference"
+        ],
+        [
+          "Composite values",
+          "Depends on complete mapping and policy",
+          "Assess the actual supported definition"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "coordinator checked optional absence, retained source setup and original sample compatibility",
+    "server_rendering": "passed",
+    "browser_rendering": "unverified",
+    "independent_review": "unavailable; no agent tools",
+    "server_rendering_evidence": "2026-10-29: all 83 authored packages rendered through actual LessonBlock; 91 focused Vitest checks passed."
+  },
+  "sql_verification": {
+    "engine": "11.8.6-MariaDB-0+deb13u1 from Debian",
+    "scope": "MariaDB compatibility execution; exact MySQL 8.4/provider execution unverified",
+    "fingerprint": "73c4680b55485cf2a319f0b632656a110989106448e2646a66aa6ac8c65b2768",
+    "cases": [
+      {
+        "problem": "referential-integrity-count",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "referential-integrity-count",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "referential-integrity-count",
+        "case": 2,
+        "passed": true
+      },
+      {
+        "problem": "employees-with-no-real-department",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "employees-with-no-real-department",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "employees-with-no-real-department",
+        "case": 2,
+        "passed": true
+      },
+      {
+        "problem": "employees-with-no-real-department",
+        "case": 3,
+        "passed": true
+      }
+    ],
+    "all_passed": true
+  }
+}

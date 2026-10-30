@@ -5,7 +5,7 @@ import { cn } from "@/lib/cn";
 /**
  * Shared form primitives (spec §14). One input language across login / register /
  * contact / profile / the custom-project wizard — sized to match `<Button>`
- * (h-11, rounded-xl, indigo focus ring) so controls line up on every screen.
+ * (h-10, rounded-xl, indigo focus ring) so controls line up on every screen.
  */
 
 const control =
@@ -19,7 +19,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
   { className, invalid, ...rest },
   ref,
 ) {
-  return <input ref={ref} className={cn(control, "h-11", invalid && invalidRing, className)} {...rest} />;
+  return <input ref={ref} aria-invalid={invalid || undefined} className={cn(control, "h-10", invalid && invalidRing, className)} {...rest} />;
 });
 
 export type TextareaProps = React.TextareaHTMLAttributes<HTMLTextAreaElement> & { invalid?: boolean };
@@ -31,6 +31,7 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(function 
     <textarea
       ref={ref}
       rows={rows}
+      aria-invalid={invalid || undefined}
       className={cn(control, "py-2.5 leading-relaxed", invalid && invalidRing, className)}
       {...rest}
     />
@@ -46,7 +47,8 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select
     <div className="relative">
       <select
         ref={ref}
-        className={cn(control, "h-11 appearance-none pr-9", invalid && invalidRing, className)}
+        aria-invalid={invalid || undefined}
+        className={cn(control, "h-10 appearance-none pr-9", invalid && invalidRing, className)}
         {...rest}
       >
         {children}
@@ -122,7 +124,7 @@ export function OptionChips<T extends string>({
             aria-pressed={selected}
             onClick={() => onSelect(o)}
             className={cn(
-              "rounded-xl border px-4 py-2 text-sm font-medium transition active:scale-[.98] motion-reduce:transform-none",
+              "min-h-10 rounded-xl border px-4 py-2 text-sm font-medium transition active:scale-[.98] motion-reduce:transform-none",
               selected
                 ? "border-primary bg-primary text-white shadow-sm"
                 : "border-line bg-card text-ink hover:border-primary/40 hover:bg-primary-50/60",

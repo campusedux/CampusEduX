@@ -1,0 +1,653 @@
+{
+  "source_ref": "chapter-4-relational-model/relation-schema",
+  "slug": "relation-schema",
+  "title": "Relation Schema",
+  "description": "Read a relation schema as a contract for attributes, domains and constraints, then implement and test small SQL table definitions.",
+  "dialect": "MySQL 8.4",
+  "notes": "## A blueprint for one kind of fact\n\nA relation schema describes the structure of one relation: its name, named attributes, and their domains. It also participates in the integrity rules that determine which relation instances are valid. Student(student_id, student_name, programme) is a compact way to name a student relation and its attributes. A fuller specification must explain permitted values, identity, and any mandatory information.\n\nThink of the schema as a contract for what a tuple means. If each tuple describes one student, student_id identifies that student, student_name supplies a descriptive name, and programme records an academic affiliation. This interpretation distinguishes Student from a registration relation containing one tuple per student-course pair. Similar-looking grids can represent different facts because their schemas and constraints assign different roles.\n\n## A schema does not list current students\n\nThe schema remains the same when a valid student tuple is inserted, updated, or removed. These operations change the relation instance. Adding an email attribute instead changes the schema because each tuple now has another named role. Keeping structure and contents separate makes it easier to describe what a database operation actually changes and which consumers may be affected.\n\nA newly defined relation can be empty. Its schema still determines the attribute count and validity rules. Student with three attributes has degree three even when it has cardinality zero. After ten students are inserted, its degree remains three and its cardinality becomes ten. Row count is therefore not a component that must be revised in the schema after every data modification.\n\n## Compact notation leaves details implicit\n\nThe notation Student(student_id, student_name, programme) is useful for discussion, but it does not fully describe an executable SQL table. What integer range is legal for student_id? Are names required? Can a student be unassigned to a programme? Is student_id unique? These questions need explicit answers before an implementation can claim to enforce the intended contract.\n\nAnnotations, a data dictionary, and executable definitions can supply those details. For example, a name can be a bounded string and the identifier can be a primary key. A domain restriction can require scores to fall within a declared interval. Avoid interpreting omitted details as universal defaults. A teaching diagram may simplify notation, while a real implementation still needs the missing decisions made deliberately.\n\n## SQL definitions make selected rules executable\n\nCREATE TABLE defines an SQL table with columns and supported constraints. A primary key expresses a unique, nonmissing identity. NOT NULL requires a value for a column. CHECK can restrict permitted combinations or ranges. These declarations are useful because they constrain writes at the database boundary, rather than depending solely on every application caller remembering the same rule.\n\n```sql\nCREATE TABLE students (\n  student_id INT PRIMARY KEY,\n  student_name VARCHAR(80) NOT NULL,\n  status VARCHAR(20) NOT NULL DEFAULT 'active'\n);\n```\n\nThis definition makes student_id the key and requires names and statuses. It supplies a default status when an insert omits that column. It does not restrict status to a particular set of words, validate that a name belongs to a real person, or authorize a caller to insert students. Explain only the guarantees actually expressed by the definition and its surrounding system.\n\n## Defaults and nullability describe different behaviour\n\nA default provides a value when an operation requests that default or omits the column in an applicable insert. Nullability determines whether an explicit absence is permitted. A status column with a default and NOT NULL can fill an omitted status while rejecting an explicitly supplied NULL. These are different input cases and should both appear in a meaningful verification plan.\n\nA default is not automatically a domain restriction. DEFAULT 'active' does not prevent an explicit 'inactive' value, nor does it prevent an unexpected string unless another rule rejects it. Similarly, VARCHAR(80) limits a representation but does not fully validate the meaning of a student name. Read each declaration for the particular obligation it enforces and identify any remaining policy elsewhere.\n\n## Keys depend on the intended grain\n\nA Student relation can use student_id as a candidate key. An Enrollment relation permitting one row per student-course pair can use the pair as a composite key. If repeat attempts are allowed, the pair alone may be too restrictive. Adding attempt_no to the identifying combination can distinguish legitimate repeated attempts without inventing duplicate student or course identities.\n\nThe choice of key therefore follows the fact being represented. A key on student_name can incorrectly reject different students sharing a name. A key on student_id alone in an enrollment relation can prevent the same student taking two courses. Testing repeated names and multiple courses reveals these mistakes more effectively than testing only one isolated example tuple that happens to satisfy almost any plausible definition.\n\n## Local rules and relationships work together\n\nSome rules can be checked within a tuple, such as a score range. Others compare tuples, such as uniqueness. A foreign key connects attributes in one relation to an allowed referenced identity. Although SQL often declares the foreign key within a table definition, its meaning spans relations and belongs in the overall database design as well.\n\nDo not assume a column named course_id automatically has a foreign key. Its type and label can suggest the intended connection without enforcing it. Likewise, a local CHECK that course_id is positive does not prove that the course exists. State whether a lesson's exercise checks only a local schema rule or also verifies a cross-relation constraint using the intended storage engine.\n\n## Output schemas are contracts too\n\nA SELECT result has named attributes with meanings determined by its projection and expressions. Selecting student_id and student_name returns a narrower result than the three-column source table. An alias can label an output attribute without changing the source schema. This distinction is useful when a screen needs a convenient display label while persistent column names remain part of established application contracts.\n\nUsing explicit selected columns helps preserve those contracts when a source table gains another attribute. SELECT * can change result width when the source changes, which may affect positional consumers. A schema change should therefore consider both direct writes and the derived result shapes read by applications, reports, views, and integrations. Compatibility is about observable usage, not just whether the new DDL parses.\n\n## Schema evolution requires data awareness\n\nAdding a mandatory attribute raises a practical question: what value should existing tuples receive? Tightening a uniqueness rule raises another: do current tuples already conflict? A schema definition can be reasonable for new data yet impossible to apply safely to existing contents without preparation. Inspect real dependencies and permitted transition states before preparing an authorized migration.\n\nIn a learning exercise, isolated tables let you explore these ideas without changing an application schema. Verify accepted inserts, omitted defaulted values, duplicate identifiers, and prohibited NULLs. If an exercise uses temporary tables, label that execution scope accurately. It does not establish production authorization, migration safety, or exact provider behaviour merely because its local examples produce the expected output.\n\n## Reading a complete schema explanation\n\nConstraint names also help diagnose rejected writes. A good explanation identifies the relation's fact grain, names its attributes, defines relevant domains, states keys and other integrity rules, and separates current tuples from structural declarations. It also makes clear which simplifications are pedagogical and which rules are executable. These habits keep a compact schema notation useful without allowing its brevity to hide missing requirements.\n\nWhen reviewing your own answer, connect every declared rule to a concrete accepted or rejected example. Ask whether two students can share a name, whether one student can take several courses, and whether missing information is permitted. A relation schema becomes practical when its structure and constraints consistently describe the intended facts across both ordinary examples and cases that challenge the design.\n",
+  "references": [],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-4-relation-schema",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-4-relation-schema-1",
+          "test_id": "pt-dbms-sql-4-relation-schema",
+          "question_text": "What does a relation schema describe?",
+          "options": [
+            "The actual current rows stored in a relation",
+            "The structural blueprint: the relation's name, attributes, and their domains",
+            "The number of tuples currently present",
+            "The physical disk location of the data"
+          ],
+          "correct_index": 1,
+          "explanation": "A relation schema is the intensional/structural definition, not the data itself.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-4-relation-schema-2",
+          "test_id": "pt-dbms-sql-4-relation-schema",
+          "question_text": "Which of these is an example of a relation schema?",
+          "options": [
+            "{(1,Asha,CS,8.7),(2,Ravi,ECE,7.9)}",
+            "Students(id, name, department, gpa)",
+            "4 tuples with a cardinality of 4",
+            "SELECT * FROM Students"
+          ],
+          "correct_index": 1,
+          "explanation": "'Students(id, name, department, gpa)' names the relation and lists its attributes — that is exactly a relation schema.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-4-relation-schema-3",
+          "test_id": "pt-dbms-sql-4-relation-schema",
+          "question_text": "If 5 new student rows are inserted into the Students table, what happens to the relation schema?",
+          "options": [
+            "It changes to reflect the 5 new rows",
+            "It stays exactly the same; only the relation (instance/data) changes",
+            "Its degree increases by 5",
+            "It is deleted and recreated"
+          ],
+          "correct_index": 1,
+          "explanation": "Inserting rows only changes the data (the relation/instance); the schema (attributes and domains) is untouched.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-4-relation-schema-4",
+          "test_id": "pt-dbms-sql-4-relation-schema",
+          "question_text": "How does a Relation Schema differ from a Relation?",
+          "options": [
+            "A relation schema is the structural blueprint; a relation is the actual set of tuples conforming to it",
+            "They are exactly the same thing",
+            "A relation is fixed, but a relation schema changes with every insert",
+            "A relation schema stores values; a relation stores attribute names"
+          ],
+          "correct_index": 0,
+          "explanation": "The schema defines structure (attributes/domains); the relation is the data instance that conforms to that structure.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-4-relation-schema-5",
+          "test_id": "pt-dbms-sql-4-relation-schema",
+          "question_text": "How does a Relation Schema relate to a Database Schema?",
+          "options": [
+            "They are unrelated concepts",
+            "A database schema is the collection of all relation schemas (plus cross-relation constraints) in the database",
+            "A relation schema contains many database schemas",
+            "A database schema only applies to a single relation"
+          ],
+          "correct_index": 1,
+          "explanation": "The database schema aggregates every relation schema in the system along with constraints spanning them.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-4-relation-schema-6",
+          "test_id": "pt-dbms-sql-4-relation-schema",
+          "question_text": "Which of the following counts as a change to the relation schema (not just the relation)?",
+          "options": [
+            "Deleting a row where gpa < 5.0",
+            "Running ALTER TABLE Students ADD COLUMN email varchar(100)",
+            "Updating Karan's gpa from 6.8 to 7.0",
+            "Inserting a new student tuple"
+          ],
+          "correct_index": 1,
+          "explanation": "Adding a new column changes the schema's attribute list; the other options only affect the data (the relation).",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-4-relation-schema-7",
+          "test_id": "pt-dbms-sql-4-relation-schema",
+          "question_text": "Can a relation schema be constrained (e.g., declare a primary key) as part of its own definition?",
+          "options": [
+            "No, constraints can only exist at the database schema level",
+            "Yes, constraints like primary key or NOT NULL are part of the relation schema's intensional definition",
+            "No, constraints are data, not structure",
+            "Only referential (foreign key) constraints belong to a relation schema"
+          ],
+          "correct_index": 1,
+          "explanation": "Constraints such as PRIMARY KEY and NOT NULL are structural rules declared as part of the relation schema.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-4-relation-schema-8",
+          "test_id": "pt-dbms-sql-4-relation-schema",
+          "question_text": "Is it valid for a relation schema to exist with no relation (instance) populated under it yet?",
+          "options": [
+            "No, a schema requires at least one tuple to be considered defined",
+            "Yes — a schema can be validly defined with an empty (zero-tuple) instance",
+            "Only if the schema has degree 0",
+            "No, this would violate entity integrity"
+          ],
+          "correct_index": 1,
+          "explanation": "A freshly created schema with no rows yet inserted still has a valid (empty) relation instance.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-4-relation-schema-new-9",
+          "test_id": "pt-dbms-sql-4-relation-schema",
+          "question_text": "What extra information is needed beyond Student(id, name) for an executable design?",
+          "options": [
+            "Only the current row count",
+            "Types, nullability and relevant integrity constraints",
+            "The first physical page address",
+            "The screen row order"
+          ],
+          "correct_index": 1,
+          "explanation": "Compact notation leaves important enforcement details implicit.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-4-relation-schema-new-10",
+          "test_id": "pt-dbms-sql-4-relation-schema",
+          "question_text": "What changes when ten valid rows are inserted into a three-attribute relation?",
+          "options": [
+            "Degree becomes thirteen",
+            "Attribute names disappear",
+            "Cardinality changes while degree remains three",
+            "The schema must be recreated"
+          ],
+          "correct_index": 2,
+          "explanation": "Insertion changes the instance, not the attribute list.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-4-relation-schema-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-4-relation-schema-application-new-1",
+          "test_id": "pt-dbms-sql-4-relation-schema-application",
+          "question_text": "Does DEFAULT active alone restrict every status to active?",
+          "options": [
+            "Yes; defaults are unique constraints",
+            "Only in an empty table",
+            "No; an explicit value can differ unless another rule forbids it",
+            "Yes; defaults prevent all updates"
+          ],
+          "correct_index": 2,
+          "explanation": "A default supplies omitted values rather than restricting every supplied value.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-4-relation-schema-application-new-2",
+          "test_id": "pt-dbms-sql-4-relation-schema-application",
+          "question_text": "Which case distinguishes a default from nullability?",
+          "options": [
+            "Two students have different identifiers",
+            "A SELECT uses ORDER BY",
+            "A table has zero rows",
+            "Omitting status can use a default while explicit NULL is rejected by NOT NULL"
+          ],
+          "correct_index": 3,
+          "explanation": "Omission and explicit NULL are separate inputs.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-4-relation-schema-application-new-3",
+          "test_id": "pt-dbms-sql-4-relation-schema-application",
+          "question_text": "Why can a primary key on student_name be inappropriate?",
+          "options": [
+            "Different students can legitimately share a name",
+            "Names cannot be columns",
+            "Primary keys must always contain three columns",
+            "Names never change"
+          ],
+          "correct_index": 0,
+          "explanation": "The key must follow identity and permitted facts.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-4-relation-schema-application-new-4",
+          "test_id": "pt-dbms-sql-4-relation-schema-application",
+          "question_text": "One enrollment per student-course pair is permitted. Which key matches that grain?",
+          "options": [
+            "student_id alone",
+            "The pair student_id and course_id",
+            "student_name alone",
+            "The displayed row number"
+          ],
+          "correct_index": 1,
+          "explanation": "The pair allows one student to enroll in multiple distinct courses.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-4-relation-schema-application-new-5",
+          "test_id": "pt-dbms-sql-4-relation-schema-application",
+          "question_text": "Repeat course attempts are valid. What can distinguish them in a composite key?",
+          "options": [
+            "Only student_name",
+            "Only the physical insertion order",
+            "An attempt number alongside student_id and course_id",
+            "Removing every key"
+          ],
+          "correct_index": 2,
+          "explanation": "The identity must distinguish legitimate separate attempts.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-4-relation-schema-application-new-6",
+          "test_id": "pt-dbms-sql-4-relation-schema-application",
+          "question_text": "Does CHECK(course_id > 0) prove that a referenced course exists?",
+          "options": [
+            "Yes; all positive identifiers exist",
+            "Only when ordered",
+            "Yes; CHECK always performs a join",
+            "No; positivity is different from referential integrity"
+          ],
+          "correct_index": 3,
+          "explanation": "Existence is a cross-relation rule.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-4-relation-schema-application-new-7",
+          "test_id": "pt-dbms-sql-4-relation-schema-application",
+          "question_text": "Does SELECT name AS display_name rename the stored attribute?",
+          "options": [
+            "No; it labels the output attribute",
+            "Yes; it executes ALTER TABLE",
+            "Yes; it replaces every value",
+            "Only when the table is empty"
+          ],
+          "correct_index": 0,
+          "explanation": "A result alias is distinct from persistent schema evolution.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-4-relation-schema-application-new-8",
+          "test_id": "pt-dbms-sql-4-relation-schema-application",
+          "question_text": "Before adding a required attribute, what must be considered for current rows?",
+          "options": [
+            "Their screen positions only",
+            "How existing tuples obtain valid values",
+            "Whether SELECT is alphabetically sorted",
+            "Only the number of indexes"
+          ],
+          "correct_index": 1,
+          "explanation": "A new requirement must be satisfiable by existing data.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-4-relation-schema-application-new-9",
+          "test_id": "pt-dbms-sql-4-relation-schema-application",
+          "question_text": "What do local temporary-table tests establish?",
+          "options": [
+            "Production migration success",
+            "All provider-specific behaviour",
+            "Behaviour of the exercised definitions and fixtures on that local engine",
+            "User authorization on the application"
+          ],
+          "correct_index": 2,
+          "explanation": "Execution evidence is limited to its tested scope.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-4-relation-schema-application-new-10",
+          "test_id": "pt-dbms-sql-4-relation-schema-application",
+          "question_text": "Which review method best tests a proposed key?",
+          "options": [
+            "Check only one row",
+            "Read only the table title",
+            "Sort by every attribute",
+            "Try legitimate repeated names and multiple related facts"
+          ],
+          "correct_index": 3,
+          "explanation": "Counterexamples expose keys that reject valid identities or fail to distinguish facts.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cx-relation-schema-default",
+      "slug": "relation-schema-default",
+      "title": "Implement a student row contract",
+      "difficulty": "Easy",
+      "task": "Create a temporary table students with student_id INT PRIMARY KEY, student_name VARCHAR(80) NOT NULL, and status VARCHAR(20) NOT NULL DEFAULT active (the string). Copy identifier and name from incoming_students while omitting status, then return all three columns.",
+      "starter_sql": "-- Define students, insert the incoming identities and names, and return its rows.",
+      "schema_sql": "CREATE TABLE incoming_students (student_id INT PRIMARY KEY, student_name VARCHAR(80) NOT NULL);",
+      "seed_sql": "INSERT INTO incoming_students VALUES (2,'Asha'),(1,'Asha');",
+      "expected": "student_id\tstudent_name\tstatus\n1\tAsha\tactive\n2\tAsha\tactive",
+      "ordering": "Ascending student_id.",
+      "constraints": [
+        "Temporary table scope is intentional; no application schema is modified."
+      ],
+      "edge_cases": [
+        "Repeated names must remain distinct identities.",
+        "Omitted status uses the default; explicit NULL is rejected."
+      ],
+      "hints": [
+        "Declare the default as a quoted SQL string.",
+        "List only student_id and student_name in the INSERT target list."
+      ],
+      "solution_sql": "CREATE TEMPORARY TABLE students (student_id INT PRIMARY KEY, student_name VARCHAR(80) NOT NULL, status VARCHAR(20) NOT NULL DEFAULT 'active');\nINSERT INTO students (student_id, student_name) SELECT student_id, student_name FROM incoming_students;\nSELECT student_id, student_name, status FROM students ORDER BY student_id;",
+      "explanation": "The definition enforces identity and required fields. The omitted status uses its default without preventing distinct students from sharing a name.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO incoming_students VALUES (7,'Mira');",
+          "expected": "student_id\tstudent_name\tstatus\n7\tMira\tactive"
+        },
+        {
+          "seed_sql": "",
+          "expected": ""
+        }
+      ],
+      "negative_validation_cases": [
+        {
+          "sql": "INSERT INTO students VALUES (1,'Other','active');",
+          "error_codes": [
+            1062
+          ]
+        },
+        {
+          "sql": "INSERT INTO students VALUES (99,'Other',NULL);",
+          "error_codes": [
+            1048
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cx-relation-schema-attempts",
+      "slug": "relation-schema-attempts",
+      "title": "Enforce one fact per course attempt",
+      "difficulty": "Medium",
+      "task": "Add a composite PRIMARY KEY on student_id, course_id, attempt_no to attempts. Return those columns and score. Distinct attempts and courses must remain valid while an identical identity triple is rejected.",
+      "starter_sql": "-- Add the composite key, then return the attempt facts.",
+      "schema_sql": "CREATE TABLE attempts (student_id INT NOT NULL, course_id INT NOT NULL, attempt_no INT NOT NULL, score INT NOT NULL);",
+      "seed_sql": "INSERT INTO attempts VALUES (1,10,1,40),(1,10,2,70),(1,20,1,80),(2,10,1,65);",
+      "expected": "student_id\tcourse_id\tattempt_no\tscore\n1\t10\t1\t40\n1\t10\t2\t70\n1\t20\t1\t80\n2\t10\t1\t65",
+      "ordering": "Ascending student_id, course_id, attempt_no.",
+      "constraints": [
+        "Input identity triples are unique.",
+        "This exercise verifies local key enforcement, not foreign-key existence rules."
+      ],
+      "edge_cases": [
+        "A student can attempt the same course more than once.",
+        "Different students can share a course and attempt number."
+      ],
+      "hints": [
+        "A key can span all three identifying attributes.",
+        "Adding score to the key would wrongly allow conflicting scores for one attempt."
+      ],
+      "solution_sql": "ALTER TABLE attempts ADD PRIMARY KEY (student_id, course_id, attempt_no);\nSELECT student_id, course_id, attempt_no, score FROM attempts ORDER BY student_id, course_id, attempt_no;",
+      "explanation": "The composite key matches the stated fact grain and rejects conflicting records with the same attempt identity.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO attempts VALUES (4,8,2,60),(4,8,1,30);",
+          "expected": "student_id\tcourse_id\tattempt_no\tscore\n4\t8\t1\t30\n4\t8\t2\t60"
+        },
+        {
+          "seed_sql": "",
+          "expected": ""
+        }
+      ],
+      "negative_validation_cases": [
+        {
+          "sql": "INSERT INTO attempts VALUES (1,10,1,99);",
+          "error_codes": [
+            1062
+          ]
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-4-relation-schema-1",
+      "test_id": "pt-dbms-sql-4-relation-schema",
+      "question_text": "What does a relation schema describe?",
+      "options": [
+        "The actual current rows stored in a relation",
+        "The structural blueprint: the relation's name, attributes, and their domains",
+        "The number of tuples currently present",
+        "The physical disk location of the data"
+      ],
+      "correct_index": 1,
+      "explanation": "A relation schema is the intensional/structural definition, not the data itself.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-4-relation-schema-2",
+      "test_id": "pt-dbms-sql-4-relation-schema",
+      "question_text": "Which of these is an example of a relation schema?",
+      "options": [
+        "{(1,Asha,CS,8.7),(2,Ravi,ECE,7.9)}",
+        "Students(id, name, department, gpa)",
+        "4 tuples with a cardinality of 4",
+        "SELECT * FROM Students"
+      ],
+      "correct_index": 1,
+      "explanation": "'Students(id, name, department, gpa)' names the relation and lists its attributes — that is exactly a relation schema.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-4-relation-schema-3",
+      "test_id": "pt-dbms-sql-4-relation-schema",
+      "question_text": "If 5 new student rows are inserted into the Students table, what happens to the relation schema?",
+      "options": [
+        "It changes to reflect the 5 new rows",
+        "It stays exactly the same; only the relation (instance/data) changes",
+        "Its degree increases by 5",
+        "It is deleted and recreated"
+      ],
+      "correct_index": 1,
+      "explanation": "Inserting rows only changes the data (the relation/instance); the schema (attributes and domains) is untouched.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-4-relation-schema-4",
+      "test_id": "pt-dbms-sql-4-relation-schema",
+      "question_text": "How does a Relation Schema differ from a Relation?",
+      "options": [
+        "A relation schema is the structural blueprint; a relation is the actual set of tuples conforming to it",
+        "They are exactly the same thing",
+        "A relation is fixed, but a relation schema changes with every insert",
+        "A relation schema stores values; a relation stores attribute names"
+      ],
+      "correct_index": 0,
+      "explanation": "The schema defines structure (attributes/domains); the relation is the data instance that conforms to that structure.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-4-relation-schema-5",
+      "test_id": "pt-dbms-sql-4-relation-schema",
+      "question_text": "How does a Relation Schema relate to a Database Schema?",
+      "options": [
+        "They are unrelated concepts",
+        "A database schema is the collection of all relation schemas (plus cross-relation constraints) in the database",
+        "A relation schema contains many database schemas",
+        "A database schema only applies to a single relation"
+      ],
+      "correct_index": 1,
+      "explanation": "The database schema aggregates every relation schema in the system along with constraints spanning them.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-4-relation-schema-6",
+      "test_id": "pt-dbms-sql-4-relation-schema",
+      "question_text": "Which of the following counts as a change to the relation schema (not just the relation)?",
+      "options": [
+        "Deleting a row where gpa < 5.0",
+        "Running ALTER TABLE Students ADD COLUMN email varchar(100)",
+        "Updating Karan's gpa from 6.8 to 7.0",
+        "Inserting a new student tuple"
+      ],
+      "correct_index": 1,
+      "explanation": "Adding a new column changes the schema's attribute list; the other options only affect the data (the relation).",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-4-relation-schema-7",
+      "test_id": "pt-dbms-sql-4-relation-schema",
+      "question_text": "Can a relation schema be constrained (e.g., declare a primary key) as part of its own definition?",
+      "options": [
+        "No, constraints can only exist at the database schema level",
+        "Yes, constraints like primary key or NOT NULL are part of the relation schema's intensional definition",
+        "No, constraints are data, not structure",
+        "Only referential (foreign key) constraints belong to a relation schema"
+      ],
+      "correct_index": 1,
+      "explanation": "Constraints such as PRIMARY KEY and NOT NULL are structural rules declared as part of the relation schema.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-4-relation-schema-8",
+      "test_id": "pt-dbms-sql-4-relation-schema",
+      "question_text": "Is it valid for a relation schema to exist with no relation (instance) populated under it yet?",
+      "options": [
+        "No, a schema requires at least one tuple to be considered defined",
+        "Yes — a schema can be validly defined with an empty (zero-tuple) instance",
+        "Only if the schema has degree 0",
+        "No, this would violate entity integrity"
+      ],
+      "correct_index": 1,
+      "explanation": "A freshly created schema with no rows yet inserted still has a valid (empty) relation instance.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "coordinator",
+    "independent_review": "unavailable; no agent tools",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Definitions and examples checked against questions; no plagiarism certification.",
+    "existing_question_corrections": [],
+    "canonical_answer_indices_preserved": true
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-4-relation-schema",
+    "original_note_sha256": "742b3c879aa581eee94e870141a88ffecd0c59b19cff87e6e84b192ef98d310a",
+    "status": "paired migration prepared; not applied"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Structure stays stable as student facts change",
+      "description": "The schema defines three attributes and identity rules; insertion changes the set of tuples rather than the schema.",
+      "columns": [
+        "Concept",
+        "Example",
+        "What it describes"
+      ],
+      "rows": [
+        [
+          "Relation schema",
+          "Student(student_id, student_name, programme)",
+          "Attribute roles and permitted structure"
+        ],
+        [
+          "Constraint",
+          "student_id is a key",
+          "Allowed identities across tuples"
+        ],
+        [
+          "Empty instance",
+          "{}",
+          "Zero student facts; schema still exists"
+        ],
+        [
+          "Populated instance",
+          "{(17, Asha, Computing)}",
+          "One current fact under that same schema"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "coordinator checked schema/instance distinction, defaults and composite-key grain",
+    "server_rendering": "passed",
+    "browser_rendering": "unverified",
+    "independent_review": "unavailable; no agent tools",
+    "server_rendering_evidence": "2026-10-29: actual LessonBlock static render for every package; focused Vitest suite passed."
+  },
+  "sql_verification": {
+    "engine": "11.8.6-MariaDB-0+deb13u1 from Debian",
+    "scope": "MariaDB compatibility execution; exact MySQL 8.4/provider execution unverified",
+    "fingerprint": "3b40fdf15d7ddac4d02d3254c62e9326ada7b6d0231eb450d02a96ad2a96be4b",
+    "cases": [
+      {
+        "problem": "relation-schema-default",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "relation-schema-default",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "relation-schema-default",
+        "case": 2,
+        "passed": true
+      },
+      {
+        "problem": "relation-schema-default",
+        "negative_case": 0,
+        "error_code": 1062,
+        "passed": true
+      },
+      {
+        "problem": "relation-schema-default",
+        "negative_case": 1,
+        "error_code": 1048,
+        "passed": true
+      },
+      {
+        "problem": "relation-schema-attempts",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "relation-schema-attempts",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "relation-schema-attempts",
+        "case": 2,
+        "passed": true
+      },
+      {
+        "problem": "relation-schema-attempts",
+        "negative_case": 0,
+        "error_code": 1062,
+        "passed": true
+      }
+    ],
+    "all_passed": true
+  }
+}

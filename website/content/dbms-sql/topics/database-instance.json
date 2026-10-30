@@ -1,0 +1,616 @@
+{
+  "source_ref": "chapter-4-relational-model/database-instance",
+  "slug": "database-instance",
+  "title": "Database Instance",
+  "description": "Distinguish a database state from its design, follow valid state changes, and compare recorded snapshots without confusing them with transaction guarantees.",
+  "dialect": "MySQL 8.4",
+  "notes": "## An instance is the data state\n\nA database instance is the actual collection of data stored under a database schema at a particular logical moment. In a college system, it includes the current Student, Course, and Enrollment relation instances together. The schema defines what those relations mean and which states are allowed. The instance supplies the facts currently recorded using those definitions.\n\nThis meaning of instance belongs to the structure-versus-data discussion. In operational documentation, database instance can also refer to a running server process or provisioned database service. Context matters. Here, two instances mean two data states, even if both are represented by one server at different times. A new server process does not necessarily imply a new logical schema or a particular change in recorded facts.\n\n## The whole state contains separate relations\n\nSuppose Student contains Asha and Ravi, Course contains Databases, and Enrollment records Asha taking Databases. These are three relation instances contributing to one database state. They are not one relational union: their attributes differ, so simply applying a union operation to all their tuples would generally be undefined or meaningless without additional transformation.\n\nIt is more precise to describe the database instance as a collection of named relation instances. The relation names preserve which kind of fact each tuple expresses. A student identifier appearing in Enrollment refers to a Student fact but does not merge the enrollment tuple into the Student relation. The connections between these separate collections are governed by the schema's relationship and integrity rules.\n\n## Ordinary writes change the state\n\nInserting an admitted student changes the Student relation and therefore the database instance. Updating that student's programme also changes the instance, even if the total row count stays the same. Deleting an enrollment changes the association facts without necessarily removing its student or course. These examples show why an instance cannot be described fully by a list of table row counts.\n\nThe structure can remain stable throughout these changes. Student still has the same attributes and domains after a new student arrives. Its degree stays fixed while its cardinality may increase. A schema change, such as adding an attribute, is a different operation that changes the contract under which instances are interpreted. Both kinds of change can affect consumers, but they affect different aspects of the system.\n\n## Validity applies across the state\n\nA legal instance satisfies the schema's integrity constraints. Student keys must be unique, required attributes must have acceptable values, and references must obey the defined relationship rules. A collection can satisfy every local column type and still be invalid because an enrollment refers to a nonexistent student. Whole-database validity cannot be assessed from one isolated table alone.\n\nEmptiness does not automatically make a database invalid. If all relations are empty and the declared rules permit that state, the schema has an empty legal instance. Similarly, NULL is not universally forbidden: optional information can be absent where the schema allows it. Validity follows the actual rules, rather than a blanket requirement that every relation contain rows or every attribute contain an ordinary value.\n\n## Same schema can support different instances\n\nA staging environment and a production environment can have the same relation definitions but different student facts. A small teaching fixture can use that schema with only a few rows. Identical structure therefore does not imply identical contents, equal row counts, or matching reports. Distinguish a check of structural compatibility from a comparison of actual data states.\n\nThe reverse also matters: apparently similar displayed rows do not prove identical schemas. One environment may enforce a key while another permits duplicates. A comparison that checks only visible data can miss different validity rules. Report whether you inspected definitions, contents, or both. Avoid describing an environment as an exact copy based only on a matching sample query.\n\n## Counts summarize rather than identify a state\n\nA count of active students can help compare recorded states, but the same count can arise from different populations. One student may leave while another joins. The total stays constant even though the instance changes. A programme update can also change important facts without changing any table's cardinality. Counts are useful summaries, not complete state fingerprints.\n\n```sql\nSELECT COUNT(*) AS active_students\nFROM student_history\nWHERE snapshot_label = 'after'\n  AND status = 'active';\n```\n\nThis query counts qualifying facts in a recorded snapshot. It does not prove that every other relation was captured at the same time. It also does not reconstruct prior contents from the current live table. Historical analysis requires recorded history, a suitable snapshot, or another explicitly available source of past facts.\n\n## Recorded snapshots need clear boundaries\n\nA snapshot label such as before or after is useful in a teaching dataset because it tells us which recorded state a row belongs to. The label is data; it is not by itself a database isolation mechanism. A production snapshot process must define how related facts are captured consistently and how concurrent changes are handled. Those guarantees require implementation-specific evidence.\n\nIf Student is copied at one time and Enrollment at another, the collected rows may never have existed together as one valid live state. For example, a later enrollment copy can reference a student absent from an earlier student copy. Do not diagnose the live application solely from an inconsistent export. First understand the extraction boundary and whether the dataset claims a consistent point-in-time view.\n\n## Compare identities before comparing values\n\nTo compare before and after states, identify facts by stable keys. A student present only afterward is an insertion relative to the earlier snapshot. A student present only before is a removal. A student present in both with a different status has a changed fact. Matching by name can misclassify two separate students who share a label or one student whose name changed.\n\nA changed-row report must state which attributes it compares. If it compares status alone, it should not claim to detect every possible Student change. A name or programme update can occur while status remains identical. The exercise can intentionally compare a narrow contract, but its title and explanation should accurately describe that scope. Keys establish alignment; the selected comparison attributes establish the differences being measured.\n\n## Empty states and no-op statements\n\nAn empty earlier snapshot can make every later identity an insertion. An empty later snapshot can make every earlier identity a removal. If both are empty, a difference report has no rows, although a count query can still return one aggregate row containing zero. Distinguish an empty result from a result whose numeric value is zero when specifying expected output.\n\nAn attempted write does not guarantee a changed instance. A rejected insert leaves no accepted new fact, and a deletion matching no rows removes nothing. Updating a field to its existing value can also leave the logical data state unchanged. Describe successful state changes precisely instead of claiming that every issued SQL statement necessarily creates a distinct database instance.\n\n## Evidence for changes and guarantees\n\nLocal fixtures can demonstrate how a count or comparison query behaves for chosen recorded states. They can include unchanged students, new identities, removed identities, and changed statuses. They do not establish real transaction isolation, backup correctness, provider behaviour, or production authorization. Record those as separate verification concerns when the required environment and approval are available.\n\nA timestamp alone does not establish that every related fact was captured atomically. The instance concept makes database behaviour concrete: structure defines the allowed form, while a state contains the currently recorded facts. Follow keys, compare the intended attributes, and assess integrity across related relations. With those habits, counts and snapshot comparisons become understandable tools rather than substitutes for the complete state or unsupported claims about how a live database handles concurrent operations.\n",
+  "references": [],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-4-database-instance",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-4-database-instance-1",
+          "test_id": "pt-dbms-sql-4-database-instance",
+          "question_text": "What is a database instance?",
+          "options": [
+            "The structural design of the database",
+            "The actual data (all current relations) stored in the database at a given point in time",
+            "The name of the database",
+            "A single attribute's domain"
+          ],
+          "correct_index": 1,
+          "explanation": "A database instance is the real, current data across every relation, as opposed to the structural schema.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-4-database-instance-2",
+          "test_id": "pt-dbms-sql-4-database-instance",
+          "question_text": "If Students goes from 4 rows to 5 rows after a new admission, what has changed?",
+          "options": [
+            "The database schema",
+            "The database instance (the data), while the schema stays the same",
+            "The relation schema's degree",
+            "Nothing has changed"
+          ],
+          "correct_index": 1,
+          "explanation": "Adding a row changes only the current data (the instance); the underlying structure (schema) is unaffected.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-4-database-instance-3",
+          "test_id": "pt-dbms-sql-4-database-instance",
+          "question_text": "Which of these best captures the difference between Database Schema and Database Instance?",
+          "options": [
+            "Schema describes structure; instance describes the actual data state at a particular moment",
+            "Schema = data; Instance = structure",
+            "They mean the same thing",
+            "Instance only applies to a single table, schema applies to the whole database"
+          ],
+          "correct_index": 0,
+          "explanation": "Schemas can evolve and data can remain unchanged; the distinction is structure versus current facts, not an absolute frequency rule.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-4-database-instance-4",
+          "test_id": "pt-dbms-sql-4-database-instance",
+          "question_text": "How does a Database Instance relate to individual Relations?",
+          "options": [
+            "A database instance is smaller than any single relation",
+            "A database instance is the collection of current named relation instances for the database schema",
+            "A relation contains many database instances",
+            "They are unrelated concepts"
+          ],
+          "correct_index": 1,
+          "explanation": "It is a collection of relation states, not a relational union across incompatible schemas.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-4-database-instance-5",
+          "test_id": "pt-dbms-sql-4-database-instance",
+          "question_text": "Assuming the operation succeeds, which action changes data without changing the database schema?",
+          "options": [
+            "Adding a new column to Students",
+            "Deleting a graduated student's row from Students",
+            "Dropping the Enrollments table",
+            "Adding a new foreign key constraint"
+          ],
+          "correct_index": 1,
+          "explanation": "Deleting a row only changes the current data (instance); the other options are structural (schema) changes.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-4-database-instance-6",
+          "test_id": "pt-dbms-sql-4-database-instance",
+          "question_text": "For a database instance to be considered legal/valid, what must it satisfy?",
+          "options": [
+            "It must have at least 1000 rows in every relation",
+            "All integrity constraints declared in the database schema (keys, foreign keys, domain constraints)",
+            "It must be identical to some prior backup",
+            "It must contain no NULL values anywhere"
+          ],
+          "correct_index": 1,
+          "explanation": "A legal instance is one that conforms to every constraint the schema defines; violating any constraint makes it an illegal instance.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-4-database-instance-7",
+          "test_id": "pt-dbms-sql-4-database-instance",
+          "question_text": "Can a 'staging' database and a 'production' database share an identical database schema but hold different database instances?",
+          "options": [
+            "No, identical schemas always imply identical data",
+            "Yes — the same schema can be populated with completely different data in each environment",
+            "Only if both databases are read-only",
+            "No, this would violate referential integrity"
+          ],
+          "correct_index": 1,
+          "explanation": "Schema and instance are independent: the same structural design can be filled with entirely different data sets.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-4-database-instance-8",
+          "test_id": "pt-dbms-sql-4-database-instance",
+          "question_text": "If an authorized DROP TABLE Enrollments succeeds, what does it affect?",
+          "options": [
+            "Only the database instance, since data is removed",
+            "Both the database schema (the relation schema is removed) and, consequently, its instance data",
+            "Neither the schema nor the instance",
+            "Only the Courses relation schema"
+          ],
+          "correct_index": 1,
+          "explanation": "Dropping a table removes its relation schema entirely (a structural/schema change), which necessarily also wipes out its data (instance).",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-4-database-instance-new-9",
+          "test_id": "pt-dbms-sql-4-database-instance",
+          "question_text": "An update changes a programme but preserves every row count. Has the logical instance changed?",
+          "options": [
+            "No; only counts define an instance",
+            "Yes; recorded values changed",
+            "Only if degree changes",
+            "Only if a server restarts"
+          ],
+          "correct_index": 1,
+          "explanation": "Facts can change without a cardinality change.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-4-database-instance-new-10",
+          "test_id": "pt-dbms-sql-4-database-instance",
+          "question_text": "Why is a database instance not normally a relational union of all its tables?",
+          "options": [
+            "All tables must have one column",
+            "UNION defines all foreign keys",
+            "Different relations can have incompatible attribute schemas",
+            "Names are always unique across all tables"
+          ],
+          "correct_index": 2,
+          "explanation": "The whole state is a collection of named relation instances.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-4-database-instance-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-4-database-instance-application-new-1",
+          "test_id": "pt-dbms-sql-4-database-instance-application",
+          "question_text": "Two environments have identical schema definitions. Must their contents match?",
+          "options": [
+            "Yes; schema determines every row",
+            "Only if read-only",
+            "No; the same structure can hold different facts",
+            "Yes; keys determine all labels"
+          ],
+          "correct_index": 2,
+          "explanation": "Structure does not determine a single populated state.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-4-database-instance-application-new-2",
+          "test_id": "pt-dbms-sql-4-database-instance-application",
+          "question_text": "A deletion matches no rows. What can be said about the logical data state?",
+          "options": [
+            "It always removes one fact",
+            "It changes the degree",
+            "It always changes every table",
+            "That statement need not change it"
+          ],
+          "correct_index": 3,
+          "explanation": "A no-match deletion removes nothing.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-4-database-instance-application-new-3",
+          "test_id": "pt-dbms-sql-4-database-instance-application",
+          "question_text": "What is needed to compare earlier contents with current contents?",
+          "options": [
+            "An available recorded history or snapshot source",
+            "Only the current row order",
+            "Only the schema title",
+            "Only SELECT DISTINCT"
+          ],
+          "correct_index": 0,
+          "explanation": "Current data alone need not contain discarded earlier facts.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-4-database-instance-application-new-4",
+          "test_id": "pt-dbms-sql-4-database-instance-application",
+          "question_text": "Why is a snapshot_label column not proof of transaction isolation?",
+          "options": [
+            "Labels force a provider snapshot",
+            "The label does not establish how the data was captured",
+            "Labels disable concurrency",
+            "A label is a foreign key"
+          ],
+          "correct_index": 1,
+          "explanation": "Capture consistency requires separate implementation evidence.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-4-database-instance-application-new-5",
+          "test_id": "pt-dbms-sql-4-database-instance-application",
+          "question_text": "What is the correct alignment basis for student snapshot comparison?",
+          "options": [
+            "Display row numbers",
+            "Names only",
+            "Stable student identifiers",
+            "Scores only"
+          ],
+          "correct_index": 2,
+          "explanation": "Keys identify which facts concern the same student.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-4-database-instance-application-new-6",
+          "test_id": "pt-dbms-sql-4-database-instance-application",
+          "question_text": "A report compares only status. What changes can it miss?",
+          "options": [
+            "Every status change",
+            "Every removed identity",
+            "Every new identity",
+            "Name or programme changes with unchanged status"
+          ],
+          "correct_index": 3,
+          "explanation": "Its evidence is limited to the selected comparison attributes.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-4-database-instance-application-new-7",
+          "test_id": "pt-dbms-sql-4-database-instance-application",
+          "question_text": "What does COUNT(*) over no qualifying rows return without GROUP BY?",
+          "options": [
+            "One result row with zero",
+            "No result rows",
+            "NULL by definition",
+            "A missing schema"
+          ],
+          "correct_index": 0,
+          "explanation": "An ungrouped COUNT aggregate produces a zero count.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-4-database-instance-application-new-8",
+          "test_id": "pt-dbms-sql-4-database-instance-application",
+          "question_text": "Why can separately timed exports appear to contain orphan references?",
+          "options": [
+            "All foreign keys are invalid",
+            "The copied relations may not represent one consistent live state",
+            "Snapshots always remove parents",
+            "Exporting changes every identifier"
+          ],
+          "correct_index": 1,
+          "explanation": "Extraction boundaries can combine facts from different times.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-4-database-instance-application-new-9",
+          "test_id": "pt-dbms-sql-4-database-instance-application",
+          "question_text": "If a student exists only in the later snapshot, how is that identity classified?",
+          "options": [
+            "Unchanged",
+            "Removed",
+            "Inserted relative to the earlier snapshot",
+            "A schema addition"
+          ],
+          "correct_index": 2,
+          "explanation": "Presence in the later state only defines an insertion in this comparison.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-4-database-instance-application-new-10",
+          "test_id": "pt-dbms-sql-4-database-instance-application",
+          "question_text": "What can small snapshot fixtures verify?",
+          "options": [
+            "Production backup consistency",
+            "Exact provider isolation",
+            "All application authorization",
+            "The comparison query on those recorded cases"
+          ],
+          "correct_index": 3,
+          "explanation": "Query correctness on fixtures is distinct from operational guarantees.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cx-database-instance-active-count",
+      "slug": "database-instance-active-count",
+      "title": "Count active students in a recorded state",
+      "difficulty": "Easy",
+      "task": "Return one column active_students counting after-state rows whose status is active. Ignore before-state rows.",
+      "schema_sql": "CREATE TABLE student_history (snapshot_label VARCHAR(10) NOT NULL, student_id INT NOT NULL, status VARCHAR(20) NOT NULL, PRIMARY KEY (snapshot_label, student_id));",
+      "seed_sql": "INSERT INTO student_history VALUES ('before',1,'active'),('after',1,'inactive'),('after',2,'active'),('after',3,'active');",
+      "expected": "active_students\n2",
+      "ordering": "Single aggregate row for the count; ascending student_id for differences.",
+      "constraints": [
+        "snapshot_label is before or after in supplied fixtures.",
+        "Recorded labels do not imply real transaction snapshots; statuses are non-NULL lowercase strings."
+      ],
+      "edge_cases": [
+        "One or both recorded states can be empty.",
+        "Equal population counts can hide changed identities."
+      ],
+      "hints": [
+        "Filter the requested recorded state for the count.",
+        "Conditional aggregation can align both labels in one pass per student identity."
+      ],
+      "solution_sql": "SELECT COUNT(*) AS active_students FROM student_history WHERE snapshot_label = 'after' AND status = 'active';",
+      "explanation": "The exercise compares recorded state data only and makes no transaction-isolation or live-backup claim.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO student_history VALUES ('before',1,'active');",
+          "expected": "active_students\n0"
+        },
+        {
+          "seed_sql": "",
+          "expected": "active_students\n0"
+        }
+      ]
+    },
+    {
+      "id": "cx-database-instance-status-diff",
+      "slug": "database-instance-status-diff",
+      "title": "Compare presence and status across recorded states",
+      "difficulty": "Medium",
+      "task": "Return student_id and change_type for inserted, removed or status-changed students between before and after. Exclude unchanged students. Use labels inserted, removed, changed. This compares status only.",
+      "schema_sql": "CREATE TABLE student_history (snapshot_label VARCHAR(10) NOT NULL, student_id INT NOT NULL, status VARCHAR(20) NOT NULL, PRIMARY KEY (snapshot_label, student_id));",
+      "seed_sql": "INSERT INTO student_history VALUES ('before',1,'active'),('after',1,'inactive'),('before',2,'active'),('after',3,'active'),('before',4,'active'),('after',4,'active');",
+      "expected": "student_id\tchange_type\n1\tchanged\n2\tremoved\n3\tinserted",
+      "ordering": "Single aggregate row for the count; ascending student_id for differences.",
+      "constraints": [
+        "snapshot_label is before or after in supplied fixtures.",
+        "Recorded labels do not imply real transaction snapshots; statuses are non-NULL lowercase strings."
+      ],
+      "edge_cases": [
+        "One or both recorded states can be empty.",
+        "Equal population counts can hide changed identities."
+      ],
+      "hints": [
+        "Filter the requested recorded state for the count.",
+        "Conditional aggregation can align both labels in one pass per student identity."
+      ],
+      "solution_sql": "SELECT student_id, CASE WHEN before_status IS NULL THEN 'inserted' WHEN after_status IS NULL THEN 'removed' ELSE 'changed' END AS change_type FROM (SELECT student_id, MAX(CASE WHEN snapshot_label = 'before' THEN status END) AS before_status, MAX(CASE WHEN snapshot_label = 'after' THEN status END) AS after_status FROM student_history GROUP BY student_id) AS states WHERE before_status IS NULL OR after_status IS NULL OR before_status <> after_status ORDER BY student_id;",
+      "explanation": "The exercise compares recorded state data only and makes no transaction-isolation or live-backup claim.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO student_history VALUES ('after',5,'active'),('before',2,'inactive');",
+          "expected": "student_id\tchange_type\n2\tremoved\n5\tinserted"
+        },
+        {
+          "seed_sql": "INSERT INTO student_history VALUES ('before',1,'active'),('after',1,'active');",
+          "expected": ""
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-4-database-instance-1",
+      "test_id": "pt-dbms-sql-4-database-instance",
+      "question_text": "What is a database instance?",
+      "options": [
+        "The structural design of the database",
+        "The actual data (all current relations) stored in the database at a given point in time",
+        "The name of the database",
+        "A single attribute's domain"
+      ],
+      "correct_index": 1,
+      "explanation": "A database instance is the real, current data across every relation, as opposed to the structural schema.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-4-database-instance-2",
+      "test_id": "pt-dbms-sql-4-database-instance",
+      "question_text": "If Students goes from 4 rows to 5 rows after a new admission, what has changed?",
+      "options": [
+        "The database schema",
+        "The database instance (the data), while the schema stays the same",
+        "The relation schema's degree",
+        "Nothing has changed"
+      ],
+      "correct_index": 1,
+      "explanation": "Adding a row changes only the current data (the instance); the underlying structure (schema) is unaffected.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-4-database-instance-3",
+      "test_id": "pt-dbms-sql-4-database-instance",
+      "question_text": "Which of these best captures the difference between Database Schema and Database Instance?",
+      "options": [
+        "Schema = structure (mostly fixed); Instance = actual data at a moment (changes constantly)",
+        "Schema = data; Instance = structure",
+        "They mean the same thing",
+        "Instance only applies to a single table, schema applies to the whole database"
+      ],
+      "correct_index": 0,
+      "explanation": "This is exactly the structure-vs-data distinction, scaled to the whole database.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-4-database-instance-4",
+      "test_id": "pt-dbms-sql-4-database-instance",
+      "question_text": "How does a Database Instance relate to individual Relations?",
+      "options": [
+        "A database instance is smaller than any single relation",
+        "A database instance is the union of the current relation (data) for every relation schema in the database",
+        "A relation contains many database instances",
+        "They are unrelated concepts"
+      ],
+      "correct_index": 1,
+      "explanation": "The database instance is the combined current state of ALL the individual relations together.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-4-database-instance-5",
+      "test_id": "pt-dbms-sql-4-database-instance",
+      "question_text": "Which action changes the database instance without changing the database schema?",
+      "options": [
+        "Adding a new column to Students",
+        "Deleting a graduated student's row from Students",
+        "Dropping the Enrollments table",
+        "Adding a new foreign key constraint"
+      ],
+      "correct_index": 1,
+      "explanation": "Deleting a row only changes the current data (instance); the other options are structural (schema) changes.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-4-database-instance-6",
+      "test_id": "pt-dbms-sql-4-database-instance",
+      "question_text": "For a database instance to be considered legal/valid, what must it satisfy?",
+      "options": [
+        "It must have at least 1000 rows in every relation",
+        "All integrity constraints declared in the database schema (keys, foreign keys, domain constraints)",
+        "It must be identical to some prior backup",
+        "It must contain no NULL values anywhere"
+      ],
+      "correct_index": 1,
+      "explanation": "A legal instance is one that conforms to every constraint the schema defines; violating any constraint makes it an illegal instance.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-4-database-instance-7",
+      "test_id": "pt-dbms-sql-4-database-instance",
+      "question_text": "Can a 'staging' database and a 'production' database share an identical database schema but hold different database instances?",
+      "options": [
+        "No, identical schemas always imply identical data",
+        "Yes — the same schema can be populated with completely different data in each environment",
+        "Only if both databases are read-only",
+        "No, this would violate referential integrity"
+      ],
+      "correct_index": 1,
+      "explanation": "Schema and instance are independent: the same structural design can be filled with entirely different data sets.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-4-database-instance-8",
+      "test_id": "pt-dbms-sql-4-database-instance",
+      "question_text": "Running DROP TABLE Enrollments affects:",
+      "options": [
+        "Only the database instance, since data is removed",
+        "Both the database schema (the relation schema is removed) and, consequently, its instance data",
+        "Neither the schema nor the instance",
+        "Only the Courses relation schema"
+      ],
+      "correct_index": 1,
+      "explanation": "Dropping a table removes its relation schema entirely (a structural/schema change), which necessarily also wipes out its data (instance).",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "coordinator",
+    "independent_review": "unavailable; no agent tools",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Definitions and examples checked against questions; no plagiarism certification.",
+    "existing_question_corrections": [
+      "tq-dbms-sql-4-database-instance-3",
+      "tq-dbms-sql-4-database-instance-4",
+      "tq-dbms-sql-4-database-instance-5",
+      "tq-dbms-sql-4-database-instance-8"
+    ],
+    "canonical_answer_indices_preserved": true
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-4-database-instance",
+    "original_note_sha256": "d67d1dd6169d161c1f039244d37d03a4c6194786ea2977412548d1f55ca691d5",
+    "status": "paired migration prepared; not applied"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "An unchanged schema can describe different database states",
+      "description": "Identifiers align facts across the recorded states. Matching counts alone would miss that student 2 was replaced by student 3.",
+      "columns": [
+        "State",
+        "Student facts",
+        "Student count",
+        "Schema"
+      ],
+      "rows": [
+        [
+          "Before",
+          "1 active; 2 active",
+          "2",
+          "Student(student_id, status)"
+        ],
+        [
+          "After",
+          "1 inactive; 3 active",
+          "2",
+          "Student(student_id, status)"
+        ],
+        [
+          "Difference",
+          "1 changed; 2 removed; 3 inserted",
+          "Counts alone hide changes",
+          "Same structure"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "coordinator checked equal counts with unequal contents and snapshot/isolation distinction",
+    "server_rendering": "passed",
+    "browser_rendering": "unverified",
+    "independent_review": "unavailable; no agent tools",
+    "server_rendering_evidence": "2026-10-29: all authored packages rendered through actual LessonBlock; focused Vitest suite passed."
+  },
+  "sql_verification": {
+    "engine": "11.8.6-MariaDB-0+deb13u1 from Debian",
+    "scope": "MariaDB compatibility execution; exact MySQL 8.4/provider execution unverified",
+    "fingerprint": "ce3092dba20b8e513bfc6826350698b7b23054ba13452ba5f8de6adc3519956b",
+    "cases": [
+      {
+        "problem": "database-instance-active-count",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "database-instance-active-count",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "database-instance-active-count",
+        "case": 2,
+        "passed": true
+      },
+      {
+        "problem": "database-instance-status-diff",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "database-instance-status-diff",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "database-instance-status-diff",
+        "case": 2,
+        "passed": true
+      }
+    ],
+    "all_passed": true
+  }
+}

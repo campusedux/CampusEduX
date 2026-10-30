@@ -1,0 +1,512 @@
+{
+  "source_ref": "chapter-22-transactions/consistency",
+  "slug": "consistency",
+  "title": "Consistency",
+  "description": "Understand ACID consistency through explicit invariants, CHECK and NULL behavior, multirow transfers, statement-error cleanup and concurrent write paths.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Define a valid state before promising consistency\n\nACID consistency means that a correctly designed transaction takes a database from one valid state to another under its specified invariants. An invariant is a condition the application requires to remain true, such as every loan referring to an existing device or a stock quantity staying nonnegative. The database cannot infer those requirements from friendly table names. Designers and trusted application logic must state the rules and choose mechanisms that actually enforce them.\n\nConsider transferring four available workshop seats between two allocation buckets. The source must exist, the destination must exist, the source must have enough capacity and the combined allocation must remain unchanged. These are separate conditions. A transaction can perform both updates atomically yet add five seats at the destination, producing a durable arithmetic mistake. Atomicity supports consistency but does not substitute for correct logic.\n\n## Classify the rules by what they constrain\n\nA row condition concerns one row, such as a positive identifier or a nonnegative quantity. An identity rule prevents duplicate business identities. A relationship rule requires a reference to an existing entity. A cross-row invariant may require the sum across several records to remain fixed. An authorization rule also determines who may initiate a change, but it should not be confused with a CHECK constraint on numeric values.\n\nFor each rule, identify its enforcement point. A CHECK can reject a bad row value, a unique constraint can prevent repeated identities and a foreign key can protect references under the declared actions. Cross-row calculations often need a carefully designed trusted operation and concurrency control. A browser disabling a button is helpful feedback but does not enforce a database invariant against another caller.\n\n## Use constraints as executable declarations\n\n```sql\nCREATE TABLE seat_buckets(\n  bucket_id INT PRIMARY KEY,\n  available INT NOT NULL,\n  CHECK (available >= 0)\n) ENGINE=InnoDB;\nINSERT INTO seat_buckets VALUES (1,10),(2,20);\n```\n\nThe primary key prohibits repeated bucket identifiers, NOT NULL excludes unknown availability and the CHECK rejects negative values in this MySQL example. These constraints express less than the entire transfer contract. Nothing in this table definition states that a particular request must debit and credit equal quantities, or that the current user is allowed to access both buckets.\n\nMySQL CHECK semantics also deserve attention: a CHECK expression evaluating to UNKNOWN does not fail in the same way as FALSE. NOT NULL is therefore meaningful alongside a numeric condition when the domain forbids missing availability. Do not assume a comparison constraint silently supplies nullability. Inspect the actual definition and the engine version supporting the intended enforcement behavior.\n\n## Trace the intended transfer and the rejected branch\n\n```sql\nSTART TRANSACTION;\nUPDATE seat_buckets SET available=available-4 WHERE bucket_id=1 AND available>=4;\n-- Trusted workflow verifies the expected source effect before continuing.\nUPDATE seat_buckets SET available=available+4 WHERE bucket_id=2;\n-- Trusted workflow verifies destination existence and the complete request contract.\nROLLBACK;\n```\n\nThe example ends with rollback intentionally, restoring the original ten and twenty in participating transactional tables. A successful transfer would commit only after the required checks. If the source update matches no row, the application must distinguish a missing source from insufficient availability as its contract requires. Statement success alone does not prove that four seats moved.\n\nIf the destination is absent, the second UPDATE can affect zero rows without raising an error. A workflow that commits anyway can reduce the total allocation while every declared row constraint remains satisfied. This demonstrates why consistency is broader than merely executing SQL that does not throw an exception. State validity must include all required business rules, not just the easiest individual-column checks.\n\n## Handle statement errors without assuming full rollback\n\nSuppose an open InnoDB transaction first changes bucket two, then attempts an update violating a CHECK on bucket one. The failing statement is rejected, but an ordinary statement error does not imply that every earlier successful statement has been rolled back. Error classes have different scopes; deadlocks, timeouts and connection loss need their documented handling.\n\nAn application should explicitly resolve a failed operation by rolling back the intended transaction or discarding an unusable connection. It should not catch the error, forget the earlier write and later commit whatever remains pending. Record whether rollback was confirmed. Losing the connection before a commit response can leave an unknown outcome requiring reconciliation rather than a confident claim that no change occurred.\n\n## Account for concurrent transactions\n\nChecking a total in application memory and then writing later can race with another transaction. Two requests might each observe enough capacity and both approve a transfer that cannot jointly succeed under the invariant. A one-session demonstration establishes the arithmetic for that history, not safety under concurrent execution.\n\nConditional updates, row locking, suitable constraints or serializable execution can help enforce a particular rule, but the complete operation determines which mechanism is appropriate. A conditional decrement protects its own eligibility test; a multibucket invariant may still require transaction boundaries and consistent locking order. Plan how conflicts are detected, how the transaction is retried and how duplicate requests are reconciled without repeating the business effect.\n\n## Distinguish ACID consistency from CAP consistency\n\nThe word consistency names different concepts in different discussions. ACID consistency concerns validity under specified state invariants. CAP consistency is generally modeled as linearizability: operations appear to take effect at a single point between their invocation and response. Saying distributed nodes agree eventually does not precisely define that stronger observation guarantee.\n\nA replicated system can faithfully replicate an invalid business calculation, and a valid database state can be observed under weaker distributed read guarantees. Keep these questions separate when reviewing an architecture. Ask what values are valid, which observations a caller may see and what happens during communication failures. One familiar acronym does not automatically answer all three questions.\n\n## Preserve rules across alternative write paths\n\nImports, administrative tools, background tasks and application endpoints may all write the same data. A rule enforced only by one screen can be bypassed by another route even without malicious intent. Prefer shared trusted enforcement where practical, and inspect which actors have direct write capability before relying on a restricted workflow.\n\nSchema evolution can also change the meaning of an invariant. Allowing multiple currencies in a balance table invalidates a naive sum that ignores currency. Recording historical allocations changes which rows belong in a current-capacity total. Write the invariant in domain terms and update its implementation and tests together. A passing old test can become irrelevant when its assumptions no longer describe the permitted state space.\n\n## Work through valid and invalid examples\n\nFor a beginner exercise, classify four proposed states: duplicate bucket identity, negative availability, a missing referenced bucket and two nonnegative buckets whose combined total rose after a transfer. The first three can have direct declarative enforcement when the schema includes the relevant rules. The last illustrates a cross-row business invariant not established by those individual constraints alone.\n\nFor an intermediate exercise, start with ten and twenty seats, debit four and credit five. The result six and twenty-five is atomic but totals thirty-one, violating conservation. Repair the arithmetic to credit four and obtain six and twenty-four. Then remove the destination row and explain why checking affected-row meaning and rolling back is necessary even though the source remains nonnegative.\n\nExtend the exercise with two simultaneous transfers from a source containing only six seats. State the intended permitted outcome before choosing locking or retry behavior. Both transfers of four cannot succeed while preserving nonnegative capacity; a correct workflow must reject, wait, abort or otherwise serialize one according to its documented contract.\n\n## Explain what the evidence establishes\n\nConstraint tests should include accepted values, negative values, nulls, duplicates and missing references where relevant. Transaction tests should include a failed later statement, a missing destination and a retryable conflict. Concurrency tests require controlled sessions or barriers so the intended interleaving is demonstrated rather than guessed from timestamps.\n\nNo result-only query can prove that every future write path preserves the full application invariant. Continue with [atomicity](/learning/dbms-sql-tutorial/atomicity), [business constraints](/learning/dbms-sql-tutorial/business-constraints), [isolation](/learning/dbms-sql-tutorial/isolation) and [data modification transactions](/learning/dbms-sql-tutorial/data-modification-transactions). A useful consistency claim names the invariant, trusted enforcement, failure cleanup and the boundaries of the supporting tests.",
+  "references": [
+    {
+      "title": "MySQL CHECK constraints",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/create-table-check-constraints.html"
+    },
+    {
+      "title": "MySQL InnoDB error handling",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/innodb-error-handling.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-22-consistency",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-22-consistency-1",
+          "test_id": "pt-dbms-sql-22-consistency",
+          "question_text": "What does ACID Consistency guarantee?",
+          "options": [
+            "Fast transaction execution",
+            "The database moves from one valid state (respecting all constraints) to another valid state",
+            "All users see the same query results",
+            "Data is never deleted"
+          ],
+          "correct_index": 1,
+          "explanation": "Consistency is about preserving the validity of declared constraints across a transaction.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-22-consistency-2",
+          "test_id": "pt-dbms-sql-22-consistency",
+          "question_text": "An InnoDB UPDATE violates an enforced CHECK constraint. What must application error handling recognize?",
+          "options": [
+            "The constraint is temporarily relaxed to let the transaction succeed",
+            "The failing statement is rejected; earlier successful statements can remain pending until explicit transaction cleanup.",
+            "Only a warning is logged, but the transaction proceeds",
+            "The balance is automatically set to 0 instead"
+          ],
+          "correct_index": 1,
+          "explanation": "Do not assume every statement error automatically rolls back the entire transaction.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-22-consistency-3",
+          "test_id": "pt-dbms-sql-22-consistency",
+          "question_text": "Does ACID consistency guarantee every real-world business fact is correct?",
+          "options": [
+            "Yes, it guarantees full business correctness",
+            "No; declared constraints and correct trusted transaction logic must encode the required invariants.",
+            "It guarantees correctness only for numeric columns",
+            "Consistency has nothing to do with correctness at all"
+          ],
+          "correct_index": 1,
+          "explanation": "Both database enforcement and application logic contribute; undeclared rules are not invented by the engine.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-22-consistency-4",
+          "test_id": "pt-dbms-sql-22-consistency",
+          "question_text": "How does ACID consistency differ from CAP consistency?",
+          "options": [
+            "Yes, they are identical",
+            "ACID consistency concerns valid-state invariants; CAP consistency is generally linearizability.",
+            "CAP theorem doesn't apply to databases",
+            "ACID Consistency only exists in distributed databases"
+          ],
+          "correct_index": 1,
+          "explanation": "Replica agreement alone is not a precise definition of CAP consistency.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-22-consistency-5",
+          "test_id": "pt-dbms-sql-22-consistency",
+          "question_text": "Whose responsibility is it to design the RIGHT constraints matching actual business rules?",
+          "options": [
+            "The database automatically infers this",
+            "The schema designer — the database only enforces whatever constraints are actually declared",
+            "This is not possible to do with ACID Consistency",
+            "Only the DBA can declare constraints, never a schema designer"
+          ],
+          "correct_index": 1,
+          "explanation": "Consistency enforcement is a joint responsibility — the database enforces, but a human must design the right rules.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-22-consistency-6",
+          "test_id": "pt-dbms-sql-22-consistency",
+          "question_text": "Does Consistency apply whether a transaction commits or rolls back?",
+          "options": [
+            "Only when it commits",
+            "Yes — the database remains in a valid state whether the transaction commits successfully or rolls back entirely",
+            "Only when it rolls back",
+            "Consistency only matters for SELECT statements"
+          ],
+          "correct_index": 1,
+          "explanation": "Both outcomes (commit and rollback) must leave the database in a state respecting all constraints.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-22-consistency-7",
+          "test_id": "pt-dbms-sql-22-consistency",
+          "question_text": "Which conceptual distinction matters when comparing ACID with distributed consistency?",
+          "options": [
+            "ACID automatically guarantees linearizable observations in every replica",
+            "Database-state invariants differ from distributed observation guarantees.",
+            "Eventual replica agreement proves every business calculation is valid",
+            "A primary key alone proves every remote read sees the latest write"
+          ],
+          "correct_index": 1,
+          "explanation": "The identical word names different contracts.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-22-consistency-8",
+          "test_id": "pt-dbms-sql-22-consistency",
+          "question_text": "How does Atomicity relate to enabling Consistency?",
+          "options": [
+            "They are unrelated",
+            "Atomicity's all-or-nothing guarantee is part of what makes it possible to never leave the database in a partially-updated, invalid state",
+            "Consistency makes Atomicity redundant",
+            "Atomicity only applies to SELECT statements, unlike Consistency"
+          ],
+          "correct_index": 1,
+          "explanation": "Without atomicity, a partially-completed transaction could leave constraints violated — the two properties work together.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-22-consistency-c-new-1",
+          "test_id": "pt-dbms-sql-22-consistency",
+          "question_text": "A transfer debits4 and credits5 atomically. What fails?",
+          "options": [
+            "The conservation invariant",
+            "Atomicity necessarily",
+            "The primary-key format",
+            "Every foreign key"
+          ],
+          "correct_index": 0,
+          "explanation": "All-or-nothing execution does not repair incorrect arithmetic.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-22-consistency-c-new-2",
+          "test_id": "pt-dbms-sql-22-consistency",
+          "question_text": "An UPDATE matches no destination row. Must MySQL raise an error?",
+          "options": [
+            "Yes, always",
+            "No; the caller must check required effects",
+            "Only if an alias is short",
+            "It automatically creates the row"
+          ],
+          "correct_index": 1,
+          "explanation": "A zero-row update can be successful as a statement but fail the business request.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-22-consistency-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-22-consistency-c-new-3",
+          "test_id": "pt-dbms-sql-22-consistency-application",
+          "question_text": "Why combine NOT NULL with a nonnegative CHECK when availability must be known?",
+          "options": [
+            "CHECK always turns NULL into zero",
+            "NOT NULL creates a foreign key",
+            "UNKNOWN does not fail a CHECK like FALSE",
+            "NULL values are negative"
+          ],
+          "correct_index": 2,
+          "explanation": "Required presence and permitted numeric range are different conditions.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-22-consistency-c-new-4",
+          "test_id": "pt-dbms-sql-22-consistency-application",
+          "question_text": "Does every InnoDB statement error undo earlier transaction statements?",
+          "options": [
+            "Yes, always",
+            "Only for SELECT",
+            "Only if a table has two rows",
+            "No; error scope depends on the failure"
+          ],
+          "correct_index": 3,
+          "explanation": "Explicit cleanup is necessary when the transaction should fail as a whole.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-22-consistency-c-new-5",
+          "test_id": "pt-dbms-sql-22-consistency-application",
+          "question_text": "What is a cross-row invariant here?",
+          "options": [
+            "The combined seat total stays unchanged",
+            "An identifier is nonnull",
+            "A label is shorter than40 characters",
+            "A row has one bucket_id"
+          ],
+          "correct_index": 0,
+          "explanation": "Conservation spans the source and destination effects.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-22-consistency-c-new-6",
+          "test_id": "pt-dbms-sql-22-consistency-application",
+          "question_text": "Does a disabled UI button enforce a trusted data rule?",
+          "options": [
+            "Yes for every caller",
+            "No",
+            "Only if the button is blue",
+            "Only on mobile"
+          ],
+          "correct_index": 1,
+          "explanation": "Other writers can reach the actual data boundary.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-22-consistency-c-new-7",
+          "test_id": "pt-dbms-sql-22-consistency-application",
+          "question_text": "Can concurrent individually plausible checks violate a shared rule?",
+          "options": [
+            "No, checks serialize by name",
+            "Only without SELECT",
+            "Yes, when both act on stale eligibility observations",
+            "Only for empty tables"
+          ],
+          "correct_index": 2,
+          "explanation": "A race can invalidate the joint outcome unless enforcement accounts for concurrency.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-22-consistency-c-new-8",
+          "test_id": "pt-dbms-sql-22-consistency-application",
+          "question_text": "What is CAP consistency generally modeled as?",
+          "options": [
+            "A nonnegative CHECK only",
+            "Eventual agreement alone",
+            "A primary-key naming rule",
+            "Linearizability"
+          ],
+          "correct_index": 3,
+          "explanation": "The contract concerns externally observed operation ordering.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-22-consistency-c-new-9",
+          "test_id": "pt-dbms-sql-22-consistency-application",
+          "question_text": "What should a failed operation leave before a pooled connection is reused?",
+          "options": [
+            "A resolved transaction or an unusable connection discarded",
+            "An unknown open transaction",
+            "A hidden pending commit",
+            "Disabled constraints"
+          ],
+          "correct_index": 0,
+          "explanation": "Connection reuse must not leak locks or pending work.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-22-consistency-c-new-10",
+          "test_id": "pt-dbms-sql-22-consistency-application",
+          "question_text": "Why inspect administrative and import write paths?",
+          "options": [
+            "They cannot write rows",
+            "They may bypass a rule enforced only in one workflow",
+            "They automatically inherit every UI check",
+            "They prove provider certification"
+          ],
+          "correct_index": 1,
+          "explanation": "Shared data invariants must survive all authorized writers.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-22-consistency-c-new-11",
+          "test_id": "pt-dbms-sql-22-consistency-application",
+          "question_text": "What must change when a balance model adds currencies?",
+          "options": [
+            "Nothing, all sums remain meaningful",
+            "Only text color",
+            "The invariant and enforcement must account for units",
+            "The definition of NULL"
+          ],
+          "correct_index": 2,
+          "explanation": "Adding unlike units makes an old unqualified total invalid.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-22-consistency-c-new-12",
+          "test_id": "pt-dbms-sql-22-consistency-application",
+          "question_text": "What supports a defensible consistency claim?",
+          "options": [
+            "The acronym ACID alone",
+            "One successful SELECT",
+            "A generated diagram alone",
+            "Named invariants, trusted enforcement and explicit failure evidence"
+          ],
+          "correct_index": 3,
+          "explanation": "The claim must match what the system actually checks and what tests demonstrated.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [],
+  "coding_not_applicable": "Consistency concerns enforcement of declared invariants across trusted write paths and concurrent/error histories. Two worked state and transfer exercises are included; result-only SQL judging cannot establish the complete property or authorization behavior.",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-22-consistency-1",
+      "test_id": "pt-dbms-sql-22-consistency",
+      "question_text": "What does ACID Consistency guarantee?",
+      "options": [
+        "Fast transaction execution",
+        "The database moves from one valid state (respecting all constraints) to another valid state",
+        "All users see the same query results",
+        "Data is never deleted"
+      ],
+      "correct_index": 1,
+      "explanation": "Consistency is about preserving the validity of declared constraints across a transaction.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-22-consistency-2",
+      "test_id": "pt-dbms-sql-22-consistency",
+      "question_text": "If a transaction would violate a CHECK (balance >= 0) constraint, what does Consistency guarantee?",
+      "options": [
+        "The constraint is temporarily relaxed to let the transaction succeed",
+        "The transaction is rejected, preventing the database from ever entering that invalid state",
+        "Only a warning is logged, but the transaction proceeds",
+        "The balance is automatically set to 0 instead"
+      ],
+      "correct_index": 1,
+      "explanation": "Consistency means the database refuses to complete a transaction that would violate a declared constraint.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-22-consistency-3",
+      "test_id": "pt-dbms-sql-22-consistency",
+      "question_text": "Does ACID Consistency guarantee that data is 'correct' in every real-world business sense?",
+      "options": [
+        "Yes, it guarantees full business correctness",
+        "No — it only guarantees adherence to constraints actually DECLARED in the schema; undeclared business rules aren't protected",
+        "It guarantees correctness only for numeric columns",
+        "Consistency has nothing to do with correctness at all"
+      ],
+      "correct_index": 1,
+      "explanation": "Only explicitly declared constraints are enforced — Consistency doesn't cover business rules the schema doesn't express.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-22-consistency-4",
+      "test_id": "pt-dbms-sql-22-consistency",
+      "question_text": "Is ACID Consistency the same concept as CAP theorem Consistency?",
+      "options": [
+        "Yes, they are identical",
+        "No — ACID Consistency is about respecting a single database's own constraints; CAP Consistency is about distributed nodes agreeing on data",
+        "CAP theorem doesn't apply to databases",
+        "ACID Consistency only exists in distributed databases"
+      ],
+      "correct_index": 1,
+      "explanation": "These are genuinely different concepts that happen to share a name — a classic point of confusion.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-22-consistency-5",
+      "test_id": "pt-dbms-sql-22-consistency",
+      "question_text": "Whose responsibility is it to design the RIGHT constraints matching actual business rules?",
+      "options": [
+        "The database automatically infers this",
+        "The schema designer — the database only enforces whatever constraints are actually declared",
+        "This is not possible to do with ACID Consistency",
+        "Only the DBA can declare constraints, never a schema designer"
+      ],
+      "correct_index": 1,
+      "explanation": "Consistency enforcement is a joint responsibility — the database enforces, but a human must design the right rules.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-22-consistency-6",
+      "test_id": "pt-dbms-sql-22-consistency",
+      "question_text": "Does Consistency apply whether a transaction commits or rolls back?",
+      "options": [
+        "Only when it commits",
+        "Yes — the database remains in a valid state whether the transaction commits successfully or rolls back entirely",
+        "Only when it rolls back",
+        "Consistency only matters for SELECT statements"
+      ],
+      "correct_index": 1,
+      "explanation": "Both outcomes (commit and rollback) must leave the database in a state respecting all constraints.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-22-consistency-7",
+      "test_id": "pt-dbms-sql-22-consistency",
+      "question_text": "Which chapter covers CAP theorem Consistency, to contrast with ACID Consistency?",
+      "options": [
+        "Chapter 10",
+        "Chapter 38 (Distributed Databases)",
+        "Chapter 5",
+        "Chapter 14"
+      ],
+      "correct_index": 1,
+      "explanation": "The distributed-systems CAP theorem is covered later, in Chapter 38.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-22-consistency-8",
+      "test_id": "pt-dbms-sql-22-consistency",
+      "question_text": "How does Atomicity relate to enabling Consistency?",
+      "options": [
+        "They are unrelated",
+        "Atomicity's all-or-nothing guarantee is part of what makes it possible to never leave the database in a partially-updated, invalid state",
+        "Consistency makes Atomicity redundant",
+        "Atomicity only applies to SELECT statements, unlike Consistency"
+      ],
+      "correct_index": 1,
+      "explanation": "Without atomicity, a partially-completed transaction could leave constraints violated — the two properties work together.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "/root/content_c",
+    "independent_review": "passed",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Independent manual content review passed within independent_review_scope; engine/browser/release gates separate.",
+    "canonical_answer_indices_preserved": true,
+    "editorial_record": "Original explanations, examples and scenarios; external originality clearance and AdSense review unperformed.",
+    "independent_reviewer": "/root",
+    "independent_review_scope": "Full notes,20MCQs/options/explanations,diagram and worked transfer/failure histories. Constraints versus cross-row invariants,CHECK UNKNOWN,error scope,concurrent checks and CAP/ACID distinctions sound; irrelevant inherited distractors replaced. Manual editorial/fixture reasoning only; SQL engine,browser,originality and AdSense verification separate."
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-22-consistency",
+    "original_note_sha256": "8ae51aa4c3282d9390a28e2c98bafda0a537a6ca62d1cd917a906f235f84e59c",
+    "status": "drafted; not included in prepared paired migrations"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Valid rows do not prove a valid transfer",
+      "description": "Each rule needs an enforcement point; a successful statement alone does not prove the requested operation.",
+      "columns": [
+        "Rule",
+        "Example failure",
+        "Enforcement question"
+      ],
+      "rows": [
+        [
+          "Known nonnegative stock",
+          "NULL or negative value",
+          "NOT NULL plus enforced CHECK"
+        ],
+        [
+          "Unique bucket identity",
+          "Repeated bucket_id",
+          "Primary or unique key"
+        ],
+        [
+          "Conserved allocation",
+          "Debit4 credit5",
+          "Trusted complete transaction logic"
+        ],
+        [
+          "Existing destination",
+          "Zero affected destination rows",
+          "Verify required effect before commit"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "technical_review": "author self-review",
+    "server_rendering": "unverified",
+    "browser_rendering": "unverified"
+  },
+  "authoring_status": "drafted; verification pending"
+}

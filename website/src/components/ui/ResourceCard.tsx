@@ -29,17 +29,17 @@ export function ResourceCard({ resource, className }: { resource: ResourceCardDa
   return (
     <Link
       href={resource.href}
-      className={cn("card card-hover group flex h-full flex-col p-5", className)}
+      className={cn("card card-hover card-pad group flex h-full min-w-0 flex-col", className)}
     >
       <div className="flex items-start gap-3">
         <span
-          className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl text-lg font-bold"
+          className="icon-box text-lg font-bold"
           style={{ backgroundColor: `${accent}1a`, color: accent }}
         >
           {resource.icon}
         </span>
         <div className="min-w-0 flex-1">
-          <h3 className="flex flex-wrap items-center gap-1.5 font-semibold text-ink group-hover:text-primary">
+          <h3 className="flex flex-wrap items-center gap-1.5 text-base font-semibold text-ink group-hover:text-primary">
             <span className="truncate">{resource.title}</span>
             {resource.isPremium ? <Badge tone="premium">Premium</Badge> : null}
           </h3>
@@ -59,11 +59,11 @@ export function ResourceCard({ resource, className }: { resource: ResourceCardDa
         </div>
       </div>
       {resource.description ? (
-        <p className="mt-3 line-clamp-3 flex-1 text-sm text-ink-muted">{resource.description}</p>
+        <p className="mt-2 line-clamp-2 flex-1 text-sm text-ink-muted">{resource.description}</p>
       ) : (
         <span className="flex-1" />
       )}
-      <div className="mt-4 flex items-center gap-1 border-t border-line pt-3 text-sm font-semibold text-primary">
+      <div className="mt-3 flex items-center gap-1 border-t border-line pt-3 text-sm font-semibold text-primary">
         View resource
         <ArrowRight className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-0.5" aria-hidden />
       </div>

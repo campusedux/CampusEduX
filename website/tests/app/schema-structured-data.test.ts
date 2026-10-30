@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import JsonLd from "@/components/JsonLd";
+import { Suspense } from "react";
 
 // `react`'s `cache()` (used by lib/cache.ts + lib/learning.ts to memoize
 // per-request fetches) is only available on the canary build Next.js aliases
@@ -31,6 +32,15 @@ import { getLearningTree, getLearningGridBrief, getLearningGrids } from "@/lib/l
 
 type Node = { type: unknown; props: { children?: unknown } };
 type LdElement = { type: unknown; props: { data: Record<string, unknown> } };
+
+// Next resolves async index content inside the page-local loading boundary.
+async function serverRoot(node: Node): Promise<Node> {
+  if (node.type === Suspense) return serverRoot(node.props.children as Node);
+  if (typeof node.type === "function" && node.type.constructor.name === "AsyncFunction") {
+    return serverRoot(await node.type(node.props) as Node);
+  }
+  return node;
+}
 
 function jsonLdBlocks(node: Node): Record<string, unknown>[] {
   const children = node.props.children;
@@ -251,7 +261,7 @@ describe("/learning ItemList of real Course entries", () => {
     vi.mocked(getLearningGrids).mockResolvedValueOnce(FIXTURE_GRIDS);
 
     const { default: LearningIndexPage } = await import("@/app/learning/page");
-    const element = (await LearningIndexPage({ searchParams: {} })) as unknown as Node;
+    const element = await serverRoot((await LearningIndexPage({ searchParams: {} })) as unknown as Node);
     const blocks = jsonLdBlocks(element);
 
     const itemList = blocks.find((d) => d["@type"] === "ItemList") as

@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import Link from "next/link";
 import { ArrowRight, Wallet, ShoppingBag, Briefcase, Users, Bookmark, Heart, Wrench, Gift, FileText } from "lucide-react";
 import { requireUser } from "@/lib/auth";
@@ -5,8 +6,9 @@ import { createAuthedServerSupabase } from "@/lib/supabase/authed-server";
 import { formatINR } from "@/lib/format";
 import { getLearningGrids } from "@/lib/learning";
 import { AccountLearningCard } from "@/components/account/AccountLearningCard";
+import { PageHeader, SectionHeader, ListLoading } from "@/components/ui";
 
-export default async function AccountOverviewPage() {
+async function AccountContent() {
   const user = await requireUser();
   const supabase = createAuthedServerSupabase();
 
@@ -44,13 +46,11 @@ export default async function AccountOverviewPage() {
   ];
 
   return (
-    <div>
-      <h1 className="font-display text-[1.6rem] font-bold tracking-tight text-ink sm:text-[1.9rem]">
-        Welcome back{firstName ? `, ${firstName}` : ""}
-      </h1>
-      <p className="mt-1 text-sm text-ink-muted">Here&apos;s a snapshot of your CampusEduX account.</p>
+    <div className="account-overview min-w-0">
+      <PageHeader title={`Welcome back${firstName ? `, ${firstName}` : ""}`} caption="Here's a snapshot of your CampusEduX account." />
+      <div className="account-content list-enter min-w-0 [overflow-wrap:anywhere]">
 
-      <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
+      <div className="mt-4 grid grid-cols-1 gap-3 sm:gap-4 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
         <AccountLearningCard courses={grids.map(({ slug, name, topic_count }) => ({ slug, name, topic_count }))} />
 
         <div className="grid grid-cols-1 gap-4">
@@ -101,14 +101,14 @@ export default async function AccountOverviewPage() {
         })}
       </div>
 
-      <h2 className="mt-8 text-xs font-bold uppercase tracking-[0.14em] text-ink-faint">Shortcuts</h2>
+      <SectionHeader title="Shortcuts" className="mt-5" />
       <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {SHORTCUTS.map((s) => {
           const Icon = s.icon;
           return (
             <Link key={s.href} href={s.href} className="group card card-hover flex items-center gap-3 p-4">
               <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-surface">
-                <Icon className="h-[18px] w-[18px] text-ink-muted group-hover:text-primary" aria-hidden />
+                <Icon className="h-5 w-5 text-ink-muted group-hover:text-primary" aria-hidden />
               </span>
               <span className="min-w-0 flex-1 truncate text-sm font-medium text-ink">{s.label}</span>
               <ArrowRight
@@ -119,6 +119,12 @@ export default async function AccountOverviewPage() {
           );
         })}
       </div>
+      </div>
     </div>
   );
+}
+
+// Keep streaming local to this index page: ancestor loading routes change nested 404 status.
+export default function AccountPage() {
+  return <Suspense fallback={<ListLoading title="Account" />}><AccountContent /></Suspense>;
 }

@@ -1,0 +1,518 @@
+{
+  "source_ref": "chapter-23-concurrency-control/strict-schedule",
+  "slug": "strict-schedule",
+  "title": "Strict Schedule",
+  "description": "Analyze strict schedules with dirty reads and dirty writes, distinguish recoverability from serializability, and understand the limits of lock and MVCC interpretations.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Wait for another writer to finish\n\nIn the classical single-version read-write model, a strict schedule prevents a transaction from reading or overwriting an item written by another transaction until that writer commits or aborts. The restriction applies to both dirty reads and dirty writes. It does not mean transactions must run one at a time, nor does it refer to MySQL's strict SQL mode for conversion and invalid-value handling.\n\nRead [recoverable schedules](/learning/dbms-sql-tutorial/recoverable-schedule), [cascadeless schedules](/learning/dbms-sql-tutorial/cascadeless-schedule) and [conflict serializability](/learning/dbms-sql-tutorial/conflict-serializability). Keep the chosen history model explicit. Real multiversion systems can let readers see older committed versions while another transaction holds a write lock, which requires more precise interpretation than treating every physical row access as the same logical read.\n\n## Track the current uncommitted writer\n\nWrite w1(A) when transaction one writes A, r2(A) when transaction two reads A and c1 or a1 when transaction one commits or aborts. After w1(A), T1 owns an unresolved write on A for this strictness test. A later r2(A) or w2(A) before T1's outcome violates strictness. An operation by T1 on its own pending A is not a cross-transaction violation.\n\nThe first operation need not be a write for the schedule to contain other reads. Several transactions can read a committed value before any writes, and transactions can work on different items concurrently. Strictness focuses on what happens after an unresolved write. It does not itself prohibit every read-write dependency or require every reader to retain a shared lock until commit.\n\n## Distinguish dirty reading from blind overwriting\n\nThe short history w1(A),r2(A),c1,c2 contains a read by T2 while T1's write is uncommitted. It is not cascadeless and therefore not strict. If T1 aborts, T2 may have used a value that should not survive. Reordering only the commits cannot erase the earlier dirty-read dependency.\n\nNow consider w1(A),w2(A),c1,c2 with no reads. T2 blindly overwrites A before T1 resolves. There is no dirty read, so the completed history can satisfy cascadelessness vacuously. It is still not strict because dirty writes are forbidden as well. This example shows why merely avoiding reads of uncommitted data does not establish the stronger property.\n\n## Explain the recovery motivation precisely\n\nSuppose the committed value was ten, T1 writes twenty and T2 overwrites it with thirty before T1 finishes. A naive undo restoring T1's before-image of ten could erase T2's later value. Strict scheduling avoids this interleaving and makes simple item-level undo easier to reason about. That is the pedagogical reason dirty writes deserve attention separately from dirty reads.\n\nDo not conclude that every database's recovery algorithm is inherently unable to distinguish later writes. Actual implementations use logs, versions and coordination mechanisms with their own guarantees. Strictness simplifies a model of recovery; it is not a complete proof of crash correctness, storage durability or an engine's internal undo algorithm. Keep the example's before-image assumption with the explanation.\n\n## Use the implication hierarchy in the right direction\n\nEvery strict schedule is cascadeless because a transaction cannot read another writer's unresolved value. Every cascadeless schedule is recoverable under the corresponding read-dependency definition, because a transaction reads a writer's value only after that writer commits. The converses do not generally hold. A recoverable history can contain dirty reads when dependent commits wait appropriately.\n\n| History | Recoverable | Cascadeless | Strict |\n|---|---|---|---|\n| w1(A),c1,r2(A),c2 | Yes | Yes | Yes |\n| w1(A),r2(A),c1,c2 | Yes | No | No |\n| w1(A),w2(A),c1,c2 | Yes for no read dependency | Yes | No |\n\nThe table describes complete histories with the stated operations only. Adding another item or read can introduce a dependency not shown. When analyzing an actual trace, inspect the entire relevant history rather than accepting the classification of a short prefix as a verdict for all subsequent work.\n\n## Keep strictness separate from serializability\n\nConsider r1(A),r2(B),w1(B),w2(A),c1,c2. Each write follows only reads on that item; neither transaction accesses an item after the other's unresolved write. The history is strict under the stated item model. Yet r1(A) before w2(A) creates T1 to T2, while r2(B) before w1(B) creates T2 to T1. The conflict graph cycles, so strictness does not imply conflict serializability.\n\nConversely, w1(A),r2(A),c1,c2 has a consistent T1-before-T2 conflict direction but a dirty read. It can be conflict-serializable while failing strictness. These counterexamples establish two distinct axes. An application seeking both recovery convenience and serializable behavior needs mechanisms that enforce both, rather than assuming either keyword supplies the other property automatically.\n\n## Relate the rule to strict two-phase locking\n\nIn a classical strict two-phase locking protocol, exclusive locks on written items are held until transaction completion. Compatible lock handling prevents another transaction from reading or writing those same uncommitted item values. The two-phase acquisition-and-release discipline additionally supports conflict-serializability reasoning in the appropriate lock model.\n\nHolding exclusive locks to the end alone should not be described as the entire two-phase rule. If a transaction releases other locks and later acquires new ones without the required discipline, additional histories can become possible. Distinguish strict two-phase locking from variants that hold every lock until completion. Textbook terminology sometimes differs, so state which locks are retained and which acquisition rule applies.\n\nLocking can also produce waits and deadlocks. Strictness does not promise zero contention or starvation freedom. A transaction can wait for another writer that is itself waiting for a different item. Detection, victim rollback, timeouts and bounded retry are separate operational concerns. The usefulness of the recovery property does not remove the need to test denied or failed operations and cleanup.\n\n## Interpret multiversion reads carefully\n\nAn InnoDB consistent read can observe an older committed version while another transaction has an uncommitted update to that row. It is not a dirty read of the uncommitted value. A literal claim that strictness requires every physical reader to wait behind every row writer would misdescribe that engine behavior. Identify the logical value or version being read before mapping an implementation trace onto the classroom rule.\n\nLikewise, locking reads and ordinary consistent reads can have different behavior at a selected isolation level. This topic does not establish that every deployed database always emits strict single-version histories or always uses strict two-phase locking for all operations. Inspect the actual transaction mode, version rules and lock semantics before making such a claim.\n\n## Do not confuse scheduling with other strict settings\n\nMySQL SQL modes can affect invalid dates, truncation or error handling. They do not automatically supply the strict-history property. Similarly, adding a unique constraint enforces a particular identity invariant but does not classify every transaction schedule. A table name such as secure_accounts or a transaction label such as strict_transfer is documentation, not an enforcement mechanism.\n\nA commit marker is also not interchangeable with a client message saying success. The history should record the database outcome, including aborts when relevant. If the connection disappears and the outcome is unknown, the caller cannot manufacture a reliable schedule classification from optimistic logging. Operational traces must distinguish an observed engine event from a guessed application outcome.\n\n## Construct and inspect your own histories\n\nFor a first exercise, begin with w1(A),w2(A),c1,c2 and move the second write after c1. Explain why that fixes the shown strictness violation, then compare what happens if T1 aborts instead. State what value T2 is permitted to observe or overwrite after the first transaction has resolved.\n\nFor a second exercise, analyze the strict-but-cyclic history above item by item. Mark each unresolved writer, build the conflict graph independently and explain why the two verdicts differ. Then add a read after an unresolved foreign write and identify the newly violated property. These concrete counterexamples are stronger than memorizing that one scheduling label sounds safer than another.\n\nContinue with [lost updates](/learning/dbms-sql-tutorial/lost-update) and [isolation](/learning/dbms-sql-tutorial/isolation) to connect theoretical classifications with application decisions. A complete answer names the item or version model, records outcomes, checks both reads and writes after unresolved writers and reserves engine-level claims for actual controlled evidence.",
+  "references": [
+    {
+      "title": "Database System Concepts: concurrency and recovery materials",
+      "url": "https://www.db-book.com/slides-dir/index.html"
+    },
+    {
+      "title": "MySQL8.4 consistent nonlocking reads",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/innodb-consistent-read.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-23-strict-schedule",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-23-strict-schedule-1",
+          "test_id": "pt-dbms-sql-23-strict-schedule",
+          "question_text": "What is the defining rule of a strict schedule?",
+          "options": [
+            "No transaction may ever write the same item twice",
+            "A transaction may not read OR write a data item written by another transaction until that other transaction has committed or aborted",
+            "All transactions must be read-only",
+            "Every schedule must be serial"
+          ],
+          "correct_index": 1,
+          "explanation": "Strictness extends cascadelessness's read restriction to also cover writes: nobody may touch an item another uncommitted transaction wrote, until that transaction resolves (commits or aborts).",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-23-strict-schedule-2",
+          "test_id": "pt-dbms-sql-23-strict-schedule",
+          "question_text": "In history w1(A),w2(A),c1,c2 with no reads,why can cascadelessness hold while strictness fails?",
+          "options": [
+            "Because T2 never actually writes A",
+            "Because T2's operation is a blind write (no read), so there is no dirty READ for another transaction to depend on — cascadelessness only restricts reads, not writes",
+            "Because T1 commits immediately after",
+            "Because cascadelessness doesn't apply to numeric data"
+          ],
+          "correct_index": 1,
+          "explanation": "Cascadelessness is purely about preventing dirty reads; since T2 never reads A, there's no read-based dependency chain, so the schedule passes the cascadeless test even though it fails the stricter write-based test.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-23-strict-schedule-3",
+          "test_id": "pt-dbms-sql-23-strict-schedule",
+          "question_text": "Why can w1(A),w2(A),a1 complicate a naive item-before-image undo procedure?",
+          "options": [
+            "It doesn't cause any real problem",
+            "Blindly restoringT1’s old value could eraseT2’s intervening write; strict scheduling avoids that dirty-write ordering",
+            "It causes a syntax error",
+            "It only matters if T2 also aborts"
+          ],
+          "correct_index": 1,
+          "explanation": "This is a simplified undo motivation,not a claim that every real logging/version algorithm cannot identify later writes.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-23-strict-schedule-4",
+          "test_id": "pt-dbms-sql-23-strict-schedule",
+          "question_text": "What is the correct ordering of strictness among the three properties in this mini-hierarchy?",
+          "options": [
+            "Recoverable is strictest, then cascadeless, then strict",
+            "Strict implies cascadeless, and cascadeless implies recoverable (strict is the strongest guarantee, recoverable the weakest)",
+            "All three properties are exactly equivalent",
+            "Cascadeless is strictest, then strict, then recoverable"
+          ],
+          "correct_index": 1,
+          "explanation": "The hierarchy is Strict ⊂ Cascadeless ⊂ Recoverable — every strict schedule is cascadeless, and every cascadeless schedule is recoverable, but not vice versa.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-23-strict-schedule-5",
+          "test_id": "pt-dbms-sql-23-strict-schedule",
+          "question_text": "Which real-world locking technique naturally produces strict schedules?",
+          "options": [
+            "Shared locks released immediately after a read",
+            "Exclusive locks on written items held until the transaction commits or aborts (as in strict two-phase locking)",
+            "No locking at all",
+            "Locks that expire after a fixed timer, regardless of commit status"
+          ],
+          "correct_index": 1,
+          "explanation": "In the classical single-version compatible-lock model,retained exclusive locks prevent access to the unresolved written value. Multiversion reads of older committed values need separate interpretation.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-23-strict-schedule-6",
+          "test_id": "pt-dbms-sql-23-strict-schedule",
+          "question_text": "Why is strict scheduling useful to a simple recovery design?",
+          "options": [
+            "Strict schedules run faster in every case",
+            "It prevents another transaction’s unresolved overwrite/read dependencies on a writer, simplifying recovery reasoning",
+            "Strict schedules eliminate the need for a precedence graph",
+            "Cascadeless and recoverable schedules are illegal under the SQL standard"
+          ],
+          "correct_index": 1,
+          "explanation": "The benefit is bounded to the stated model. Actual crash correctness and multiversion behavior require their own engine-specific evidence.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-23-strict-schedule-7",
+          "test_id": "pt-dbms-sql-23-strict-schedule",
+          "question_text": "Is strictness related to whether a schedule is conflict-serializable?",
+          "options": [
+            "Strictness guarantees conflict serializability automatically",
+            "They are orthogonal/independent properties — a schedule can be strict but not conflict-serializable, or conflict-serializable but not strict; real systems aim to guarantee both",
+            "Conflict serializability guarantees strictness automatically",
+            "They are the exact same property under different names"
+          ],
+          "correct_index": 1,
+          "explanation": "Serializability concerns the equivalence of results to a serial order; strictness concerns safe handling of commits/aborts for recovery — the two are independent axes a schedule can satisfy or fail separately.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-23-strict-schedule-8",
+          "test_id": "pt-dbms-sql-23-strict-schedule",
+          "question_text": "What does the term 'strict' refer to in 'strict schedule'?",
+          "options": [
+            "A SQL engine configuration setting like strict mode for data types",
+            "A formal scheduling property about blocking reads and writes to data written by an uncommitted transaction until it resolves",
+            "A requirement that the schedule be serial",
+            "A rule that transactions must strictly alternate operations one at a time"
+          ],
+          "correct_index": 1,
+          "explanation": "This is a common point of confusion — 'strict' here is unrelated to SQL strict mode; it's purely a concurrency-control scheduling property.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-23-strict-schedule-new-9",
+          "test_id": "pt-dbms-sql-23-strict-schedule",
+          "question_text": "After w1(A),which T2 operation violates strictness beforec1 or a1?",
+          "options": [
+            "Only a read",
+            "Either r2(A) or w2(A)",
+            "Only a write",
+            "Neither"
+          ],
+          "correct_index": 1,
+          "explanation": "The rule forbids both dirty reads and dirty writes.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-23-strict-schedule-new-10",
+          "test_id": "pt-dbms-sql-23-strict-schedule",
+          "question_text": "May T1 reread its own uncommitted A under this cross-transaction rule?",
+          "options": [
+            "Never",
+            "Only afterT2 commits",
+            "Yes",
+            "Only ifA is numeric"
+          ],
+          "correct_index": 2,
+          "explanation": "Own changes are not another transaction’s unresolved write.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-23-strict-schedule-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-23-strict-schedule-application-new-1",
+          "test_id": "pt-dbms-sql-23-strict-schedule-application",
+          "question_text": "Does working on an independent itemB require waiting solely becauseT1 wroteA?",
+          "options": [
+            "Yes, all database work stops",
+            "Only for SELECT",
+            "Only with one connection",
+            "No under this item rule"
+          ],
+          "correct_index": 3,
+          "explanation": "The restriction is scoped to the item written.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-23-strict-schedule-application-new-2",
+          "test_id": "pt-dbms-sql-23-strict-schedule-application",
+          "question_text": "Why can a blind-write history be cascadeless but not strict?",
+          "options": [
+            "It has no dirty read but can contain a dirty write",
+            "Every write automatically reads",
+            "Cascadeless means serial",
+            "Strictness only concerns names"
+          ],
+          "correct_index": 0,
+          "explanation": "The two properties restrict different accesses.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-23-strict-schedule-application-new-3",
+          "test_id": "pt-dbms-sql-23-strict-schedule-application",
+          "question_text": "Which implication is valid?",
+          "options": [
+            "Recoverable implies strict",
+            "Strict implies cascadeless",
+            "Cascadeless implies strict",
+            "A cyclic graph implies strict"
+          ],
+          "correct_index": 1,
+          "explanation": "The strict restriction includes the dirty-read prohibition.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-23-strict-schedule-application-new-4",
+          "test_id": "pt-dbms-sql-23-strict-schedule-application",
+          "question_text": "Does strictness alone guarantee an acyclic conflict graph?",
+          "options": [
+            "Yes, always",
+            "Only for two transactions",
+            "No",
+            "Only with integers"
+          ],
+          "correct_index": 2,
+          "explanation": "Read-before-write cycles can exist without dirty accesses.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-23-strict-schedule-application-new-5",
+          "test_id": "pt-dbms-sql-23-strict-schedule-application",
+          "question_text": "A reader sees an older committed version during another writer’s update. Is this necessarily a dirty read?",
+          "options": [
+            "Yes, every overlapping read is dirty",
+            "Only when the version has an ID",
+            "Only afterROLLBACK",
+            "No"
+          ],
+          "correct_index": 3,
+          "explanation": "Version semantics determine which value was observed.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-23-strict-schedule-application-new-6",
+          "test_id": "pt-dbms-sql-23-strict-schedule-application",
+          "question_text": "What additional concern remains with strict locking?",
+          "options": [
+            "Deadlock and contention handling",
+            "No transaction can abort",
+            "Locks become permissions",
+            "Durability becomes unnecessary"
+          ],
+          "correct_index": 0,
+          "explanation": "Holding write locks can cause waits and cycles.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-23-strict-schedule-application-new-7",
+          "test_id": "pt-dbms-sql-23-strict-schedule-application",
+          "question_text": "Does MySQL strict SQL mode prove strict schedules?",
+          "options": [
+            "Yes",
+            "No",
+            "Only if an index exists",
+            "Only on weekends"
+          ],
+          "correct_index": 1,
+          "explanation": "Data-conversion mode and concurrency history are separate.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-23-strict-schedule-application-new-8",
+          "test_id": "pt-dbms-sql-23-strict-schedule-application",
+          "question_text": "What makes the naive before-image recovery example hazardous?",
+          "options": [
+            "Every log is absent by definition",
+            "Reads always change data",
+            "Undo of an earlier writer can erase an intervening write",
+            "Keys cannot be numeric"
+          ],
+          "correct_index": 2,
+          "explanation": "It illustrates why unresolved overwrites complicate simple undo.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-23-strict-schedule-application-new-9",
+          "test_id": "pt-dbms-sql-23-strict-schedule-application",
+          "question_text": "Does holding exclusive locks until completion alone describe all of two-phase locking?",
+          "options": [
+            "Yes, no other rule exists",
+            "Only for blind writes",
+            "Only for one-row tables",
+            "No, acquisition/release discipline also matters"
+          ],
+          "correct_index": 3,
+          "explanation": "Strictness and the two-phase protocol conditions should both be stated.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-23-strict-schedule-application-new-10",
+          "test_id": "pt-dbms-sql-23-strict-schedule-application",
+          "question_text": "What evidence supports mapping a real engine to this model?",
+          "options": [
+            "Observed operations,outcomes and actual version/locking semantics",
+            "A friendly transaction name",
+            "Only a screenshot of balances",
+            "Only a SQL mode"
+          ],
+          "correct_index": 0,
+          "explanation": "The theoretical model must match what reads actually observe.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [],
+  "coding_not_applicable": "The objective is a recovery/scheduling property over read-write histories. Two explicit trace-analysis exercises assess it. A one-session SQL output judge cannot establish multi-session dirty-write exclusion, recovery or the chosen engine’s version/lock behavior.",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-23-strict-schedule-1",
+      "test_id": "pt-dbms-sql-23-strict-schedule",
+      "question_text": "What is the defining rule of a strict schedule?",
+      "options": [
+        "No transaction may ever write the same item twice",
+        "A transaction may not read OR write a data item written by another transaction until that other transaction has committed or aborted",
+        "All transactions must be read-only",
+        "Every schedule must be serial"
+      ],
+      "correct_index": 1,
+      "explanation": "Strictness extends cascadelessness's read restriction to also cover writes: nobody may touch an item another uncommitted transaction wrote, until that transaction resolves (commits or aborts).",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-23-strict-schedule-2",
+      "test_id": "pt-dbms-sql-23-strict-schedule",
+      "question_text": "In the 'Cascadeless but NOT Strict' worked example, why is that schedule considered cascadeless despite T2 writing A before T1 commits?",
+      "options": [
+        "Because T2 never actually writes A",
+        "Because T2's operation is a blind write (no read), so there is no dirty READ for another transaction to depend on — cascadelessness only restricts reads, not writes",
+        "Because T1 commits immediately after",
+        "Because cascadelessness doesn't apply to numeric data"
+      ],
+      "correct_index": 1,
+      "explanation": "Cascadelessness is purely about preventing dirty reads; since T2 never reads A, there's no read-based dependency chain, so the schedule passes the cascadeless test even though it fails the stricter write-based test.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-23-strict-schedule-3",
+      "test_id": "pt-dbms-sql-23-strict-schedule",
+      "question_text": "Why does the WW (write-write) interleaving in the 'Cascadeless but NOT Strict' example create a problem specifically for crash recovery?",
+      "options": [
+        "It doesn't cause any real problem",
+        "If T1 later aborts and the DBMS restores A's before-image to undo T1's write, that undo would also stomp on T2's already-applied write, since the undo logic can't distinguish that a newer write happened on top",
+        "It causes a syntax error",
+        "It only matters if T2 also aborts"
+      ],
+      "correct_index": 1,
+      "explanation": "Standard undo-by-before-image recovery assumes no other transaction has touched the item since the write being undone; a WW conflict before commit/abort breaks that assumption.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-23-strict-schedule-4",
+      "test_id": "pt-dbms-sql-23-strict-schedule",
+      "question_text": "What is the correct ordering of strictness among the three properties in this mini-hierarchy?",
+      "options": [
+        "Recoverable is strictest, then cascadeless, then strict",
+        "Strict implies cascadeless, and cascadeless implies recoverable (strict is the strongest guarantee, recoverable the weakest)",
+        "All three properties are exactly equivalent",
+        "Cascadeless is strictest, then strict, then recoverable"
+      ],
+      "correct_index": 1,
+      "explanation": "The hierarchy is Strict ⊂ Cascadeless ⊂ Recoverable — every strict schedule is cascadeless, and every cascadeless schedule is recoverable, but not vice versa.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-23-strict-schedule-5",
+      "test_id": "pt-dbms-sql-23-strict-schedule",
+      "question_text": "Which real-world locking technique naturally produces strict schedules?",
+      "options": [
+        "Shared locks released immediately after a read",
+        "Exclusive locks on written items held until the transaction commits or aborts (as in strict two-phase locking)",
+        "No locking at all",
+        "Locks that expire after a fixed timer, regardless of commit status"
+      ],
+      "correct_index": 1,
+      "explanation": "Holding an exclusive lock on a written item until commit/abort ensures no other transaction can read or write that item in the meantime, which is exactly the strict schedule guarantee.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-23-strict-schedule-6",
+      "test_id": "pt-dbms-sql-23-strict-schedule",
+      "question_text": "Why do most production relational databases implement strict schedules rather than settling for merely cascadeless or recoverable ones?",
+      "options": [
+        "Strict schedules run faster in every case",
+        "Strict schedules make crash recovery simple and safe (before-images can always be restored without risk) and map naturally onto standard exclusive locking",
+        "Strict schedules eliminate the need for a precedence graph",
+        "Cascadeless and recoverable schedules are illegal under the SQL standard"
+      ],
+      "correct_index": 1,
+      "explanation": "The combination of recovery simplicity and a natural fit with exclusive-lock-until-commit locking makes strict schedules the practical default, even though weaker properties would technically also prevent inconsistency.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-23-strict-schedule-7",
+      "test_id": "pt-dbms-sql-23-strict-schedule",
+      "question_text": "Is strictness related to whether a schedule is conflict-serializable?",
+      "options": [
+        "Strictness guarantees conflict serializability automatically",
+        "They are orthogonal/independent properties — a schedule can be strict but not conflict-serializable, or conflict-serializable but not strict; real systems aim to guarantee both",
+        "Conflict serializability guarantees strictness automatically",
+        "They are the exact same property under different names"
+      ],
+      "correct_index": 1,
+      "explanation": "Serializability concerns the equivalence of results to a serial order; strictness concerns safe handling of commits/aborts for recovery — the two are independent axes a schedule can satisfy or fail separately.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-23-strict-schedule-8",
+      "test_id": "pt-dbms-sql-23-strict-schedule",
+      "question_text": "What does the term 'strict' refer to in 'strict schedule'?",
+      "options": [
+        "A SQL engine configuration setting like strict mode for data types",
+        "A formal scheduling property about blocking reads and writes to data written by an uncommitted transaction until it resolves",
+        "A requirement that the schedule be serial",
+        "A rule that transactions must strictly alternate operations one at a time"
+      ],
+      "correct_index": 1,
+      "explanation": "This is a common point of confusion — 'strict' here is unrelated to SQL strict mode; it's purely a concurrency-control scheduling property.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "/root",
+    "independent_review": "passed",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Independent manual content review passed within independent_review_scope; engine/browser/release gates separate.",
+    "canonical_answer_indices_preserved": true,
+    "independent_reviewer": "/root/content_b",
+    "independent_review_scope": "Full notes,20MCQs/options/explanations,diagram. Strict-but-cyclic schedule and blind-write cascadeless counterexamples sound. Manual editorial reasoning only; engine/browser/originality/AdSense separate."
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-23-strict-schedule",
+    "original_note_sha256": "314380d8016272c07d6817e571b0de408f13f48d68f20c604013b56a6e19ac58",
+    "status": "drafted; not included in prepared paired migrations"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Read and write restrictions distinguish strictness",
+      "description": "The outcomes resolve each written item before another transaction may access its uncommitted value.",
+      "columns": [
+        "History fragment",
+        "Dirty read?",
+        "Dirty write?",
+        "Strict?"
+      ],
+      "rows": [
+        [
+          "w1(A),r2(A),c1",
+          "Yes",
+          "No",
+          "No"
+        ],
+        [
+          "w1(A),w2(A),c1",
+          "No read",
+          "Yes",
+          "No"
+        ],
+        [
+          "w1(A),c1,w2(A)",
+          "No",
+          "No",
+          "Yes for this fragment"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "provided",
+    "technical_review": "author review; independent review pending",
+    "server_rendering": "passed",
+    "browser_rendering": "unverified",
+    "independent_review": "pending",
+    "server_rendering_evidence": "2026-10-29 full Vitest:1310 passed/12 skipped; actual LessonBlock/TopicDiagrams render over230 packages. Browser visual QA remains unverified."
+  },
+  "authoring_status": "drafted; verification pending",
+  "sql_verification": {
+    "scope": "not executed; exact MySQL/provider verification pending",
+    "all_passed": false,
+    "cases": []
+  }
+}

@@ -1,0 +1,580 @@
+{
+  "source_ref": "chapter-15-group-by-and-aggregation/cube-concept",
+  "slug": "cube-concept",
+  "title": "CUBE Concept",
+  "description": "Understand every grouping level in a two-dimensional SQL cube, distinguish subtotal labels from missing data, and build an explicit MySQL UNION ALL equivalent.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Ask for several grains in one report\n\nA fundraising report may need totals by campus and campaign, totals by campus regardless of campaign, totals by campaign regardless of campus, and an overall total. These are four different grouping levels. CUBE is the SQL concept that asks for every combination of a chosen set of grouping dimensions. The word does not require three dimensions or a graphical cube. Two dimensions already produce a useful collection of summaries.\n\nReview [GROUP BY](/learning/dbms-sql-tutorial/group-by), [grouping sets](/learning/dbms-sql-tutorial/grouping-sets-concept) and [ROLLUP](/learning/dbms-sql-tutorial/rollup-concept) first. MySQL 8.4 supports GROUP BY with WITH ROLLUP, but it does not provide the general GROUP BY CUBE syntax. The runnable examples here therefore construct the requested grouping levels explicitly. Examples written for another database must be labeled by dialect rather than presented as MySQL commands.\n\n## Enumerate the grouping choices\n\nFor dimensions campus and campaign, each dimension can either remain in the grouping key or be summarized away. Keeping both yields detailed campus-campaign totals. Keeping only campus yields campus subtotals. Keeping only campaign yields campaign subtotals. Keeping neither yields the grand total. With three distinct dimensions there are eight grouping sets; with four there are sixteen. This counts grouping sets, not final result rows.\n\nA grouping set can produce many rows because each distinct key within that set creates a group. Conversely, a sparse dataset may contain only a few observed combinations. A cube aggregates the existing facts. It does not automatically create a row for every theoretically possible campus and campaign pair. A complete reporting grid requires a separate dimension-combination construction and an explicit missing-fact policy.\n\n| Grouping level | Campus retained | Campaign retained | Meaning |\n|---|---|---|---|\n| campus_campaign | Yes | Yes | One total per observed pair |\n| campus | Yes | No | One total per campus |\n| campaign | No | Yes | One total per campaign |\n| all | No | No | One overall total |\n\n## Trace an original three-fact example\n\nAssume three contribution facts: North campus raised 40 for Trees, North raised 60 for Books, and South raised 20 for Trees. The detailed level has three rows. Campus totals are North 100 and South 20. Campaign totals are Books 60 and Trees 60. The overall total is 120. Adding these eight displayed rows together would produce 480, because every original fact appears at four reporting levels.\n\nThat repeated representation is intentional. A cube is a collection of alternative summaries, not eight independent financial facts. A chart or downstream query must choose one compatible level before adding amounts again. Otherwise the grand total, subtotals and details are counted together. Include a level identifier in an exported dataset so that consumers can filter the correct grain without guessing from blank labels.\n\n```sql\nCREATE TABLE contributions (\n  contribution_id INT PRIMARY KEY,\n  campus VARCHAR(20), campaign VARCHAR(20), amount INT\n);\nINSERT INTO contributions VALUES\n(1,'North','Trees',40),\n(2,'North','Books',60),\n(3,'South','Trees',20);\n```\n\n## Build all four levels explicitly in MySQL\n\nUNION ALL combines the rows from four aggregate queries. The same eligible source population must feed every branch. An explicit level column distinguishes the meaning of each branch, while NULL placeholders keep the output column positions aligned. An outer ORDER BY specifies the final display order; branch order alone is not an output-order contract.\n\n```sql\nSELECT level_name, campus, campaign, total_amount\nFROM (\n  SELECT 'campus_campaign' AS level_name, campus, campaign,\n         SUM(amount) AS total_amount\n  FROM contributions GROUP BY campus, campaign\n  UNION ALL\n  SELECT 'campus', campus, NULL, SUM(amount)\n  FROM contributions GROUP BY campus\n  UNION ALL\n  SELECT 'campaign', NULL, campaign, SUM(amount)\n  FROM contributions GROUP BY campaign\n  UNION ALL\n  SELECT 'all', NULL, NULL, SUM(amount)\n  FROM contributions\n) AS summaries\nORDER BY level_name, campus, campaign;\n```\n\nUNION ALL preserves every intentionally emitted grouping row. Plain UNION introduces duplicate elimination over the output columns. A level identifier reduces accidental collisions, but retaining the correct set-combination operator still communicates that different branches represent separate reporting levels. Do not use duplicate elimination as a substitute for knowing which grouping levels the report needs.\n\nFor a larger query, a common table expression can define the eligible contribution population once in the query text. That helps keep filters consistent when requirements change. It does not promise that the database physically scans or materializes the source only once; optimizer decisions and query plans determine execution. Recheck all branches after adding eligibility, currency or date-range conditions.\n\n## Distinguish absent dimensions from unknown values\n\nA NULL campus in a detailed row can mean that the source contribution has an unknown campus. A NULL campus in a campaign subtotal means campus was summarized away. The characters displayed in that column cannot distinguish the two. The explicit level column can. On databases supporting native CUBE, grouping indicators such as GROUPING provide the same kind of distinction between data NULL and aggregate placeholders.\n\nReplacing every NULL campus with a label such as All campuses merges two meanings unless the reporting level is also considered. Use Unknown campus for an unknown source value and All campuses for an omitted grouping dimension. Keep these as presentation choices, not stored identifiers. A real campus named All campuses must not collide with a synthetic summary label in a machine-readable report.\n\nNULL amounts introduce a separate issue. SUM reports the known amounts within each group and returns NULL if no known amount contributes. A grand total with some missing amounts is not necessarily a complete measured total. Include known-value counts or a completeness indicator when readers need to distinguish partial evidence from a fully observed aggregate. Subtotals do not repair missing source measurements.\n\n## Compare a cube with a hierarchy\n\nROLLUP over campus followed by campaign produces detailed pairs, campus subtotals and the grand total. It does not also produce campaign-only totals. Reversing the dimension order changes which intermediate hierarchy is included. A complete two-dimensional cube contains both intermediate levels, so changing the order of its distinct dimensions does not change the collection of grouping sets, though output ordering still needs to be specified separately.\n\nUse a rollup when the business hierarchy is the point, such as country then city. Use a cube-style report when readers need several independent ways to summarize the same facts. Requesting every combination merely because it is available can overwhelm the report and increase work. A selected list of grouping sets is often more appropriate when only a few cross-dimension summaries are useful.\n\nThe number of grouping sets doubles for each additional distinct dimension. This exponential growth explains why unrestricted high-dimensional cubes can become expensive and difficult to interpret. Actual row counts also depend on the number of distinct values and observed combinations at every level. Estimate the requested grains and inspect representative output sizes before exposing an unrestricted reporting option to users.\n\n## Check measures before combining dimensions\n\nAdditive measures such as contributed amount can be recomputed at each compatible grouping level, provided the units and population match. An average is different: averaging campus averages without weighting by their contributing counts can produce the wrong overall average. Distinct contributor counts are also not generally additive because one contributor can appear in several campuses or campaigns. Compute the requested measure from its proper inputs at each level.\n\nKeep currencies separate unless a documented conversion policy supplies a common unit. Adding rupees and dollars does not become meaningful because a grand-total row is convenient. Similarly, joining contributions to several tags can multiply the original facts before any grouping occurs. Validate the source contribution identity and grain before trusting a perfectly shaped cube output.\n\nFor an exported cube, include a data dictionary describing the level values and the meaning of each placeholder column. A consumer should not infer hierarchy from display order or formatting alone. Stable machine-readable grain labels make later chart changes safer because presentation can change without changing the aggregation contract.\n\n## Verify every level independently\n\nFor the three-fact example, reconcile each subtotal level to 120 and verify the detail pairs manually. Add a source NULL campus, a repeated contribution amount, an all-NULL amount group and empty input. In the explicit implementation, the ungrouped grand-total branch still yields one aggregate row over empty input, while grouped branches yield none. Decide whether the report should display that row and document the choice.\n\nA complete review names every emitted grain, confirms identical eligibility across branches and checks that consumers do not sum mixed levels. Continue with [set operations](/learning/dbms-sql-tutorial/union-all) for branch combination and [aggregate query optimization](/learning/dbms-sql-tutorial/aggregate-query-optimization) for measured execution work. Accurate grouping semantics come before assumptions about how many scans a concise query appears to contain.",
+  "references": [
+    {
+      "title": "MySQL 8.4 GROUP BY modifiers",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/group-by-modifiers.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-15-cube-concept",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-15-cube-concept-1",
+          "test_id": "pt-dbms-sql-15-cube-concept",
+          "question_text": "What does `CUBE(region, product)` compute that plain `ROLLUP(region, product)` does not?",
+          "options": [
+            "Nothing extra — they are identical",
+            "Product-only subtotal rows (ignoring region), in addition to everything ROLLUP produces",
+            "Only the grand total row",
+            "Region-only subtotal rows"
+          ],
+          "correct_index": 1,
+          "explanation": "CUBE computes every possible combination of the grouping columns, including product-only subtotals that ROLLUP's strict right-to-left hierarchy never produces.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-15-cube-concept-2",
+          "test_id": "pt-dbms-sql-15-cube-concept",
+          "question_text": "How many grouping sets does `CUBE(region, product)` expand to?",
+          "options": [
+            "2: (region), (product)",
+            "3: (region, product), (region), ()",
+            "4: (region, product), (region), (product), ()",
+            "6, one per (region, product) combination"
+          ],
+          "correct_index": 2,
+          "explanation": "CUBE produces every subset of its column list: full detail, each single column alone, and the empty set — 4 total for 2 columns (2^2).",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-15-cube-concept-3",
+          "test_id": "pt-dbms-sql-15-cube-concept",
+          "question_text": "A nonempty source has six observed region-product pairs, three regions and two products. How many rows does a complete two-dimensional cube produce?",
+          "options": [
+            "6",
+            "10",
+            "12",
+            "16"
+          ],
+          "correct_index": 2,
+          "explanation": "6 detail rows + 3 region subtotals + 2 product subtotals + 1 grand total = 12.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-15-cube-concept-4",
+          "test_id": "pt-dbms-sql-15-cube-concept",
+          "question_text": "Widget facts have amounts 100, 200, 50, 120 and 60 across regions. What is the Widget product-only subtotal?",
+          "options": [
+            "160",
+            "250",
+            "530",
+            "1060"
+          ],
+          "correct_index": 2,
+          "explanation": "Summing all Widget orders across every region (100+200+50+120+60) gives 530.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-15-cube-concept-5",
+          "test_id": "pt-dbms-sql-15-cube-concept",
+          "question_text": "How many grouping sets does `CUBE(a, b, c)` (three columns) produce?",
+          "options": [
+            "3",
+            "4",
+            "6",
+            "8"
+          ],
+          "correct_index": 3,
+          "explanation": "CUBE produces 2^n grouping sets for n columns; with 3 columns that's 2^3 = 8, covering every possible subset.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-15-cube-concept-6",
+          "test_id": "pt-dbms-sql-15-cube-concept",
+          "question_text": "Which of the following databases support the standard `GROUP BY CUBE(...)` syntax?",
+          "options": [
+            "MySQL only",
+            "PostgreSQL, SQL Server, and Oracle",
+            "SQLite only",
+            "No mainstream database supports it"
+          ],
+          "correct_index": 1,
+          "explanation": "PostgreSQL, SQL Server, and Oracle support CUBE natively; MySQL does not support CUBE at all, only the simpler WITH ROLLUP.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-15-cube-concept-7",
+          "test_id": "pt-dbms-sql-15-cube-concept",
+          "question_text": "What is a language-level advantage of native CUBE compared with spelling out every grouping subset using UNION ALL?",
+          "options": [
+            "CUBE produces fewer rows overall",
+            "It expresses all grouping subsets declaratively in one grouping construct",
+            "CUBE is the only way to compute a grand total",
+            "There is no advantage; they are equivalent in every way"
+          ],
+          "correct_index": 1,
+          "explanation": "CUBE describes the complete collection of grouping sets concisely. Physical scans, sharing and materialization depend on the engine and actual plan; neither syntax proves a fixed number of scans.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-15-cube-concept-8",
+          "test_id": "pt-dbms-sql-15-cube-concept",
+          "question_text": "In `GROUP BY CUBE(region, product)`, how would you programmatically distinguish the grand total row from a region-only subtotal row?",
+          "options": [
+            "Grand total always sorts first alphabetically",
+            "Check GROUPING(region) and GROUPING(product): the grand total has both equal to 1, while a region-only subtotal has GROUPING(region)=0 and GROUPING(product)=1",
+            "It is impossible to distinguish them",
+            "Check if total_amount is negative"
+          ],
+          "correct_index": 1,
+          "explanation": "GROUPING(column) identifies an omitted grouping dimension. A grand total omits both dimensions; a region-only subtotal retains region and omits product. Source NULL values need not be summary placeholders.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-15-cube-concept-new-9",
+          "test_id": "pt-dbms-sql-15-cube-concept",
+          "question_text": "Why does summing every row of a two-dimensional cube count each source amount four times?",
+          "options": [
+            "The source table is necessarily duplicated",
+            "Each fact contributes to detail, both one-dimension subtotals and the grand total",
+            "UNION ALL always multiplies any amount by four",
+            "NULL values become four"
+          ],
+          "correct_index": 1,
+          "explanation": "The four grouping levels are alternative summaries of the same facts. Choose one compatible level before adding totals.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-15-cube-concept-new-10",
+          "test_id": "pt-dbms-sql-15-cube-concept",
+          "question_text": "Does a cube automatically fill every absent dimension combination?",
+          "options": [
+            "Yes, with zero amounts",
+            "Yes, with fabricated facts",
+            "No, aggregation summarizes observed facts",
+            "Only when aliases are short"
+          ],
+          "correct_index": 2,
+          "explanation": "A complete dimension grid requires a separate construction and missing-fact policy.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-15-cube-concept-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-15-cube-concept-application-new-1",
+          "test_id": "pt-dbms-sql-15-cube-concept-application",
+          "question_text": "Which level is absent from ROLLUP(campus,campaign) but present in the full cube?",
+          "options": [
+            "Campus-only totals",
+            "Detailed campus-campaign totals",
+            "The grand total",
+            "Campaign-only totals"
+          ],
+          "correct_index": 3,
+          "explanation": "The rollup follows the stated hierarchy and omits the independent campaign-only level.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-15-cube-concept-application-new-2",
+          "test_id": "pt-dbms-sql-15-cube-concept-application",
+          "question_text": "Why include level_name in an explicit cube report?",
+          "options": [
+            "To identify the output grain even when source values are NULL",
+            "To force one physical scan",
+            "To convert currencies",
+            "To make each input amount unique"
+          ],
+          "correct_index": 0,
+          "explanation": "A NULL can represent missing source data or an omitted grouping dimension.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-15-cube-concept-application-new-3",
+          "test_id": "pt-dbms-sql-15-cube-concept-application",
+          "question_text": "How should a consumer total the displayed cube output?",
+          "options": [
+            "Sum every row across all levels",
+            "Choose one compatible grouping level first",
+            "Add only rows containing NULL",
+            "Always average all subtotals"
+          ],
+          "correct_index": 1,
+          "explanation": "Different levels repeat the same underlying facts.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-15-cube-concept-application-new-4",
+          "test_id": "pt-dbms-sql-15-cube-concept-application",
+          "question_text": "Which MySQL 8.4 approach can construct a general two-dimensional cube result?",
+          "options": [
+            "GROUP BY CUBE directly",
+            "A CROSS JOIN without aggregates",
+            "Explicit grouped branches joined with UNION ALL",
+            "ORDER BY every dimension"
+          ],
+          "correct_index": 2,
+          "explanation": "MySQL supplies WITH ROLLUP but not general CUBE syntax.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-15-cube-concept-application-new-5",
+          "test_id": "pt-dbms-sql-15-cube-concept-application",
+          "question_text": "Which measure cannot usually be combined by simply averaging subgroup results?",
+          "options": [
+            "A sum in one currency",
+            "A count of disjoint facts",
+            "A total of nonoverlapping amounts",
+            "An average when subgroup counts differ"
+          ],
+          "correct_index": 3,
+          "explanation": "Recompute the weighted result from sums and contributing counts.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-15-cube-concept-application-new-6",
+          "test_id": "pt-dbms-sql-15-cube-concept-application",
+          "question_text": "What can double when one distinct grouping dimension is added?",
+          "options": [
+            "The number of grouping sets",
+            "Every individual amount",
+            "The number of source facts",
+            "The number of currencies necessarily"
+          ],
+          "correct_index": 0,
+          "explanation": "Every previous set has variants retaining and omitting the added dimension.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-15-cube-concept-application-new-7",
+          "test_id": "pt-dbms-sql-15-cube-concept-application",
+          "question_text": "What does NULL campus mean in a campaign subtotal?",
+          "options": [
+            "A campus is necessarily unknown",
+            "Campus is omitted at that grouping level",
+            "There are no contributions",
+            "Every source campus is NULL"
+          ],
+          "correct_index": 1,
+          "explanation": "The level indicator distinguishes omission from unknown source data.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-15-cube-concept-application-new-8",
+          "test_id": "pt-dbms-sql-15-cube-concept-application",
+          "question_text": "Why must eligibility filters match across cube branches?",
+          "options": [
+            "Different filters always improve totals",
+            "UNION ALL fixes inconsistent filters",
+            "The levels should summarize the same fact population",
+            "GROUP BY removes pending facts automatically"
+          ],
+          "correct_index": 2,
+          "explanation": "A subtotal cannot reconcile to details if the branches use different populations.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-15-cube-concept-application-new-9",
+          "test_id": "pt-dbms-sql-15-cube-concept-application",
+          "question_text": "Does defining eligible facts in a CTE prove one physical scan?",
+          "options": [
+            "Yes, in every engine",
+            "Yes, if the CTE has a short name",
+            "Only when SUM is used",
+            "No, inspect the actual execution plan"
+          ],
+          "correct_index": 3,
+          "explanation": "Query text structure does not dictate a fixed optimizer execution strategy.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-15-cube-concept-application-new-10",
+          "test_id": "pt-dbms-sql-15-cube-concept-application",
+          "question_text": "On empty input, what does the explicit ungrouped SUM grand-total branch return?",
+          "options": [
+            "One row with a NULL sum",
+            "No row in every case",
+            "One row with sum one",
+            "An arbitrary retained fact"
+          ],
+          "correct_index": 0,
+          "explanation": "Grouped branches have no groups, but the ungrouped aggregate still has a summary row.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cx-cube-campus-totals",
+      "slug": "cube-campus-totals",
+      "title": "Produce a campus subtotal level",
+      "difficulty": "Easy",
+      "task": "Return campus,total_amount grouped by campus, ordered by campus.",
+      "schema_sql": "CREATE TABLE gifts(id INT PRIMARY KEY,campus VARCHAR(10),campaign VARCHAR(10),amount INT);",
+      "seed_sql": "INSERT INTO gifts VALUES (1,'N','T',40),(2,'N','B',60),(3,'S','T',20);",
+      "solution_sql": "SELECT campus,SUM(amount) AS total_amount FROM gifts GROUP BY campus ORDER BY campus;",
+      "expected": "campus\ttotal_amount\nN\t100\nS\t20",
+      "explanation": "Retain campus as the key and summarize campaigns away.",
+      "ordering": "Apply the ORDER BY explicitly required by the task; scalar results contain one row.",
+      "constraints": [
+        "Only synthetic fixture tables are in scope."
+      ],
+      "edge_cases": [
+        "Check empty input and the supplied contrasting fixtures."
+      ],
+      "hints": [
+        "Retain campus as the key and summarize campaigns away."
+      ],
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO gifts VALUES (1,'S','T',5),(2,'S','T',5);",
+          "expected": "campus\ttotal_amount\nS\t10"
+        },
+        {
+          "seed_sql": "",
+          "expected": ""
+        }
+      ]
+    },
+    {
+      "id": "cx-cube-two-dimension-levels",
+      "slug": "cube-two-dimension-levels",
+      "title": "Construct all four grouping levels",
+      "difficulty": "Medium",
+      "task": "Return level_name,campus,campaign,total_amount for detail, campus, campaign and all grouping levels. Order by level_name,campus,campaign.",
+      "schema_sql": "CREATE TABLE gifts(id INT PRIMARY KEY,campus VARCHAR(10),campaign VARCHAR(10),amount INT);",
+      "seed_sql": "INSERT INTO gifts VALUES (1,'N','T',40),(2,'N','B',60);",
+      "solution_sql": "SELECT level_name,campus,campaign,total_amount FROM (SELECT 'detail' AS level_name,campus,campaign,SUM(amount) AS total_amount FROM gifts GROUP BY campus,campaign UNION ALL SELECT 'campus',campus,NULL,SUM(amount) FROM gifts GROUP BY campus UNION ALL SELECT 'campaign',NULL,campaign,SUM(amount) FROM gifts GROUP BY campaign UNION ALL SELECT 'all',NULL,NULL,SUM(amount) FROM gifts) AS g ORDER BY level_name,campus,campaign;",
+      "expected": "level_name\tcampus\tcampaign\ttotal_amount\nall\tNULL\tNULL\t100\ncampaign\tNULL\tB\t60\ncampaign\tNULL\tT\t40\ncampus\tN\tNULL\t100\ndetail\tN\tB\t60\ndetail\tN\tT\t40",
+      "explanation": "Explicit level labels distinguish each grain, including source NULLs.",
+      "ordering": "Apply the ORDER BY explicitly required by the task; scalar results contain one row.",
+      "constraints": [
+        "Only synthetic fixture tables are in scope."
+      ],
+      "edge_cases": [
+        "Check empty input and the supplied contrasting fixtures."
+      ],
+      "hints": [
+        "Explicit level labels distinguish each grain, including source NULLs."
+      ],
+      "validation_cases": [
+        {
+          "seed_sql": "",
+          "expected": "level_name\tcampus\tcampaign\ttotal_amount\nall\tNULL\tNULL\tNULL"
+        },
+        {
+          "seed_sql": "INSERT INTO gifts VALUES (1,NULL,'T',5),(2,'N','T',NULL);",
+          "expected": "level_name\tcampus\tcampaign\ttotal_amount\nall\tNULL\tNULL\t5\ncampaign\tNULL\tT\t5\ncampus\tNULL\tNULL\t5\ncampus\tN\tNULL\tNULL\ndetail\tNULL\tT\t5\ndetail\tN\tT\tNULL"
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-15-cube-concept-1",
+      "test_id": "pt-dbms-sql-15-cube-concept",
+      "question_text": "What does `CUBE(region, product)` compute that plain `ROLLUP(region, product)` does not?",
+      "options": [
+        "Nothing extra — they are identical",
+        "Product-only subtotal rows (ignoring region), in addition to everything ROLLUP produces",
+        "Only the grand total row",
+        "Region-only subtotal rows"
+      ],
+      "correct_index": 1,
+      "explanation": "CUBE computes every possible combination of the grouping columns, including product-only subtotals that ROLLUP's strict right-to-left hierarchy never produces.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-15-cube-concept-2",
+      "test_id": "pt-dbms-sql-15-cube-concept",
+      "question_text": "How many grouping sets does `CUBE(region, product)` expand to?",
+      "options": [
+        "2: (region), (product)",
+        "3: (region, product), (region), ()",
+        "4: (region, product), (region), (product), ()",
+        "6, one per (region, product) combination"
+      ],
+      "correct_index": 2,
+      "explanation": "CUBE produces every subset of its column list: full detail, each single column alone, and the empty set — 4 total for 2 columns (2^2).",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-15-cube-concept-3",
+      "test_id": "pt-dbms-sql-15-cube-concept",
+      "question_text": "How many total output rows does `GROUP BY CUBE(region, product)` return over the orders table?",
+      "options": [
+        "6",
+        "10",
+        "12",
+        "16"
+      ],
+      "correct_index": 2,
+      "explanation": "6 detail rows + 3 region subtotals + 2 product subtotals + 1 grand total = 12.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-15-cube-concept-4",
+      "test_id": "pt-dbms-sql-15-cube-concept",
+      "question_text": "What is the value of the product-only subtotal row for Widget (region = NULL, product = 'Widget') under CUBE?",
+      "options": [
+        "160",
+        "250",
+        "530",
+        "1060"
+      ],
+      "correct_index": 2,
+      "explanation": "Summing all Widget orders across every region (100+200+50+120+60) gives 530.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-15-cube-concept-5",
+      "test_id": "pt-dbms-sql-15-cube-concept",
+      "question_text": "How many grouping sets does `CUBE(a, b, c)` (three columns) produce?",
+      "options": [
+        "3",
+        "4",
+        "6",
+        "8"
+      ],
+      "correct_index": 3,
+      "explanation": "CUBE produces 2^n grouping sets for n columns; with 3 columns that's 2^3 = 8, covering every possible subset.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-15-cube-concept-6",
+      "test_id": "pt-dbms-sql-15-cube-concept",
+      "question_text": "Which of the following databases support the standard `GROUP BY CUBE(...)` syntax?",
+      "options": [
+        "MySQL only",
+        "PostgreSQL, SQL Server, and Oracle",
+        "SQLite only",
+        "No mainstream database supports it"
+      ],
+      "correct_index": 1,
+      "explanation": "PostgreSQL, SQL Server, and Oracle support CUBE natively; MySQL does not support CUBE at all, only the simpler WITH ROLLUP.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-15-cube-concept-7",
+      "test_id": "pt-dbms-sql-15-cube-concept",
+      "question_text": "Compared to computing the same 4 grouping levels (detail, region, product, grand total) as 4 separate GROUP BY queries joined with UNION ALL, what is the main advantage of CUBE?",
+      "options": [
+        "CUBE produces fewer rows overall",
+        "CUBE lets the engine compute all combinations from a single logical scan of the base data instead of 4 separate scans",
+        "CUBE is the only way to compute a grand total",
+        "There is no advantage; they are equivalent in every way"
+      ],
+      "correct_index": 1,
+      "explanation": "CUBE (like GROUPING SETS and ROLLUP) computes multiple grouping levels from one pass over the data, whereas the UNION ALL approach requires one full scan per separate GROUP BY query.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-15-cube-concept-8",
+      "test_id": "pt-dbms-sql-15-cube-concept",
+      "question_text": "In `GROUP BY CUBE(region, product)`, how would you programmatically distinguish the grand total row from a region-only subtotal row?",
+      "options": [
+        "Grand total always sorts first alphabetically",
+        "Check GROUPING(region) and GROUPING(product): the grand total has both equal to 1, while a region-only subtotal has GROUPING(region)=0 and GROUPING(product)=1",
+        "It is impossible to distinguish them",
+        "Check if total_amount is negative"
+      ],
+      "correct_index": 1,
+      "explanation": "GROUPING(col) returns 1 when that column was rolled up away (its value is NULL for grouping purposes) for that particular row; the grand total rolls up every column (all GROUPING() = 1), while a region-only subtotal keeps region ungrouped (GROUPING(region)=0) but rolls up product (GROUPING(product)=1).",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "/root/worker_1",
+    "independent_review": "passed",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "author semantic review; independent review pending",
+    "canonical_answer_indices_preserved": true,
+    "independent_reviewer": "/root",
+    "independent_review_scope": "Full notes,20 MCQs with options/reasoning, both exercises including six predicted sample/alternative outputs, table diagram and links. MySQL UNION ALL implementation, grouping-set counts, mixed-level double counting, source NULL versus summary omission and empty grand total correct. Replaced duplicate MCQ and added source-NULL/all-NULL fixture. Engine/browser verification separate."
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-15-cube-concept",
+    "original_note_sha256": "751e33b48e7b46f36312d202aa57c332b447acb4bbb94d2d63592276083d8d99",
+    "status": "drafted; not included in prepared paired migrations"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Four independent grouping choices",
+      "description": "The same three facts contribute once at each displayed grain.",
+      "columns": [
+        "Level",
+        "Rows",
+        "Sum within level"
+      ],
+      "rows": [
+        [
+          "Campus and campaign",
+          "3",
+          "120"
+        ],
+        [
+          "Campus",
+          "2",
+          "120"
+        ],
+        [
+          "Campaign",
+          "2",
+          "120"
+        ],
+        [
+          "All",
+          "1",
+          "120"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "provided",
+    "technical_review": "coordinator independent manual review passed",
+    "server_rendering": "passed",
+    "browser_rendering": "unverified",
+    "independent_review": "passed",
+    "server_rendering_evidence": "2026-10-29 full Vitest:1310 passed/12 skipped; actual LessonBlock/TopicDiagrams render over230 packages. Browser visual QA remains unverified."
+  },
+  "authoring_status": "drafted; verification pending",
+  "sql_verification": {
+    "scope": "not executed; exact MySQL/provider verification pending",
+    "all_passed": false,
+    "cases": []
+  }
+}

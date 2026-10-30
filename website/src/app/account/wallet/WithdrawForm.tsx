@@ -36,10 +36,11 @@ export default function WithdrawForm({
   }
 
   async function handleWithdraw() {
+    if (status === "processing") return;
     const value = Number(amount);
     let problem: string | null = null;
     if (!Number.isFinite(value) || value <= 0) problem = "Enter an amount to withdraw.";
-    else if (Math.round(value * 100) !== value * 100) problem = "Amount can have at most 2 decimal places.";
+    else if (Math.abs(Math.round(value * 100) - value * 100) > 1e-8) problem = "Amount can have at most 2 decimal places.";
     else if (value < minPayout) problem = `Minimum withdrawal amount is ${formatINR(minPayout)}.`;
     else if (value > balance) problem = "You can't withdraw more than your wallet balance.";
     else if (!isValidUpiId(upiId)) problem = "Enter a valid UPI ID (for example name@bank).";
@@ -51,19 +52,24 @@ export default function WithdrawForm({
 
     setStatus("processing");
     setError(null);
-    const { error: rpcError } = await createBrowserSupabase().rpc("request_withdrawal", {
-      p_amount: value,
-      p_upi_id: upiId.trim(),
-    });
-    if (rpcError) {
+    try {
+      const { error: rpcError } = await createBrowserSupabase().rpc("request_withdrawal", {
+        p_amount: value,
+        p_upi_id: upiId.trim(),
+      });
+      if (rpcError) {
+        setStatus("error");
+        setError(rpcError.message || "Couldn't submit your withdrawal request. Please try again.");
+        return;
+      }
+      setStatus("done");
+      setAmount("");
+      setUpiId("");
+      router.refresh();
+    } catch (err) {
       setStatus("error");
-      setError(rpcError.message || "Couldn't submit your withdrawal request. Please try again.");
-      return;
+      setError(err instanceof Error ? err.message : "Couldn't submit your withdrawal request. Please try again.");
     }
-    setStatus("done");
-    setAmount("");
-    setUpiId("");
-    router.refresh();
   }
 
   return (

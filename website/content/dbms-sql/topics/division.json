@@ -1,0 +1,670 @@
+{
+  "source_ref": "chapter-7-relational-algebra/division",
+  "slug": "division",
+  "title": "Division",
+  "description": "Answer every-required-item questions by searching for missing matches, with explicit candidate universes, duplicate handling and empty-requirement semantics.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Every required course is a universal condition\n\nRelational division answers a question such as which students have completed every course in a specified required set. It compares relationships against that whole set rather than looking for one qualifying enrollment. A student with many completions can still fail if one particular required course is missing. A student with exactly the required completions can qualify without any additional courses.\n\nUse Students as the candidate population, Required as the courses being demanded, and Completed as accepted student-course facts. In the first exercise, those names describe three explicit tables. Completion means an accepted fact in this simplified dataset; enrollment alone would not prove passing in a real university system unless the application explicitly defines that meaning.\n\n## Write the candidate universe before the query\n\nSuppose Students contains Asha, Ben and Chen. Required contains Databases and Networks. Asha completed both, Ben completed only Databases, and Chen has no completion facts. Only Asha qualifies for the nonempty required set. Additional unrelated completions do not disqualify Asha because the question asks for at least all required courses, not exactly those courses and nothing else.\n\nA candidate universe is essential when there are no requirements. With Students as the universe, all three candidates qualify: there is no required course any candidate failed to complete. With candidates derived only from Completed, Chen cannot appear because that source never names Chen. Both queries can be internally consistent, but they answer different population contracts.\n\n## Think in terms of a missing witness\n\nFor one candidate, ask whether a required course exists for which no completion exists. If such a missing witness exists, reject the candidate. If there is no missing witness, retain the candidate. This is the double-negative structure of a common NOT EXISTS formulation: no required item remains without a matching relationship.\n\nEach existence test needs the complete intended key. In the simple model, the completion comparison includes student_id and course_id. If course_id is only unique within a program, the program role must also be included. Comparing a local number without its scope can claim a requirement was satisfied by an entirely different course.\n\n```sql\nSELECT s.student_id\nFROM students s\nWHERE NOT EXISTS (\n  SELECT 1 FROM required_courses r\n  WHERE NOT EXISTS (\n    SELECT 1 FROM completions c\n    WHERE c.student_id = s.student_id\n      AND c.course_id = r.course_id\n  )\n)\nORDER BY s.student_id;\n```\n\n## Trace the nested conditions with concrete candidates\n\nFor Asha, examine Databases: a matching completion exists, so that required row is not missing. Networks is also present. The inner missing-course search returns no witness, and the outer NOT EXISTS accepts Asha. The query does not need a row counting how many extra courses Asha has taken because extra relationships are irrelevant to this condition.\n\nFor Ben, Databases is present but Networks has no matching completion. That one witness makes the missing-course search nonempty, so the outer predicate fails. For Chen, either required course is enough to establish failure. The query logically tests existence; its physical implementation is the optimizer's responsibility rather than a promise to execute a particular nested loop literally.\n\n## Empty requirements expose an important boundary\n\nIf Required is empty, the missing-course search is empty for every available candidate. The universal condition is therefore true for every candidate in the chosen universe. This is often called vacuous truth. It follows from the quantified condition and is not equivalent to asserting that every student actually completed some course.\n\nA product may instead require at least one configured requirement before displaying eligibility. That adds a separate existence condition on Required. State that policy explicitly rather than silently building it into an inner join that drops all candidates when requirements are empty. The exercises preserve the mathematical universal interpretation and state where candidates come from.\n\n## Duplicate occurrences do not create new obligations\n\nTwo identical completion rows for one student-course pair still establish only that one course is present. They cannot compensate for a missing different course. Similarly, repeating the same required course does not introduce a second distinct course obligation under set-oriented requirement semantics. Existence predicates naturally ask whether the needed relationship is present, independently of occurrence counts.\n\nA production design may enforce uniqueness on current accepted relationships, while a historical event table may intentionally contain repeated attempts. These are different grains. Decide which facts represent qualifying completion before applying division. This simplified content uses the supplied accepted pair facts; it does not infer passing status, recency, accreditation, or identity from the number of attempts.\n\n## Counting is an alternative with careful assumptions\n\nA grouped formulation can compare each candidate's count of distinct matched required course identifiers with the distinct required total. Filtering matched courses to the required set is essential. Otherwise, unrelated completions can inflate the count until an incomplete candidate appears to satisfy the total. Counting all enrollments and comparing that number with the required total is not a reliable substitute.\n\nEmpty requirements need particular attention in a counting version. Starting from an inner join to Required produces no groups when Required is empty, so it cannot return the full candidate universe automatically. A preserving candidate-driven design or an explicit empty-set case is needed. Compare semantics across empty inputs before declaring counting and double NOT EXISTS interchangeable for every formulation.\n\n## Relational division is different from arithmetic division\n\nMySQL does not provide a relational DIVIDE keyword for this operation. Arithmetic slash and the MySQL integer DIV operator calculate numeric results; they do not quantify relationships. SQL expresses the universal condition through other constructs, including nested NOT EXISTS and suitable aggregate formulations. Learning the missing-witness reasoning is more useful than memorizing one fixed arrangement of clauses.\n\nThe broader relational-algebra interpretation also needs compatible attribute roles. Dividing a relation over student and course roles by a required-course relation yields student roles satisfying every required course within the chosen relational universe. A practical SQL report can deliberately use a separate Students table to define a wider candidate universe than projection from the relationship source supplies.\n\n## Missing data and absent relationships are different concerns\n\nThe exercises declare comparison identifiers NOT NULL. With nullable identifiers, an ordinary equality involving NULL does not establish a true match, and the intended meaning of an unknown required identifier needs separate design. A NOT IN formulation also has its own three-valued-logic traps when the subquery contains NULL. Do not replace predicates mechanically while assuming all absence rules remain equivalent.\n\nA missing completion fact means the query cannot establish the required relationship from these inputs. It does not prove the student never studied the subject elsewhere. Likewise, membership in the result is a database report under the supplied records, not an independent eligibility authorization. Trusted application rules still decide which source facts may be inserted and which report results a caller may see.\n\n## Exercise universes stay explicit and testable\n\nThe introductory exercise starts with all rows in students, so a student without completions remains a candidate and qualifies when requirements are empty. The retained advanced exercise has only enrollments and required_courses. Its candidate universe is the distinct student identifiers appearing anywhere in enrollments, including completions of unrelated courses. It cannot invent students absent from those inputs.\n\nValidate a missing course, duplicate completions, duplicate requirements, extra unrelated courses, an empty required set, and an empty candidate source. Keep deterministic output ordering separate from universal membership. These cases distinguish an every-item query from an at-least-one query, an exact-set query, and an accidental comparison of inflated counts. Reference-result fixtures verify those cases without proving that every alternative student submission used the requested technique.\n\n## Requirement scope follows the question\n\nA real program may publish different requirement sets by admission year or degree pathway. The report must select the intended version before checking every item. Combining requirements from several programs can reject valid candidates by demanding courses that never belonged to their pathway. Conversely, filtering requirements too narrowly can declare completion prematurely.\n\nThe same scoping rule applies to accepted completions: a course equivalence, transferred credit, or withdrawn attempt needs a stated policy before it becomes a qualifying pair. Division evaluates the relationship facts presented to it. It does not decide equivalence policy or repair an incorrectly assembled requirement population.\n",
+  "references": [
+    {
+      "title": "MySQL 8.4 EXISTS and NOT EXISTS subqueries",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/exists-and-not-exists-subqueries.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-7-division",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-7-division-1",
+          "test_id": "pt-dbms-sql-7-division",
+          "question_text": "What kind of question does the Division operation answer?",
+          "options": [
+            "Which rows satisfy a single condition",
+            "Which X are related to EVERY Y in a given set (e.g. which students have taken ALL required courses)",
+            "How many rows two relations have in common",
+            "Which columns two relations share"
+          ],
+          "correct_index": 1,
+          "explanation": "Division specifically answers 'relates to every member of a set' questions.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-7-division-2",
+          "test_id": "pt-dbms-sql-7-division",
+          "question_text": "Does SQL have a single dedicated keyword for Division, like UNION for Union?",
+          "options": [
+            "Yes, the DIVIDE keyword",
+            "No; use constructs such as nested NOT EXISTS or a carefully defined aggregate formulation",
+            "Yes, the DIVISION keyword",
+            "Yes, it's implemented via the / operator"
+          ],
+          "correct_index": 1,
+          "explanation": "Arithmetic DIV and slash do not implement universal relationship matching.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-7-division-3",
+          "test_id": "pt-dbms-sql-7-division",
+          "question_text": "In a distinct-course counting formulation, what must the compared counts represent?",
+          "options": [
+            "That the student has enrolled in at least one course",
+            "Distinct required courses matched by the candidate and the distinct required course total",
+            "That the student's GPA exceeds a threshold",
+            "That the student has no duplicate enrollments"
+          ],
+          "correct_index": 1,
+          "explanation": "Both sides must count the same obligation domain; empty requirement handling also needs the candidate universe.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-7-division-4",
+          "test_id": "pt-dbms-sql-7-division",
+          "question_text": "Why is COUNT(DISTINCT course_id) used instead of plain COUNT(course_id) in the Division pattern?",
+          "options": [
+            "DISTINCT has no effect here",
+            "Without DISTINCT, a student enrolled twice in the same required course would be miscounted as satisfying more requirements than they actually completed",
+            "COUNT(course_id) is invalid syntax",
+            "DISTINCT makes the query run faster with no correctness implication"
+          ],
+          "correct_index": 1,
+          "explanation": "Duplicate enrollments in the same course must not inflate the count of distinct requirements satisfied.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-7-division-5",
+          "test_id": "pt-dbms-sql-7-division",
+          "question_text": "What is a common mistake when attempting to write a Division query?",
+          "options": [
+            "Forgetting to use SELECT",
+            "Comparing against the student's own total enrollment count instead of the required-courses total, which answers a different (wrong) question",
+            "Using too many JOIN clauses",
+            "Using WHERE instead of HAVING for every condition"
+          ],
+          "correct_index": 1,
+          "explanation": "Comparing to the wrong total changes the question being answered — a classic, subtle bug in Division-style queries.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-7-division-6",
+          "test_id": "pt-dbms-sql-7-division",
+          "question_text": "Does the Division pattern generalize beyond the 'courses' example?",
+          "options": [
+            "No, it only ever applies to student/course scenarios",
+            "Yes; testing every required relationship also applies to suppliers and required parts",
+            "It only works with exactly two related tables, never more",
+            "Division cannot be generalized to any other scenario"
+          ],
+          "correct_index": 1,
+          "explanation": "Universal matching can be expressed by a missing-witness search or a suitable counting design.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-7-division-7",
+          "test_id": "pt-dbms-sql-7-division",
+          "question_text": "What makes an every-required-item query vulnerable to subtle errors?",
+          "options": [
+            "It requires knowledge of a rarely-used SQL keyword",
+            "It must handle the candidate universe, missing obligations, duplicates and empty requirements consistently",
+            "It is actually one of the simplest operations",
+            "It only works on relations with exactly one column"
+          ],
+          "correct_index": 1,
+          "explanation": "The difficulty lies in the quantified contract, not in requiring one particular SQL recipe.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-7-division-8",
+          "test_id": "pt-dbms-sql-7-division",
+          "question_text": "What must an all-required-courses query define in addition to its completion relationships?",
+          "options": [
+            "Only a single students table",
+            "The required course set and the candidate student universe, either explicit or derived under a stated contract",
+            "Only the required_courses table",
+            "A departments table and nothing else"
+          ],
+          "correct_index": 1,
+          "explanation": "A separate students universe includes candidates absent from enrollments, which matters particularly for empty requirements.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-7-division-new-9",
+          "test_id": "pt-dbms-sql-7-division",
+          "question_text": "With no required courses and an explicit students universe, who satisfies the universal condition?",
+          "options": [
+            "Nobody",
+            "Every student in that universe",
+            "Only students with duplicate completions",
+            "Only students with at least one completion"
+          ],
+          "correct_index": 1,
+          "explanation": "There is no missing required witness for any available candidate.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-7-division-new-10",
+          "test_id": "pt-dbms-sql-7-division",
+          "question_text": "Can ten unrelated completions replace one missing required course?",
+          "options": [
+            "Yes, if the total count is large enough",
+            "Only if sorted",
+            "No",
+            "Only if duplicated"
+          ],
+          "correct_index": 2,
+          "explanation": "Membership must match each required identity.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-7-division-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-7-division-application-new-1",
+          "test_id": "pt-dbms-sql-7-division-application",
+          "question_text": "What does the outer NOT EXISTS exclude?",
+          "options": [
+            "Candidates who have extra courses",
+            "Only candidates with duplicate names",
+            "Candidates with at least one missing required relationship",
+            "Every candidate with a course"
+          ],
+          "correct_index": 2,
+          "explanation": "The inner missing witness establishes failure of the universal condition.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-7-division-application-new-2",
+          "test_id": "pt-dbms-sql-7-division-application",
+          "question_text": "Why does the retained two-table exercise derive distinct student ids?",
+          "options": [
+            "To invent students with no source rows",
+            "To require exactly one course",
+            "To sort required courses",
+            "Its candidate universe is students represented in enrollments"
+          ],
+          "correct_index": 3,
+          "explanation": "The supplied sources do not contain a separate full student population.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-7-division-application-new-3",
+          "test_id": "pt-dbms-sql-7-division-application",
+          "question_text": "What effect do duplicate required rows have under existence semantics?",
+          "options": [
+            "They repeat the same obligation without creating a distinct course",
+            "They require a second different completion",
+            "They invalidate SQL",
+            "They create extra students"
+          ],
+          "correct_index": 0,
+          "explanation": "Existence is unaffected by repeated copies of the same predicate witness.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-7-division-application-new-4",
+          "test_id": "pt-dbms-sql-7-division-application",
+          "question_text": "Which comparison needs a program identifier when course numbers are program-local?",
+          "options": [
+            "Only the final ordering",
+            "The complete required-course identity match",
+            "Only the student name",
+            "No comparison"
+          ],
+          "correct_index": 1,
+          "explanation": "Scope is part of identity rather than display formatting.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-7-division-application-new-5",
+          "test_id": "pt-dbms-sql-7-division-application",
+          "question_text": "Does relational division require exactly the required set and no extras?",
+          "options": [
+            "Yes; any extra course disqualifies",
+            "Only if requirements are empty",
+            "No; at least every required relationship is enough",
+            "Only under DISTINCT"
+          ],
+          "correct_index": 2,
+          "explanation": "Exact-set equality adds a different condition.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-7-division-application-new-6",
+          "test_id": "pt-dbms-sql-7-division-application",
+          "question_text": "What is MySQL DIV used for?",
+          "options": [
+            "Universal relationship matching",
+            "Changing schemas",
+            "Rejecting NULL foreign keys",
+            "Integer arithmetic division"
+          ],
+          "correct_index": 3,
+          "explanation": "The numeric operator is unrelated to relational division.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-7-division-application-new-7",
+          "test_id": "pt-dbms-sql-7-division-application",
+          "question_text": "Why can an inner-join counting query lose candidates when requirements are empty?",
+          "options": [
+            "No joined rows exist to form candidate groups",
+            "The required count must be infinite",
+            "ORDER BY removes them",
+            "DISTINCT disables empty sets"
+          ],
+          "correct_index": 0,
+          "explanation": "A preserving candidate design or explicit empty-set case is needed.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-7-division-application-new-8",
+          "test_id": "pt-dbms-sql-7-division-application",
+          "question_text": "What does passing a fixture establish?",
+          "options": [
+            "Every future student query uses the required technique",
+            "The reference result for that supplied input",
+            "Hosted-provider compatibility",
+            "Eligibility authorization"
+          ],
+          "correct_index": 1,
+          "explanation": "Execution evidence has a limited, recorded scope.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-7-division-application-new-9",
+          "test_id": "pt-dbms-sql-7-division-application",
+          "question_text": "How many distinct courses does repeating completion (1,101) establish?",
+          "options": [
+            "Two",
+            "Zero automatically",
+            "One",
+            "Every required course"
+          ],
+          "correct_index": 2,
+          "explanation": "Repeated occurrences cannot replace another required identity.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-7-division-application-new-10",
+          "test_id": "pt-dbms-sql-7-division-application",
+          "question_text": "With an empty derived enrollment universe and no requirements, how many candidates can the retained query return?",
+          "options": [
+            "All unrecorded students",
+            "One invented NULL student",
+            "Every course",
+            "Zero"
+          ],
+          "correct_index": 3,
+          "explanation": "Vacuous truth does not invent members of an absent candidate universe.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cx-division-explicit-universe",
+      "slug": "division-explicit-universe",
+      "title": "Find every eligible student in an explicit candidate universe",
+      "difficulty": "Easy",
+      "task": "Return student_id for every student who has a completion for every required course. Use the students table as the entire candidate universe. Empty requirements qualify every student, including those without completions. Extra courses do not disqualify anyone.",
+      "schema_sql": "CREATE TABLE students (student_id INT PRIMARY KEY);\nCREATE TABLE required_courses (course_id INT NOT NULL);\nCREATE TABLE completions (student_id INT NOT NULL, course_id INT NOT NULL);",
+      "seed_sql": "INSERT INTO students VALUES (1),(2),(3); INSERT INTO required_courses VALUES (10),(20); INSERT INTO completions VALUES (1,10),(1,20),(2,10);",
+      "expected": "student_id\n1",
+      "ordering": "Ascending student_id.",
+      "constraints": [
+        "All comparison identifiers are NOT NULL.",
+        "The complete student universe is supplied explicitly."
+      ],
+      "edge_cases": [
+        "No requirements qualifies all supplied students.",
+        "Duplicate facts do not create additional obligations."
+      ],
+      "hints": [
+        "Find a required course with no completion for the current student.",
+        "Reject only students for whom such a missing course exists."
+      ],
+      "solution_sql": "SELECT s.student_id FROM students s WHERE NOT EXISTS (SELECT 1 FROM required_courses r WHERE NOT EXISTS (SELECT 1 FROM completions c WHERE c.student_id=s.student_id AND c.course_id=r.course_id)) ORDER BY s.student_id;",
+      "explanation": "The supplied candidate population survives whenever no required course lacks a matching completion.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO students VALUES (2),(1); INSERT INTO completions VALUES (1,99);",
+          "expected": "student_id\n1\n2"
+        },
+        {
+          "seed_sql": "INSERT INTO students VALUES (1),(2); INSERT INTO required_courses VALUES (10),(10),(20); INSERT INTO completions VALUES (1,10),(1,10),(1,20),(1,99),(2,10),(2,10);",
+          "expected": "student_id\n1"
+        },
+        {
+          "seed_sql": "INSERT INTO required_courses VALUES (10);",
+          "expected": ""
+        }
+      ]
+    },
+    {
+      "id": "cp-dbms-sql-division-completed-all-required-courses",
+      "slug": "division-completed-all-required-courses",
+      "title": "Division: Students Who Completed All Required Courses",
+      "difficulty": "Hard",
+      "existing_problem": true,
+      "original_description_md5": "60663bdba4822e9d70fe3dabb8157c01",
+      "task": "Return student_id for students represented in enrollments who have completed every distinct required course. In this simplified retained dataset enrollments represent accepted completions. The candidate universe is DISTINCT student_id from enrollments, including unrelated courses; there is no separate students table. Empty requirements qualify every represented candidate. Extra completions are allowed.",
+      "schema_sql": "CREATE TABLE enrollments (student_id INTEGER NOT NULL, course_id INTEGER NOT NULL);\nCREATE TABLE required_courses (course_id INTEGER NOT NULL);",
+      "seed_sql": "INSERT INTO required_courses (course_id) VALUES (101), (102), (103);\nINSERT INTO enrollments (student_id, course_id) VALUES\n(1, 101), (1, 102), (1, 103),\n(2, 101), (2, 102),\n(3, 101), (3, 102), (3, 103), (3, 104);",
+      "expected": "student_id\n1\n3",
+      "ordering": "Ascending student_id.",
+      "constraints": [
+        "Retain the original advanced difficulty, identity, schema and sample setup.",
+        "Required identifiers and completion identifiers are NOT NULL."
+      ],
+      "edge_cases": [
+        "Repeated requirements and completions do not inflate satisfaction.",
+        "An empty requirement set returns every represented candidate.",
+        "An empty enrollments source contains no candidate, even with no requirements."
+      ],
+      "hints": [
+        "Start from represented candidate identifiers.",
+        "Exclude candidates with any required course lacking a matching completion."
+      ],
+      "solution_sql": "SELECT DISTINCT e.student_id FROM enrollments e WHERE NOT EXISTS (SELECT 1 FROM required_courses r WHERE NOT EXISTS (SELECT 1 FROM enrollments x WHERE x.student_id=e.student_id AND x.course_id=r.course_id)) ORDER BY e.student_id;",
+      "explanation": "The candidate-driven missing-witness search handles duplicate occurrences and empty requirements while preserving the retained two-table universe.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO required_courses (course_id) VALUES (201), (202);\nINSERT INTO enrollments (student_id, course_id) VALUES\n(5, 201), (5, 202),\n(6, 201),\n(7, 201), (7, 202), (7, 203);",
+          "expected": "student_id\n5\n7"
+        },
+        {
+          "seed_sql": "INSERT INTO enrollments VALUES (2,99),(1,88),(1,88);",
+          "expected": "student_id\n1\n2"
+        },
+        {
+          "seed_sql": "INSERT INTO required_courses VALUES (10),(10),(20); INSERT INTO enrollments VALUES (1,10),(1,10),(1,20),(2,10),(2,99);",
+          "expected": "student_id\n1"
+        },
+        {
+          "seed_sql": "",
+          "expected": ""
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-7-division-1",
+      "test_id": "pt-dbms-sql-7-division",
+      "question_text": "What kind of question does the Division operation answer?",
+      "options": [
+        "Which rows satisfy a single condition",
+        "Which X are related to EVERY Y in a given set (e.g. which students have taken ALL required courses)",
+        "How many rows two relations have in common",
+        "Which columns two relations share"
+      ],
+      "correct_index": 1,
+      "explanation": "Division specifically answers 'relates to every member of a set' questions.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-7-division-2",
+      "test_id": "pt-dbms-sql-7-division",
+      "question_text": "Does SQL have a single dedicated keyword for Division, like UNION for Union?",
+      "options": [
+        "Yes, the DIVIDE keyword",
+        "No — Division must be expressed as a combination of WHERE, GROUP BY, HAVING, and COUNT(DISTINCT)",
+        "Yes, the DIVISION keyword",
+        "Yes, it's implemented via the / operator"
+      ],
+      "correct_index": 1,
+      "explanation": "Unlike Union/Intersection/Difference, Division has no direct SQL keyword and must be built from other clauses.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-7-division-3",
+      "test_id": "pt-dbms-sql-7-division",
+      "question_text": "In the classic Division query pattern, what does the HAVING clause check?",
+      "options": [
+        "That the student has enrolled in at least one course",
+        "That the count of distinct REQUIRED courses a student completed equals the TOTAL number of required courses",
+        "That the student's GPA exceeds a threshold",
+        "That the student has no duplicate enrollments"
+      ],
+      "correct_index": 1,
+      "explanation": "The HAVING clause is what confirms 'all required courses,' by comparing against the total required-courses count.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-7-division-4",
+      "test_id": "pt-dbms-sql-7-division",
+      "question_text": "Why is COUNT(DISTINCT course_id) used instead of plain COUNT(course_id) in the Division pattern?",
+      "options": [
+        "DISTINCT has no effect here",
+        "Without DISTINCT, a student enrolled twice in the same required course would be miscounted as satisfying more requirements than they actually completed",
+        "COUNT(course_id) is invalid syntax",
+        "DISTINCT makes the query run faster with no correctness implication"
+      ],
+      "correct_index": 1,
+      "explanation": "Duplicate enrollments in the same course must not inflate the count of distinct requirements satisfied.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-7-division-5",
+      "test_id": "pt-dbms-sql-7-division",
+      "question_text": "What is a common mistake when attempting to write a Division query?",
+      "options": [
+        "Forgetting to use SELECT",
+        "Comparing against the student's own total enrollment count instead of the required-courses total, which answers a different (wrong) question",
+        "Using too many JOIN clauses",
+        "Using WHERE instead of HAVING for every condition"
+      ],
+      "correct_index": 1,
+      "explanation": "Comparing to the wrong total changes the question being answered — a classic, subtle bug in Division-style queries.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-7-division-6",
+      "test_id": "pt-dbms-sql-7-division",
+      "question_text": "Does the Division pattern generalize beyond the 'courses' example?",
+      "options": [
+        "No, it only ever applies to student/course scenarios",
+        "Yes — the same WHERE-IN/GROUP BY/HAVING-COUNT pattern applies to any 'relates to every member of a set' question, like suppliers and required parts",
+        "It only works with exactly two related tables, never more",
+        "Division cannot be generalized to any other scenario"
+      ],
+      "correct_index": 1,
+      "explanation": "The underlying pattern is a general technique for any 'must satisfy all of' relationship, not specific to courses.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-7-division-7",
+      "test_id": "pt-dbms-sql-7-division",
+      "question_text": "Why is Division considered one of the harder relational algebra concepts to master?",
+      "options": [
+        "It requires knowledge of a rarely-used SQL keyword",
+        "It has no direct syntactic shortcut in SQL and requires correctly combining several clauses (WHERE, GROUP BY, HAVING, COUNT DISTINCT) to express correctly",
+        "It is actually one of the simplest operations",
+        "It only works on relations with exactly one column"
+      ],
+      "correct_index": 1,
+      "explanation": "The lack of a single keyword, combined with subtle correctness pitfalls (like the DISTINCT and 'wrong total' issues), makes Division genuinely challenging.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-7-division-8",
+      "test_id": "pt-dbms-sql-7-division",
+      "question_text": "What real relations does the classic 'students who completed all required courses' Division query need?",
+      "options": [
+        "Only a single students table",
+        "An enrollments relation (student-to-course) and a required_courses relation defining the full required set",
+        "Only the required_courses table",
+        "A departments table and nothing else"
+      ],
+      "correct_index": 1,
+      "explanation": "Division inherently compares a per-student subset (their enrollments in required courses) against the full required-courses set.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "coordinator",
+    "independent_review": "unavailable; no agent tools",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Definitions and examples checked against questions; no plagiarism certification.",
+    "existing_question_corrections": [
+      "tq-dbms-sql-7-division-2",
+      "tq-dbms-sql-7-division-3",
+      "tq-dbms-sql-7-division-6",
+      "tq-dbms-sql-7-division-7",
+      "tq-dbms-sql-7-division-8"
+    ],
+    "canonical_answer_indices_preserved": true,
+    "batch_review": {
+      "reviewer": "coordinator",
+      "independent": false,
+      "scope": "New package only: notes, keyed examples, original question identities and canonical indices, every correct answer, exercises and recorded fixture outputs, diagram trace, content-only paired integration.",
+      "findings_resolved": "Outer Join retained absence question clarified: missing parent is a violation only when the modeled relationship requires it. Division retains its original Hard exercise; validator permits retained Hard alongside Easy while rejecting a new Hard substitute.",
+      "remaining": "Exact MySQL/provider execution, browser QA, independent review and applied-migration behavior unverified; output fixtures do not prove required source technique."
+    }
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-7-division",
+    "original_note_sha256": "f7a188bd5423a09e704115a2ea4495162b686bd48924adb4a41622c97b676c0c",
+    "status": "paired migration prepared; not applied"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Division rejects a candidate when any required witness is missing",
+      "description": "For required courses 10 and 20, student 1 satisfies both, student 2 misses 20 and student 3 misses both. Extra course 99 does not substitute for course 20.",
+      "columns": [
+        "Candidate",
+        "Course 10",
+        "Course 20",
+        "Extra 99",
+        "Every requirement?"
+      ],
+      "rows": [
+        [
+          "1",
+          "Present",
+          "Present",
+          "Absent",
+          "Yes"
+        ],
+        [
+          "2",
+          "Present",
+          "Missing",
+          "Present",
+          "No"
+        ],
+        [
+          "3",
+          "Missing",
+          "Missing",
+          "Absent",
+          "No"
+        ],
+        [
+          "Empty requirement boundary",
+          "No obligation",
+          "No obligation",
+          "Irrelevant",
+          "Every candidate in stated universe"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "coordinator checked missing-witness semantics, explicit versus derived candidate universe, duplicate obligations and empty-set boundary",
+    "server_rendering": "passed",
+    "browser_rendering": "unverified",
+    "independent_review": "unavailable; no agent tools",
+    "server_rendering_evidence": "Actual LessonBlock rendering passed in selected Vitest checks for natural-join, outer-join and division; no browser QA."
+  },
+  "sql_verification": {
+    "engine": "11.8.6-MariaDB-0+deb13u1 from Debian",
+    "scope": "MariaDB compatibility execution; exact MySQL 8.4/provider execution unverified",
+    "fingerprint": "18d263ac94ad1ffe93441a82c0928838564add8c2f160e6edc36ff06067abcb7",
+    "cases": [
+      {
+        "problem": "division-explicit-universe",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "division-explicit-universe",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "division-explicit-universe",
+        "case": 2,
+        "passed": true
+      },
+      {
+        "problem": "division-explicit-universe",
+        "case": 3,
+        "passed": true
+      },
+      {
+        "problem": "division-completed-all-required-courses",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "division-completed-all-required-courses",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "division-completed-all-required-courses",
+        "case": 2,
+        "passed": true
+      },
+      {
+        "problem": "division-completed-all-required-courses",
+        "case": 3,
+        "passed": true
+      },
+      {
+        "problem": "division-completed-all-required-courses",
+        "case": 4,
+        "passed": true
+      }
+    ],
+    "all_passed": true
+  }
+}

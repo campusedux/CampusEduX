@@ -1,0 +1,516 @@
+{
+  "source_ref": "chapter-20-indexes-and-access-paths/when-not-to-index",
+  "slug": "when-not-to-index",
+  "title": "When Not to Index",
+  "description": "Decide when an index is unjustified using workload frequency, selectivity, scan cost, write overhead and constraint roles, with concrete review exercises.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Decide from workload evidence rather than index count\n\nAn index is useful when its access benefits justify its storage and maintenance costs for the actual workload. Choosing not to add one can be the correct engineering decision. A campus application with a tiny configuration table may read all rows efficiently, while a heavily written event table can suffer from a collection of speculative indexes that no important query uses.\n\nThe question is not whether indexes are good or bad. It is whether a particular proposed index supports a verified query or integrity requirement better than the available alternatives. Read [why indexes exist](/learning/dbms-sql-tutorial/why-indexes-exist) and [index maintenance](/learning/dbms-sql-tutorial/index-maintenance) first. This lesson examines cases where a plausible-looking index deserves more analysis before it becomes permanent write overhead.\n\n## Start with a concrete query and frequency\n\nRecord the query shape, predicates, selected columns, ordering and expected result size. Also record how often it runs and which latency matters. An occasional administrative report may not justify an expensive index on a high-volume ingestion table, while a frequent learner-facing lookup might. The same index can be worthwhile in one workload and wasteful in another.\n\nAvoid adding an index solely because a column appears in a WHERE clause. A predicate can match nearly every row, apply a function that the ordinary index does not support directly, or be dominated by another selective condition. The useful access path depends on the whole query and data distribution. A list of indexed column names alone cannot establish that the important queries are well supported.\n\n## Recognize small-table economics\n\nA table containing a few configuration rows may fit in one or a small number of pages. Reading it directly can be cheaper than navigating another structure and then locating matching rows. Even when an index is available, the optimizer may legitimately prefer a scan. That plan is not automatically evidence that the index is broken or that a hint is needed.\n\nSmall today does not mean small forever. Check the table's intended growth and the query's frequency before making the decision permanent. Conversely, do not impose a universal rule that small tables must never be indexed. A unique key can be required for integrity regardless of size, and a highly repeated lookup can have different economics from an infrequent full-table read.\n\n## Examine low selectivity carefully\n\nA boolean active column might have only two distinct values. An index on it alone may be unhelpful when the query requests the common value and therefore needs most rows. Fetching many table rows through a secondary index can cost more than a scan, particularly when the index does not cover the requested output. Count distinct values and the frequency distribution separately.\n\nLow cardinality does not imply that an index is always useless. If only a tiny fraction of rows are pending, an index can help a pending-work query. A low-cardinality field can also be useful as part of a composite key supporting a more selective conjunction or an ordered limited read. Test the actual value distribution rather than declaring every status column unindexable.\n\n## Consider the cost of wide results\n\nAn index that locates half the table may still need many base-row lookups when the query selects a wide set of columns. A covering index can change that cost, but making every output column part of an index can greatly increase its size and write burden. The best answer may be reducing unnecessary selected columns, changing the report shape or accepting a scan for that report.\n\nDo not estimate benefit from the percentage of matched rows alone. Page locality, clustering, cache state, row width and storage latency affect the real work. A controlled comparison should use representative data and meaningful execution evidence. A tiny tutorial fixture cannot establish the scan-versus-index break-even point for a production table.\n\n## Avoid redundant structures without ignoring differences\n\nIf a composite index begins with customer_id and then created_at, a proposed customer_id-only index may be redundant for some lookup workloads. However, narrower indexes can have different size and access costs, and existing definitions can support constraints or foreign-key requirements. Review the actual definitions and plans before declaring one safe to remove.\n\n```sql\nEXPLAIN\nSELECT order_id, created_at\nFROM orders\nWHERE customer_id = 42\nORDER BY created_at\nLIMIT 20;\n```\n\nThis query provides a concrete workload to inspect. It does not prove which index exists, which one the optimizer chooses or whether a new structure is needed. Compare possible definitions in an approved isolated environment, and preserve the required output semantics. Do not drop a deployed index merely because another index shares its first column.\n\n## Respect integrity and dependency roles\n\nA primary or unique key may enforce a required invariant even when no observed SELECT uses it directly. A foreign-key implementation can also require a supporting index. Removing such a structure can weaken or break data integrity, so an unused-query observation is not sufficient authorization for removal. Separate access optimization from constraint enforcement during the review.\n\nSimilarly, an index can serve rare but critical operational paths, such as account recovery, reconciliation or a support investigation. A short observation window may miss them. Identify owners and direct callers before treating a usage counter of zero as proof of no value. The decision must include the period and workload actually observed, plus limitations in the available monitoring evidence.\n\n## Be cautious with volatile indexed attributes\n\nFrequently changing an indexed status, timestamp or counter can add maintenance work on a write-heavy table. The added cost includes updating index entries and possibly affecting page organization, contention and logging. If the intended read is rare or already fast enough, a new index may make the overall workload worse even while improving that one query.\n\nThe correct response is measurement, not a ban on indexing changed columns. A worker queue can need an index that finds the next eligible task efficiently, and that status necessarily changes. Compare throughput, latency and contention under representative read-write load. An optimization that saves milliseconds on a rare read while degrading frequent writes needs a clear product justification.\n\n## Understand predicates an ordinary index cannot directly serve\n\nApplying a transformation to a stored column can prevent a simple index on the original value from supporting the intended lookup directly. A leading-wildcard text search also differs from an ordinary left-prefix lookup. Adding another plain index on the same raw column may not address the query shape at all.\n\nBefore proposing expression indexes, generated columns or specialized search structures, confirm engine support and the precise requirement. Those changes add their own storage, maintenance and compatibility considerations. Sometimes the appropriate solution is to compare a correctly typed parameter, use an existing search capability, or change an unsupported query pattern. Keep implementation choices tied to verified application contracts and established search capabilities.\n\n## Measure over a representative lifecycle\n\nAn index can appear useful during one data distribution and become less useful as a common value dominates. Statistics can also become inaccurate, leading to poor estimates. Compare estimated and actual row behavior where the available tooling supports it, and consider whether statistics maintenance or a query correction resolves the problem before adding another structure.\n\nBenchmark enough of the workload to include writes and important alternate predicates. Record which data volume, cache conditions and query frequencies were tested. Repeating a single cached SELECT does not represent every operational state. The result should say what improved and what cost increased, rather than presenting a universal claim that one index always helps or never helps.\n\n## Use reviewable workload exercises\n\nFor a first design exercise, consider a twelve-row configuration table read in full once per request. Propose the evidence needed before adding a secondary index on a two-value flag. Explain why a scan may be reasonable and why a required unique configuration name must still be protected. This separates access economics from integrity requirements.\n\nFor a second exercise, consider a large event table receiving frequent inserts, with one rare export scanning most rows and one critical lookup by external event identity. Compare an export-only index proposal with the identity key's role. List what must be measured, which constraints must be preserved and how a rollback would restore the previous access path. These tasks require reasoning about a workload, not memorizing a blanket prohibition.\n\n## Keep removal reversible and separately authorized\n\nChoosing not to add a speculative index is different from removing an existing one. Removal requires direct-caller, constraint and operational review, plus a rollback plan and explicit approval. Even a supported invisible-index experiment has engine-specific limitations and does not erase the need to consider integrity and write costs. This lesson authorizes no schema operations.\n\nContinue with [selectivity](/learning/dbms-sql-tutorial/selectivity), [composite indexes](/learning/dbms-sql-tutorial/composite-index) and [covering indexes](/learning/dbms-sql-tutorial/covering-index) to refine proposals. A sound decision states the workload, the evidence window, the intended benefit, the write and storage costs, and any constraint that makes an index necessary independent of query speed.\n",
+  "references": [
+    {
+      "title": "MySQL 8.4 reference manual",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/mysql-indexes.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-20-when-not-to-index",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-20-when-not-to-index-1",
+          "test_id": "pt-dbms-sql-20-when-not-to-index",
+          "question_text": "Why might an index fail to improve a tiny full-read configuration query?",
+          "options": [
+            "Every small table is forbidden from having indexes",
+            "A direct scan may cost less than index navigation plus row access",
+            "Primary keys stop working on small tables",
+            "The optimizer must ignore every index"
+          ],
+          "correct_index": 1,
+          "explanation": "This is a possible measured cost outcome, not a universal row-count cutoff.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-20-when-not-to-index-2",
+          "test_id": "pt-dbms-sql-20-when-not-to-index",
+          "question_text": "A wide-row query requests the active value held by 99% of rows. Why might an active-only secondary index help little?",
+          "options": [
+            "Every boolean index is always useless",
+            "Most rows still need to be read, so a scan may be cheaper",
+            "The index must contain no active rows",
+            "The query can return only 1% of rows"
+          ],
+          "correct_index": 1,
+          "explanation": "The requested value distribution and row-fetch cost matter.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-20-when-not-to-index-3",
+          "test_id": "pt-dbms-sql-20-when-not-to-index",
+          "question_text": "Which observation warrants pausing a speculative access index proposal?",
+          "options": [
+            "Its column is a required unique key",
+            "No demonstrated query benefit, pending a separate check of integrity requirements",
+            "It supports a verified critical lookup",
+            "It prevents an approved duplicate-key invariant"
+          ],
+          "correct_index": 1,
+          "explanation": "Lack of read benefit is not permission to remove constraint enforcement.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-20-when-not-to-index-4",
+          "test_id": "pt-dbms-sql-20-when-not-to-index",
+          "question_text": "Why might a write-heavy table (like a high-volume event log) be a poor candidate for many indexes?",
+          "options": [
+            "Write-heavy tables cannot have any indexes by definition",
+            "The cumulative write-overhead cost of maintaining many indexes can outweigh the benefit if reads against that table are rare or non-critical",
+            "Indexes make writes faster on write-heavy tables, so more is always better",
+            "Event logs never have any columns worth filtering on"
+          ],
+          "correct_index": 1,
+          "explanation": "On write-dominated tables, the per-write index-maintenance cost (20.14) compounds and can exceed any read-side gain from having the index.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-20-when-not-to-index-5",
+          "test_id": "pt-dbms-sql-20-when-not-to-index",
+          "question_text": "What is the risk of adding indexes 'just in case' for every new query pattern that appears?",
+          "options": [
+            "There is no risk; more indexes are always strictly beneficial",
+            "The table can accumulate many rarely-used indexes, each adding an ongoing write-performance cost, compounding over time",
+            "It automatically converts the table into a view",
+            "It removes the table's clustered index"
+          ],
+          "correct_index": 1,
+          "explanation": "Speculative indexes consume storage and add maintenance for relevant inserts, deletes and indexed-value changes. That ongoing cost needs a demonstrated workload or integrity benefit.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-20-when-not-to-index-6",
+          "test_id": "pt-dbms-sql-20-when-not-to-index",
+          "question_text": "Why review dependencies before removing a rarely observed index?",
+          "options": [
+            "Usage counters prove no dependency exists",
+            "It may support a required key or foreign-key invariant, and removal can fail or harm that design",
+            "Every unused index is safe to remove",
+            "Indexes cannot support constraints"
+          ],
+          "correct_index": 1,
+          "explanation": "Exact removal behavior depends on the definition and engine; preserve integrity and seek approval.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-20-when-not-to-index-7",
+          "test_id": "pt-dbms-sql-20-when-not-to-index",
+          "question_text": "Can a low-selectivity column ever still be worth including in an index?",
+          "options": [
+            "No, low-selectivity columns should never appear in any index under any circumstances",
+            "Yes, as the leading column of a composite index paired with a more selective trailing column, if that combined filter pattern is common",
+            "Yes, but only if the column is renamed first",
+            "No, because low-selectivity columns cannot be part of a B+ Tree"
+          ],
+          "correct_index": 1,
+          "explanation": "Composite index design (20.7) can still justify a low-selectivity leading column if it matches real, common query filter combinations.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-20-when-not-to-index-8",
+          "test_id": "pt-dbms-sql-20-when-not-to-index",
+          "question_text": "What should an index decision balance?",
+          "options": [
+            "Only the number of columns",
+            "Verified workload benefit, maintenance cost and integrity requirements",
+            "Only query-text length",
+            "Only alphabetical naming"
+          ],
+          "correct_index": 1,
+          "explanation": "An index can be required for correctness even when a read benefit is not observed.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "cx-q-when-not-to-index-9",
+          "test_id": "pt-dbms-sql-20-when-not-to-index",
+          "question_text": "An event table gets 10000 writes per minute and one annual export. What should justify an export-only index?",
+          "options": [
+            "Measured export value weighed against continual write and storage cost",
+            "The export contains WHERE so the index is mandatory",
+            "Annual reports always override write needs",
+            "No measurements are needed"
+          ],
+          "correct_index": 0,
+          "explanation": "Frequency changes the workload tradeoff.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "cx-q-when-not-to-index-10",
+          "test_id": "pt-dbms-sql-20-when-not-to-index",
+          "question_text": "A twelve-row configuration query reads every column of every row from one page. The measured scan is already within budget. What is a reasonable next step?",
+          "options": [
+            "Force a secondary index immediately",
+            "Keep the measured plan unless growth or another requirement justifies an index",
+            "Drop the required primary key",
+            "Add every column to separate indexes"
+          ],
+          "correct_index": 1,
+          "explanation": "The observed full-read path may already be appropriate.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "cx-test-when-not-to-index-2",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "cx-q-when-not-to-index-11",
+          "test_id": "cx-test-when-not-to-index-2",
+          "question_text": "A two-value status is 99.9% complete and 0.1% pending. Which query most plausibly benefits from a status-led access path?",
+          "options": [
+            "An export of every complete row necessarily",
+            "Any query regardless of selected values",
+            "A frequent limited lookup for pending work",
+            "A query that never reads this table"
+          ],
+          "correct_index": 2,
+          "explanation": "A rare requested value can be selective despite low cardinality.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "cx-q-when-not-to-index-12",
+          "test_id": "cx-test-when-not-to-index-2",
+          "question_text": "Why inspect the frequency distribution of a status?",
+          "options": [
+            "Distinct count determines every plan",
+            "Every status has equal frequency",
+            "An index changes stored statuses",
+            "One rare value can be selective despite few distinct values"
+          ],
+          "correct_index": 3,
+          "explanation": "Selectivity depends on the requested population.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "cx-q-when-not-to-index-13",
+          "test_id": "cx-test-when-not-to-index-2",
+          "question_text": "Why can a wide result reduce secondary-index benefit?",
+          "options": [
+            "Many base-row fetches may still be needed",
+            "Indexes cannot locate wide tables",
+            "SELECT columns never matter",
+            "All indexes cover every column"
+          ],
+          "correct_index": 0,
+          "explanation": "Projection and row width affect the access cost.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "cx-q-when-not-to-index-14",
+          "test_id": "cx-test-when-not-to-index-2",
+          "question_text": "What must not be inferred from an unused-query counter?",
+          "options": [
+            "That no recorded query used it during that window",
+            "That a constraint-supporting index is safe to remove",
+            "That the observation has a time scope",
+            "That more investigation may be needed"
+          ],
+          "correct_index": 1,
+          "explanation": "Integrity and rare operational paths require separate review.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "cx-q-when-not-to-index-15",
+          "test_id": "cx-test-when-not-to-index-2",
+          "question_text": "Why can volatile indexed fields cost more on writes?",
+          "options": [
+            "They disable all transactions",
+            "They automatically duplicate rows",
+            "Relevant changes require index maintenance",
+            "They never affect logging"
+          ],
+          "correct_index": 2,
+          "explanation": "Read benefit has a maintenance counterpart.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "cx-q-when-not-to-index-16",
+          "test_id": "cx-test-when-not-to-index-2",
+          "question_text": "What should precede a specialized expression index?",
+          "options": [
+            "Assuming any function needs one",
+            "Disabling constraints",
+            "Dropping all raw-column indexes",
+            "Verification of query need and engine support"
+          ],
+          "correct_index": 3,
+          "explanation": "A plain index may not fit a transformed predicate.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "cx-q-when-not-to-index-17",
+          "test_id": "cx-test-when-not-to-index-2",
+          "question_text": "What does a shared left prefix prove about two indexes?",
+          "options": [
+            "Potential overlap requiring workload and dependency review",
+            "One is always safely removable",
+            "Both enforce the same constraints",
+            "Their sizes are identical"
+          ],
+          "correct_index": 0,
+          "explanation": "Physical and integrity roles can still differ.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "cx-q-when-not-to-index-18",
+          "test_id": "cx-test-when-not-to-index-2",
+          "question_text": "Why is one cached SELECT benchmark insufficient?",
+          "options": [
+            "Cached reads are invalid SQL",
+            "It omits write costs and other operational states",
+            "Only writes can be timed",
+            "Indexes never affect reads"
+          ],
+          "correct_index": 1,
+          "explanation": "A workload has several relevant paths.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "cx-q-when-not-to-index-19",
+          "test_id": "cx-test-when-not-to-index-2",
+          "question_text": "What is the difference between declining and removing an index?",
+          "options": [
+            "They are identical actions",
+            "Declining deletes the table",
+            "Removal changes an existing dependency and needs separate approval",
+            "Removal never needs rollback"
+          ],
+          "correct_index": 2,
+          "explanation": "Existing callers and constraints may depend on the structure.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "cx-q-when-not-to-index-20",
+          "test_id": "cx-test-when-not-to-index-2",
+          "question_text": "Which report best supports an index decision?",
+          "options": [
+            "Always use indexes",
+            "Never index booleans",
+            "Scans always mean failure",
+            "Measured benefit, observed costs and evidence limits"
+          ],
+          "correct_index": 3,
+          "explanation": "A bounded evidence claim is more useful than a universal slogan.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [],
+  "coding_not_applicable": "The objective is an evidence-based index decision over a workload, including integrity dependencies and write costs. The notes provide two explicit design exercises and an EXPLAIN inspection example. A deterministic SQL-output judge cannot establish representative performance or authorize index removal, so no simulated performance proof is supplied.",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-20-when-not-to-index-1",
+      "test_id": "pt-dbms-sql-20-when-not-to-index",
+      "question_text": "Why might a small table (a few hundred rows) not benefit meaningfully from an index?",
+      "options": [
+        "Small tables cannot technically support indexes",
+        "A full table scan of a few hundred rows is already extremely fast, so an index adds overhead without meaningful speedup",
+        "Small tables always use hash indexes automatically",
+        "Indexes only work on tables larger than 1,000,000 rows"
+      ],
+      "correct_index": 1,
+      "explanation": "When a scan is already fast due to small size, the added storage and write overhead of an index isn't justified by the read speedup.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-20-when-not-to-index-2",
+      "test_id": "pt-dbms-sql-20-when-not-to-index",
+      "question_text": "Why is a low-selectivity column (like a boolean flag) generally a poor indexing candidate, revisited from 20.12?",
+      "options": [
+        "Because boolean columns cannot be stored in a database",
+        "Because it barely narrows the search space, so the optimizer often ignores the index anyway in favor of a full scan",
+        "Because boolean columns always contain NULL",
+        "Because it is illegal to index boolean columns in SQL"
+      ],
+      "correct_index": 1,
+      "explanation": "Low selectivity means filtering on the column still leaves most rows matching, so an index provides little real read benefit.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-20-when-not-to-index-3",
+      "test_id": "pt-dbms-sql-20-when-not-to-index",
+      "question_text": "What is a red flag suggesting a column should NOT be indexed?",
+      "options": [
+        "It is frequently used in WHERE clauses",
+        "It is rarely or never referenced in any query's filter, join, or ORDER BY clause",
+        "It has high selectivity",
+        "It is part of the table's primary key"
+      ],
+      "correct_index": 1,
+      "explanation": "An index that's never actually used by any query provides zero read benefit while still incurring storage and write costs.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-20-when-not-to-index-4",
+      "test_id": "pt-dbms-sql-20-when-not-to-index",
+      "question_text": "Why might a write-heavy table (like a high-volume event log) be a poor candidate for many indexes?",
+      "options": [
+        "Write-heavy tables cannot have any indexes by definition",
+        "The cumulative write-overhead cost of maintaining many indexes can outweigh the benefit if reads against that table are rare or non-critical",
+        "Indexes make writes faster on write-heavy tables, so more is always better",
+        "Event logs never have any columns worth filtering on"
+      ],
+      "correct_index": 1,
+      "explanation": "On write-dominated tables, the per-write index-maintenance cost (20.14) compounds and can exceed any read-side gain from having the index.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-20-when-not-to-index-5",
+      "test_id": "pt-dbms-sql-20-when-not-to-index",
+      "question_text": "What is the risk of adding indexes 'just in case' for every new query pattern that appears?",
+      "options": [
+        "There is no risk; more indexes are always strictly beneficial",
+        "The table can accumulate many rarely-used indexes, each adding an ongoing write-performance cost, compounding over time",
+        "It automatically converts the table into a view",
+        "It removes the table's clustered index"
+      ],
+      "correct_index": 1,
+      "explanation": "Indiscriminate 'just in case' indexing leads to index bloat — many indexes rarely used for reads but still costing on every write.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-20-when-not-to-index-6",
+      "test_id": "pt-dbms-sql-20-when-not-to-index",
+      "question_text": "Why must you be careful before dropping an index that usage statistics show as 'rarely used'?",
+      "options": [
+        "Usage statistics are always fabricated and should be ignored",
+        "The index might be backing a UNIQUE or PRIMARY KEY constraint, so dropping it would also remove that constraint",
+        "Dropping any index always deletes the underlying table",
+        "Rarely-used indexes cannot technically be dropped by any engine"
+      ],
+      "correct_index": 1,
+      "explanation": "A unique index (20.9) often enforces a real constraint; removing it for being 'unused' as a lookup structure would also remove the uniqueness guarantee.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-20-when-not-to-index-7",
+      "test_id": "pt-dbms-sql-20-when-not-to-index",
+      "question_text": "Can a low-selectivity column ever still be worth including in an index?",
+      "options": [
+        "No, low-selectivity columns should never appear in any index under any circumstances",
+        "Yes, as the leading column of a composite index paired with a more selective trailing column, if that combined filter pattern is common",
+        "Yes, but only if the column is renamed first",
+        "No, because low-selectivity columns cannot be part of a B+ Tree"
+      ],
+      "correct_index": 1,
+      "explanation": "Composite index design (20.7) can still justify a low-selectivity leading column if it matches real, common query filter combinations.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-20-when-not-to-index-8",
+      "test_id": "pt-dbms-sql-20-when-not-to-index",
+      "question_text": "What is the overall lesson of this topic (20.15), tying together the whole chapter?",
+      "options": [
+        "Every column in every table should always be indexed to maximize performance",
+        "Indexing should be a deliberate, considered trade-off — sometimes the correct choice is not to index at all",
+        "Indexes have no real cost and should be added liberally",
+        "Only primary keys should ever be indexed, and nothing else"
+      ],
+      "correct_index": 1,
+      "explanation": "The chapter's throughline is that indexing is a deliberate trade-off decision (read speed vs. storage/write cost), not a default that should always be applied.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "worker_3",
+    "independent_review": "passed",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "author review; independent review pending",
+    "canonical_answer_indices_preserved": true,
+    "editorial_record": "Original explanations and assessments; seeded identities and canonical answer positions retained. External originality clearance unavailable.",
+    "independent_reviewer": "/root",
+    "independent_review_scope": "Full notes,20 MCQs/options/reasoning,decision diagram and two concrete workload exercises reviewed. Tiny tables, rare status values, coverage versus navigation, write cost, observation windows, constraint dependencies and reversible removal appropriately conditional. Corrected inherited blanket every-write phrasing to relevant index-maintaining writes; no structural operations executed. Exact MySQL/provider, browser and release validation remain separate."
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-20-when-not-to-index",
+    "original_note_sha256": "63ef3aa296612f37b7928207e888df73f66fe992cb904d8df0e4321646a30aa7",
+    "status": "drafted; not included in prepared paired migrations"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Reasons to pause an index proposal",
+      "description": "Each observation prompts a specific verification question rather than a universal ban.",
+      "columns": [
+        "Observation",
+        "Potential concern",
+        "Required evidence"
+      ],
+      "rows": [
+        [
+          "Tiny table, full read",
+          "Navigation overhead exceeds scan",
+          "Actual plan and growth"
+        ],
+        [
+          "Common status value",
+          "Most rows still fetched",
+          "Value distribution and projection"
+        ],
+        [
+          "High write rate",
+          "Maintenance dominates benefit",
+          "Read-write workload measurement"
+        ],
+        [
+          "No recent recorded reads",
+          "Rare or constraint role omitted",
+          "Caller and dependency review"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "coordinator independent manual review passed",
+    "server_rendering": "passed",
+    "browser_rendering": "unverified",
+    "independent_review": "passed",
+    "server_rendering_evidence": "2026-10-29 full Vitest:1310 passed/12 skipped; actual LessonBlock/TopicDiagrams render over230 packages. Browser visual QA remains unverified."
+  },
+  "authoring_status": "drafted; verification pending",
+  "sql_verification": {
+    "scope": "not executed; exact MySQL/provider execution pending",
+    "all_passed": false,
+    "cases": []
+  }
+}

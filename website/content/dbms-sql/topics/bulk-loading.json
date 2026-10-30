@@ -1,0 +1,597 @@
+{
+  "source_ref": "chapter-11-dml-and-data-modification/bulk-loading",
+  "slug": "bulk-loading",
+  "title": "Bulk Loading",
+  "description": "Understand MySQL bulk loading, LOAD DATA and LOCAL, staging tables, duplicate policies, warning checks, and recoverable import batches.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Large imports are data transitions\n\nBulk loading moves many records through a path designed to reduce repeated work. A campus receives a supplier catalogue containing thousands of equipment codes, labels and quantities. Sending one network request per row can spend considerable time on parsing, communication and transaction overhead. A bulk path can process more data together, but its usefulness depends on preserving the meaning and integrity of every accepted record.\n\nThe objective is not merely to finish reading a file quickly. The importer must identify the batch, interpret fields correctly, resolve duplicates, account for rejected records and establish which rows became authoritative. A fast import that silently converts unknown quantities to zero can be less useful than a slower import that rejects malformed input clearly and preserves the previous catalogue.\n\n## File loading and multirow insertion differ\n\nMySQL offers LOAD DATA for text-file input. [Multirow INSERT](/learning/dbms-sql-tutorial/multi-row-insert) sends several values within an SQL statement, while INSERT SELECT transfers selected rows already accessible through a query. These are related ways to reduce repeated submission, but they have different setup, permission and error-handling requirements. Choose the mechanism that matches the actual input boundary rather than call every multirow write a file load.\n\nA learning environment may permit table-based SQL but not filesystem access. The exercises therefore use synthetic staging tables and set-based insertion. They teach the validation and merge stages without pretending that a browser SQL editor can open arbitrary local files. In an operational import, the earlier parsing stage still needs its own tests for file encoding, delimiters, permissions and malformed records.\n\n## Decide which host owns the file\n\nWithout LOCAL, MySQL reads the file on the server host. The caller needs the documented file privilege, and secure_file_priv can restrict the permitted location. A path on a student's laptop is not automatically a path on the database server. Changing directory in a browser cannot make the remote server read a file that exists only on that laptop.\n\nWith LOCAL, the client reads the file and transmits its contents. Both client and server must allow that capability. LOCAL also changes error handling; it is not simply a location switch. An application should use its reviewed import path and permitted file source rather than broaden server privileges or enable unrestricted local loading as a shortcut to get an example working.\n\n## Parse before trusting typed values\n\nA text file needs an explicit contract for character set, field separators, quoting, escape rules, line endings and headers. A comma inside a quoted label is part of that label, not another equipment property. A header row must not accidentally become equipment code code and quantity quantity. Test those cases using the actual loader and file format rather than assume a filename extension defines the format.\n\nThe file's character set also matters. MySQL's load statement supports a character-set declaration; connection text settings alone do not define how file bytes are interpreted. Preserve the original batch and row identity long enough to explain errors. Once an invalid value has been coerced into an ordinary integer, a later query may no longer be able to distinguish that conversion from genuinely supplied data.\n\n## Staging separates receipt from acceptance\n\nA staging table can hold received records before any catalogue mutation. Include a batch identifier and a stable source-row identifier so each input can be reconciled. Raw fields may remain text while a validation stage classifies them. The authoritative target then receives only accepted typed values under its own constraints. Receipt of a row is not the same event as acceptance of its meaning.\n\nFor a simple staged table whose quantity is already an integer, a predicate can select nonnegative quantities. That demonstrates one validation rule, not a complete raw-file parser. A real pipeline also needs to detect overflow, malformed numeric strings, missing codes and unwanted text normalization. The staging design should preserve enough evidence to correct the source rather than silently rewrite ambiguous input.\n\n## Duplicate policy must precede the merge\n\nA repeated code within one batch can mean duplicate export rows, successive snapshots or distinct events. Those meanings require different policies. For an insert-only catalogue, an existing target code might be excluded and reported. For a refresh, it might be updated. For deliveries, quantities might be accumulated after protected event deduplication. Avoid inventing the policy from whichever statement happens to run without an error.\n\nMultiple input rows for one absent code can still collide with each other even when a query excludes codes already in the target. A uniqueness rule on the staged typed code can reject that input, or a deliberate aggregation can produce one accepted value per code. Aggregation is appropriate only when the requirement says those rows contribute to the same quantity. Choosing an arbitrary row conceals unresolved input meaning.\n\n```sql\nINSERT INTO accepted_catalogue (equipment_code, quantity)\nSELECT s.equipment_code, s.quantity\nFROM staged_catalogue AS s\nLEFT JOIN accepted_catalogue AS a\n  ON a.equipment_code = s.equipment_code\nWHERE s.quantity >= 0 AND a.equipment_code IS NULL;\n```\n\n## Warnings are outcomes that need attention\n\nMySQL LOAD DATA modifiers affect duplicate and conversion handling. LOCAL without REPLACE has IGNORE-like consequences for interpretation errors, which may become warnings even under restrictive SQL modes. A statement returning without a fatal error therefore does not prove that every input row was accepted exactly as supplied. Review the documented result and warnings for the selected load form.\n\nKeep received, accepted, rejected and skipped counts separate. If one hundred records were received and three are rejected, the target should not be described as containing one hundred new valid records. Reconcile counts with row identities and reasons, especially when duplicates can refer either to an earlier target row or another row in the same incoming batch.\n\n## Performance advice depends on the engine\n\nIndex maintenance, constraint checks, transaction logging, storage throughput and network latency all affect load speed. There is no fixed speedup that every bulk load achieves. Measure representative data and the actual target settings. A small import with expensive transformation can behave very differently from a large sequential file whose parsing and validation are simple.\n\nDo not remove primary keys, unique protection or foreign-key enforcement as a generic optimization. Those controls can define which data is valid. Index-related loading advice for one storage engine may not apply to InnoDB. Changes to a live table can also affect concurrent readers and writers. Preserve the established integrity rules and investigate measured bottlenecks within an approved operational plan.\n\n## Transaction boundaries determine recovery\n\nAn import can have separate receipt, validation and merge transactions. Document what remains after each failure. If acceptance is one transactional InnoDB merge, a rejected statement should not be treated as a partially approved catalogue update. Across independently committed batches, however, earlier successful batches remain committed when a later batch fails. Recovery must recognize that boundary.\n\nA durable batch identity helps distinguish retrying an unfinished batch from loading the same catalogue twice. Preserve enough state to determine whether the merge committed if the connection fails before the client receives confirmation. An unconditional retry can duplicate events or overwrite newer snapshots. Design the retry policy together with the duplicate policy, not as an afterthought after the first network failure.\n\n## Reconcile the final authoritative state\n\nAfter a merge, inspect the accepted target using deterministic ordering and verify both changed and preserved rows. The first exercise accepts only nonnegative staged quantities into a fresh target. The second imports absent codes while retaining existing target quantities. Alternative fixtures include invalid input and already known codes so a solution that simply copies every row is visibly incorrect.\n\nFor a larger pipeline, reconciliation also checks batch ownership, key coverage and source-to-target totals where those totals have a defined meaning. Do not sum unrelated snapshots merely because each has a numeric quantity. A good bulk import makes its accepted semantics explainable: which source rows were considered, why they were admitted or excluded, what became authoritative, and how a failed or repeated attempt is handled.\n",
+  "references": [
+    {
+      "title": "MySQL 8.4 LOAD DATA",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/load-data.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-11-bulk-loading",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-11-bulk-loading-1",
+          "test_id": "pt-dbms-sql-11-bulk-loading",
+          "question_text": "What is the main objective of a reliable bulk import?",
+          "options": [
+            "Skip all integrity rules",
+            "Efficiently accept correctly interpreted records with accountable outcomes",
+            "Read files without validating anything",
+            "Guarantee identical speed on all hardware"
+          ],
+          "correct_index": 1,
+          "explanation": "Throughput must preserve acceptance and reconciliation semantics.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-11-bulk-loading-2",
+          "test_id": "pt-dbms-sql-11-bulk-loading",
+          "question_text": "Which MySQL statement directly reads a text file into a table?",
+          "options": [
+            "REFRESH FILE",
+            "LOAD DATA",
+            "UPDATE INFILE",
+            "INSERT DIRECTORY"
+          ],
+          "correct_index": 1,
+          "explanation": "LOAD DATA has explicit parsing and privilege requirements.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-11-bulk-loading-3",
+          "test_id": "pt-dbms-sql-11-bulk-loading",
+          "question_text": "How does INSERT SELECT differ from a file load?",
+          "options": [
+            "It selects rows already accessible through SQL",
+            "It always opens a laptop file",
+            "It requires PostgreSQL COPY syntax",
+            "It disables target constraints"
+          ],
+          "correct_index": 0,
+          "explanation": "Set-based copying does not itself test file parsing.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-11-bulk-loading-4",
+          "test_id": "pt-dbms-sql-11-bulk-loading",
+          "question_text": "Why should index-dropping advice not be applied indiscriminately?",
+          "options": [
+            "No database uses indexes during writes",
+            "Indexes can enforce integrity and engine-specific advice may not apply",
+            "Dropping keys is mandatory for file input",
+            "Every index is merely cosmetic"
+          ],
+          "correct_index": 1,
+          "explanation": "Preserve required keys and investigate measured bottlenecks.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-11-bulk-loading-5",
+          "test_id": "pt-dbms-sql-11-bulk-loading",
+          "question_text": "Why can a successful LOCAL load still require warning review?",
+          "options": [
+            "LOCAL encrypts invalid rows automatically",
+            "Some interpretation errors become warnings and processing continues",
+            "LOCAL forbids all duplicates before reading",
+            "A warning always rolls back all earlier batches"
+          ],
+          "correct_index": 1,
+          "explanation": "LOCAL changes interpretation and error handling.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-11-bulk-loading-6",
+          "test_id": "pt-dbms-sql-11-bulk-loading",
+          "question_text": "What can removing a useful live index affect?",
+          "options": [
+            "Only the file name",
+            "Concurrent query performance as well as integrity if the index enforces a rule",
+            "Only the display order in a spreadsheet",
+            "Nothing until the next deployment"
+          ],
+          "correct_index": 1,
+          "explanation": "Operational consequences extend beyond load throughput.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-11-bulk-loading-7",
+          "test_id": "pt-dbms-sql-11-bulk-loading",
+          "question_text": "What speedup should a tutorial promise for every bulk load?",
+          "options": [
+            "Exactly ten times",
+            "No fixed multiplier without representative measurement",
+            "At least one hundred times",
+            "Always twice as fast"
+          ],
+          "correct_index": 1,
+          "explanation": "Data, transformation, engine and environment determine performance.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-11-bulk-loading-8",
+          "test_id": "pt-dbms-sql-11-bulk-loading",
+          "question_text": "What must recovery planning establish?",
+          "options": [
+            "Only whether the filename is short",
+            "Which stages or batches committed before failure",
+            "That all input is always one transaction",
+            "That retries always overwrite safely"
+          ],
+          "correct_index": 1,
+          "explanation": "Transaction boundaries determine the state left behind.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-11-bulk-loading-new-9",
+          "test_id": "pt-dbms-sql-11-bulk-loading",
+          "question_text": "Who reads a file when LOCAL is omitted?",
+          "options": [
+            "The server host",
+            "Every browser tab",
+            "Only the application user interface",
+            "The SQL parser without filesystem access"
+          ],
+          "correct_index": 0,
+          "explanation": "The path and permissions must be meaningful on that host.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-11-bulk-loading-new-10",
+          "test_id": "pt-dbms-sql-11-bulk-loading",
+          "question_text": "Who reads the file with LOAD DATA LOCAL?",
+          "options": [
+            "The server only",
+            "The permitted client and sends its contents",
+            "A remote website automatically",
+            "An unrelated staging query"
+          ],
+          "correct_index": 1,
+          "explanation": "Both client and server capability settings matter.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-11-bulk-loading-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-11-bulk-loading-application-new-1",
+          "test_id": "pt-dbms-sql-11-bulk-loading-application",
+          "question_text": "What does a staging row prove by itself?",
+          "options": [
+            "That it passed every business rule",
+            "That input was received, not necessarily accepted as authoritative",
+            "That it committed into the final target",
+            "That every raw field was originally valid"
+          ],
+          "correct_index": 1,
+          "explanation": "Receipt and acceptance are separate transitions.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-11-bulk-loading-application-new-2",
+          "test_id": "pt-dbms-sql-11-bulk-loading-application",
+          "question_text": "Why retain a source-row identity?",
+          "options": [
+            "To bypass uniqueness",
+            "To eliminate parsing",
+            "To reconcile each accepted or rejected record with its input",
+            "To make all retries safe automatically"
+          ],
+          "correct_index": 2,
+          "explanation": "Identity allows meaningful diagnostics and accounting.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-11-bulk-loading-application-new-3",
+          "test_id": "pt-dbms-sql-11-bulk-loading-application",
+          "question_text": "What happens if a quoted label contains a comma?",
+          "options": [
+            "It always creates another SQL column",
+            "It is always invalid SQL text",
+            "It should be removed silently",
+            "The configured parser must treat it according to quoting rules"
+          ],
+          "correct_index": 3,
+          "explanation": "The file format defines separators and enclosures.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-11-bulk-loading-application-new-4",
+          "test_id": "pt-dbms-sql-11-bulk-loading-application",
+          "question_text": "Why can NOT EXISTS against the target alone miss duplicate-input problems?",
+          "options": [
+            "Two incoming rows can share one currently absent target key",
+            "NOT EXISTS creates a unique staging index",
+            "It excludes all source rows unconditionally",
+            "The target can never be empty"
+          ],
+          "correct_index": 0,
+          "explanation": "Input-internal duplicates require a separate policy.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-11-bulk-loading-application-new-5",
+          "test_id": "pt-dbms-sql-11-bulk-loading-application",
+          "question_text": "When is summing duplicate input quantities appropriate?",
+          "options": [
+            "For every snapshot export",
+            "When the requirement defines them as additive contributions",
+            "Whenever a unique key rejects input",
+            "Whenever text labels match"
+          ],
+          "correct_index": 1,
+          "explanation": "Business meaning must justify aggregation.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-11-bulk-loading-application-new-6",
+          "test_id": "pt-dbms-sql-11-bulk-loading-application",
+          "question_text": "What does setting the connection character set alone fail to establish?",
+          "options": [
+            "Whether SQL keywords exist",
+            "Whether primary keys can be declared",
+            "The intended interpretation of file bytes for LOAD DATA",
+            "The number of target rows"
+          ],
+          "correct_index": 2,
+          "explanation": "Use the file loading character-set contract.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-11-bulk-loading-application-new-7",
+          "test_id": "pt-dbms-sql-11-bulk-loading-application",
+          "question_text": "Received 100, rejected 3, skipped 2, accepted 95. Which report is accurate?",
+          "options": [
+            "100 new valid target rows",
+            "98 accepted records",
+            "No accounting is needed",
+            "95 accepted records, with rejected and skipped outcomes tracked separately"
+          ],
+          "correct_index": 3,
+          "explanation": "Reconciliation must preserve distinct outcome categories.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-11-bulk-loading-application-new-8",
+          "test_id": "pt-dbms-sql-11-bulk-loading-application",
+          "question_text": "What can a table-only SQL exercise validate about a load pipeline?",
+          "options": [
+            "Its staged validation and merge logic",
+            "All client filesystem permissions",
+            "Every CSV escape convention",
+            "The remote file upload interface"
+          ],
+          "correct_index": 0,
+          "explanation": "The exercise boundary should be stated precisely.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-11-bulk-loading-application-new-9",
+          "test_id": "pt-dbms-sql-11-bulk-loading-application",
+          "question_text": "Why does a connection failure make blind retries risky?",
+          "options": [
+            "A disconnected request can never commit",
+            "The merge may have committed before acknowledgment was lost",
+            "Every loader automatically deduplicates events",
+            "Retries always use a fresh target"
+          ],
+          "correct_index": 1,
+          "explanation": "Batch identity and known commit state guide safe recovery.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-11-bulk-loading-application-new-10",
+          "test_id": "pt-dbms-sql-11-bulk-loading-application",
+          "question_text": "Which protection should remain during a learning merge?",
+          "options": [
+            "No uniqueness on any target",
+            "Disabled foreign-key validation",
+            "Target constraints that define accepted data",
+            "An unrestricted global file privilege"
+          ],
+          "correct_index": 2,
+          "explanation": "The merge must respect existing data-integrity rules.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cx-bulk-accept-valid-staging",
+      "slug": "bulk-accept-valid-staging",
+      "title": "Accept nonnegative staged quantities",
+      "difficulty": "Easy",
+      "task": "accepted_catalogue starts empty. Insert staged rows whose already-typed integer quantity is nonnegative, and return equipment_code,quantity ordered by code. Do not repair negative rows or change staging.",
+      "schema_sql": "CREATE TABLE staged_catalogue(equipment_code VARCHAR(12) PRIMARY KEY,quantity INT NOT NULL); CREATE TABLE accepted_catalogue(equipment_code VARCHAR(12) PRIMARY KEY,quantity INT NOT NULL CHECK(quantity>=0));",
+      "seed_sql": "INSERT INTO staged_catalogue VALUES ('CAM',6),('MIC',-2),('TRI',0);",
+      "expected": "equipment_code\tquantity\nCAM\t6\nTRI\t0",
+      "ordering": "As explicitly ordered in the result query.",
+      "constraints": [
+        "Use only the supplied synthetic tables and requested transition.",
+        "Preserve unrelated rows."
+      ],
+      "edge_cases": [
+        "All rows may be invalid.",
+        "A zero quantity must be preserved."
+      ],
+      "hints": [
+        "Filter the staged rows before inserting.",
+        "Zero is valid."
+      ],
+      "solution_sql": "INSERT INTO accepted_catalogue(equipment_code,quantity) SELECT equipment_code,quantity FROM staged_catalogue WHERE quantity>=0; SELECT equipment_code,quantity FROM accepted_catalogue ORDER BY equipment_code;",
+      "explanation": "The filter admits valid nonnegative typed quantities, including zero. It does not model raw text parsing or overwrite staging.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO staged_catalogue VALUES ('BAD',-1);",
+          "expected": ""
+        },
+        {
+          "seed_sql": "INSERT INTO staged_catalogue VALUES ('NEW',8);",
+          "expected": "equipment_code\tquantity\nNEW\t8"
+        }
+      ]
+    },
+    {
+      "id": "cx-bulk-insert-absent-codes",
+      "slug": "bulk-insert-absent-codes",
+      "title": "Merge only new valid catalogue codes",
+      "difficulty": "Medium",
+      "task": "Insert nonnegative staged rows only for codes absent from accepted_catalogue. Preserve every existing accepted quantity and all staging rows. Return equipment_code,quantity ordered by code. Staging enforces one row per code.",
+      "schema_sql": "CREATE TABLE staged_catalogue(equipment_code VARCHAR(12) PRIMARY KEY,quantity INT NOT NULL); CREATE TABLE accepted_catalogue(equipment_code VARCHAR(12) PRIMARY KEY,quantity INT NOT NULL CHECK(quantity>=0));",
+      "seed_sql": "INSERT INTO accepted_catalogue VALUES ('CAM',9),('OLD',4); INSERT INTO staged_catalogue VALUES ('CAM',2),('MIC',5),('BAD',-1);",
+      "expected": "equipment_code\tquantity\nCAM\t9\nMIC\t5\nOLD\t4",
+      "ordering": "As explicitly ordered in the result query.",
+      "constraints": [
+        "Use only the supplied synthetic tables and requested transition.",
+        "Preserve unrelated rows."
+      ],
+      "edge_cases": [
+        "All supplied codes may already exist.",
+        "An empty target still rejects negative quantities."
+      ],
+      "hints": [
+        "Use a correlated absence check on the complete code identity.",
+        "Do not update existing quantities."
+      ],
+      "solution_sql": "INSERT INTO accepted_catalogue(equipment_code,quantity) SELECT s.equipment_code,s.quantity FROM staged_catalogue s LEFT JOIN accepted_catalogue a ON a.equipment_code=s.equipment_code WHERE s.quantity>=0 AND a.equipment_code IS NULL; SELECT equipment_code,quantity FROM accepted_catalogue ORDER BY equipment_code;",
+      "explanation": "The anti-match excludes existing identities while the domain filter rejects negative quantities. The staging primary key prevents input-internal code duplicates.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO accepted_catalogue VALUES ('CAM',9); INSERT INTO staged_catalogue VALUES ('CAM',2);",
+          "expected": "equipment_code\tquantity\nCAM\t9"
+        },
+        {
+          "seed_sql": "INSERT INTO staged_catalogue VALUES ('NEW',0),('BAD',-3);",
+          "expected": "equipment_code\tquantity\nNEW\t0"
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-11-bulk-loading-1",
+      "test_id": "pt-dbms-sql-11-bulk-loading",
+      "question_text": "What is bulk loading?",
+      "options": [
+        "Loading exactly one row at a time for safety",
+        "A mechanism specifically optimized for inserting very large volumes of data, bypassing much of ordinary per-row INSERT overhead",
+        "A synonym for a multi-row INSERT statement",
+        "A way to delete large amounts of data quickly"
+      ],
+      "correct_index": 1,
+      "explanation": "Bulk loading is purpose-built for large-scale data insertion, distinct from ordinary INSERT mechanisms.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-11-bulk-loading-2",
+      "test_id": "pt-dbms-sql-11-bulk-loading",
+      "question_text": "Which MySQL statement is specifically designed for bulk loading from a file?",
+      "options": [
+        "INSERT INTO ... VALUES",
+        "LOAD DATA INFILE",
+        "UPDATE ... SET",
+        "MERGE INTO"
+      ],
+      "correct_index": 1,
+      "explanation": "LOAD DATA INFILE is MySQL's dedicated bulk-load mechanism.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-11-bulk-loading-3",
+      "test_id": "pt-dbms-sql-11-bulk-loading",
+      "question_text": "Which PostgreSQL command is the equivalent bulk-load mechanism?",
+      "options": [
+        "COPY",
+        "MERGE",
+        "UPSERT",
+        "BULK INSERT"
+      ],
+      "correct_index": 0,
+      "explanation": "PostgreSQL's COPY command is its dedicated bulk data loading mechanism.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-11-bulk-loading-4",
+      "test_id": "pt-dbms-sql-11-bulk-loading",
+      "question_text": "Why does temporarily dropping indexes before a large bulk load, then rebuilding them afterward, improve performance?",
+      "options": [
+        "Indexes have no effect on insert performance",
+        "Maintaining an index on every single row insert is far more expensive than building the index once after all data has loaded",
+        "Dropping indexes is required by SQL syntax for bulk loads",
+        "This technique never actually improves performance"
+      ],
+      "correct_index": 1,
+      "explanation": "Incremental index maintenance during millions of inserts is much costlier than one bulk index build at the end.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-11-bulk-loading-5",
+      "test_id": "pt-dbms-sql-11-bulk-loading",
+      "question_text": "What is a real risk of bulk loading compared to ordinary INSERT?",
+      "options": [
+        "There is no risk difference whatsoever",
+        "Bulk loading may perform less per-row validation by default, and may not always be as atomically all-or-nothing on every engine/configuration",
+        "Bulk loading always corrupts the entire database",
+        "Bulk loading cannot be used with any table that has constraints"
+      ],
+      "correct_index": 1,
+      "explanation": "Speed optimizations in bulk-load paths can trade off some of the validation/atomicity guarantees ordinary INSERT provides.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-11-bulk-loading-6",
+      "test_id": "pt-dbms-sql-11-bulk-loading",
+      "question_text": "Why might disabling indexes during a bulk load be risky for a table serving live production reads at the same time?",
+      "options": [
+        "It's never risky under any circumstances",
+        "The table has no working indexes (beyond possibly the primary key) for the load's duration, which can badly degrade concurrent read performance",
+        "Disabling indexes automatically locks the table from all access",
+        "Read queries always fail outright without indexes"
+      ],
+      "correct_index": 1,
+      "explanation": "Concurrent reads relying on those indexes would suffer significantly slower query performance during the load.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-11-bulk-loading-7",
+      "test_id": "pt-dbms-sql-11-bulk-loading",
+      "question_text": "Roughly how much faster can bulk loading be compared to row-by-row INSERT for large datasets?",
+      "options": [
+        "No meaningful difference",
+        "Often one or two orders of magnitude faster, due to skipping most per-statement overhead",
+        "Bulk loading is usually slower",
+        "Exactly twice as fast, always"
+      ],
+      "correct_index": 1,
+      "explanation": "The overhead savings compound dramatically at scale, often yielding a very large speedup.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-11-bulk-loading-8",
+      "test_id": "pt-dbms-sql-11-bulk-loading",
+      "question_text": "What should you confirm before relying on a bulk-load mechanism for critical data?",
+      "options": [
+        "Nothing needs to be confirmed; all bulk-load tools behave identically",
+        "Whether the specific mechanism is fully transactional (all-or-nothing) or can leave a partial, inconsistent state on failure",
+        "That the file being loaded is under 1MB",
+        "That no indexes exist on the table at all, permanently"
+      ],
+      "correct_index": 1,
+      "explanation": "Atomicity guarantees vary by tool/engine/configuration, so this is worth verifying explicitly for critical data.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "coordinator",
+    "independent_review": "passed",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Independent manual review passed; native MySQL fixture evidence recorded separately; provider/browser/Supabase release gates remain separate.",
+    "existing_question_corrections": [
+      "tq-dbms-sql-11-bulk-loading-1",
+      "tq-dbms-sql-11-bulk-loading-2",
+      "tq-dbms-sql-11-bulk-loading-3",
+      "tq-dbms-sql-11-bulk-loading-4",
+      "tq-dbms-sql-11-bulk-loading-5",
+      "tq-dbms-sql-11-bulk-loading-6",
+      "tq-dbms-sql-11-bulk-loading-7",
+      "tq-dbms-sql-11-bulk-loading-8"
+    ],
+    "canonical_answer_indices_preserved": true,
+    "editorial_record": "Original snapshots retained. Questions rewritten for precise dialect and topic coverage while preserving identities and canonical answer positions; technical and independent review pending.",
+    "independent_reviewer": "Codex reviewer, current 2026-10-30 session",
+    "independent_review_scope": "Read full notes, all 640 MCQ stems/options/canonical answers/explanations, 64 exercise contracts/solutions/fixtures, and all 32 diagrams. Verified retained identities/answers through source-continuity tests; SQL execution evidence is recorded separately. No external originality, provider, live application or Supabase authorization clearance.",
+    "independent_review_record": "reports/independent-review-2026-10-30.json",
+    "content_sha256": "55e008450def5d89dbfd25d399df81b8669b35285fd867baf6e6acc3af871e50"
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-11-bulk-loading",
+    "original_note_sha256": "c0c11ec37794443ae250012ad85f21ca44a850934213213ede91b6d0213f8254",
+    "status": "drafted; not yet included in prepared paired migrations"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Catalogue receipt does not imply target acceptance",
+      "description": "The merge accepts new nonnegative codes and preserves known quantities.",
+      "columns": [
+        "Staged code",
+        "Staged quantity",
+        "Prior target",
+        "Merge outcome"
+      ],
+      "rows": [
+        [
+          "CAM",
+          "2",
+          "9",
+          "Skip; preserve 9"
+        ],
+        [
+          "MIC",
+          "5",
+          "Absent",
+          "Insert 5"
+        ],
+        [
+          "BAD",
+          "-1",
+          "Absent",
+          "Reject negative quantity"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "drafted — verification pending",
+    "server_rendering": "pending",
+    "browser_rendering": "unverified",
+    "independent_review": "pending"
+  },
+  "authoring_status": "drafted — verification pending",
+  "sql_verification": {
+    "scope": "not executed; exact MySQL/provider verification pending",
+    "all_passed": false,
+    "cases": []
+  }
+}

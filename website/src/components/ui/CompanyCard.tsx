@@ -17,13 +17,13 @@ export function CompanyCard({ company, className }: { company: CompanyCardData; 
   return (
     <Link
       href={`/jobs/companies/${company.id}`}
-      className={cn("card card-hover group flex items-center gap-3 p-4", className)}
+      className={cn("card card-hover card-pad group flex min-w-0 items-center gap-3", className)}
     >
-      <span className="flex h-12 w-12 flex-shrink-0 items-center justify-center overflow-hidden rounded-xl bg-primary-50">
+      <span className="icon-box overflow-hidden bg-primary-50">
         {company.logo_url ? (
-          <Image src={company.logo_url} alt={company.name} width={48} height={48} className="h-full w-full object-cover" />
+          <Image src={company.logo_url} alt={company.name} width={40} height={40} className="h-full w-full object-cover" />
         ) : (
-          <Building2 className="h-5 w-5 text-primary" aria-hidden />
+          <Building2 className="text-primary" aria-hidden />
         )}
       </span>
       <span className="min-w-0 flex-1">

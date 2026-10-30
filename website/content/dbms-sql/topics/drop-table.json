@@ -1,0 +1,639 @@
+{
+  "source_ref": "chapter-9-ddl-and-schema-design/drop-table",
+  "slug": "drop-table",
+  "title": "DROP TABLE",
+  "description": "Distinguish removing an object from clearing its rows, inspect dependency and transaction semantics by engine, and practise narrowly scoped removal on disposable temporary objects.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Dropping removes the table object\n\nDROP TABLE removes a table definition together with its table data and associated objects according to the engine's rules. After successful removal, the old name no longer identifies that table. This is different from returning an empty result or deleting selected rows. A query using the removed object can fail because the expected relation itself is absent.\n\nImagine a campus import process that created a disposable staging table for one completed batch. If that table is no longer needed, removal can be an appropriate lab operation. The same command against the authoritative student table has a completely different impact. The SQL verb alone does not establish whether the intended target is disposable, important, or even the object the caller meant to name.\n\n## Compare object removal with row removal\n\nDELETE removes qualifying rows while preserving the table definition. Its WHERE clause can express a subset. TRUNCATE clears table contents through engine-specific table-level behaviour while keeping a usable table structure. DROP removes the object itself. These differences affect subsequent statements, dependencies, identity state and transaction behaviour, so the commands are not interchangeable performance alternatives.\n\nA useful question is what the next consumer expects to find. If it expects the table to exist but contain no old batch rows, DROP is a different result contract. If the obsolete structure itself must disappear, clearing rows leaves the old definition behind. Write that postcondition before choosing a command rather than starting from whichever verb appears shortest.\n\n## Resolve the exact object before issuing removal\n\nAn unqualified name is interpreted in the connection's context. The familiar local name staging_rows can exist in more than one database or namespace. A correctly spelled name can therefore still target the wrong object if the connection or default context is wrong. Use an explicit target and inspect the applicable environment before making an irreversible assumption.\n\nMySQL also distinguishes temporary tables scoped to a connection from persistent tables. DROP TEMPORARY TABLE names the temporary-table operation explicitly and avoids treating the lab as an instruction to remove an application's persistent table. The exercises use only their supplied temporary objects. That execution boundary is part of the task contract, not permission to remove other objects with similar names.\n\n```sql\nDROP TEMPORARY TABLE IF EXISTS obsolete_batch;\n```\n\n## IF EXISTS changes absence handling only\n\nIF EXISTS avoids the ordinary missing-table error for an already-absent target in the supported statement form. It does not verify that the target's contents are unimportant or that every caller stopped using it. A script can successfully do nothing against the wrong context just as it can successfully remove the wrong present object. Guarded syntax is narrower than an operational correctness check.\n\nAn expected cleanup can be repeatable when absence is a valid final state. That does not mean every destructive change should suppress all errors. Unexpected absence might reveal an incorrect connection or an earlier failed stage. Decide whether a missing object is acceptable for the actual workflow, and retain enough observations to distinguish an intended no-op from a hidden setup mistake.\n\n## Dependencies can make removal broader or impossible\n\nViews, foreign keys, stored code and application queries can depend on a table in different ways. Some are catalog-enforced dependencies; others are references in application source or external jobs. A database can reject a removal because of a known dependency, but successful removal does not prove no external consumer still expects the table. Dependency review has to match the actual system boundary.\n\nPostgreSQL supports RESTRICT and CASCADE semantics for applicable drops. CASCADE can affect dependent objects, not merely erase a list of rows from the named table. MySQL accepts RESTRICT and CASCADE words in its DROP TABLE syntax without giving them the same PostgreSQL cascading behaviour. Never promise cross-product dependency cleanup from the presence of the same keyword.\n\n## Do not use cascading syntax to avoid understanding references\n\nA foreign key expresses an integrity relationship that may be intentionally protecting authoritative data. Disabling checks or dropping dependent definitions solely to make a cleanup command succeed changes that protection. The first task is to identify why the dependency exists and whether the proposed object removal is actually compatible with the intended model.\n\nThe temporary lab tasks avoid native persistent foreign-key dependencies. Their successful execution therefore does not prove how a real parent-table removal behaves under MySQL's persistent references. Keep that gap explicit rather than treating a temporary table's isolated behaviour as evidence that a dependency-heavy production operation is safe. Different object kinds and engines need their own native checks.\n\n## Transaction behaviour is product and object specific\n\nOrdinary MySQL DROP TABLE has implicit-commit behaviour and cannot be treated like a transactional row deletion that ROLLBACK will simply undo. PostgreSQL can roll back appropriate table DDL within an uncommitted transaction. These are useful product contrasts, but a tutorial should state the exact operation rather than claiming all SQL DDL shares a single rollback rule.\n\nMySQL temporary-table creation and removal have special transaction behaviour: avoiding an ordinary implicit commit does not make the temporary definition itself transactionally restored by rollback. Keep those properties separate. The exercises demonstrate disposable temporary removal and replacement only. They do not simulate crash recovery, establish application migration rollback, or prove every administrative DDL sequence behaves identically.\n\n## Renaming is not a universal safe retirement method\n\nRenaming an old table and observing a waiting period is sometimes proposed as a retirement strategy. It can also break consumers immediately, interfere with references or leave stale routing assumptions. A rename is another observable change that needs its own compatibility review. It is not automatically safer merely because the original bytes may remain available under another name.\n\nA responsible retirement decision needs evidence of ownership, consumer migration, retention requirements and a valid recovery source where required. A backup is useful only when the relevant data and definitions are captured and restoration is understood. Merely asserting that some backup exists does not reconstruct a dropped table or guarantee compatible recovery within a needed interval.\n\n## A new table with the same name is a new definition\n\nAfter a table is dropped, creating another table with the same name does not recover the old facts. The replacement may have different columns, constraints and data. Callers can encounter errors or, more subtly, receive plausible but semantically different results. Name reuse should therefore be described as a new object lifecycle, not as proof of continuity.\n\nThe introductory exercise reuses a disposable temporary name with a deliberately different column to expose that distinction. The original payload is removed; the new table receives an explicit new row. Its output belongs to the new definition. No part of that exercise claims the old contents were restored, preserved invisibly or made recoverable by reusing the spelling.\n\n## Copying before removal requires an explicit data contract\n\nThe second exercise copies all current disposable batch rows into a supplied archive before removing only the batch table. The archive has its own occurrence-preserving contract. Existing archive rows remain, and the new batch rows are appended. This makes the intended data movement visible rather than treating DROP as an operation that automatically archives anything.\n\nThat small copy is not a complete production backup strategy. A real concurrent workload would need a consistent snapshot or an appropriate coordination policy, and a real archive needs access and retention decisions. The fixture is intentionally single-session and synthetic. Its purpose is to verify the requested copy and narrow removal, not to suggest that every production retirement can be reduced to the same three statements.\n\n## Verify postconditions without overstating them\n\nUse nonempty and empty input, repeated batch occurrences, a preexisting archive row and an unrelated survivor table. The reference result checks the intended archive and survivor state. Recreating the removed temporary name demonstrates that the old definition no longer occupies it in that connection. A separate rejected read could also establish absence, but it is not needed to inflate otherwise equivalent observations.\n\nRecord the actual engine and object scope. MariaDB compatibility results verify these temporary-table lab cases, while exact MySQL/provider execution, persistent dependencies and application migration effects remain unverified. The explanatory package can be complete while those execution claims stay open. Accurate teaching distinguishes what removing a table means from what a narrow disposable exercise can prove about a larger system.\n",
+  "references": [
+    {
+      "title": "MySQL 8.4 DROP TABLE",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/drop-table.html"
+    },
+    {
+      "title": "PostgreSQL 18 DROP TABLE",
+      "url": "https://www.postgresql.org/docs/18/sql-droptable.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-9-drop-table",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-9-drop-table-1",
+          "test_id": "pt-dbms-sql-9-drop-table",
+          "question_text": "What does DROP TABLE remove?",
+          "options": [
+            "Only the rows, keeping the table definition",
+            "The table's entire structure and all of its data, including indexes and constraints",
+            "Only the indexes on the table",
+            "Only rows matching a WHERE clause"
+          ],
+          "correct_index": 1,
+          "explanation": "DROP TABLE erases the object entirely, unlike TRUNCATE (data only) or DELETE (selective rows).",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-9-drop-table-2",
+          "test_id": "pt-dbms-sql-9-drop-table",
+          "question_text": "What is the key structural difference between DROP TABLE and TRUNCATE TABLE?",
+          "options": [
+            "They are identical in every way",
+            "DROP TABLE removes the table object itself; TRUNCATE TABLE removes rows but keeps the table structure",
+            "TRUNCATE TABLE removes the table object; DROP TABLE only removes rows",
+            "DROP TABLE only works on views"
+          ],
+          "correct_index": 1,
+          "explanation": "DROP TABLE deletes the entire object; TRUNCATE empties the data but leaves the (now empty) table structure intact.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-9-drop-table-3",
+          "test_id": "pt-dbms-sql-9-drop-table",
+          "question_text": "In PostgreSQL, what does a restrictive dependency rule prevent?",
+          "options": [
+            "It silently drops the dependents too",
+            "Removal that would require cascading through protected dependent objects",
+            "It renames the dependents automatically",
+            "It converts the table into a view"
+          ],
+          "correct_index": 1,
+          "explanation": "The exact dependency rules are engine specific; MySQL RESTRICT does not provide the same cascading model.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-9-drop-table-4",
+          "test_id": "pt-dbms-sql-9-drop-table",
+          "question_text": "Why does PostgreSQL DROP TABLE CASCADE need dependency review?",
+          "options": [
+            "It only works on temporary tables",
+            "It can affect dependent objects whose removal was not obvious from the table name",
+            "It requires the table to be empty first",
+            "It automatically creates a backup before dropping"
+          ],
+          "correct_index": 1,
+          "explanation": "Cascading is an explicit dependency consequence, not a portable cleanup promise.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-9-drop-table-5",
+          "test_id": "pt-dbms-sql-9-drop-table",
+          "question_text": "Can ordinary MySQL table removal be assumed reversible with a later ROLLBACK?",
+          "options": [
+            "MySQL does not support DROP TABLE",
+            "No; ordinary DROP TABLE has implicit-commit and non-rollback behaviour",
+            "MySQL requires two-phase commit for all statements",
+            "DROP TABLE in MySQL only works on views"
+          ],
+          "correct_index": 1,
+          "explanation": "Temporary-table exceptions do not establish rollback restoration of their definitions.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-9-drop-table-6",
+          "test_id": "pt-dbms-sql-9-drop-table",
+          "question_text": "Which of DROP TABLE, TRUNCATE TABLE, and DELETE supports a WHERE clause to target a subset of rows?",
+          "options": [
+            "All three",
+            "Only DELETE",
+            "Only TRUNCATE TABLE",
+            "Only DROP TABLE"
+          ],
+          "correct_index": 1,
+          "explanation": "Only DELETE can be filtered with WHERE; DROP TABLE and TRUNCATE TABLE act on the whole table.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-9-drop-table-7",
+          "test_id": "pt-dbms-sql-9-drop-table",
+          "question_text": "What should precede removal of an important table?",
+          "options": [
+            "Run TRUNCATE TABLE first",
+            "Review target identity, consumers, dependencies, retention and a valid recovery approach",
+            "Always use CASCADE to be thorough",
+            "Disable all indexes first"
+          ],
+          "correct_index": 1,
+          "explanation": "A rename and waiting period is not a universal safe substitute for compatibility evidence.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-9-drop-table-8",
+          "test_id": "pt-dbms-sql-9-drop-table",
+          "question_text": "On PostgreSQL, under what condition can a DROP TABLE statement actually be undone?",
+          "options": [
+            "Never, under any circumstance",
+            "If it was run inside an explicit transaction and COMMIT has not yet been issued",
+            "Only if CASCADE was used",
+            "Only if the table had no rows"
+          ],
+          "correct_index": 1,
+          "explanation": "PostgreSQL supports transactional DDL, so a DROP TABLE can be rolled back before the transaction commits.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-9-drop-table-new-9",
+          "test_id": "pt-dbms-sql-9-drop-table",
+          "question_text": "After DROP, does the old name still identify the removed table?",
+          "options": [
+            "Yes, with zero rows",
+            "No",
+            "Only if sorted",
+            "Only if a view exists elsewhere"
+          ],
+          "correct_index": 1,
+          "explanation": "Removal changes object existence.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-9-drop-table-new-10",
+          "test_id": "pt-dbms-sql-9-drop-table",
+          "question_text": "Does IF EXISTS prove a present table is safe to remove?",
+          "options": [
+            "Yes",
+            "Only if it is empty",
+            "No",
+            "Only with integer keys"
+          ],
+          "correct_index": 2,
+          "explanation": "Absence handling does not establish target appropriateness.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-9-drop-table-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-9-drop-table-application-new-1",
+          "test_id": "pt-dbms-sql-9-drop-table-application",
+          "question_text": "Which operation supports a row predicate for selective removal?",
+          "options": [
+            "DROP TABLE",
+            "TRUNCATE TABLE",
+            "DELETE",
+            "CREATE SCHEMA"
+          ],
+          "correct_index": 2,
+          "explanation": "The other illustrated removal forms do not select a WHERE subset.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-9-drop-table-application-new-2",
+          "test_id": "pt-dbms-sql-9-drop-table-application",
+          "question_text": "Does creating the same table name restore the original rows?",
+          "options": [
+            "Yes, always",
+            "Only if the name is quoted",
+            "Only if ids are sorted",
+            "No"
+          ],
+          "correct_index": 3,
+          "explanation": "The replacement definition needs its own explicit data.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-9-drop-table-application-new-3",
+          "test_id": "pt-dbms-sql-9-drop-table-application",
+          "question_text": "Why name TEMPORARY explicitly in the lab cleanup?",
+          "options": [
+            "To restrict removal to the supplied temporary object kind",
+            "To remove every database",
+            "To bypass all dependencies",
+            "To guarantee backup recovery"
+          ],
+          "correct_index": 0,
+          "explanation": "The task has a narrow connection-local scope.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-9-drop-table-application-new-4",
+          "test_id": "pt-dbms-sql-9-drop-table-application",
+          "question_text": "What does a successful isolated temporary drop fail to prove?",
+          "options": [
+            "That the tested statement ran",
+            "Persistent foreign-key dependency behaviour",
+            "That the lab name can be reused",
+            "The recorded replacement output"
+          ],
+          "correct_index": 1,
+          "explanation": "Native persistent objects require their own evidence.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-9-drop-table-application-new-5",
+          "test_id": "pt-dbms-sql-9-drop-table-application",
+          "question_text": "Why is a rename not automatically a harmless retirement step?",
+          "options": [
+            "It never changes anything",
+            "It creates every missing view",
+            "Consumers can depend on the existing name and break immediately",
+            "It guarantees all callers migrated"
+          ],
+          "correct_index": 2,
+          "explanation": "Renaming has its own compatibility consequences.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-9-drop-table-application-new-6",
+          "test_id": "pt-dbms-sql-9-drop-table-application",
+          "question_text": "What does copying rows before removal need in a concurrent production system?",
+          "options": [
+            "Only a shorter alias",
+            "No domain assumptions",
+            "An arbitrary waiting period",
+            "A deliberate consistency and coordination policy"
+          ],
+          "correct_index": 3,
+          "explanation": "The single-session fixture does not establish a concurrent snapshot.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-9-drop-table-application-new-7",
+          "test_id": "pt-dbms-sql-9-drop-table-application",
+          "question_text": "Do MySQL DROP TABLE CASCADE words implement PostgreSQL cascading semantics?",
+          "options": [
+            "No",
+            "Yes, identically",
+            "Only when names match",
+            "Only with TEXT"
+          ],
+          "correct_index": 0,
+          "explanation": "Syntax words do not guarantee shared behaviour.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-9-drop-table-application-new-8",
+          "test_id": "pt-dbms-sql-9-drop-table-application",
+          "question_text": "What should an archive-copy exercise state about duplicates?",
+          "options": [
+            "That all duplicates are always errors",
+            "Whether repeated occurrences are preserved or collapsed",
+            "That ORDER BY removes them",
+            "That DROP counts them automatically"
+          ],
+          "correct_index": 1,
+          "explanation": "The intended archive grain determines the copy contract.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-9-drop-table-application-new-9",
+          "test_id": "pt-dbms-sql-9-drop-table-application",
+          "question_text": "Does a missing target always mean cleanup succeeded in the intended environment?",
+          "options": [
+            "Yes",
+            "Only if IF EXISTS is present",
+            "No; context or setup can be wrong",
+            "Only if the statement is short"
+          ],
+          "correct_index": 2,
+          "explanation": "A no-op can hide an incorrect target.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-9-drop-table-application-new-10",
+          "test_id": "pt-dbms-sql-9-drop-table-application",
+          "question_text": "Which result contract preserves a table definition but empties it?",
+          "options": [
+            "DROP alone",
+            "Renaming a database",
+            "Projection",
+            "A suitable row-clearing operation, rather than DROP"
+          ],
+          "correct_index": 3,
+          "explanation": "Object existence is part of the postcondition.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cx-drop-reuse-temporary-name",
+      "slug": "drop-reuse-temporary-name",
+      "title": "Remove a disposable definition before reusing its name",
+      "difficulty": "Easy",
+      "task": "Drop only the supplied TEMPORARY obsolete_batch table, then create a new TEMPORARY obsolete_batch(marker VARCHAR(30) NOT NULL). Insert marker fresh and return marker. The new row is an explicit replacement, not recovery of old data.",
+      "schema_sql": "CREATE TEMPORARY TABLE obsolete_batch (old_id INT PRIMARY KEY, old_payload VARCHAR(40));",
+      "seed_sql": "INSERT INTO obsolete_batch VALUES (1,'old');",
+      "expected": "marker\nfresh",
+      "ordering": "Exactly the one inserted marker.",
+      "constraints": [
+        "Use DROP TEMPORARY TABLE for the supplied object only.",
+        "The replacement has a different shape."
+      ],
+      "edge_cases": [
+        "Old table can contain no rows.",
+        "Old payload must not survive as replacement data."
+      ],
+      "hints": [
+        "Remove the original definition before creating a new shape under its name.",
+        "Insert the requested marker explicitly."
+      ],
+      "solution_sql": "DROP TEMPORARY TABLE obsolete_batch; CREATE TEMPORARY TABLE obsolete_batch (marker VARCHAR(30) NOT NULL); INSERT INTO obsolete_batch VALUES ('fresh'); SELECT marker FROM obsolete_batch;",
+      "explanation": "Name reuse succeeds only after the old temporary definition is removed, and the new output is explicitly supplied.",
+      "validation_cases": [
+        {
+          "seed_sql": "",
+          "expected": "marker\nfresh"
+        },
+        {
+          "seed_sql": "INSERT INTO obsolete_batch VALUES (7,'earlier'),(8,'other');",
+          "expected": "marker\nfresh"
+        }
+      ]
+    },
+    {
+      "id": "cx-drop-archive-batch",
+      "slug": "drop-archive-batch",
+      "title": "Append a disposable batch to its archive before narrow cleanup",
+      "difficulty": "Medium",
+      "task": "Append every obsolete_batch occurrence to archived_rows without removing existing archive rows. Drop only TEMPORARY obsolete_batch, recreate it with marker VARCHAR(30), and insert marker retired. Return archived_count, archived_total, survivor_count and marker. Treat the single-session archive copy as occurrence preserving.",
+      "schema_sql": "CREATE TEMPORARY TABLE obsolete_batch (value INT NOT NULL); CREATE TEMPORARY TABLE archived_rows (value INT NOT NULL); CREATE TEMPORARY TABLE survivor_rows (survivor_id INT PRIMARY KEY);",
+      "seed_sql": "INSERT INTO obsolete_batch VALUES (2),(2),(3); INSERT INTO archived_rows VALUES (9); INSERT INTO survivor_rows VALUES (1),(2);",
+      "expected": "archived_count\tarchived_total\tsurvivor_count\tmarker\n4\t16\t2\tretired",
+      "ordering": "One aggregate result row.",
+      "constraints": [
+        "Only the batch object is removed.",
+        "Repeated occurrences and previous archive rows are preserved."
+      ],
+      "edge_cases": [
+        "Empty batch leaves prior archive rows unchanged.",
+        "An empty archive total is reported as zero."
+      ],
+      "hints": [
+        "Copy before removing the source.",
+        "Use independent aggregates so survivor rows do not multiply archive counts."
+      ],
+      "solution_sql": "INSERT INTO archived_rows SELECT value FROM obsolete_batch; DROP TEMPORARY TABLE obsolete_batch; CREATE TEMPORARY TABLE obsolete_batch (marker VARCHAR(30) NOT NULL); INSERT INTO obsolete_batch VALUES ('retired'); SELECT (SELECT COUNT(*) FROM archived_rows) AS archived_count,(SELECT COALESCE(SUM(value),0) FROM archived_rows) AS archived_total,(SELECT COUNT(*) FROM survivor_rows) AS survivor_count,marker FROM obsolete_batch;",
+      "explanation": "The explicit copy preserves the intended occurrences, and the replacement marker plus independent survivor count expose the narrow object scope.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO archived_rows VALUES (5); INSERT INTO survivor_rows VALUES (1);",
+          "expected": "archived_count\tarchived_total\tsurvivor_count\tmarker\n1\t5\t1\tretired"
+        },
+        {
+          "seed_sql": "",
+          "expected": "archived_count\tarchived_total\tsurvivor_count\tmarker\n0\t0\t0\tretired"
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-9-drop-table-1",
+      "test_id": "pt-dbms-sql-9-drop-table",
+      "question_text": "What does DROP TABLE remove?",
+      "options": [
+        "Only the rows, keeping the table definition",
+        "The table's entire structure and all of its data, including indexes and constraints",
+        "Only the indexes on the table",
+        "Only rows matching a WHERE clause"
+      ],
+      "correct_index": 1,
+      "explanation": "DROP TABLE erases the object entirely, unlike TRUNCATE (data only) or DELETE (selective rows).",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-9-drop-table-2",
+      "test_id": "pt-dbms-sql-9-drop-table",
+      "question_text": "What is the key structural difference between DROP TABLE and TRUNCATE TABLE?",
+      "options": [
+        "They are identical in every way",
+        "DROP TABLE removes the table object itself; TRUNCATE TABLE removes rows but keeps the table structure",
+        "TRUNCATE TABLE removes the table object; DROP TABLE only removes rows",
+        "DROP TABLE only works on views"
+      ],
+      "correct_index": 1,
+      "explanation": "DROP TABLE deletes the entire object; TRUNCATE empties the data but leaves the (now empty) table structure intact.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-9-drop-table-3",
+      "test_id": "pt-dbms-sql-9-drop-table",
+      "question_text": "What does the RESTRICT behavior (the default) do when you try to DROP TABLE a table that other objects depend on?",
+      "options": [
+        "It silently drops the dependents too",
+        "It blocks the drop with an error",
+        "It renames the dependents automatically",
+        "It converts the table into a view"
+      ],
+      "correct_index": 1,
+      "explanation": "RESTRICT is the safe default: it refuses to drop a table that still has dependents.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-9-drop-table-4",
+      "test_id": "pt-dbms-sql-9-drop-table",
+      "question_text": "What is a major risk of using DROP TABLE ... CASCADE?",
+      "options": [
+        "It only works on temporary tables",
+        "It can silently drop dependent objects like foreign keys and views the user may not know about",
+        "It requires the table to be empty first",
+        "It automatically creates a backup before dropping"
+      ],
+      "correct_index": 1,
+      "explanation": "CASCADE removes every dependent object along with the table, which can have unintended side effects.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-9-drop-table-5",
+      "test_id": "pt-dbms-sql-9-drop-table",
+      "question_text": "In MySQL, why can't a DROP TABLE typically be rolled back even inside a BEGIN...COMMIT block?",
+      "options": [
+        "MySQL does not support DROP TABLE",
+        "DDL statements in MySQL cause an implicit commit, so there is nothing left to roll back",
+        "MySQL requires two-phase commit for all statements",
+        "DROP TABLE in MySQL only works on views"
+      ],
+      "correct_index": 1,
+      "explanation": "MySQL's DDL auto-commits, unlike PostgreSQL/SQL Server which support transactional DDL that can be rolled back before commit.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-9-drop-table-6",
+      "test_id": "pt-dbms-sql-9-drop-table",
+      "question_text": "Which of DROP TABLE, TRUNCATE TABLE, and DELETE supports a WHERE clause to target a subset of rows?",
+      "options": [
+        "All three",
+        "Only DELETE",
+        "Only TRUNCATE TABLE",
+        "Only DROP TABLE"
+      ],
+      "correct_index": 1,
+      "explanation": "Only DELETE can be filtered with WHERE; DROP TABLE and TRUNCATE TABLE act on the whole table.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-9-drop-table-7",
+      "test_id": "pt-dbms-sql-9-drop-table",
+      "question_text": "What is a recommended safety practice before running DROP TABLE on an important production table?",
+      "options": [
+        "Run TRUNCATE TABLE first",
+        "Rename the table and let it sit for a safety window before actually dropping it",
+        "Always use CASCADE to be thorough",
+        "Disable all indexes first"
+      ],
+      "correct_index": 1,
+      "explanation": "Renaming first provides a safety buffer to confirm nothing still depends on the table before permanently dropping it.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-9-drop-table-8",
+      "test_id": "pt-dbms-sql-9-drop-table",
+      "question_text": "On PostgreSQL, under what condition can a DROP TABLE statement actually be undone?",
+      "options": [
+        "Never, under any circumstance",
+        "If it was run inside an explicit transaction and COMMIT has not yet been issued",
+        "Only if CASCADE was used",
+        "Only if the table had no rows"
+      ],
+      "correct_index": 1,
+      "explanation": "PostgreSQL supports transactional DDL, so a DROP TABLE can be rolled back before the transaction commits.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "coordinator",
+    "independent_review": "unavailable; no agent tools",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Definitions and examples checked against questions; no plagiarism certification.",
+    "existing_question_corrections": [
+      "tq-dbms-sql-9-drop-table-3",
+      "tq-dbms-sql-9-drop-table-4",
+      "tq-dbms-sql-9-drop-table-5",
+      "tq-dbms-sql-9-drop-table-7"
+    ],
+    "canonical_answer_indices_preserved": true,
+    "batch_review": {
+      "reviewer": "coordinator",
+      "independent": false,
+      "scope": "This new package: explained definitions and boundaries, retained source question identities/canonical indices, new correct answers and explanations, exercise solutions and recorded fixtures, diagram trace and prepared integration.",
+      "execution_evidence": "Focused MariaDB reference cases and selected actual LessonBlock rendering passed; no browser QA or exact MySQL/provider execution.",
+      "source_preservation": "Original snapshots retained; eight retained exercises across this continuation matched source identity, difficulty, schema, seed and trailing checker.",
+      "limits": "No independent worker available. Output fixtures do not prove arbitrary student submissions used a requested technique. Native PostgreSQL/other-engine concepts remain documented or explicitly mirrored, not verified by MariaDB."
+    }
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-9-drop-table",
+    "original_note_sha256": "d08fd45b253bb15a0b3747e8448a382476f4bb54c969956e4b7f41d278c2613d",
+    "status": "paired migration prepared; not applied"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Object removal and row clearing have different final states",
+      "description": "The comparison tracks whether the old definition remains and whether a predicate selects a subset; product-specific transactional rules still need separate review.",
+      "columns": [
+        "Operation",
+        "Old definition remains?",
+        "Old rows",
+        "WHERE subset?"
+      ],
+      "rows": [
+        [
+          "DELETE with predicate",
+          "Yes",
+          "Only qualifying rows removed",
+          "Yes"
+        ],
+        [
+          "TRUNCATE",
+          "Usable table structure remains",
+          "All removed under engine rules",
+          "No"
+        ],
+        [
+          "DROP TABLE",
+          "No",
+          "Removed with the object",
+          "No"
+        ],
+        [
+          "Create same name afterward",
+          "A new definition",
+          "Only explicitly loaded new data",
+          "Not recovery"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "coordinator checked object-versus-row postconditions, temporary scope, occurrence-preserving archive and engine-specific cascade semantics",
+    "server_rendering": "passed",
+    "browser_rendering": "unverified",
+    "independent_review": "unavailable; no agent tools",
+    "server_rendering_evidence": "Selected actual LessonBlock Vitest rendering passed for this batch; no browser QA."
+  },
+  "sql_verification": {
+    "engine": "11.8.6-MariaDB-0+deb13u1 from Debian",
+    "scope": "MariaDB compatibility execution; exact MySQL 8.4/provider execution unverified",
+    "fingerprint": "1bd488a1ad695262639634f58c13d61638ac0994936874cef7efe1cf309cb87a",
+    "cases": [
+      {
+        "problem": "drop-reuse-temporary-name",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "drop-reuse-temporary-name",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "drop-reuse-temporary-name",
+        "case": 2,
+        "passed": true
+      },
+      {
+        "problem": "drop-archive-batch",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "drop-archive-batch",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "drop-archive-batch",
+        "case": 2,
+        "passed": true
+      }
+    ],
+    "all_passed": true
+  }
+}

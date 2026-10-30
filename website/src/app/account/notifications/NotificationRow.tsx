@@ -21,7 +21,12 @@ export default function NotificationRow({ notification }: { notification: Notifi
   async function markRead() {
     if (isRead) return;
     setIsRead(true);
-    await createBrowserSupabase().from("notifications").update({ is_read: true }).eq("id", notification.id);
+    try {
+      const { error } = await createBrowserSupabase().from("notifications").update({ is_read: true }).eq("id", notification.id);
+      if (error) setIsRead(false);
+    } catch {
+      setIsRead(false);
+    }
   }
 
   return (

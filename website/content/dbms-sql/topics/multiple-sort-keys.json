@@ -1,0 +1,607 @@
+{
+  "source_ref": "chapter-13-sorting-and-pagination/multiple-sort-keys",
+  "slug": "multiple-sort-keys",
+  "title": "Multiple Sort Keys",
+  "description": "Order SQL rows by multiple columns with separate ASC and DESC directions; trace left-to-right priorities and use a final key to resolve ties.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Several keys express a priority order\n\nA multi-key [ORDER BY](/learning/dbms-sql-tutorial/order-by) compares result rows using a sequence of priorities. A campus catalogue can list categories alphabetically, then show expensive products first within each category. The second key does not compete equally with the first. It is consulted only when the earlier key does not distinguish the rows. That priority structure is the essential meaning of a multi-key order.\n\nState the requirement in that same hierarchy: category first, price within category, identity within any remaining tie. This is often easier to review than a flat list of desired properties. If the business instead wants the most expensive product overall first, price must become the earlier key. Reordering the terms changes the ranking contract rather than merely changing formatting.\n\n## Compare rows at their first differing key\n\nTo compare two rows, inspect the first sort expression. If their values differ under its comparison rules, that expression decides their order. Only if those values tie do you inspect the next expression. Continue until a key distinguishes the rows or all stated keys tie. This is often called lexicographic ordering, even when some keys are numeric rather than textual.\n\nConsider a Books product priced at three hundred and an Electronics product priced at eighty thousand. Under category-first order, the Books row can come first regardless of its lower price. The price key becomes relevant only within equal categories. A sample containing several categories with very different prices makes this priority visible and exposes a query that accidentally sorts globally by price.\n\n```sql\nSELECT id, name, category, price\nFROM products\nORDER BY category ASC, price DESC, id ASC;\n```\n\n## Each key owns its direction\n\nA multi-key sort can mix ascending and descending directions. Category ascending and price descending is a valid combination because the directions apply to different comparison priorities. A DESC attached to price does not reverse category ordering or the direction of a later identity key. Write directions explicitly when the mixture is central to the feature.\n\nThe omitted direction on an ordinary term defaults to ascending. Relying on that default is legal, but a clear maintained query can spell out every direction to reduce misreading. The purpose is communicative consistency rather than a universal performance change. A query's actual access strategy depends on the complete expression, available indexes and data distribution.\n\n## Complete ties remain unspecified until resolved\n\nTwo rows can share both category and price. With only those keys, their relative order is not fully specified. It is not automatically alphabetical by name, insertion order or primary-key order. Add another term when the consumer needs deterministic ordering. A unique id is a suitable final tie breaker when the result contains one row per product.\n\nThe retained intermediate exercise preserves its category and price priorities and states ascending id for otherwise equal rows. Earlier source samples contain no such ties, so that final key preserves their visible order while making a previously unspecified case explicit. New tie fixtures show why the extension matters. Keep the source identity and setup intact rather than replace the exercise to avoid explaining ties.\n\n## A label can itself have equivalent comparisons\n\nText keys use their applicable collation. Two category spellings may compare equal under case-insensitive rules even if their displayed strings differ. The next key can then influence their relative positions. A reader expecting strict byte distinctions may find the result surprising unless the comparison contract is stated. Do not assume that visual spelling alone defines every sort boundary.\n\nA unique numeric identity at the end can resolve remaining row ties even when earlier labels compare equivalently. It does not force those labels into a different collation order. If the product requires a specific language-aware or exact-case category presentation, define that text comparison explicitly and test representative labels rather than treat id as a substitute for the intended primary sort semantics.\n\n## Result grain determines a useful final key\n\nA product table's [primary key](/learning/dbms-sql-tutorial/primary-key) distinguishes its base rows, but a join can repeat a product once per matching tag or checkout. In that result, product id alone may still leave ties. Include the relevant relationship or event identity if the report intentionally returns several rows per product. Otherwise revise the query to express the desired one-row-per-product grain before ordering.\n\nDo not add DISTINCT casually to hide those repeated rows. It can change the report meaning or conceal a missing join condition. Understand whether multiplicity is intended, then choose projection and ordering together. A deterministic sequence of the wrong row population is still an incorrect query, just as a correct population with unspecified ties can still violate an export contract.\n\n## Custom priority keys need an explicit mapping\n\nA report may order urgent requests before normal requests regardless of their text labels. A CASE expression can map those statuses to priority numbers, followed by timestamp and identity keys. Define what happens to unknown or newly added statuses. A mapping that assigns every unexpected state the highest priority can change the workflow when new data appears.\n\nComputed priorities are ordinary ordering expressions rather than permission checks. The report may rank a row first without granting the caller authority to act on it. Validate privileged transitions at the trusted boundary and keep the ranking policy documented in the query contract. Sorting an interface is not a substitute for enforcing which records that interface is allowed to retrieve.\n\n## Missing values form another ordering dimension\n\nA nullable price or timestamp can have an engine-specific default placement. If the feature needs missing values last while known prices descend, make missingness a separate key before the value. Then apply a unique identity after the known-value priority. Each term has one role: present versus absent grouping, value ranking and final deterministic tie resolution.\n\nReplacing NULL with a large numeric sentinel can merge unknown data with a legitimate extreme value. A Boolean missingness key avoids changing the source fact. For cross-engine code, use the supported syntax and equivalent tested rules for each engine rather than assume default NULL placement is portable. Sorting policy should be visible even when the current sample happens to contain no missing values.\n\n## Pagination depends on the full key tuple\n\nA page boundary defined only by price is incomplete when several rows share that price. Continuation needs the same complete ordering tuple that determines position, including directions and any missingness policy. If the display order is category, descending price and ascending id, a cursor or comparison rule based solely on id does not describe the same sequence.\n\nStable keys do not freeze changing data between requests. Inserts, removals and updates can move items relative to a page boundary. Decide whether the feature needs a snapshot, a best-effort live list or a durable export. The ordering tuple supports that design but does not by itself provide its visibility or consistency guarantees. Test ties around boundaries when implementing pagination separately.\n\n## Index alignment is evidence to inspect\n\nAn index can sometimes help satisfy an ordering when its key layout and the query's restrictions fit the required priorities and directions. That is not a guarantee for every multi-key expression. Filtering, computed terms, join shape and the chosen plan can change whether additional sorting is needed. Establish the correct sequence first, then inspect a representative plan if performance matters.\n\nAvoid reordering keys merely to match an available index unless the requirement permits the changed ranking. Category-first and price-first lists are different products even if one happens to be cheaper to compute. An optimization must preserve the sequence contract, including tie order and NULL placement, rather than return an approximately similar sample that becomes wrong on more varied data.\n\n## Verify priority changes with contrasting rows\n\nThe beginner exercise sorts inspection requests by rating descending, then cost ascending, then identity. It includes a lower-rated cheap request to show that price cannot outrank rating. The retained product exercise sorts category first and price second, with an explicit final identity tie breaker. Both provide alternative fixtures with complete and partial ties.\n\nCheck each adjacent pair in the expected output by identifying the first key that distinguishes it. If a cheaper row appears later, explain which higher-priority key decided the order. This reasoning exposes swapped keys, wrongly shared directions and omitted ties. A clear multi-key query makes every sequence decision traceable to the stated priority list instead of accidental source order.\n",
+  "references": [
+    {
+      "title": "MySQL 8.4 ORDER BY expressions and directions",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/select.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-13-multiple-sort-keys",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-13-multiple-sort-keys-1",
+          "test_id": "pt-dbms-sql-13-multiple-sort-keys",
+          "question_text": "In ORDER BY category,price, what is price used for?",
+          "options": [
+            "Sorting every row globally before category",
+            "Filtering expensive rows",
+            "Breaking ties on the earlier category key",
+            "Removing duplicate categories"
+          ],
+          "correct_index": 2,
+          "explanation": "Keys have left-to-right priority.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-13-multiple-sort-keys-2",
+          "test_id": "pt-dbms-sql-13-multiple-sort-keys",
+          "question_text": "Does swapping category and price generally preserve sequence?",
+          "options": [
+            "Yes, ordering keys are commutative",
+            "No, it changes the primary ranking priority",
+            "Only if both are numbers",
+            "Always if there are two keys"
+          ],
+          "correct_index": 1,
+          "explanation": "Some samples may coincide, but the contracts differ.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-13-multiple-sort-keys-3",
+          "test_id": "pt-dbms-sql-13-multiple-sort-keys",
+          "question_text": "Can one key ascend while the next descends?",
+          "options": [
+            "No, one direction applies to the entire list",
+            "Yes",
+            "Only for the final key",
+            "Only in a stored procedure"
+          ],
+          "correct_index": 1,
+          "explanation": "Each term owns its direction.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-13-multiple-sort-keys-4",
+          "test_id": "pt-dbms-sql-13-multiple-sort-keys",
+          "question_text": "What does category ASC,price DESC do?",
+          "options": [
+            "Order globally by high price",
+            "Order categories first, then high prices within equal categories",
+            "Reverse all category labels",
+            "Choose only one product per category"
+          ],
+          "correct_index": 1,
+          "explanation": "The second term does not override the first.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-13-multiple-sort-keys-5",
+          "test_id": "pt-dbms-sql-13-multiple-sort-keys",
+          "question_text": "What if all stated sort keys tie?",
+          "options": [
+            "Names always sort automatically",
+            "Relative order is unspecified without another distinguishing key",
+            "Insertion order is guaranteed",
+            "The query errors"
+          ],
+          "correct_index": 1,
+          "explanation": "A final key can complete the contract.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-13-multiple-sort-keys-6",
+          "test_id": "pt-dbms-sql-13-multiple-sort-keys",
+          "question_text": "Does multi-key ORDER BY stop at two terms?",
+          "options": [
+            "Yes, exactly two terms",
+            "Only one term is ever legal",
+            "No, use the needed supported key list",
+            "Only WHERE columns can be keys"
+          ],
+          "correct_index": 2,
+          "explanation": "Avoid claiming an unlimited count across every implementation limit.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-13-multiple-sort-keys-7",
+          "test_id": "pt-dbms-sql-13-multiple-sort-keys",
+          "question_text": "Which priority gives highest rating first and cheapest within equal ratings?",
+          "options": [
+            "cost ASC,rating DESC",
+            "rating DESC,cost ASC",
+            "rating ASC,cost DESC",
+            "cost DESC,rating ASC"
+          ],
+          "correct_index": 1,
+          "explanation": "Rating is the primary comparison.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-13-multiple-sort-keys-8",
+          "test_id": "pt-dbms-sql-13-multiple-sort-keys",
+          "question_text": "How should category, best rating, then name be ordered?",
+          "options": [
+            "category ASC,rating DESC,name ASC",
+            "name ASC,rating DESC,category ASC",
+            "rating DESC,name ASC,category DESC",
+            "category DESC,rating ASC,name DESC"
+          ],
+          "correct_index": 0,
+          "explanation": "The key sequence follows the report hierarchy.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-13-multiple-sort-keys-new-9",
+          "test_id": "pt-dbms-sql-13-multiple-sort-keys",
+          "question_text": "What decides two rows when their categories differ?",
+          "options": [
+            "The category key alone at that priority",
+            "The lower price automatically",
+            "The later id automatically",
+            "All keys vote equally"
+          ],
+          "correct_index": 0,
+          "explanation": "Later terms are consulted only after earlier ties.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-13-multiple-sort-keys-new-10",
+          "test_id": "pt-dbms-sql-13-multiple-sort-keys",
+          "question_text": "Why add id after category and price?",
+          "options": [
+            "To make price the primary key",
+            "To distinguish remaining ties when id is unique in the result",
+            "To remove categories",
+            "To change stored identities"
+          ],
+          "correct_index": 1,
+          "explanation": "The extra term completes the sequence.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-13-multiple-sort-keys-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-13-multiple-sort-keys-application-new-1",
+          "test_id": "pt-dbms-sql-13-multiple-sort-keys-application",
+          "question_text": "Does price DESC make a following id term descending too?",
+          "options": [
+            "Yes",
+            "No, its omitted direction defaults ascending",
+            "Only when prices tie",
+            "Only for text ids"
+          ],
+          "correct_index": 1,
+          "explanation": "Directions do not propagate across commas.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-13-multiple-sort-keys-application-new-2",
+          "test_id": "pt-dbms-sql-13-multiple-sort-keys-application",
+          "question_text": "Why can a text category tie despite visibly different spelling?",
+          "options": [
+            "Every string is byte-distinct under all collations",
+            "Category has no type",
+            "The applicable collation can compare the strings equivalently",
+            "ORDER BY ignores text"
+          ],
+          "correct_index": 2,
+          "explanation": "Comparison semantics define ties.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-13-multiple-sort-keys-application-new-3",
+          "test_id": "pt-dbms-sql-13-multiple-sort-keys-application",
+          "question_text": "When can product id fail to resolve a joined result completely?",
+          "options": [
+            "Whenever an index exists",
+            "Whenever price is positive",
+            "Whenever category is text",
+            "When the join intentionally returns several rows for that product"
+          ],
+          "correct_index": 3,
+          "explanation": "The tie key must match result grain.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-13-multiple-sort-keys-application-new-4",
+          "test_id": "pt-dbms-sql-13-multiple-sort-keys-application",
+          "question_text": "Why not use DISTINCT automatically to fix join fanout?",
+          "options": [
+            "It can change meaning or conceal a missing relationship condition",
+            "It always preserves every event",
+            "It is required by ORDER BY",
+            "It creates a primary key"
+          ],
+          "correct_index": 0,
+          "explanation": "Resolve the population contract before ordering.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-13-multiple-sort-keys-application-new-5",
+          "test_id": "pt-dbms-sql-13-multiple-sort-keys-application",
+          "question_text": "What does a CASE priority key require for unexpected states?",
+          "options": [
+            "A guaranteed highest rank for every new state",
+            "An explicit default or handling policy",
+            "Automatic authorization",
+            "A table deletion"
+          ],
+          "correct_index": 1,
+          "explanation": "New states must not silently change the workflow.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-13-multiple-sort-keys-application-new-6",
+          "test_id": "pt-dbms-sql-13-multiple-sort-keys-application",
+          "question_text": "Why make NULL placement a separate key when needed?",
+          "options": [
+            "It guarantees one fixed physical plan",
+            "It replaces every later key",
+            "It preserves missingness without inventing a numeric sentinel",
+            "It authorizes missing rows"
+          ],
+          "correct_index": 2,
+          "explanation": "Missingness grouping and value ranking have separate roles.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-13-multiple-sort-keys-application-new-7",
+          "test_id": "pt-dbms-sql-13-multiple-sort-keys-application",
+          "question_text": "What tuple should a continuation design reflect?",
+          "options": [
+            "Only whichever id is convenient",
+            "Only the first displayed text field",
+            "Only the row count",
+            "The complete ordering keys and their directions"
+          ],
+          "correct_index": 3,
+          "explanation": "A cursor based on a different sequence can skip or repeat rows.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-13-multiple-sort-keys-application-new-8",
+          "test_id": "pt-dbms-sql-13-multiple-sort-keys-application",
+          "question_text": "Does a deterministic key tuple freeze changing data across requests?",
+          "options": [
+            "No, consistency needs a separate visibility policy",
+            "Yes, for every user forever",
+            "Only when all keys ascend",
+            "Only when the tuple has three terms"
+          ],
+          "correct_index": 0,
+          "explanation": "Stable ordering and stable data are different guarantees.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-13-multiple-sort-keys-application-new-9",
+          "test_id": "pt-dbms-sql-13-multiple-sort-keys-application",
+          "question_text": "Can keys be rearranged for index convenience without checking requirements?",
+          "options": [
+            "Yes, every ordering is equivalent",
+            "No, that can change the product ranking",
+            "Only for large tables",
+            "Only when prices are integers"
+          ],
+          "correct_index": 1,
+          "explanation": "Optimization must preserve the required sequence.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-13-multiple-sort-keys-application-new-10",
+          "test_id": "pt-dbms-sql-13-multiple-sort-keys-application",
+          "question_text": "How can one explain an adjacent pair in a sorted result?",
+          "options": [
+            "Average every key together",
+            "Ignore all but the last term",
+            "Find the first key on which they differ",
+            "Assume insertion order"
+          ],
+          "correct_index": 2,
+          "explanation": "That key and its direction justify the pair order.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cx-sort-keys-rating-cost",
+      "slug": "sort-keys-rating-cost",
+      "title": "Prioritize rating before cost",
+      "difficulty": "Easy",
+      "task": "Return request_id,rating,cost sorted by rating descending, then cost ascending, then request_id ascending. Every fixture value is known. Preserve all requests.",
+      "schema_sql": "CREATE TABLE rated_requests(request_id INT PRIMARY KEY,rating INT NOT NULL,cost INT NOT NULL);",
+      "seed_sql": "INSERT INTO rated_requests VALUES (8,5,30),(2,5,20),(4,4,1),(1,5,20);",
+      "expected": "request_id\trating\tcost\n1\t5\t20\n2\t5\t20\n8\t5\t30\n4\t4\t1",
+      "ordering": "As explicitly ordered in the result query.",
+      "constraints": [
+        "Use only the supplied synthetic tables and requested transition.",
+        "Preserve unrelated rows."
+      ],
+      "edge_cases": [
+        "A cheap low-rated request remains after higher-rated ones.",
+        "A complete rating-and-cost tie uses identity."
+      ],
+      "hints": [
+        "Keep rating as the first key.",
+        "Specify a direction for every term."
+      ],
+      "solution_sql": "SELECT request_id,rating,cost FROM rated_requests ORDER BY rating DESC,cost ASC,request_id ASC;",
+      "explanation": "Higher rating dominates lower cost. Cost decides only equal ratings, and identity decides the remaining complete tie.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO rated_requests VALUES (7,3,1),(1,4,9);",
+          "expected": "request_id\trating\tcost\n1\t4\t9\n7\t3\t1"
+        },
+        {
+          "seed_sql": "INSERT INTO rated_requests VALUES (9,5,2),(3,5,2);",
+          "expected": "request_id\trating\tcost\n3\t5\t2\n9\t5\t2"
+        }
+      ]
+    },
+    {
+      "id": "cp-dbms-sql-sort-by-category-then-price-descending",
+      "slug": "sort-by-category-then-price-descending",
+      "title": "Sort by Category, Then Price Descending",
+      "difficulty": "Medium",
+      "task": "Return id,name,category,price for all products sorted by category ascending, then price descending within equal category. Resolve otherwise unspecified equal-category-and-price ties with id ascending. Preserve the original schema and sample.",
+      "schema_sql": "CREATE TABLE products (\n  id INTEGER PRIMARY KEY,\n  name TEXT NOT NULL,\n  category TEXT NOT NULL,\n  price INTEGER NOT NULL\n);",
+      "seed_sql": "INSERT INTO products (id, name, category, price) VALUES\n(1, 'ProLaptop', 'Electronics', 85000),\n(2, 'Desk Lamp', 'Home', 900),\n(3, 'ProPhone', 'Electronics', 45000),\n(4, 'Python Basics', 'Books', 350),\n(5, 'Novel', 'Books', 220),\n(6, 'Headphones', 'Electronics', 3000),\n(7, 'Rug', 'Home', 4500);",
+      "expected": "id\tname\tcategory\tprice\n4\tPython Basics\tBooks\t350\n5\tNovel\tBooks\t220\n1\tProLaptop\tElectronics\t85000\n3\tProPhone\tElectronics\t45000\n6\tHeadphones\tElectronics\t3000\n7\tRug\tHome\t4500\n2\tDesk Lamp\tHome\t900",
+      "ordering": "As explicitly ordered in the result query.",
+      "constraints": [
+        "Use only the supplied synthetic tables and requested transition.",
+        "Preserve unrelated rows."
+      ],
+      "edge_cases": [
+        "A costly Electronics item remains after Books under the category priority.",
+        "Equal category and price use ascending identity."
+      ],
+      "hints": [
+        "Put category before price.",
+        "Add id only after the original category and price priorities."
+      ],
+      "solution_sql": "SELECT id,name,category,price FROM products ORDER BY category ASC,price DESC,id ASC;",
+      "explanation": "Category has the highest priority. Descending price applies within its ties, and ascending id specifies the previously unspecified complete tie without changing original sample order.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO products (id, name, category, price) VALUES\n(1, 'Tablet', 'Electronics', 20000),\n(2, 'Sofa', 'Home', 30000),\n(3, 'Speaker', 'Electronics', 5000),\n(4, 'Cookbook', 'Books', 400),\n(5, 'Chair', 'Home', 2500),\n(6, 'Mouse', 'Electronics', 900);",
+          "expected": "id\tname\tcategory\tprice\n4\tCookbook\tBooks\t400\n1\tTablet\tElectronics\t20000\n3\tSpeaker\tElectronics\t5000\n6\tMouse\tElectronics\t900\n2\tSofa\tHome\t30000\n5\tChair\tHome\t2500"
+        },
+        {
+          "seed_sql": "INSERT INTO products VALUES (8,'Book B','Books',300),(2,'Book A','Books',300),(4,'Camera','Electronics',90000);",
+          "expected": "id\tname\tcategory\tprice\n2\tBook A\tBooks\t300\n8\tBook B\tBooks\t300\n4\tCamera\tElectronics\t90000"
+        }
+      ],
+      "existing_problem": true,
+      "original_description_md5": "08cc6e11395a1b902524310921182d56",
+      "original_check_sql": "",
+      "check_sql": ""
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-13-multiple-sort-keys-1",
+      "test_id": "pt-dbms-sql-13-multiple-sort-keys",
+      "question_text": "In `ORDER BY category, price`, what role does `price` play?",
+      "options": [
+        "It is the primary and only sort key",
+        "It sorts the whole table regardless of category",
+        "It only breaks ties among rows that already share the same category",
+        "It is ignored because only one ORDER BY key is allowed"
+      ],
+      "correct_index": 2,
+      "explanation": "Secondary sort keys only apply within groups of equal values from the preceding key(s).",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-13-multiple-sort-keys-2",
+      "test_id": "pt-dbms-sql-13-multiple-sort-keys",
+      "question_text": "Will `ORDER BY category, price` and `ORDER BY price, category` generally produce the same row order?",
+      "options": [
+        "Yes, ORDER BY is commutative regardless of column order",
+        "No, because sort keys are applied in priority order left to right, so swapping them changes the result",
+        "Yes, but only if both columns are numeric",
+        "No, because SQL only allows one column in ORDER BY"
+      ],
+      "correct_index": 1,
+      "explanation": "The leftmost column is the dominant sort key; swapping column order changes which one takes priority and produces a different overall order.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-13-multiple-sort-keys-3",
+      "test_id": "pt-dbms-sql-13-multiple-sort-keys",
+      "question_text": "Can different columns in a multi-key ORDER BY use different sort directions?",
+      "options": [
+        "No, all columns must use the same direction",
+        "Yes, e.g. ORDER BY category ASC, rating DESC is valid",
+        "Only the first column can specify a direction",
+        "Only if using a stored procedure"
+      ],
+      "correct_index": 1,
+      "explanation": "Each column in ORDER BY can independently specify ASC or DESC.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-13-multiple-sort-keys-4",
+      "test_id": "pt-dbms-sql-13-multiple-sort-keys",
+      "question_text": "Given rows with categories 'Electronics' and 'Home', and prices within each, what does `ORDER BY category, price DESC` do?",
+      "options": [
+        "Sorts all rows by price descending, ignoring category",
+        "Groups rows alphabetically by category, then sorts each group's prices from highest to lowest",
+        "Sorts categories in reverse alphabetical order",
+        "Produces a syntax error because DESC must apply to all columns"
+      ],
+      "correct_index": 1,
+      "explanation": "DESC applies only to the column it follows (price); category still sorts ascending (the default) as the primary key.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-13-multiple-sort-keys-5",
+      "test_id": "pt-dbms-sql-13-multiple-sort-keys",
+      "question_text": "If two products have the exact same category AND the exact same price, what determines their relative order under `ORDER BY category, price`?",
+      "options": [
+        "They are guaranteed to appear in name-alphabetical order",
+        "Their order is unspecified unless an additional tiebreaker column is added",
+        "They are guaranteed to appear in insertion order",
+        "SQL raises an error for exact ties"
+      ],
+      "correct_index": 1,
+      "explanation": "With no further tiebreaker column, rows tied on all specified sort keys have no guaranteed relative order.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-13-multiple-sort-keys-6",
+      "test_id": "pt-dbms-sql-13-multiple-sort-keys",
+      "question_text": "How many columns can appear in an ORDER BY clause?",
+      "options": [
+        "Exactly one",
+        "At most two",
+        "Any number, separated by commas",
+        "Only as many as appear in the WHERE clause"
+      ],
+      "correct_index": 2,
+      "explanation": "ORDER BY supports an arbitrary comma-separated list of sort expressions.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-13-multiple-sort-keys-7",
+      "test_id": "pt-dbms-sql-13-multiple-sort-keys",
+      "question_text": "You want the highest-rated product overall to appear first, and among equally-rated products, the cheapest first. Which ORDER BY achieves this?",
+      "options": [
+        "ORDER BY price ASC, rating DESC",
+        "ORDER BY rating DESC, price ASC",
+        "ORDER BY rating, price",
+        "ORDER BY price, rating DESC"
+      ],
+      "correct_index": 1,
+      "explanation": "Rating must be the primary (dominant) key in descending order, with price as the ascending tiebreaker.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-13-multiple-sort-keys-8",
+      "test_id": "pt-dbms-sql-13-multiple-sort-keys",
+      "question_text": "A report needs rows grouped by category (alphabetical), and within each category by rating (best first), and within equal ratings by name (alphabetical). Which clause is correct?",
+      "options": [
+        "ORDER BY category, rating DESC, name",
+        "ORDER BY name, rating DESC, category",
+        "ORDER BY category DESC, rating, name",
+        "ORDER BY rating DESC, category, name"
+      ],
+      "correct_index": 0,
+      "explanation": "The sort keys must be listed in priority order matching the requirement: category first, then rating descending, then name as final tiebreaker.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "coordinator",
+    "independent_review": "passed",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Independent manual review passed; native MySQL fixture evidence recorded separately; provider/browser/Supabase release gates remain separate.",
+    "existing_question_corrections": [
+      "tq-dbms-sql-13-multiple-sort-keys-1",
+      "tq-dbms-sql-13-multiple-sort-keys-2",
+      "tq-dbms-sql-13-multiple-sort-keys-3",
+      "tq-dbms-sql-13-multiple-sort-keys-4",
+      "tq-dbms-sql-13-multiple-sort-keys-5",
+      "tq-dbms-sql-13-multiple-sort-keys-6",
+      "tq-dbms-sql-13-multiple-sort-keys-7",
+      "tq-dbms-sql-13-multiple-sort-keys-8"
+    ],
+    "canonical_answer_indices_preserved": true,
+    "editorial_record": "Original snapshots retained. Questions rewritten for precise dialect and topic coverage while preserving identities and canonical answer positions; technical and independent review pending.",
+    "independent_reviewer": "Codex reviewer, current 2026-10-30 session",
+    "independent_review_scope": "Read full notes, all 640 MCQ stems/options/canonical answers/explanations, 64 exercise contracts/solutions/fixtures, and all 32 diagrams. Verified retained identities/answers through source-continuity tests; SQL execution evidence is recorded separately. No external originality, provider, live application or Supabase authorization clearance.",
+    "independent_review_record": "reports/independent-review-2026-10-30.json",
+    "content_sha256": "25805f069248ef88f5d0f830f834a0857e49cbeff35728c4405873bdd798b675"
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-13-multiple-sort-keys",
+    "original_note_sha256": "b195d64b1f0cbf4be8338679e2e812babb4346b0e2621018b4507988eea9fe4e",
+    "status": "drafted; not yet included in prepared paired migrations"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "A higher-priority rating outweighs a lower cost",
+      "description": "Cost and identity are consulted only after earlier priority ties.",
+      "columns": [
+        "Request id",
+        "Rating",
+        "Cost",
+        "Position"
+      ],
+      "rows": [
+        [
+          "1",
+          "5",
+          "20",
+          "1; identity breaks complete tie"
+        ],
+        [
+          "2",
+          "5",
+          "20",
+          "2; same rating and cost"
+        ],
+        [
+          "8",
+          "5",
+          "30",
+          "3; higher cost at same rating"
+        ],
+        [
+          "4",
+          "4",
+          "1",
+          "4; lower rating despite cheapest cost"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "drafted — verification pending",
+    "server_rendering": "pending",
+    "browser_rendering": "unverified",
+    "independent_review": "pending"
+  },
+  "authoring_status": "drafted — verification pending",
+  "sql_verification": {
+    "scope": "not executed; exact MySQL/provider verification pending",
+    "all_passed": false,
+    "cases": []
+  }
+}

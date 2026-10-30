@@ -1,0 +1,567 @@
+{
+  "slug": "join-cardinality",
+  "source_ref": "chapter-16-joins/join-cardinality",
+  "title": "Join Cardinality",
+  "description": "Predict join row counts, diagnose detail fanout, and preserve student-level totals with keys, outer joins, and preaggregation.",
+  "dialect": "MySQL 8.4; engine-specific behavior labeled",
+  "references": [
+    {
+      "title": "MySQL JOIN clause",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/join.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-16-join-cardinality",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-16-join-cardinality-1",
+          "test_id": "pt-dbms-sql-16-join-cardinality",
+          "question_text": "What does join cardinality describe?",
+          "options": [
+            "The order columns appear in the result",
+            "The numerical relationship (one-to-one, one-to-many, many-to-many) between two joined tables",
+            "The number of columns in a table",
+            "Whether a join uses INNER or OUTER"
+          ],
+          "correct_index": 1,
+          "explanation": "Cardinality describes the matching relationship's shape between two tables.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-16-join-cardinality-2",
+          "test_id": "pt-dbms-sql-16-join-cardinality",
+          "question_text": "In a one-to-many join between departments and employees, how many result rows does one department with 5 employees produce?",
+          "options": [
+            "1 row",
+            "5 rows — the department row is repeated once per matching employee",
+            "0 rows",
+            "This cannot be determined"
+          ],
+          "correct_index": 1,
+          "explanation": "One-to-many joins duplicate the 'one' side's row for every match on the 'many' side.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-16-join-cardinality-3",
+          "test_id": "pt-dbms-sql-16-join-cardinality",
+          "question_text": "Why does summing a department's budget after joining to employees produce a wrong total?",
+          "options": [
+            "SUM() cannot be used after a join",
+            "The department's budget value is duplicated once per employee row, so SUM() would add it multiple times instead of once",
+            "Budget is always NULL after a join",
+            "This actually produces the correct total"
+          ],
+          "correct_index": 1,
+          "explanation": "This is the classic 'fan-out' aggregate bug caused by not accounting for one-to-many row multiplication.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-16-join-cardinality-4",
+          "test_id": "pt-dbms-sql-16-join-cardinality",
+          "question_text": "How is a many-to-many relationship typically implemented in a relational schema?",
+          "options": [
+            "Via a single direct join with no intermediate table",
+            "Via an intermediate junction/bridge table, itself involved in two one-to-many relationships",
+            "Many-to-many relationships cannot be represented relationally",
+            "By duplicating both tables"
+          ],
+          "correct_index": 1,
+          "explanation": "A junction table (like enrollments between students and courses) is the standard relational solution for many-to-many.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-16-join-cardinality-5",
+          "test_id": "pt-dbms-sql-16-join-cardinality",
+          "question_text": "What schema-level mechanism helps enforce an intended one-to-one relationship?",
+          "options": [
+            "A CHECK constraint on unrelated columns",
+            "A UNIQUE constraint on the foreign key column, preventing more than one match per row",
+            "Using CROSS JOIN in every query",
+            "There is no way to enforce this"
+          ],
+          "correct_index": 1,
+          "explanation": "A UNIQUE constraint on the referencing column guarantees at most one match, enforcing true one-to-one cardinality.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-16-join-cardinality-6",
+          "test_id": "pt-dbms-sql-16-join-cardinality",
+          "question_text": "Why is knowing the expected cardinality useful BEFORE running a join?",
+          "options": [
+            "It has no practical use",
+            "It lets you predict roughly how many rows the join should produce, serving as a sanity check against surprising results",
+            "It determines which JOIN keyword to use exclusively",
+            "Cardinality only matters after the query has already run"
+          ],
+          "correct_index": 1,
+          "explanation": "Predicting expected row counts is a valuable sanity check for catching join bugs early.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-16-join-cardinality-7",
+          "test_id": "pt-dbms-sql-16-join-cardinality",
+          "question_text": "In a one-to-one relationship, how many rows in B can a single row in A match at most?",
+          "options": [
+            "Unlimited",
+            "At most one",
+            "Exactly zero",
+            "Exactly two"
+          ],
+          "correct_index": 1,
+          "explanation": "One-to-one means each side matches at most a single row on the other side.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-16-join-cardinality-8",
+          "test_id": "pt-dbms-sql-16-join-cardinality",
+          "question_text": "Is the students-courses relationship (via an enrollments table) best described as one-to-many or many-to-many?",
+          "options": [
+            "One-to-many",
+            "Many-to-many — a student can take many courses, and a course can have many students",
+            "One-to-one",
+            "None of these apply"
+          ],
+          "correct_index": 1,
+          "explanation": "Both directions of the relationship allow multiple matches, making this a classic many-to-many case.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "cx-join-cardinality-fundamentals-9",
+          "test_id": "pt-dbms-sql-16-join-cardinality",
+          "question_text": "A key occurs twice on the left and three times on the right of an equality inner join. How many rows does that key contribute?",
+          "options": [
+            "6",
+            "5",
+            "3",
+            "1"
+          ],
+          "correct_index": 0,
+          "explanation": "Every left occurrence matches every right occurrence: 2 times 3.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "cx-join-cardinality-fundamentals-10",
+          "test_id": "pt-dbms-sql-16-join-cardinality",
+          "question_text": "A left row has no matching right row. How many rows does it contribute to a LEFT JOIN?",
+          "options": [
+            "0",
+            "1",
+            "2",
+            "The number of right input rows"
+          ],
+          "correct_index": 1,
+          "explanation": "The left join preserves it using one null extended row.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "cx-join-cardinality-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "cx-join-cardinality-application-1",
+          "test_id": "cx-join-cardinality-application",
+          "question_text": "Which expression counts matched enrollment identities after a LEFT JOIN?",
+          "options": [
+            "COUNT(*) in every case",
+            "COUNT(e.id) for nonnull enrollment IDs",
+            "SUM(DISTINCT e.student_id)",
+            "COUNT(s.id) in every case"
+          ],
+          "correct_index": 1,
+          "explanation": "The nonnull child identity excludes the unmatched placeholder.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "cx-join-cardinality-application-2",
+          "test_id": "cx-join-cardinality-application",
+          "question_text": "One student has two enrollments and three payments. Joining both detail tables through that student produces how many combinations?",
+          "options": [
+            "2",
+            "3",
+            "6",
+            "5"
+          ],
+          "correct_index": 2,
+          "explanation": "Independent child matches multiply.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "cx-join-cardinality-application-3",
+          "test_id": "cx-join-cardinality-application",
+          "question_text": "Why is SUM(DISTINCT payment_amount) unsafe as a general fanout repair?",
+          "options": [
+            "SUM never accepts DISTINCT",
+            "It doubles every amount",
+            "It creates missing foreign keys",
+            "Different payments can have equal amounts"
+          ],
+          "correct_index": 3,
+          "explanation": "Removing duplicate amounts can discard legitimate payments.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "cx-join-cardinality-application-4",
+          "test_id": "cx-join-cardinality-application",
+          "question_text": "What does a unique right join key guarantee for each left row under ordinary equality?",
+          "options": [
+            "At most one right match",
+            "Exactly one right match regardless of nulls",
+            "At least two right matches",
+            "No unmatched left rows"
+          ],
+          "correct_index": 0,
+          "explanation": "Uniqueness limits multiplicity but does not guarantee existence.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "cx-join-cardinality-application-5",
+          "test_id": "cx-join-cardinality-application",
+          "question_text": "What happens when ordinary equality compares two NULL join keys?",
+          "options": [
+            "It matches them as equal identifiers",
+            "It does not evaluate true",
+            "It always raises an error",
+            "It creates a Cartesian product"
+          ],
+          "correct_index": 1,
+          "explanation": "Unknown comparisons do not qualify as ON matches.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "cx-join-cardinality-application-6",
+          "test_id": "cx-join-cardinality-application",
+          "question_text": "Which operation best asks whether a student has any qualifying enrollment?",
+          "options": [
+            "CROSS JOIN",
+            "SUM(DISTINCT amount)",
+            "EXISTS",
+            "An unrestricted detail join"
+          ],
+          "correct_index": 2,
+          "explanation": "EXISTS checks membership without multiplying outer rows.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "cx-join-cardinality-application-7",
+          "test_id": "cx-join-cardinality-application",
+          "question_text": "How should two independent child measures usually be combined at student grain?",
+          "options": [
+            "Join details and remove equal amounts",
+            "Drop every repeated student",
+            "Count all joined rows as students",
+            "Aggregate each child by student before joining"
+          ],
+          "correct_index": 3,
+          "explanation": "Separate summaries prevent cross multiplication.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "cx-join-cardinality-application-8",
+          "test_id": "cx-join-cardinality-application",
+          "question_text": "Why can a right-side WHERE filter remove unmatched LEFT JOIN rows?",
+          "options": [
+            "The null placeholder fails the filter",
+            "WHERE automatically converts all columns to zero",
+            "LEFT JOIN forbids WHERE",
+            "The parent key becomes nonunique"
+          ],
+          "correct_index": 0,
+          "explanation": "A comparison with null is unknown and is filtered out.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "cx-join-cardinality-application-9",
+          "test_id": "cx-join-cardinality-application",
+          "question_text": "Does adding an index change the logically correct number of matching rows?",
+          "options": [
+            "Yes, it removes duplicates",
+            "No",
+            "Yes, it adds placeholder rows",
+            "Only for primary keys with existing duplicates"
+          ],
+          "correct_index": 1,
+          "explanation": "Access paths affect execution rather than relational results.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "cx-join-cardinality-application-10",
+          "test_id": "cx-join-cardinality-application",
+          "question_text": "A report should include every student once with zero for no enrollments. Which design fits?",
+          "options": [
+            "INNER JOIN then COUNT(*)",
+            "CROSS JOIN then DISTINCT amount",
+            "LEFT JOIN then group by student and count nonnull child IDs",
+            "Filter child IDs with WHERE e.id IS NOT NULL"
+          ],
+          "correct_index": 2,
+          "explanation": "Outer preservation plus the correct aggregate includes zero counts.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-16-join-cardinality-1",
+      "test_id": "pt-dbms-sql-16-join-cardinality",
+      "question_text": "What does join cardinality describe?",
+      "options": [
+        "The order columns appear in the result",
+        "The numerical relationship (one-to-one, one-to-many, many-to-many) between two joined tables",
+        "The number of columns in a table",
+        "Whether a join uses INNER or OUTER"
+      ],
+      "correct_index": 1,
+      "explanation": "Cardinality describes the matching relationship's shape between two tables.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-16-join-cardinality-2",
+      "test_id": "pt-dbms-sql-16-join-cardinality",
+      "question_text": "In a one-to-many join between departments and employees, how many result rows does one department with 5 employees produce?",
+      "options": [
+        "1 row",
+        "5 rows — the department row is repeated once per matching employee",
+        "0 rows",
+        "This cannot be determined"
+      ],
+      "correct_index": 1,
+      "explanation": "One-to-many joins duplicate the 'one' side's row for every match on the 'many' side.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-16-join-cardinality-3",
+      "test_id": "pt-dbms-sql-16-join-cardinality",
+      "question_text": "Why does summing a department's budget after joining to employees produce a wrong total?",
+      "options": [
+        "SUM() cannot be used after a join",
+        "The department's budget value is duplicated once per employee row, so SUM() would add it multiple times instead of once",
+        "Budget is always NULL after a join",
+        "This actually produces the correct total"
+      ],
+      "correct_index": 1,
+      "explanation": "This is the classic 'fan-out' aggregate bug caused by not accounting for one-to-many row multiplication.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-16-join-cardinality-4",
+      "test_id": "pt-dbms-sql-16-join-cardinality",
+      "question_text": "How is a many-to-many relationship typically implemented in a relational schema?",
+      "options": [
+        "Via a single direct join with no intermediate table",
+        "Via an intermediate junction/bridge table, itself involved in two one-to-many relationships",
+        "Many-to-many relationships cannot be represented relationally",
+        "By duplicating both tables"
+      ],
+      "correct_index": 1,
+      "explanation": "A junction table (like enrollments between students and courses) is the standard relational solution for many-to-many.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-16-join-cardinality-5",
+      "test_id": "pt-dbms-sql-16-join-cardinality",
+      "question_text": "What schema-level mechanism helps enforce an intended one-to-one relationship?",
+      "options": [
+        "A CHECK constraint on unrelated columns",
+        "A UNIQUE constraint on the foreign key column, preventing more than one match per row",
+        "Using CROSS JOIN in every query",
+        "There is no way to enforce this"
+      ],
+      "correct_index": 1,
+      "explanation": "A UNIQUE constraint on the referencing column guarantees at most one match, enforcing true one-to-one cardinality.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-16-join-cardinality-6",
+      "test_id": "pt-dbms-sql-16-join-cardinality",
+      "question_text": "Why is knowing the expected cardinality useful BEFORE running a join?",
+      "options": [
+        "It has no practical use",
+        "It lets you predict roughly how many rows the join should produce, serving as a sanity check against surprising results",
+        "It determines which JOIN keyword to use exclusively",
+        "Cardinality only matters after the query has already run"
+      ],
+      "correct_index": 1,
+      "explanation": "Predicting expected row counts is a valuable sanity check for catching join bugs early.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-16-join-cardinality-7",
+      "test_id": "pt-dbms-sql-16-join-cardinality",
+      "question_text": "In a one-to-one relationship, how many rows in B can a single row in A match at most?",
+      "options": [
+        "Unlimited",
+        "At most one",
+        "Exactly zero",
+        "Exactly two"
+      ],
+      "correct_index": 1,
+      "explanation": "One-to-one means each side matches at most a single row on the other side.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-16-join-cardinality-8",
+      "test_id": "pt-dbms-sql-16-join-cardinality",
+      "question_text": "Is the students-courses relationship (via an enrollments table) best described as one-to-many or many-to-many?",
+      "options": [
+        "One-to-many",
+        "Many-to-many — a student can take many courses, and a course can have many students",
+        "One-to-one",
+        "None of these apply"
+      ],
+      "correct_index": 1,
+      "explanation": "Both directions of the relationship allow multiple matches, making this a classic many-to-many case.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cx-student-enrollment-counts",
+      "slug": "student-enrollment-counts",
+      "title": "Count enrollments for every student",
+      "difficulty": "Easy",
+      "task": "Return id and enrollment_count for every student, ordered by id.",
+      "schema_sql": "CREATE TABLE students(id INT PRIMARY KEY); CREATE TABLE enrollments(id INT PRIMARY KEY,student_id INT);",
+      "seed_sql": "INSERT INTO students VALUES(1),(2); INSERT INTO enrollments VALUES(10,1),(11,1);",
+      "solution_sql": "SELECT s.id,COUNT(e.id) AS enrollment_count FROM students s LEFT JOIN enrollments e ON e.student_id=s.id GROUP BY s.id ORDER BY s.id;",
+      "expected": "id\tenrollment_count\n1\t2\n2\t0",
+      "ordering": "Ascending student id.",
+      "edge_cases": [
+        "Unmatched students.",
+        "Several enrollments for one student.",
+        "Empty child input."
+      ],
+      "hints": [
+        "Identify whether the result grain is a student or an enrollment."
+      ],
+      "explanation": "Preserve student identity and handle child multiplicity explicitly.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO students VALUES(3),(4);",
+          "expected": "id\tenrollment_count\n3\t0\n4\t0"
+        }
+      ]
+    },
+    {
+      "id": "cx-students-with-many-enrollments",
+      "slug": "students-with-many-enrollments",
+      "title": "Find students with multiple enrollments",
+      "difficulty": "Medium",
+      "task": "Return id once for each student with at least two enrollments, ordered by id.",
+      "schema_sql": "CREATE TABLE students(id INT PRIMARY KEY); CREATE TABLE enrollments(id INT PRIMARY KEY,student_id INT);",
+      "seed_sql": "INSERT INTO students VALUES(1),(2); INSERT INTO enrollments VALUES(10,1),(11,1),(12,2);",
+      "solution_sql": "SELECT s.id FROM students s JOIN enrollments e ON e.student_id=s.id GROUP BY s.id HAVING COUNT(e.id)>=2 ORDER BY s.id;",
+      "expected": "id\n1",
+      "ordering": "Ascending student id.",
+      "edge_cases": [
+        "Unmatched students.",
+        "Several enrollments for one student.",
+        "Empty child input."
+      ],
+      "hints": [
+        "Identify whether the result grain is a student or an enrollment."
+      ],
+      "explanation": "Preserve student identity and handle child multiplicity explicitly.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO students VALUES(7),(8); INSERT INTO enrollments VALUES(20,8),(21,8),(22,8);",
+          "expected": "id\n8"
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "review": {
+    "reviewer": "/root/finish_f",
+    "independent_review": "passed",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Independent manual content review passed within independent_review_scope; engine/browser/release gates separate.",
+    "editorial_record": "Original scenario-led prose and assessments. External originality and AdSense review unperformed.",
+    "canonical_answer_indices_preserved": true,
+    "independent_reviewer": "/root/review_f_and_foundations",
+    "independent_review_scope": "Full notes,20MCQs with every option,canonical answer position and explanation,original diagrams,and all exercise contracts/fixtures or solved conceptual labs. Original identities/indices checked against public seed cache where applicable. Reported substantive findings corrected by coordinator and filtered recheck accepted;identified learner-facing spacing polished. Manual technical/editorial reasoning only;engine,provider,browser,external originality and AdSense evidence separate."
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-16-join-cardinality",
+    "original_note_sha256": "13ac72967041bdaa50371f9a55a3195a8aeca388ac431bf75057276c7725a57b",
+    "status": "drafted; not included in prepared paired migrations"
+  },
+  "notes": "## Count matches before counting rows\n\nJoin cardinality is the number of rows produced by a join. It depends on the matching rows on both sides, the join predicate, and the join type. It is not determined by how many columns appear in SELECT. A campus report might begin with one row per student but finish with several rows per student because each enrollment matches separately. State the intended result grain before writing the query: one row per student, enrollment, course, or department.\n\nRelationship cardinality describes permitted associations in the data model. Result cardinality describes the rows a particular query actually produces. A one to many relationship permits several enrollments for one student, but a filter might select none. Conversely, a missing join condition can create many matches even when the intended relationship is one to one. Distinguishing these ideas makes row count surprises explainable rather than mysterious.\n\n## A small reproducible campus fixture\n\nUse students with identifiers 1, 2, and 3, named Asha, Bao, and Chen. Enrollments contain two records for student 1 and one record for student 2. Student 3 has no enrollment. The enrollment identifier is unique, while student_id repeats because it represents a foreign key relationship rather than enrollment identity.\n\n```sql\nCREATE TABLE students (id INT PRIMARY KEY, name VARCHAR(30));\nCREATE TABLE enrollments (id INT PRIMARY KEY, student_id INT, course VARCHAR(30));\nINSERT INTO students VALUES (1,'Asha'),(2,'Bao'),(3,'Chen');\nINSERT INTO enrollments VALUES (10,1,'SQL'),(11,1,'DBMS'),(12,2,'SQL');\nSELECT s.id, e.id AS enrollment_id\nFROM students s JOIN enrollments e ON e.student_id=s.id\nORDER BY s.id,e.id;\n```\n\nThe result is the pairs (1, 10), (1, 11), and (2, 12). Three input students and three input enrollments happen to produce three output rows, but the equality of these counts is accidental. Asha contributes two rows, Bao contributes one, and Chen contributes zero. Replacing enrollment identifiers with course names changes displayed values without changing the underlying number of matches.\n\n## Derive the count by key\n\nFor an equality inner join, group each input by the join key. If a particular nonnull key appears L times on the left and R times on the right, that key contributes L multiplied by R rows. Add those contributions across matching keys. A left key appearing twice and a right key appearing three times contributes six rows, even if every projected value looks identical.\n\nThis multiplication explains why joining two detail tables through a shared parent is dangerous for totals. Suppose one student has two enrollments and three payments. Joining all three tables yields six detail combinations for that student. Summing payment amounts in this joined result counts each payment twice; counting enrollments counts each enrollment three times. Both joins can use correct foreign keys while the final aggregation still answers the wrong question.\n\nPreaggregate each detail table to the required parent grain before combining independent measures. Alternatively, calculate the measures in separate correlated aggregates. COUNT(DISTINCT enrollment_id) can repair a specific count when identifiers represent the intended entity, but SUM(DISTINCT amount) is generally wrong because different payments may legitimately have the same amount. Correct identity and equal numeric values are different concepts.\n\n## Outer joins preserve unmatched rows\n\nA left join contributes one null extended row for a left row with no matches. When a left row has matches, it contributes the actual number of matches without an additional placeholder. Thus our fixture produces four rows under LEFT JOIN: Asha twice, Bao once, and Chen once with a null enrollment identifier. A left join does not promise one output row per left input row.\n\n```sql\nSELECT s.id, COUNT(e.id) AS enrollment_count\nFROM students s LEFT JOIN enrollments e ON e.student_id=s.id\nGROUP BY s.id ORDER BY s.id;\n```\n\nThis returns counts 2, 1, and 0. COUNT(*) would report 1 for Chen because the placeholder row exists. COUNT(e.id) ignores the null placeholder and counts real enrollment identities. Using a nullable detail attribute as the counted expression could undercount real records, so choose a guaranteed nonnull identifier when counting matched entities.\n\nPredicate placement can change the preservation rule. A condition on the right table inside ON limits which matches qualify while retaining unmatched students. Putting the same condition in WHERE usually removes rows where the right side is null because the comparison evaluates to unknown. Describe whether the report means all students with a qualifying count, or only students who have a qualifying enrollment, before moving predicates.\n\n## Keys and nulls constrain the possibilities\n\nA unique right join key establishes at most one matching right row per left row for ordinary equality. An inner join can still discard unmatched left rows. A foreign key with valid nonnull values can establish that matching parents exist, but nullable foreign keys and additional predicates affect that conclusion. Constraints describe guarantees; current sample data only describes one observed instance.\n\nOrdinary equality does not match a null key to another null key. Two unknown student identifiers do not identify the same student. MySQL's null safe equality operator can match nulls, which changes the multiplication rule by allowing the null groups to contribute rows. Use it only when that behavior matches the business meaning, and explain the dialect dependency when teaching or reviewing the query.\n\nDuplicate rows remain in SQL query results unless an operation explicitly removes them. DISTINCT operates after the join and projection. It can conceal multiplied rows when the selected columns omit identifying details, but it does not prove that the join was correct. Before adding DISTINCT, inspect the match keys and decide whether you wanted an existence test, an aggregation, or every relationship occurrence.\n\n## Worked exercise: students with SQL enrollment\n\nThe requirement is to return each student identifier once if that student has at least one SQL enrollment. A plain join produces repeated identifiers when the same student has multiple qualifying enrollment records. EXISTS expresses the required membership without transferring detail multiplicity into the result. With the fixture, the expected identifiers are 1 and 2 in ascending order.\n\n```sql\nSELECT s.id FROM students s\nWHERE EXISTS (SELECT 1 FROM enrollments e\n              WHERE e.student_id=s.id AND e.course='SQL')\nORDER BY s.id;\n```\n\nIf another SQL enrollment for student 1 is inserted, the answer still contains student 1 once. That is a useful adversarial test because it distinguishes existence from a join that accidentally passes the original fixture. An empty enrollment table should return no students here, while the earlier left join count report should still return every student with zero.\n\n## Worked exercise: repair a multiplied revenue report\n\nImagine enrollments and payments are joined directly, and a student with two enrollments has payments of 40 and 40. The joined sum becomes 160 instead of 80. SUM(DISTINCT amount) returns 40 and is also incorrect. The repair is to aggregate payments by student_id first, yielding one amount of 80, and only then join that summary to another summary with one row per student.\n\nCheck the grain at every intermediate step. Run a diagnostic grouping by student identifier and counting joined rows, then compare that count with independently counted enrollments and payments. A product of those counts is evidence of detail multiplication. Missing predicates, incomplete composite keys, and inequality joins can produce additional fanout, so inspect the whole predicate rather than assuming the foreign key name proves correctness.\n\nFor a composite relationship, include every component in the match. Joining course registrations only on course_id when term_id is also part of identity connects registrations across terms. A fixture containing the same course in two terms exposes this defect immediately. Adding the missing term predicate repairs the relationship rather than hiding its consequences.\n\n## Review and related study\n\nUse EXPLAIN to compare estimated row counts with the logical grain, and use actual result counts on safe fixtures to establish correctness. Estimates guide performance decisions but cannot certify business totals. Indexes can make matching faster without changing the correct cardinality. Keep test cases for unmatched parents, duplicate child values, empty inputs, null join keys, and multiple children in each independent detail table.\n\nContinue with [Multiple Row Subquery](/learning/dbms-sql-tutorial/multiple-row-subquery) for membership predicates, [Subquery in SELECT](/learning/dbms-sql-tutorial/subquery-in-select) for per-row summaries, and [Selectivity](/learning/dbms-sql-tutorial/selectivity) for the separate problem of estimating filtered row counts. The practical habit is to name the output entity first, derive its allowed multiplicity second, and choose the SQL operation that preserves that meaning.\n",
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Matching rows contribute different output counts",
+      "description": "Each left student contributes its right matches, or one placeholder only in a left join when unmatched.",
+      "columns": [
+        "Student",
+        "Enrollment matches",
+        "Inner rows",
+        "Left rows"
+      ],
+      "rows": [
+        [
+          "Asha",
+          "2",
+          "2",
+          "2"
+        ],
+        [
+          "Bao",
+          "1",
+          "1",
+          "1"
+        ],
+        [
+          "Chen",
+          "0",
+          "0",
+          "1"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "technical_review": "Independent manual diagram/content consistency review passed;actual static/browser rendering tracked separately.",
+    "server_rendering": "pending",
+    "browser_rendering": "unverified",
+    "independent_review": "passed"
+  },
+  "sql_verification": {
+    "scope": "not executed; concurrency/recovery/provider verification separate",
+    "all_passed": false,
+    "cases": []
+  }
+}

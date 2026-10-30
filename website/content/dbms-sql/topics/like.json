@@ -1,0 +1,612 @@
+{
+  "source_ref": "chapter-12-select-and-filtering/like",
+  "slug": "like",
+  "title": "LIKE",
+  "description": "Match SQL text with LIKE, percent and underscore wildcards, explicit escaping, and bound patterns; understand collation and prefix-search limits.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Patterns describe a shape rather than one value\n\nLIKE tests text against a pattern containing ordinary characters and simple wildcards. A campus equipment catalogue might group products whose names begin with Pro. Equality with Pro would match only the complete value under the relevant comparison rules, while a prefix pattern can also match ProCamera and ProMicrophone. The correct operator follows the requested search shape.\n\nA pattern is not a regular expression. LIKE has its own small wildcard language, and a symbol meaningful in a regular expression can be ordinary text here. Keeping the languages distinct prevents a student from writing a dot-star expression and expecting it to behave like a SQL percent wildcard. Choose the simplest supported language that expresses the actual requirement.\n\n## Percent admits an empty sequence too\n\nThe percent wildcard matches a sequence of zero or more characters. A pattern beginning with Pro and ending with percent therefore matches Pro itself as well as longer values with that prefix. Do not assume that at least one extra character is required. Include the bare prefix in fixtures so that misunderstanding becomes visible rather than hidden by examples containing only longer names.\n\nPercent at the beginning changes the question to a suffix or substring search. A pattern with percent before book matches values ending in book. With percent on both sides, it can match book anywhere in the value. Those searches are useful but broader than a prefix search. A misplaced wildcard can return plausible catalogue rows while violating a precise naming rule.\n\n## Underscore consumes one character\n\nThe underscore wildcard matches exactly one character. A pattern consisting of one underscore followed by ovel matches a five-character value whose last four characters are ovel. It does not match ovel itself, because the first position still needs a character. It also does not match a longer prefix unless the rest of the pattern allows those additional positions.\n\nCombine underscore and percent deliberately. Pro followed by underscore requires at least one character after Pro and permits exactly one if nothing follows that underscore. Pro followed by underscore and percent requires at least one extra character but can admit more. These distinctions are easiest to understand by tracing each pattern token against the text rather than memorizing a few familiar examples.\n\n```sql\nSELECT equipment_id, name\nFROM equipment_names\nWHERE name LIKE 'Pro%'\nORDER BY equipment_id;\n```\n\n## The whole string must fit the pattern\n\nLIKE does not ordinarily mean find this fragment anywhere unless the pattern includes wildcards that allow the surrounding text. A pattern Camera contains no wildcard and must fit the complete value according to its comparison semantics. It does not automatically match NewCamera. To search for that fragment within a larger value, supply the intended surrounding percent wildcards.\n\nThis makes prefix, suffix and containment separate feature choices. A search box labeled starts with should not silently construct a containment pattern because that returns more results. A literal-name comparison may be better expressed with equality when no wildcard semantics are intended. State whether a caller is submitting raw search text or an actual pattern language.\n\n## Literal wildcard characters need escaping\n\nSometimes the text being sought contains a percent or underscore as data. A label beginning with 50% must distinguish a literal percent sign from a wildcard. MySQL supports an ESCAPE clause that names the escape character. Using an explicit exclamation mark makes the example easier to read without depending on layers of backslash interpretation in SQL string literals.\n\n```sql\nSELECT label_id, label\nFROM catalogue_labels\nWHERE label LIKE '50!%%' ESCAPE '!'\nORDER BY label_id;\n```\n\nIn this pattern, the first percent is escaped and therefore literal; the final percent remains a wildcard. The escape character itself also needs the appropriate treatment when searched literally. A user-input helper should handle the escape character as well as percent and underscore according to a documented algorithm. Otherwise an input containing the chosen escape marker can change the intended pattern.\n\n## Parameter binding does not escape the pattern language\n\nBinding a search value prevents it from becoming SQL structure through unsafe string concatenation. It does not make percent and underscore literal inside a LIKE pattern. If the UI promises a literal prefix search, escape pattern metacharacters in the user's text before adding the deliberate trailing wildcard, then bind the resulting pattern through the supported client API.\n\nIf the UI intentionally supports wildcard patterns, validate length and communicate the feature clearly. The caller's ability to supply a wildcard is a product decision rather than a side effect of forgetting to escape input. Keep access enforcement at the trusted data boundary regardless of the search form. A broader pattern must not expose rows the caller lacks permission to read.\n\n## Text comparison rules still apply\n\nLIKE case behaviour depends on the applicable character types and [collation](/learning/dbms-sql-tutorial/data-types) rather than a universal case-insensitive promise. A pattern Pro can distinguish pro under one declared comparison contract and match it under another. The literal-percent exercise uses an explicit ASCII binary collation for its limited synthetic labels. The retained catalogue exercise preserves its original schema and avoids case-ambiguous fixture values.\n\nCharacter encoding and collation also affect more than case. An underscore represents a character rather than a blanket promise about one raw byte of a multibyte encoding. Trailing spaces can behave differently from assumptions drawn from ordinary equality. Test the actual text contract, especially when importing labels from several systems or offering searches across languages with different comparison needs.\n\n## Missing text is not an empty string\n\nA [NULL](/learning/dbms-sql-tutorial/null-values) value compared through LIKE yields an unknown result and does not survive an ordinary positive WHERE condition. An empty string is known text containing zero characters. A pattern consisting only of percent can match that empty string because the wildcard permits an empty sequence. It still does not turn a NULL source value into an accepted empty value.\n\nNOT LIKE also leaves an unknown result unknown. If a report should include both known nonmatching names and missing names, add the missing-name condition explicitly. A catalogue cleanup report may need that broad population, while a product search normally should not. The same operator supports different useful features when their missing-value policies are stated clearly.\n\n## Search shape influences access strategies\n\nA fixed left prefix can sometimes support an index range strategy on an appropriate index. A leading wildcard generally prevents that straightforward prefix-range lookup, although other access paths can still be considered. Do not promise that every prefix search uses an index or that every containment search must use one specific physical plan. Types, collation, selectivity and available indexes matter.\n\nMeasure representative queries when search cost becomes important. A short substring on a large catalogue can match many rows and require substantial scanning or filtering. Bound result retrieval according to the feature's contract, and retain deterministic ordering for the displayed page. LIMIT controls output size; it does not prove that the database examined only that many candidate rows.\n\n## Keep normalization visible to callers\n\nTrimming leading spaces or converting names to lowercase can change what a prefix search means. If a stored label begins with a space, an exact prefix query should not quietly treat that space as absent unless normalization is part of the search contract. Apply a consistent rule to indexed search values and displayed explanations. Otherwise users can see a returned label that appears not to satisfy the prefix they entered.\n\n## Do not silently promote LIKE into validation\n\nA simple pattern can identify a prefix or approximate naming shape, but it may not fully validate a structured identifier. Requiring exactly three uppercase letters and four digits is more naturally expressed through an appropriate regular expression and trusted validation rules. Conversely, a prefix catalogue filter does not need a complex regular expression merely because the engine offers one.\n\nThe first exercise preserves the existing product-prefix task and includes the bare prefix and a prefix appearing later in the string. Its original text comparison settings remain intact. The second searches for a literal percent sign before an arbitrary suffix. Together they expose wildcard placement, empty-sequence behaviour and escaping mistakes. Explain the pattern as a sequence of literal and wildcard tokens, then test its result against both obvious matches and near misses.\n",
+  "references": [
+    {
+      "title": "MySQL 8.4 LIKE and ESCAPE",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/string-comparison-functions.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-12-like",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-12-like-1",
+          "test_id": "pt-dbms-sql-12-like",
+          "question_text": "What does % match in LIKE?",
+          "options": [
+            "Exactly one character",
+            "Zero or more characters",
+            "Only a literal percent sign",
+            "Exactly two letters"
+          ],
+          "correct_index": 1,
+          "explanation": "The empty suffix is permitted.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-12-like-2",
+          "test_id": "pt-dbms-sql-12-like",
+          "question_text": "What does _ match in LIKE?",
+          "options": [
+            "Any sequence of characters",
+            "Exactly one character",
+            "Zero characters only",
+            "Only a literal underscore"
+          ],
+          "correct_index": 1,
+          "explanation": "It consumes one character position.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-12-like-3",
+          "test_id": "pt-dbms-sql-12-like",
+          "question_text": "Which pattern expresses a Pro prefix?",
+          "options": [
+            "%Pro",
+            "Pro%",
+            "%Pro% only as an exact prefix",
+            "_Pro"
+          ],
+          "correct_index": 1,
+          "explanation": "The trailing percent allows the suffix.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-12-like-4",
+          "test_id": "pt-dbms-sql-12-like",
+          "question_text": "Why can a leading wildcard cost more than a fixed prefix search?",
+          "options": [
+            "It is invalid SQL",
+            "It generally prevents a straightforward left-prefix index range lookup",
+            "It deletes the index",
+            "It always returns every row"
+          ],
+          "correct_index": 1,
+          "explanation": "Actual plans still depend on the complete query and indexes.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-12-like-5",
+          "test_id": "pt-dbms-sql-12-like",
+          "question_text": "How can a pattern search for a literal percent?",
+          "options": [
+            "Assume two percent signs are literal",
+            "Escape it using the declared pattern escape convention",
+            "Use an unescaped percent",
+            "Remove the pattern entirely"
+          ],
+          "correct_index": 1,
+          "explanation": "An explicit ESCAPE clause makes the convention visible.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-12-like-6",
+          "test_id": "pt-dbms-sql-12-like",
+          "question_text": "What influences LIKE case sensitivity?",
+          "options": [
+            "LIKE is always case insensitive",
+            "The applicable text comparison and collation rules",
+            "LIKE is always case sensitive",
+            "Only the first wildcard"
+          ],
+          "correct_index": 1,
+          "explanation": "Declare and test the intended text semantics.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-12-like-7",
+          "test_id": "pt-dbms-sql-12-like",
+          "question_text": "What shape does _ovel describe?",
+          "options": [
+            "Any length ending in ovel",
+            "Exactly five characters with any first character then ovel",
+            "Only ovel",
+            "Any value containing ovel anywhere"
+          ],
+          "correct_index": 1,
+          "explanation": "No wildcard permits extra leading or trailing characters.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-12-like-8",
+          "test_id": "pt-dbms-sql-12-like",
+          "question_text": "Can a fixed-prefix pattern sometimes use an appropriate index efficiently?",
+          "options": [
+            "No, LIKE can never use indexes",
+            "Yes, but inspect the actual plan rather than guarantee it",
+            "Only if every value matches",
+            "Only if there is no collation"
+          ],
+          "correct_index": 1,
+          "explanation": "A prefix shape can support a range strategy.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-12-like-new-9",
+          "test_id": "pt-dbms-sql-12-like",
+          "question_text": "Does Pro% match the complete value Pro?",
+          "options": [
+            "Yes",
+            "No, one extra character is required",
+            "Only if Pro is NULL",
+            "Only with two percent signs"
+          ],
+          "correct_index": 0,
+          "explanation": "Percent accepts an empty sequence.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-12-like-new-10",
+          "test_id": "pt-dbms-sql-12-like",
+          "question_text": "What does Pro_ require when no other tokens follow?",
+          "options": [
+            "Any number after Pro including zero",
+            "Exactly one character after Pro",
+            "Any prefix before Pro",
+            "A literal underscore after Pro"
+          ],
+          "correct_index": 1,
+          "explanation": "The underscore consumes exactly one position.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-12-like-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-12-like-application-new-1",
+          "test_id": "pt-dbms-sql-12-like-application",
+          "question_text": "What does Pro_% require?",
+          "options": [
+            "Exactly zero after Pro",
+            "At least one character after Pro",
+            "Only Pro itself",
+            "Only a literal percent at the end"
+          ],
+          "correct_index": 1,
+          "explanation": "The underscore requires one and percent allows the remainder.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-12-like-application-new-2",
+          "test_id": "pt-dbms-sql-12-like-application",
+          "question_text": "Does LIKE Camera automatically match NewCamera?",
+          "options": [
+            "Yes, LIKE always means contains",
+            "Only if indexed",
+            "No, surrounding text needs an allowing wildcard",
+            "Only if sorted"
+          ],
+          "correct_index": 2,
+          "explanation": "The pattern must fit the complete text.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-12-like-application-new-3",
+          "test_id": "pt-dbms-sql-12-like-application",
+          "question_text": "In 50!%% ESCAPE ! with the SQL literals supplied correctly, what is literal?",
+          "options": [
+            "Every percent",
+            "No percent",
+            "Only the final percent",
+            "The first percent after the escape marker"
+          ],
+          "correct_index": 3,
+          "explanation": "The final unescaped percent remains the suffix wildcard.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-12-like-application-new-4",
+          "test_id": "pt-dbms-sql-12-like-application",
+          "question_text": "Does parameter binding make user-supplied % literal inside LIKE?",
+          "options": [
+            "No, SQL binding and pattern escaping solve different problems",
+            "Yes, every bound string loses wildcard semantics",
+            "Only for underscore",
+            "Only when the placeholder is named"
+          ],
+          "correct_index": 0,
+          "explanation": "Escape pattern syntax when the feature promises literal text.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-12-like-application-new-5",
+          "test_id": "pt-dbms-sql-12-like-application",
+          "question_text": "What else must a literal-search escaping helper handle?",
+          "options": [
+            "Only spaces",
+            "The chosen escape character itself",
+            "Only letters",
+            "Only the SQL keyword LIKE"
+          ],
+          "correct_index": 1,
+          "explanation": "Otherwise an input escape marker can alter pattern interpretation.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-12-like-application-new-6",
+          "test_id": "pt-dbms-sql-12-like-application",
+          "question_text": "Does a NULL name match a pattern of only % in WHERE?",
+          "options": [
+            "Yes, NULL is always empty",
+            "Only if there are no other rows",
+            "No, LIKE evaluates to UNKNOWN",
+            "Only with NOT LIKE"
+          ],
+          "correct_index": 2,
+          "explanation": "Missing text is not an empty string.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-12-like-application-new-7",
+          "test_id": "pt-dbms-sql-12-like-application",
+          "question_text": "Can an empty non-NULL string match %?",
+          "options": [
+            "No, every match needs one character",
+            "Only with an underscore",
+            "Only under NOT LIKE",
+            "Yes"
+          ],
+          "correct_index": 3,
+          "explanation": "Percent can match zero characters.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-12-like-application-new-8",
+          "test_id": "pt-dbms-sql-12-like-application",
+          "question_text": "Does NOT LIKE automatically include missing names?",
+          "options": [
+            "No, unknown remains unknown",
+            "Yes, it includes every NULL",
+            "Only under binary collation",
+            "Only for suffix patterns"
+          ],
+          "correct_index": 0,
+          "explanation": "Add IS NULL if that population is required.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-12-like-application-new-9",
+          "test_id": "pt-dbms-sql-12-like-application",
+          "question_text": "What does LIMIT on a containment search fail to prove?",
+          "options": [
+            "That the result has a bound",
+            "That only that many candidates were examined",
+            "That ORDER BY is possible",
+            "That LIKE accepts wildcards"
+          ],
+          "correct_index": 1,
+          "explanation": "Output size and search effort are distinct.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-12-like-application-new-10",
+          "test_id": "pt-dbms-sql-12-like-application",
+          "question_text": "Which search is a good use of simple LIKE?",
+          "options": [
+            "An exact uppercase-letter and digit grammar with alternatives",
+            "Arbitrary nested expression validation",
+            "A literal prefix with an arbitrary suffix",
+            "A guarantee of caller ownership"
+          ],
+          "correct_index": 2,
+          "explanation": "Choose a language proportional to the actual shape.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cp-dbms-sql-names-starting-with-pro",
+      "slug": "names-starting-with-pro",
+      "title": "Names Starting with Pro",
+      "difficulty": "Easy",
+      "task": "Return id,name for products whose name begins with Pro using LIKE 'Pro%', ordered by id. Keep the retained schema, sample and comparison settings. Case behaviour follows the configured text collation; fixtures avoid mixed-case ambiguity. The bare name Pro qualifies.",
+      "schema_sql": "CREATE TABLE products (\n  id INTEGER PRIMARY KEY,\n  name TEXT NOT NULL,\n  category TEXT NOT NULL,\n  price INTEGER NOT NULL,\n  stock INTEGER\n);",
+      "seed_sql": "INSERT INTO products (id, name, category, price, stock) VALUES\n(1, 'ProLaptop', 'Electronics', 85000, 12),\n(2, 'Notebook', 'Stationery', 40, NULL),\n(3, 'Python Basics', 'Books', 350, 5),\n(4, 'ProPhone', 'Electronics', 45000, 0),\n(5, 'Novel', 'Books', 220, NULL),\n(6, 'Desk Lamp', 'Home', 900, 8);",
+      "expected": "id\tname\n1\tProLaptop\n4\tProPhone",
+      "ordering": "As explicitly ordered in the result query.",
+      "constraints": [
+        "Use only the supplied synthetic tables and requested transition.",
+        "Preserve unrelated rows."
+      ],
+      "edge_cases": [
+        "Pro itself qualifies.",
+        "A name containing Pro only later is excluded."
+      ],
+      "hints": [
+        "Place percent after the fixed prefix.",
+        "Keep the original output id ordering."
+      ],
+      "solution_sql": "SELECT id,name FROM products WHERE name LIKE 'Pro%' ORDER BY id;",
+      "explanation": "The fixed prefix and trailing wildcard match the retained catalogue names. Percent accepts an empty suffix; a later occurrence of Pro is not enough. This retained schema does not declare a universal case-sensitive collation.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO products (id, name, category, price, stock) VALUES\n(1, 'ProTablet', 'Electronics', 32000, 4),\n(2, 'Pencil Set', 'Stationery', 60, NULL),\n(3, 'SQL Guide', 'Books', 500, 10),\n(4, 'ProSpeaker', 'Electronics', 6000, 0);",
+          "expected": "id\tname\n1\tProTablet\n4\tProSpeaker"
+        },
+        {
+          "seed_sql": "INSERT INTO products VALUES (1,'Pro','Electronics',1,1),(2,'XPro','Books',1,1);",
+          "expected": "id\tname\n1\tPro"
+        },
+        {
+          "seed_sql": "INSERT INTO products VALUES (1,'Notebook','Books',1,1);",
+          "expected": ""
+        }
+      ],
+      "existing_problem": true,
+      "original_description_md5": "3ec0cbec14d14947f2bec4938bfb1146",
+      "original_check_sql": "",
+      "check_sql": ""
+    },
+    {
+      "id": "cx-like-literal-percent-prefix",
+      "slug": "like-literal-percent-prefix",
+      "title": "Search labels beginning with literal 50 percent",
+      "difficulty": "Medium",
+      "task": "Return label_id,label where label begins with the exact literal characters 50% and may have any suffix. Use ESCAPE '!' so the percent in the prefix is literal and a later percent remains the suffix wildcard. Order by label_id.",
+      "schema_sql": "CREATE TABLE catalogue_labels(label_id INT PRIMARY KEY,label VARCHAR(50) CHARACTER SET ascii COLLATE ascii_bin);",
+      "seed_sql": "INSERT INTO catalogue_labels VALUES (1,'50%'),(2,'50%bonus'),(3,'500bonus'),(4,'50_bonus'),(5,'X50%'),(6,NULL);",
+      "expected": "label_id\tlabel\n1\t50%\n2\t50%bonus",
+      "ordering": "As explicitly ordered in the result query.",
+      "constraints": [
+        "Use only the supplied synthetic tables and requested transition.",
+        "Preserve unrelated rows."
+      ],
+      "edge_cases": [
+        "A label consisting of exactly 50% qualifies.",
+        "A numeric-looking 500 prefix must not qualify."
+      ],
+      "hints": [
+        "Separate the literal percent from the suffix wildcard.",
+        "Use the explicit single-character escape convention."
+      ],
+      "solution_sql": "SELECT label_id,label FROM catalogue_labels WHERE label LIKE '50!%%' ESCAPE '!' ORDER BY label_id;",
+      "explanation": "The escape marker makes the first percent literal. The final unescaped percent admits zero or more suffix characters without broadening the required prefix.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO catalogue_labels VALUES (7,'50%off'),(8,'50!off');",
+          "expected": "label_id\tlabel\n7\t50%off"
+        },
+        {
+          "seed_sql": "INSERT INTO catalogue_labels VALUES (1,'50'),(2,'500');",
+          "expected": ""
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-12-like-1",
+      "test_id": "pt-dbms-sql-12-like",
+      "question_text": "What does the % wildcard match in a LIKE pattern?",
+      "options": [
+        "Exactly one character",
+        "Any sequence of zero or more characters",
+        "A literal percent sign only",
+        "Exactly zero characters"
+      ],
+      "correct_index": 1,
+      "explanation": "% matches any run of characters, including none at all.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-12-like-2",
+      "test_id": "pt-dbms-sql-12-like",
+      "question_text": "What does the _ wildcard match in a LIKE pattern?",
+      "options": [
+        "Any sequence of characters",
+        "Exactly one character",
+        "A literal underscore only",
+        "Zero or one character"
+      ],
+      "correct_index": 1,
+      "explanation": "_ matches precisely one character, no more and no fewer.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-12-like-3",
+      "test_id": "pt-dbms-sql-12-like",
+      "question_text": "Which pattern matches strings that START with 'Pro'?",
+      "options": [
+        "'%Pro'",
+        "'Pro%'",
+        "'_Pro_'",
+        "'%Pro%'"
+      ],
+      "correct_index": 1,
+      "explanation": "A trailing % after the fixed prefix matches anything starting with 'Pro'.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-12-like-4",
+      "test_id": "pt-dbms-sql-12-like",
+      "question_text": "Why can a leading % in a LIKE pattern (e.g. '%book%') hurt performance on large tables?",
+      "options": [
+        "It never affects performance",
+        "The database can't know where in the string to start looking, generally preventing efficient use of a normal index",
+        "Leading % is not valid syntax",
+        "It always causes a syntax error on large tables specifically"
+      ],
+      "correct_index": 1,
+      "explanation": "Without a fixed starting point, an index that's sorted by the column's value can't narrow the search efficiently.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-12-like-5",
+      "test_id": "pt-dbms-sql-12-like",
+      "question_text": "How can you match a literal '%' character rather than using it as a wildcard?",
+      "options": [
+        "This is impossible with LIKE",
+        "Using an ESCAPE clause, e.g. LIKE '50\\%%' ESCAPE '\\'",
+        "By using two percent signs together",
+        "By switching to the = operator instead"
+      ],
+      "correct_index": 1,
+      "explanation": "Most dialects support an ESCAPE clause to treat a wildcard character as a literal.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-12-like-6",
+      "test_id": "pt-dbms-sql-12-like",
+      "question_text": "Does LIKE's case sensitivity come from LIKE itself or from something else?",
+      "options": [
+        "LIKE is always case-sensitive by definition",
+        "It depends on the column's collation setting, the same as ordinary comparison operators",
+        "LIKE is always case-insensitive by definition",
+        "Case sensitivity is randomly determined per query"
+      ],
+      "correct_index": 1,
+      "explanation": "Collation governs case-sensitivity for LIKE just as it does for =, not a property of LIKE itself.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-12-like-7",
+      "test_id": "pt-dbms-sql-12-like",
+      "question_text": "What does '_ovel' match?",
+      "options": [
+        "Any string ending in 'ovel'",
+        "A string of exactly 5 characters, with any first character followed by 'ovel'",
+        "Only the exact string 'ovel'",
+        "Any string starting with 'ovel'"
+      ],
+      "correct_index": 1,
+      "explanation": "_ requires exactly one character in that position, followed by the literal 'ovel'.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-12-like-8",
+      "test_id": "pt-dbms-sql-12-like",
+      "question_text": "Does a trailing-only wildcard pattern like 'book%' have the same indexing limitation as a leading wildcard?",
+      "options": [
+        "Yes, identically limited",
+        "No — a trailing-only wildcard can typically still use a normal index efficiently, unlike a leading wildcard",
+        "Trailing wildcards are not supported by LIKE",
+        "Both patterns always require a full table scan"
+      ],
+      "correct_index": 1,
+      "explanation": "Because the fixed prefix gives the index a starting point, trailing-wildcard patterns are generally index-friendly.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "coordinator",
+    "independent_review": "passed",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Independent manual review passed; native MySQL fixture evidence recorded separately; provider/browser/Supabase release gates remain separate.",
+    "existing_question_corrections": [
+      "tq-dbms-sql-12-like-1",
+      "tq-dbms-sql-12-like-2",
+      "tq-dbms-sql-12-like-3",
+      "tq-dbms-sql-12-like-4",
+      "tq-dbms-sql-12-like-5",
+      "tq-dbms-sql-12-like-6",
+      "tq-dbms-sql-12-like-7",
+      "tq-dbms-sql-12-like-8"
+    ],
+    "canonical_answer_indices_preserved": true,
+    "editorial_record": "Original snapshots retained. Questions rewritten for precise dialect and topic coverage while preserving identities and canonical answer positions; technical and independent review pending.",
+    "retained_exercise_contract": "Original id,slug,title,difficulty,schema,seed and trailing checker preserved; original hidden fixture retained with additional boundaries.",
+    "independent_reviewer": "Codex reviewer, current 2026-10-30 session",
+    "independent_review_scope": "Read full notes, all 640 MCQ stems/options/canonical answers/explanations, 64 exercise contracts/solutions/fixtures, and all 32 diagrams. Verified retained identities/answers through source-continuity tests; SQL execution evidence is recorded separately. No external originality, provider, live application or Supabase authorization clearance.",
+    "independent_review_record": "reports/independent-review-2026-10-30.json",
+    "content_sha256": "95a8c0a27bbfa7130e9805084ecf34b6d8a7e42daf3d6273b341706d5d9a1cef"
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-12-like",
+    "original_note_sha256": "64bedfe9af45ce6b553ebb79a94af8c8651cd63611886e2e915c038b37593421",
+    "status": "drafted; not yet included in prepared paired migrations"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Each wildcard changes the required text shape",
+      "description": "The examples assume the same case-sensitive fixture collation.",
+      "columns": [
+        "Pattern",
+        "Example match",
+        "Near miss",
+        "Reason"
+      ],
+      "rows": [
+        [
+          "Pro%",
+          "Pro",
+          "XPro",
+          "Prefix required; suffix may be empty"
+        ],
+        [
+          "Pro_",
+          "ProX",
+          "Pro",
+          "One extra character required"
+        ],
+        [
+          "_ovel",
+          "Novel",
+          "ovel",
+          "Exactly one leading character"
+        ],
+        [
+          "50!%% ESCAPE '!'",
+          "50%bonus",
+          "500bonus",
+          "Literal percent required"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "drafted — verification pending",
+    "server_rendering": "pending",
+    "browser_rendering": "unverified",
+    "independent_review": "pending"
+  },
+  "authoring_status": "drafted — verification pending",
+  "sql_verification": {
+    "scope": "not executed; exact MySQL/provider verification pending",
+    "all_passed": false,
+    "cases": []
+  }
+}

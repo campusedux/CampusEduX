@@ -1,0 +1,514 @@
+{
+  "source_ref": "chapter-22-transactions/acid",
+  "slug": "acid",
+  "title": "ACID",
+  "description": "Understand atomicity, consistency, isolation and durability through transaction failures, concurrent updates, storage-engine limits and safe retry reasoning.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Give a transaction a precise reliability contract\n\nACID names four properties associated with reliable transactions: atomicity, consistency, isolation and durability. Together they help an application reason about changes despite failures and concurrent work. They do not guarantee that arbitrary application code is correct. A perfectly atomic transaction can commit an incorrect calculation, and a durable mistake remains a mistake until an authorized corrective action repairs it.\n\nImagine moving five reserved workshop seats from one allocation bucket to another. The intended operation subtracts five from the source and adds five to the destination without creating or losing capacity. Its contract includes permitted actors, nonnegative remaining capacity and one intended request identity. Transaction properties support that contract, while the application must still define and enforce its business meaning.\n\n## Atomicity covers the chosen transaction boundary\n\nAtomicity means the transaction's supported changes commit together or do not remain committed as a partial transaction. If the second seat update fails, the first should not be left as an independently committed subtraction. The guarantee only covers work inside the transaction on participating transactional resources. Two updates performed under separate autocommitted statements are two transactions, regardless of the function name surrounding them.\n\n```sql\nSTART TRANSACTION;\nUPDATE seat_buckets SET reserved = reserved - 5 WHERE bucket_id = 1;\nUPDATE seat_buckets SET reserved = reserved + 5 WHERE bucket_id = 2;\n-- The trusted workflow checks the required invariants before choosing:\nROLLBACK;\n```\n\nThis illustration intentionally rolls back the changes. A successful SQL statement is not necessarily a successful business operation: an UPDATE matching zero rows may complete without a database error. Verify required row existence and affected-row meaning within the chosen workflow. Atomicity cannot detect that a missing destination was unacceptable unless the implementation actually checks that condition.\n\n## Consistency preserves specified valid states\n\nConsistency means a transaction should take the database from one valid state to another under the specified invariants. Database constraints can enforce required identities, valid references, uniqueness and particular row conditions. Application logic may need additional checks for rules involving several rows or external decisions. The engine does not invent those rules from a table's suggestive name.\n\nFor the seat transfer, a nonnegative source and unchanged combined capacity are separate requirements. Subtracting five from a source containing only three violates the intended rule even if both arithmetic statements execute. A transaction that instead credits the destination by six is atomic but changes the combined quantity. Write the invariant first, then identify which trusted mechanism enforces each part.\n\nACID consistency differs from the consistency terminology in the CAP theorem. CAP's consistency is generally modeled as linearizability: operations behave as if they occurred at one point between invocation and response. It is not merely every replica eventually having equal values. Keep state-validity rules and distributed observation guarantees distinct when using the same familiar word.\n\n## Isolation governs interaction with concurrent work\n\nIsolation describes which concurrent interactions an execution model permits and what observations transactions can make. Serializable execution provides a strong serial-equivalence model, but common SQL isolation levels permit different anomalies. Saying a database supports transactions does not prove that every report or read-modify-write sequence has the strongest isolation behavior.\n\nTwo requests can each read the same available capacity, both decide it is sufficient and then make incompatible decisions. Correct handling can require locking, a suitable atomic conditional update, constraints or serializable execution with retry, depending on the complete operation. Do not select a technique solely from an acronym. Trace the reads, predicates, writes and failure paths under the actual engine contract.\n\nIsolation also does not mean every transaction physically runs alone. Independent operations can interleave while preserving the required observation model. Concurrency control may use locks, multiple row versions or combinations of techniques. The performance and blocking consequences depend on the workload, implementation and chosen level; serial-equivalent results do not require a literal one-transaction-at-a-time server.\n\n## Durability begins with a successful commit contract\n\nDurability concerns the survival of committed changes under the system's documented failure and persistence guarantees. Logging and recovery mechanisms help make that possible. A row becoming visible in one session before commit does not establish durability. Nor does printing a success message before the database confirms the intended transaction outcome.\n\nReal guarantees depend on engine configuration and storage behavior. A relaxed persistence setting, failed storage subsystem or loss of an entire machine can exceed a local crash guarantee. Backups, replication and restore procedures address additional failure scopes. Avoid teaching durability as a promise that no imaginable disaster can ever lose data or that backups become unnecessary.\n\nA client can also lose the connection while a commit response is in flight. The transaction may have committed even though the client did not receive confirmation. This is an unknown outcome, not automatic evidence of rollback. Reconciliation using an authorized request identity can distinguish an already completed operation from a new attempt without blindly repeating the business effect.\n\n## Verify the storage engine and all participants\n\nMySQL supports storage engines with different transactional capabilities. InnoDB supplies transactional facilities used by these examples. MyISAM does not provide equivalent rollback of its table changes. An application must inspect actual table definitions rather than assume that writing START TRANSACTION changes every storage engine into a transactional one.\n\nMixing transactional and nontransactional tables can leave effects that rollback cannot reverse. Likewise, ordinary DDL can have implicit commit behavior distinct from row updates. A transaction containing an email send, remote payment request or file write does not automatically make those external actions part of the database rollback domain. State exactly which participants share the atomic boundary.\n\n## Handle errors without assuming their scope\n\nErrors can affect a statement, a whole transaction or a connection depending on their cause and engine behavior. An InnoDB deadlock can roll back a transaction; other errors may roll back only the failed statement while earlier changes remain pending. The caller should inspect the documented failure semantics and explicitly close or discard an unsuccessful transaction rather than guess that any exception has undone everything.\n\nTransaction cleanup belongs on every exit path. Returning a connection to a pool with an open transaction can leak locks or unexpected session state into later work. A failed rollback or lost connection also requires handling. Do not report a confirmed business failure or success merely because cleanup was attempted; distinguish confirmed rollback, confirmed commit and uncertain outcome.\n\n## Keep retries and external actions coherent\n\nRetrying the complete business operation can be appropriate after a retryable conflict, but use bounded attempts and a stable request identity. A duplicate-key conflict does not itself prove that the same authorized payload already succeeded. Verify ownership and meaning before interpreting it as an idempotent result. Unbounded retries can turn contention into persistent overload.\n\nFor external notifications, a reviewed transactional-outbox design can commit an event record with the database change and deliver it afterward. That separates database atomicity from network delivery while introducing its own idempotency and monitoring responsibilities. It is a design option rather than proof that every notification system is already reliable. Never claim one local transaction atomically controls unrelated services without an actual shared protocol.\n\n## Test properties with targeted failure scenarios\n\nFor an atomicity exercise, begin with source capacity ten and destination capacity twenty. Subtract five, then simulate an application-detected invalid destination before commit. Predict the correct rollback result and explain why two autocommitted updates would fail that requirement. Add the case where the destination UPDATE matches no row but raises no error.\n\nFor an isolation exercise, write two sessions that both observe the same source capacity before either commits. Identify the business anomaly a naive stale-value assignment could permit. Then describe which trusted condition or serialization mechanism must prevent it. A one-session query returning the expected total cannot establish that concurrent execution is safe.\n\nA durability exercise needs a documented crash and restart environment plus persistence settings; a normal SELECT after COMMIT is only a much narrower observation. Keep allowed, denied, failure and recovery evidence separate. Read [atomicity](/learning/dbms-sql-tutorial/atomicity), [isolation](/learning/dbms-sql-tutorial/isolation) and [durability](/learning/dbms-sql-tutorial/durability) for the individual properties. The useful outcome is an explicit transaction boundary and a tested account of what each failure leaves behind.",
+  "references": [
+    {
+      "title": "MySQL8.4 InnoDB and ACID",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/mysql-acid.html"
+    },
+    {
+      "title": "MySQL8.4 InnoDB error handling",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/innodb-error-handling.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-22-acid",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-22-acid-1",
+          "test_id": "pt-dbms-sql-22-acid",
+          "question_text": "What does the A in ACID stand for?",
+          "options": [
+            "Availability",
+            "Atomicity",
+            "Accuracy",
+            "Asynchrony"
+          ],
+          "correct_index": 1,
+          "explanation": "Atomicity is the all-or-nothing guarantee.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-22-acid-2",
+          "test_id": "pt-dbms-sql-22-acid",
+          "question_text": "What does the D in ACID stand for?",
+          "options": [
+            "Deletion",
+            "Durability",
+            "Decomposition",
+            "Dependency"
+          ],
+          "correct_index": 1,
+          "explanation": "Committed changes survive failures within the documented persistence contract; engine settings and storage assumptions matter.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-22-acid-3",
+          "test_id": "pt-dbms-sql-22-acid",
+          "question_text": "Which listed MySQL storage engine lacks transactional rollback of its table changes?",
+          "options": [
+            "InnoDB",
+            "MyISAM",
+            "Both support transactions identically",
+            "Neither supports transactions"
+          ],
+          "correct_index": 1,
+          "explanation": "MyISAM is nontransactional. ROLLBACK cannot reverse its writes, and diagnostics can warn about incomplete rollback.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-22-acid-4",
+          "test_id": "pt-dbms-sql-22-acid",
+          "question_text": "Is ACID's 'Consistency' the same concept as the 'Consistency' in the CAP theorem?",
+          "options": [
+            "Yes, identical concepts",
+            "No: ACID consistency concerns valid-state invariants, while CAP consistency is generally linearizability",
+            "CAP theorem doesn't have a Consistency concept",
+            "ACID Consistency only applies to distributed databases"
+          ],
+          "correct_index": 1,
+          "explanation": "Linearizability describes observations appearing to occur at a single point between invocation and response, rather than merely eventual replica agreement.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-22-acid-5",
+          "test_id": "pt-dbms-sql-22-acid",
+          "question_text": "Why is choosing a transactional storage engine a prerequisite for ACID guarantees?",
+          "options": [
+            "It isn't actually required",
+            "Multi-statement rollback requires transaction-capable participants; a nontransactional table is outside that guarantee",
+            "ACID guarantees are provided by the SQL language itself, independent of storage engine",
+            "Only Consistency requires a transactional engine"
+          ],
+          "correct_index": 1,
+          "explanation": "ACID is only meaningful when the underlying engine actually implements transaction support.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-22-acid-6",
+          "test_id": "pt-dbms-sql-22-acid",
+          "question_text": "How do Atomicity and Consistency interact?",
+          "options": [
+            "They are completely unrelated",
+            "Atomicity partly enables Consistency — an incomplete (non-atomic) update could leave the database in an invalid, inconsistent state",
+            "Consistency makes Atomicity unnecessary",
+            "They are exact synonyms"
+          ],
+          "correct_index": 1,
+          "explanation": "The four ACID properties aren't fully independent — atomicity helps guarantee consistency is achievable.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-22-acid-7",
+          "test_id": "pt-dbms-sql-22-acid",
+          "question_text": "What does the isolation contract specify for concurrent transactions?",
+          "options": [
+            "It has no relationship to the other three",
+            "Which concurrent interactions and observations are allowed; weaker levels can permit anomalies",
+            "It only matters for single-user databases",
+            "It replaces the need for Atomicity entirely"
+          ],
+          "correct_index": 1,
+          "explanation": "Isolation depends on the selected level and engine semantics, rather than a universal claim that all in-progress observations are forbidden.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-22-acid-8",
+          "test_id": "pt-dbms-sql-22-acid",
+          "question_text": "What is the overall purpose of the ACID guarantees together?",
+          "options": [
+            "To make queries run faster",
+            "To make transactions a reliable building block for correct application logic despite concurrency, failures, and bugs",
+            "To reduce the amount of disk storage used",
+            "To simplify SQL syntax"
+          ],
+          "correct_index": 1,
+          "explanation": "ACID's combined purpose is trustworthiness of transactions under real-world conditions.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-22-acid-new-9",
+          "test_id": "pt-dbms-sql-22-acid",
+          "question_text": "Both updates autocommit separately. Does their shared function name make them atomic together?",
+          "options": [
+            "Yes, function names define transactions",
+            "No, the database boundaries remain separate",
+            "Only if aliases match",
+            "Only when rows are small"
+          ],
+          "correct_index": 1,
+          "explanation": "The application must actually establish one participating transaction.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-22-acid-new-10",
+          "test_id": "pt-dbms-sql-22-acid",
+          "question_text": "The source subtraction succeeds and the destination UPDATE matches zero rows. What must the workflow do?",
+          "options": [
+            "Assume an exception was mandatory",
+            "Always commit because SQL returned",
+            "Check the required effect and choose rollback when the contract failed",
+            "Invent a destination identifier"
+          ],
+          "correct_index": 2,
+          "explanation": "Statement completion does not prove the requested entity existed.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-22-acid-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-22-acid-application-new-1",
+          "test_id": "pt-dbms-sql-22-acid-application",
+          "question_text": "A transaction subtracts5 and credits6. Which statement is correct?",
+          "options": [
+            "Atomicity repairs the extra unit",
+            "Durability prevents wrong arithmetic",
+            "Isolation changes6 into5",
+            "It can be atomic while violating the capacity invariant"
+          ],
+          "correct_index": 3,
+          "explanation": "Business consistency needs the correct calculation and enforcement.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-22-acid-application-new-2",
+          "test_id": "pt-dbms-sql-22-acid-application",
+          "question_text": "Does transactional support imply every query runs at SERIALIZABLE?",
+          "options": [
+            "No, actual isolation settings and semantics matter",
+            "Yes, automatically",
+            "Only for COUNT",
+            "Only for short queries"
+          ],
+          "correct_index": 0,
+          "explanation": "Transaction capability and selected isolation level are distinct.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-22-acid-application-new-3",
+          "test_id": "pt-dbms-sql-22-acid-application",
+          "question_text": "A commit response is lost. What is the client outcome?",
+          "options": [
+            "Certainly rolled back",
+            "Uncertain until reconciled",
+            "Certainly never executed",
+            "Permission to repeat without a request key"
+          ],
+          "correct_index": 1,
+          "explanation": "The server may have committed before the response disappeared.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-22-acid-application-new-4",
+          "test_id": "pt-dbms-sql-22-acid-application",
+          "question_text": "Can a database rollback automatically unsend an email?",
+          "options": [
+            "Yes, all sockets participate",
+            "Only if email contains an ID",
+            "No, external effects need their own coordination",
+            "Only before midnight"
+          ],
+          "correct_index": 2,
+          "explanation": "The email server is outside the ordinary local transaction boundary.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-22-acid-application-new-5",
+          "test_id": "pt-dbms-sql-22-acid-application",
+          "question_text": "What is a useful purpose of a stable request identity?",
+          "options": [
+            "Eliminate authorization",
+            "Prove every duplicate error is success",
+            "Replace all constraints",
+            "Reconcile retries without blindly duplicating a business effect"
+          ],
+          "correct_index": 3,
+          "explanation": "The stored result still needs an authorized payload match.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-22-acid-application-new-6",
+          "test_id": "pt-dbms-sql-22-acid-application",
+          "question_text": "Can a statement error leave earlier transaction changes pending?",
+          "options": [
+            "Yes, depending on the engine and error scope",
+            "Never",
+            "Only without tables",
+            "Only if there is no index"
+          ],
+          "correct_index": 0,
+          "explanation": "Handle documented statement versus whole-transaction failure semantics.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-22-acid-application-new-7",
+          "test_id": "pt-dbms-sql-22-acid-application",
+          "question_text": "What does the C in CAP generally refer to?",
+          "options": [
+            "The number of database constraints",
+            "Linearizability of distributed observations",
+            "Every replica eventually matching",
+            "Numeric precision"
+          ],
+          "correct_index": 1,
+          "explanation": "This differs from ACID state-validity consistency.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-22-acid-application-new-8",
+          "test_id": "pt-dbms-sql-22-acid-application",
+          "question_text": "What additional protection does a backup address?",
+          "options": [
+            "Making wrong SQL correct",
+            "Eliminating every retry",
+            "Recovery scopes beyond the local commit guarantee",
+            "Granting user access"
+          ],
+          "correct_index": 2,
+          "explanation": "Durability and disaster recovery need explicit failure models.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-22-acid-application-new-9",
+          "test_id": "pt-dbms-sql-22-acid-application",
+          "question_text": "Why is one successful transfer fixture insufficient isolation evidence?",
+          "options": [
+            "It has only two rows",
+            "Its identifiers are numeric",
+            "Its final total is known",
+            "It contains no competing session interleaving"
+          ],
+          "correct_index": 3,
+          "explanation": "Concurrency properties require appropriate concurrent scenarios.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-22-acid-application-new-10",
+          "test_id": "pt-dbms-sql-22-acid-application",
+          "question_text": "What should be recorded with a transaction reliability claim?",
+          "options": [
+            "Engine,boundary,settings,failure scope and actual checks",
+            "Only the SQL title",
+            "Only a screenshot",
+            "Only one success response"
+          ],
+          "correct_index": 0,
+          "explanation": "Claims must match the tested enforcement and recovery point.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [],
+  "coding_not_applicable": "ACID properties require failure, concurrent-session and crash/restart verification at their actual enforcement points. The notes contain explicit failure-analysis exercises and transactional SQL. Deterministic single-result judging would not establish these guarantees.",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-22-acid-1",
+      "test_id": "pt-dbms-sql-22-acid",
+      "question_text": "What does the A in ACID stand for?",
+      "options": [
+        "Availability",
+        "Atomicity",
+        "Accuracy",
+        "Asynchrony"
+      ],
+      "correct_index": 1,
+      "explanation": "Atomicity is the all-or-nothing guarantee.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-22-acid-2",
+      "test_id": "pt-dbms-sql-22-acid",
+      "question_text": "What does the D in ACID stand for?",
+      "options": [
+        "Deletion",
+        "Durability",
+        "Decomposition",
+        "Dependency"
+      ],
+      "correct_index": 1,
+      "explanation": "Durability guarantees committed changes survive crashes.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-22-acid-3",
+      "test_id": "pt-dbms-sql-22-acid",
+      "question_text": "Which storage engine, as discovered practically in this course, does NOT support real transactions?",
+      "options": [
+        "InnoDB",
+        "MyISAM",
+        "Both support transactions identically",
+        "Neither supports transactions"
+      ],
+      "correct_index": 1,
+      "explanation": "MyISAM lacks transaction support entirely — ROLLBACK silently does nothing on MyISAM tables.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-22-acid-4",
+      "test_id": "pt-dbms-sql-22-acid",
+      "question_text": "Is ACID's 'Consistency' the same concept as the 'Consistency' in the CAP theorem?",
+      "options": [
+        "Yes, identical concepts",
+        "No — they are related but distinct: ACID Consistency is about respecting database constraints/rules, CAP Consistency is about all distributed nodes agreeing on data",
+        "CAP theorem doesn't have a Consistency concept",
+        "ACID Consistency only applies to distributed databases"
+      ],
+      "correct_index": 1,
+      "explanation": "This is a classic point of confusion worth explicitly distinguishing, as covered further in Chapter 38.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-22-acid-5",
+      "test_id": "pt-dbms-sql-22-acid",
+      "question_text": "Why is choosing a transactional storage engine a prerequisite for ACID guarantees?",
+      "options": [
+        "It isn't actually required",
+        "Without transaction support, there is no real Atomicity/Isolation/Durability for multi-statement operations — ACID guarantees only apply where the engine actually implements them",
+        "ACID guarantees are provided by the SQL language itself, independent of storage engine",
+        "Only Consistency requires a transactional engine"
+      ],
+      "correct_index": 1,
+      "explanation": "ACID is only meaningful when the underlying engine actually implements transaction support.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-22-acid-6",
+      "test_id": "pt-dbms-sql-22-acid",
+      "question_text": "How do Atomicity and Consistency interact?",
+      "options": [
+        "They are completely unrelated",
+        "Atomicity partly enables Consistency — an incomplete (non-atomic) update could leave the database in an invalid, inconsistent state",
+        "Consistency makes Atomicity unnecessary",
+        "They are exact synonyms"
+      ],
+      "correct_index": 1,
+      "explanation": "The four ACID properties aren't fully independent — atomicity helps guarantee consistency is achievable.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-22-acid-7",
+      "test_id": "pt-dbms-sql-22-acid",
+      "question_text": "What role does Isolation play among the four ACID properties?",
+      "options": [
+        "It has no relationship to the other three",
+        "It prevents concurrent transactions from seeing each other's not-yet-complete, in-progress state, which could otherwise violate atomicity's guarantees from an outside observer's perspective",
+        "It only matters for single-user databases",
+        "It replaces the need for Atomicity entirely"
+      ],
+      "correct_index": 1,
+      "explanation": "Isolation protects the illusion of atomicity when multiple transactions run concurrently.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-22-acid-8",
+      "test_id": "pt-dbms-sql-22-acid",
+      "question_text": "What is the overall purpose of the ACID guarantees together?",
+      "options": [
+        "To make queries run faster",
+        "To make transactions a reliable building block for correct application logic despite concurrency, failures, and bugs",
+        "To reduce the amount of disk storage used",
+        "To simplify SQL syntax"
+      ],
+      "correct_index": 1,
+      "explanation": "ACID's combined purpose is trustworthiness of transactions under real-world conditions.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "/root",
+    "independent_review": "passed",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Independent manual content review passed within independent_review_scope; engine/browser/release gates separate.",
+    "canonical_answer_indices_preserved": true,
+    "independent_reviewer": "/root/content_b",
+    "independent_review_scope": "Full notes,20MCQs/options/explanations,diagram. Transaction boundaries, consistency/isolation/durability and unknown commit correctly scoped. Manual editorial reasoning only; engine/browser/originality/AdSense separate."
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-22-acid",
+    "original_note_sha256": "e797ae5aa0d140bcff460ebbd6136512934ec9c37534daa5b376efcb019452df",
+    "status": "drafted; not included in prepared paired migrations"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Four properties answer different failure questions",
+      "description": "A correct transaction needs an actual boundary and explicit domain invariants.",
+      "columns": [
+        "Property",
+        "Seat-transfer question"
+      ],
+      "rows": [
+        [
+          "Atomicity",
+          "Do partial supported changes remain committed?"
+        ],
+        [
+          "Consistency",
+          "Does the permitted capacity invariant hold?"
+        ],
+        [
+          "Isolation",
+          "What concurrent decisions and observations are allowed?"
+        ],
+        [
+          "Durability",
+          "What survives after a confirmed commit under the persistence contract?"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "provided",
+    "technical_review": "author review; independent review pending",
+    "server_rendering": "passed",
+    "browser_rendering": "unverified",
+    "independent_review": "pending",
+    "server_rendering_evidence": "2026-10-29 full Vitest:1310 passed/12 skipped; actual LessonBlock/TopicDiagrams render over230 packages. Browser visual QA remains unverified."
+  },
+  "authoring_status": "drafted; verification pending",
+  "sql_verification": {
+    "scope": "not executed; exact MySQL/provider verification pending",
+    "all_passed": false,
+    "cases": []
+  }
+}

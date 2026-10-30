@@ -1,0 +1,623 @@
+{
+  "source_ref": "chapter-3-data-models/relational-model",
+  "slug": "relational-model",
+  "title": "Relational Model",
+  "description": "Distinguish relations from SQL tables while tracing tuples, attributes, domains, candidate keys, association facts, declarative queries, and implementation-dependent transaction and scaling behavior.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Describing facts through relations\n\nThe relational model represents information through relations over defined attributes and domains. Edgar F. Codd introduced the model in his 1970 work on shared data banks. Its important contribution is a logical account of data that does not require an application to navigate a particular stored pointer path merely to describe the result it wants.\n\nA relation is commonly illustrated as a table. A tuple corresponds to one fact-bearing row, an attribute describes a component of that fact, and a domain describes the permitted kind of value. These terms concern logical meaning. The physical engine can organize records using pages, indexes, or other supported structures without making those structures part of every logical query.\n\nSQL products implement relational ideas, but an arbitrary SQL table is not identical to every mathematical property of a relation. Duplicate rows, NULL, and expression behavior require explicit treatment. Learn the model's principles and the selected product's actual semantics together rather than assuming that a table-shaped display proves full relational correctness.\n\n## Defining the fact represented by one tuple\n\nConsider Student with student_id and student_name, Course with course_id and course_name, and Enrollment connecting a student to a course. For a simplified fixture, assume one enrollment per student-course pair. The Enrollment tuple states that this particular student takes this particular course. It is not merely an unnamed line produced for display.\n\nIf repeated offerings or retakes are required, the pair may no longer identify the real occurrence. The model then needs an offering or attempt distinction. A schema that matches today's examples can still fail tomorrow's requirement if it cannot distinguish two valid occurrences. Determine the fact and identity before choosing columns from a convenient screen.\n\nAttribute meaning includes units, time, and absence rules where relevant. A score needs a scale and assessment context. A name is a label rather than proof of identity. Two students can share a name while remaining different tuples through their identifiers. A relational description should make these meanings explicit instead of relying on accidental uniqueness in a tiny dataset.\n\n## Understanding domains and validity rules\n\nA domain identifies the values appropriate to an attribute. A score might be an integer from zero to one hundred or missing under a separately defined SQL policy. A database type contributes a representation, but a broad integer type does not itself enforce that narrower score range. Required values, valid references, and uniqueness are additional parts of the contract.\n\nKeys identify tuples. A candidate key is a minimal set of attributes that uniquely identifies the fact under the intended rules; one can be chosen as the primary key in a SQL implementation. Another unique label is not automatically a suitable key if the domain permits it to change or repeat. Identity and current appearance must remain separate.\n\nA foreign-key relationship can require an enrollment's student reference to identify an existing student. That rule differs from merely storing an integer column named student_id. A drawing of an arrow also does not enforce it. The implemented constraint and its allowed and rejected behavior require direct database evidence in an authorized environment.\n\n## Representing many-to-many facts\n\nStudents can attend several courses, and a course can contain several students. An association relation such as Enrollment represents the individual pairs. This preserves one Student identity and one Course identity while allowing many connecting facts. Repeating whole student records inside every course can instead create inconsistent copies of a student's attributes.\n\nFor example, student 11, Mira, enrolls in Databases and Networks. Student 12, Dev, enrolls in Databases. Enrollment has three pair facts rather than two student facts or two course facts. A query joining these relations can present the student's name and course name together without requiring those labels to be stored redundantly in every association.\n\nThe association can also own relationship-specific attributes, such as the score for that enrollment. A score belonging to a student-course occurrence should not be stored as the student's single universal score. Where an attribute belongs follows its meaning and dependencies, not the visual width of the table it might fit into.\n\n## Requesting results declaratively\n\nA declarative query states the intended source relationships, predicates, and output. The optimizer chooses a supported physical strategy. This separation reduces direct coupling to pointer navigation, but it does not mean every query is automatically independent of schema changes, access hints, or product features. The actual contract and callers still matter.\n\n```sql\nSELECT s.student_id, s.student_name, c.course_name\nFROM students s\nJOIN enrollments e ON e.student_id = s.student_id\nJOIN courses c ON c.course_id = e.course_id\nORDER BY s.student_id, c.course_id;\n```\n\nFor the three enrollment facts, Mira appears twice with different courses and Dev appears once. That is correct because the result grain is one enrollment, not one student. Removing repeated student labels with DISTINCT without examining the selected fields can hide or discard legitimate facts instead of repairing a join.\n\nA wrong join condition can multiply combinations or pair unrelated identities. Join through the modeled keys rather than names. If two students are both called Mira, name equality cannot reliably connect an enrollment to its owner. Stable identity is what makes combining facts correct.\n\n## Distinguishing sets, duplicates, and order\n\nA mathematical relation is set-based and does not have an inherent display order. SQL queries can use bag-like behavior, retaining duplicate result rows unless the requested operation removes them. Two different input records can project to identical visible values when their identifiers are omitted. That does not prove the records themselves were duplicates.\n\nUse DISTINCT only when the requested result is genuinely the set of distinct selected values. A report of unique course names differs from a listing of every enrollment. Similarly, COUNT star over an enrollment join counts matching combinations; it does not automatically count students. The grain and selected identity determine the correct interpretation.\n\nOrdering is explicit in SQL. A table's insertion sequence or an observed index path should not be treated as the relation's intrinsic order. If consumers need a deterministic sequence, request appropriate sort keys and tie-breakers. This keeps physical changes from exposing an assumption the query never actually specified.\n\n## Treating NULL and incomplete facts carefully\n\nSQL NULL is not an ordinary domain value equal to itself through standard equality. It represents a defined absence or unknown state and changes comparison behavior. Use IS NULL for absence checks, and decide whether a missing score means unrecorded, not applicable, or another explicitly modeled situation.\n\nAn unenrolled student and an enrollment with a missing score are different facts. An inner join can omit the student with no matching enrollment, while a preserving join can keep that student with missing related attributes. A successful query must reflect which population the task asks for rather than treating every missing output as interchangeable.\n\nThe pure relational model and practical SQL absence mechanisms should therefore be explained distinctly. Do not claim that a NULL-filled arbitrary table automatically satisfies every relational principle, or that replacing missing values with zero preserves meaning. Correct modeling needs explicit definitions and constraints beyond a familiar rectangular layout.\n\n## Comparing implementation trade-offs\n\nNormalized relations can reduce redundant facts and make update rules clearer. A read assembling information from several relations may require joins, while a document representation may return a suitable embedded aggregate directly. Neither implies a universal performance winner. Indexes, cardinality, data size, required consistency, and workload determine the actual costs.\n\nRelational modeling also does not limit every product to one vertically scaled server. Distributed relational and SQL implementations exist, and other products have their own scaling restrictions. Evaluate the actual engine and deployment rather than teaching horizontal distribution as a capability categorically forbidden by the model.\n\nACID stands for atomicity, consistency, isolation, and durability in transaction discussions. Those guarantees depend on the implementation, storage engine, configuration, and correct operation design. They do not follow automatically from using tables. Likewise, translating application objects into relational facts can require mapping work, but that cost should be compared against the actual data and query needs.\n\n## Verifying the represented relationships\n\nCheck ordinary facts and awkward cases: repeated names, an unenrolled student, a course with no participants, missing optional scores, and invalid references. A SQL mirror over valid fixtures demonstrates query meaning; it does not substitute for foreign-key enforcement tests or production authorization evidence. Record what was executed and what remains unverified.\n\nThe relational model is useful because identities, relationships, and validity rules can be expressed as a coherent logical account. Preserve the distinction between that account and a particular table display or engine feature. Clear tuple meaning, explicit association facts, and declarative result contracts make the model practical without turning it into unsupported promises about duplicates, transactions, or scalability.\n",
+  "references": [
+    {
+      "title": "Codd relational model paper, IBM Research",
+      "url": "https://research.ibm.com/publications/a-relational-model-of-data-for-large-shared-data-banks"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-3-relational-model",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-3-relational-model-1",
+          "test_id": "pt-dbms-sql-3-relational-model",
+          "question_text": "Who introduced the relational model and in what year?",
+          "options": [
+            "Edgar F. Codd, 1970",
+            "Charles Bachman, 1969",
+            "Michael Stonebraker, 1980",
+            "Ted Codd, 1985"
+          ],
+          "correct_index": 0,
+          "explanation": "E. F. Codd published the foundational relational model paper in 1970 while at IBM.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-3-relational-model-2",
+          "test_id": "pt-dbms-sql-3-relational-model",
+          "question_text": "In the relational model, what is a 'tuple'?",
+          "options": [
+            "A column name",
+            "A single row in a table",
+            "A database index",
+            "A stored procedure"
+          ],
+          "correct_index": 1,
+          "explanation": "A tuple corresponds to a single row of a relation (table), representing one record with values for each attribute.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-3-relational-model-3",
+          "test_id": "pt-dbms-sql-3-relational-model",
+          "question_text": "What separation does declarative relational querying aim to support?",
+          "options": [
+            "It requires more storage space",
+            "The requested logical result is described separately from a particular physical navigation plan",
+            "It cannot represent one-to-many relationships",
+            "It does not support keys or constraints"
+          ],
+          "correct_index": 1,
+          "explanation": "Actual queries can still depend on schema and implementation features.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-3-relational-model-4",
+          "test_id": "pt-dbms-sql-3-relational-model",
+          "question_text": "How does the relational model represent a many-to-many relationship, such as students enrolling in multiple courses?",
+          "options": [
+            "By duplicating student records under each course",
+            "Using a junction/associative table with foreign keys to both related tables",
+            "By nesting course documents inside student documents",
+            "It cannot represent many-to-many relationships"
+          ],
+          "correct_index": 1,
+          "explanation": "A junction table like Enrollments(student_id, course_id) cleanly represents many-to-many relationships without duplication, unlike hierarchical trees.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-3-relational-model-5",
+          "test_id": "pt-dbms-sql-3-relational-model",
+          "question_text": "What does 'ACID' stand for in the context of relational database transactions?",
+          "options": [
+            "Atomicity, Consistency, Isolation, Durability",
+            "Access, Concurrency, Indexing, Distribution",
+            "Aggregation, Caching, Integrity, Denormalization",
+            "Availability, Consistency, Idempotency, Durability"
+          ],
+          "correct_index": 0,
+          "explanation": "ACID properties (Atomicity, Consistency, Isolation, Durability) are the transactional guarantees traditionally associated with relational databases.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-3-relational-model-6",
+          "test_id": "pt-dbms-sql-3-relational-model",
+          "question_text": "What is the 'impedance mismatch' problem often cited as a drawback of the relational model?",
+          "options": [
+            "SQL queries run too slowly on large tables",
+            "Object-oriented application code doesn't map cleanly onto flat, normalized tables, requiring extra translation logic",
+            "Relational databases cannot store numeric data",
+            "Tables cannot have more than one primary key column"
+          ],
+          "correct_index": 1,
+          "explanation": "Since application objects often have nested or list-valued attributes, mapping them to normalized relational tables requires extra joins/translation, motivating ORMs and alternative models like document stores.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-3-relational-model-7",
+          "test_id": "pt-dbms-sql-3-relational-model",
+          "question_text": "Why might normalized relations and embedded documents have different read costs?",
+          "options": [
+            "Relational databases cannot use indexes",
+            "They organize required facts differently, and actual performance depends on the workload and implementation",
+            "SQL cannot filter on multiple conditions",
+            "Relational tables cannot store text fields"
+          ],
+          "correct_index": 1,
+          "explanation": "Neither model is a universal winner; measure the operation and guarantees required.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-3-relational-model-8",
+          "test_id": "pt-dbms-sql-3-relational-model",
+          "question_text": "Is horizontal distribution categorically prohibited by the relational model?",
+          "options": [
+            "They cannot enforce data integrity",
+            "No; scaling capabilities depend on the actual product and deployment",
+            "They cannot support transactions",
+            "They cannot store more than one table"
+          ],
+          "correct_index": 1,
+          "explanation": "Distributed relational and SQL systems exist; a model label does not fix deployment topology.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-3-relational-model-new-9",
+          "test_id": "pt-dbms-sql-3-relational-model",
+          "question_text": "What does a candidate key identify under the model's intended rules?",
+          "options": [
+            "The first physical page",
+            "A tuple through a minimal unique attribute set",
+            "Every current display label automatically",
+            "A particular network route"
+          ],
+          "correct_index": 1,
+          "explanation": "Candidate key minimality and uniqueness concern logical identity.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-3-relational-model-new-10",
+          "test_id": "pt-dbms-sql-3-relational-model",
+          "question_text": "Does a table-shaped display prove all mathematical relation properties hold?",
+          "options": [
+            "Yes; rectangles guarantee uniqueness",
+            "Only if column names are short",
+            "No; SQL duplicates, NULL, and constraints need explicit review",
+            "Only if the client uses a dark theme"
+          ],
+          "correct_index": 2,
+          "explanation": "Practical SQL behavior must be distinguished from the mathematical model.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-3-relational-model-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-3-relational-model-application-new-1",
+          "test_id": "pt-dbms-sql-3-relational-model-application",
+          "question_text": "Mira attends two courses and Dev attends one. How many enrollment facts exist?",
+          "options": [
+            "Two",
+            "One",
+            "Three",
+            "Six necessarily"
+          ],
+          "correct_index": 2,
+          "explanation": "Each student-course association is a distinct fact.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-3-relational-model-application-new-2",
+          "test_id": "pt-dbms-sql-3-relational-model-application",
+          "question_text": "Two students share the same name. Which link should identify the owner of an enrollment?",
+          "options": [
+            "The name alone",
+            "The name length",
+            "The current row position",
+            "The modeled student identifier"
+          ],
+          "correct_index": 3,
+          "explanation": "Shared labels do not merge distinct student identities.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-3-relational-model-application-new-3",
+          "test_id": "pt-dbms-sql-3-relational-model-application",
+          "question_text": "An enrollment join repeats Mira on two course rows. What should be checked before treating that as a duplicate defect?",
+          "options": [
+            "Whether one row is intended to represent one enrollment",
+            "Whether the name has four letters",
+            "Whether the table uses an SSD",
+            "Whether the SELECT text is uppercase"
+          ],
+          "correct_index": 0,
+          "explanation": "The repeated student can be correct at association grain.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-3-relational-model-application-new-4",
+          "test_id": "pt-dbms-sql-3-relational-model-application",
+          "question_text": "The task asks for all students including those without enrollment. What population risk does an inner join create?",
+          "options": [
+            "All students are necessarily duplicated",
+            "Unenrolled students are omitted",
+            "Course names become keys",
+            "Every score changes to zero"
+          ],
+          "correct_index": 1,
+          "explanation": "A preserving approach is needed when unmatched students belong in the result.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-3-relational-model-application-new-5",
+          "test_id": "pt-dbms-sql-3-relational-model-application",
+          "question_text": "A student has no enrollment; another has an enrollment with NULL score. Are those the same state?",
+          "options": [
+            "Yes; all missing values mean the same fact",
+            "Only if names match",
+            "No; a missing relationship differs from an unrecorded attribute",
+            "Only if scores are integers"
+          ],
+          "correct_index": 2,
+          "explanation": "The model and query should retain meaningful absence distinctions.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-3-relational-model-application-new-6",
+          "test_id": "pt-dbms-sql-3-relational-model-application",
+          "question_text": "A field is named student_id but has no referential rule. What is not proved?",
+          "options": [
+            "That the column has a label",
+            "That integers can be stored",
+            "That SQL can read it",
+            "That every stored reference identifies an existing student"
+          ],
+          "correct_index": 3,
+          "explanation": "A name is not foreign-key enforcement.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-3-relational-model-application-new-7",
+          "test_id": "pt-dbms-sql-3-relational-model-application",
+          "question_text": "A report requests unique course-name values rather than all enrollments. What changes?",
+          "options": [
+            "The desired result population and duplicate policy",
+            "The physical identity of every student",
+            "The database port",
+            "The transaction acronym"
+          ],
+          "correct_index": 0,
+          "explanation": "Distinct selected values and complete association facts are different tasks.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-3-relational-model-application-new-8",
+          "test_id": "pt-dbms-sql-3-relational-model-application",
+          "question_text": "A query has no ORDER BY but returns a stable sequence today. What should not be inferred?",
+          "options": [
+            "The query executed",
+            "The relation has that inherent guaranteed display order",
+            "A result was observed",
+            "Physical access can influence encounter order"
+          ],
+          "correct_index": 1,
+          "explanation": "A needed sequence should be requested explicitly.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-3-relational-model-application-new-9",
+          "test_id": "pt-dbms-sql-3-relational-model-application",
+          "question_text": "An engine stores tables. Does that fact alone prove full ACID behavior for every operation?",
+          "options": [
+            "Yes; every table guarantees all isolation levels",
+            "Only if names are unique",
+            "No; transaction guarantees depend on implementation and configuration",
+            "Only if the report has joins"
+          ],
+          "correct_index": 2,
+          "explanation": "The model does not replace engine and operation evidence.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-3-relational-model-application-new-10",
+          "test_id": "pt-dbms-sql-3-relational-model-application",
+          "question_text": "A supplier-specific price is stored as one attribute of Part despite several suppliers. What should modeling review question?",
+          "options": [
+            "Only the spelling of price",
+            "Only the table width",
+            "Only whether the column is numeric",
+            "Whether the attribute belongs to a supplier-part association instead"
+          ],
+          "correct_index": 3,
+          "explanation": "Attribute ownership follows the fact being represented.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "dsa-dbms-sql-relational-identity",
+      "slug": "relational-identity",
+      "title": "Preserve separate students with a shared label",
+      "difficulty": "Easy",
+      "task": "Return student_id and student_name for all students, ordered by student_id. Do not collapse rows with repeated names. Each row represents a separate student identity.",
+      "schema_sql": "CREATE TABLE students (student_id INT PRIMARY KEY, student_name VARCHAR(40) NOT NULL);",
+      "seed_sql": "INSERT INTO students VALUES (12,'Mira'),(11,'Mira'),(13,'Dev');",
+      "expected": "student_id\tstudent_name\n11\tMira\n12\tMira\n13\tDev",
+      "ordering": "student_id ascending",
+      "constraints": [
+        "Student identifiers are unique and required",
+        "Names can repeat"
+      ],
+      "edge_cases": [
+        "Repeated labels must retain separate identities",
+        "Empty input returns no rows"
+      ],
+      "hints": [
+        "Select the identifier as well as the label",
+        "Do not aggregate students by name"
+      ],
+      "solution_sql": "SELECT student_id,student_name FROM students ORDER BY student_id;",
+      "explanation": "The explicit projection preserves each modeled identity even when display labels match.",
+      "validation_cases": [
+        {
+          "seed_sql": "",
+          "expected": ""
+        },
+        {
+          "seed_sql": "INSERT INTO students VALUES (1,'Sam'),(2,'Sam');",
+          "expected": "student_id\tstudent_name\n1\tSam\n2\tSam"
+        }
+      ]
+    },
+    {
+      "id": "dsa-dbms-sql-relational-association",
+      "slug": "relational-association",
+      "title": "Present student-course association facts",
+      "difficulty": "Medium",
+      "task": "Return student_id, student_name, course_id, course_name, score for every enrollment. Join through identifiers, preserve NULL scores, and order by student_id then course_id. Students and courses without enrollment are excluded. This fixture guarantees valid references; the exercise does not test actual foreign-key enforcement.",
+      "schema_sql": "CREATE TABLE students (student_id INT PRIMARY KEY, student_name VARCHAR(40) NOT NULL);\nCREATE TABLE courses (course_id INT PRIMARY KEY, course_name VARCHAR(40) NOT NULL);\nCREATE TABLE enrollments (student_id INT NOT NULL, course_id INT NOT NULL, score INT NULL CHECK(score BETWEEN 0 AND 100), PRIMARY KEY(student_id,course_id));",
+      "seed_sql": "INSERT INTO students VALUES (11,'Mira'),(12,'Dev'),(13,'Mira'); INSERT INTO courses VALUES (1,'Databases'),(2,'Networks'),(3,'Logic'); INSERT INTO enrollments VALUES (11,2,NULL),(11,1,90),(12,1,0);",
+      "expected": "student_id\tstudent_name\tcourse_id\tcourse_name\tscore\n11\tMira\t1\tDatabases\t90\n11\tMira\t2\tNetworks\tNULL\n12\tDev\t1\tDatabases\t0",
+      "ordering": "student_id ascending, course_id ascending",
+      "constraints": [
+        "One enrollment per student-course pair",
+        "All fixture references identify existing records",
+        "Score is NULL or between zero and one hundred"
+      ],
+      "edge_cases": [
+        "One student can have several association facts",
+        "An unenrolled student is not an enrollment row",
+        "Zero score is distinct from missing score"
+      ],
+      "hints": [
+        "Use both association foreign-reference fields in joins",
+        "Keep the requested enrollment grain"
+      ],
+      "solution_sql": "SELECT s.student_id,s.student_name,c.course_id,c.course_name,e.score FROM students s JOIN enrollments e ON e.student_id=s.student_id JOIN courses c ON c.course_id=e.course_id ORDER BY s.student_id,c.course_id;",
+      "explanation": "The association identifiers connect student and course meanings while retaining one row per enrollment and the original score absence policy.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO students VALUES (1,'Mira'); INSERT INTO courses VALUES (1,'Logic');",
+          "expected": ""
+        },
+        {
+          "seed_sql": "INSERT INTO students VALUES (1,'Mira'),(2,'Mira'); INSERT INTO courses VALUES (1,'Logic'); INSERT INTO enrollments VALUES (2,1,50),(1,1,NULL);",
+          "expected": "student_id\tstudent_name\tcourse_id\tcourse_name\tscore\n1\tMira\t1\tLogic\tNULL\n2\tMira\t1\tLogic\t50"
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-3-relational-model-1",
+      "test_id": "pt-dbms-sql-3-relational-model",
+      "question_text": "Who introduced the relational model and in what year?",
+      "options": [
+        "Edgar F. Codd, 1970",
+        "Charles Bachman, 1969",
+        "Michael Stonebraker, 1980",
+        "Ted Codd, 1985"
+      ],
+      "correct_index": 0,
+      "explanation": "E. F. Codd published the foundational relational model paper in 1970 while at IBM.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-3-relational-model-2",
+      "test_id": "pt-dbms-sql-3-relational-model",
+      "question_text": "In the relational model, what is a 'tuple'?",
+      "options": [
+        "A column name",
+        "A single row in a table",
+        "A database index",
+        "A stored procedure"
+      ],
+      "correct_index": 1,
+      "explanation": "A tuple corresponds to a single row of a relation (table), representing one record with values for each attribute.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-3-relational-model-3",
+      "test_id": "pt-dbms-sql-3-relational-model",
+      "question_text": "What core principle distinguishes the relational model from the navigational hierarchical and network models?",
+      "options": [
+        "It requires more storage space",
+        "Data independence: queries are declarative and separate from physical storage/access paths",
+        "It cannot represent one-to-many relationships",
+        "It does not support keys or constraints"
+      ],
+      "correct_index": 1,
+      "explanation": "The relational model's hallmark is data independence: you write declarative queries and the DBMS decides the physical access strategy, unlike navigational pointer-chasing models.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-3-relational-model-4",
+      "test_id": "pt-dbms-sql-3-relational-model",
+      "question_text": "How does the relational model represent a many-to-many relationship, such as students enrolling in multiple courses?",
+      "options": [
+        "By duplicating student records under each course",
+        "Using a junction/associative table with foreign keys to both related tables",
+        "By nesting course documents inside student documents",
+        "It cannot represent many-to-many relationships"
+      ],
+      "correct_index": 1,
+      "explanation": "A junction table like Enrollments(student_id, course_id) cleanly represents many-to-many relationships without duplication, unlike hierarchical trees.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-3-relational-model-5",
+      "test_id": "pt-dbms-sql-3-relational-model",
+      "question_text": "What does 'ACID' stand for in the context of relational database transactions?",
+      "options": [
+        "Atomicity, Consistency, Isolation, Durability",
+        "Access, Concurrency, Indexing, Distribution",
+        "Aggregation, Caching, Integrity, Denormalization",
+        "Availability, Consistency, Idempotency, Durability"
+      ],
+      "correct_index": 0,
+      "explanation": "ACID properties (Atomicity, Consistency, Isolation, Durability) are the transactional guarantees traditionally associated with relational databases.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-3-relational-model-6",
+      "test_id": "pt-dbms-sql-3-relational-model",
+      "question_text": "What is the 'impedance mismatch' problem often cited as a drawback of the relational model?",
+      "options": [
+        "SQL queries run too slowly on large tables",
+        "Object-oriented application code doesn't map cleanly onto flat, normalized tables, requiring extra translation logic",
+        "Relational databases cannot store numeric data",
+        "Tables cannot have more than one primary key column"
+      ],
+      "correct_index": 1,
+      "explanation": "Since application objects often have nested or list-valued attributes, mapping them to normalized relational tables requires extra joins/translation, motivating ORMs and alternative models like document stores.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-3-relational-model-7",
+      "test_id": "pt-dbms-sql-3-relational-model",
+      "question_text": "Why might a highly normalized relational schema underperform a document database for certain read-heavy workloads?",
+      "options": [
+        "Relational databases cannot use indexes",
+        "Retrieving a full logical entity may require joining many normalized tables, whereas a document store can return one denormalized document in a single read",
+        "SQL cannot filter on multiple conditions",
+        "Relational tables cannot store text fields"
+      ],
+      "correct_index": 1,
+      "explanation": "Normalization spreads related data across multiple tables, so reconstructing a full entity requires joins; a document model keeps a denormalized nested structure that can be fetched in one read.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-3-relational-model-8",
+      "test_id": "pt-dbms-sql-3-relational-model",
+      "question_text": "What is a common scaling limitation traditionally associated with relational databases compared to many NoSQL systems?",
+      "options": [
+        "They cannot enforce data integrity",
+        "They typically scale vertically (more powerful single-server hardware) rather than easily horizontally across many commodity servers",
+        "They cannot support transactions",
+        "They cannot store more than one table"
+      ],
+      "correct_index": 1,
+      "explanation": "Traditional RDBMSs are often scaled up (bigger machines) rather than out, whereas many NoSQL models were designed from the start for horizontal, distributed scaling.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "coordinator",
+    "independent_review": "unavailable; no agent tools",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Definitions and examples checked against questions; no plagiarism certification.",
+    "existing_question_corrections": [
+      "tq-dbms-sql-3-relational-model-3",
+      "tq-dbms-sql-3-relational-model-7",
+      "tq-dbms-sql-3-relational-model-8"
+    ],
+    "canonical_answer_indices_preserved": true
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-3-relational-model",
+    "original_note_sha256": "2e5d796889bba628a993f51d5268b39fbaba5bae6a0d4e09f6ca4cb10249fac1",
+    "status": "paired migration prepared; not applied"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Student-course identity and relationship cardinality",
+      "description": "Each enrollment references one student and one course. A student can have zero or many enrollments, and a course can have zero or many enrollments. The pair identifies one association in this simplified model.",
+      "columns": [
+        "Relation",
+        "Key",
+        "Relationship"
+      ],
+      "rows": [
+        [
+          "Student",
+          "student_id",
+          "Zero to many enrollment facts"
+        ],
+        [
+          "Course",
+          "course_id",
+          "Zero to many enrollment facts"
+        ],
+        [
+          "Enrollment",
+          "student_id + course_id",
+          "Exactly one student and one course per pair"
+        ],
+        [
+          "Enrollment.score",
+          "Not an identity",
+          "One optional measurement for the association"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "coordinator review",
+    "server_rendering": "passed",
+    "browser_rendering": "unverified",
+    "independent_review": "unavailable; no agent tools",
+    "rendering_check": "2026-10-29: actual LessonBlock/TopicDiagrams rendering; 49 authored-package checks passed. Browser rendering unverified."
+  },
+  "sql_verification": {
+    "engine": "11.8.6-MariaDB-0+deb13u1 from Debian",
+    "scope": "MariaDB compatibility execution; exact MySQL 8.4/provider execution unverified",
+    "fingerprint": "5da04a19346ae13bd4553445b2d9f770353cfeefac3b1e2cb9ad625b61deb4f4",
+    "cases": [
+      {
+        "problem": "relational-identity",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "relational-identity",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "relational-identity",
+        "case": 2,
+        "passed": true
+      },
+      {
+        "problem": "relational-association",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "relational-association",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "relational-association",
+        "case": 2,
+        "passed": true
+      }
+    ],
+    "all_passed": true
+  }
+}

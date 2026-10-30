@@ -1,0 +1,511 @@
+{
+  "source_ref": "chapter-21-normalization-and-functional-dependencies/1nf",
+  "slug": "1nf",
+  "title": "1NF",
+  "description": "Learn first normal form through meaningful domains, repeating memberships, row identity and lossless relationship modeling, with concrete campus design exercises.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Represent one value from a declared domain\n\nFirst normal form is the starting point for relational normalization. A relation should represent each attribute value as a value from its declared domain, without a repeating group of the same attribute inside a row. In practical SQL design, this often means moving a variable-length collection of related facts into a separate relation rather than storing a comma-separated list in one column or adding a fixed series of nearly identical columns.\n\nThe phrase atomic value is relative to the intended domain and operations. A date contains a year, month and day, yet it can be one value of the DATE domain. A text title contains words, yet it can be one title. The useful question is whether the design treats a cell as one domain value or hides several independently meaningful facts that the application must query and constrain separately.\n\n## Identify the repeated fact in a campus example\n\nImagine learners with learner_id, learner_name and a column containing several skill codes such as SQL, PYTHON, LINUX. If each skill is independently searchable, assignable and removable, the cell hides multiple learner-skill relationships. An update that removes one skill must parse and reconstruct text instead of changing the one relationship that actually changed.\n\nA better model has Learners(learner_id, learner_name) and LearnerSkills(learner_id, skill_code). The second relation holds one row for each learner-skill membership. A learner with three skills has three related rows. A learner with no recorded skills has no membership rows, while the learner entity still exists. This representation preserves the distinction between an entity and a collection of relationships about it.\n\n## Replace repeating columns with rows\n\nColumns named skill1, skill2 and skill3 expose the same problem in another form. The number of skills becomes a schema limit. Adding a fourth skill requires a new column or an awkward overflow convention. Searching all skills requires checking every slot, and the order of slots can accidentally acquire meaning even if membership is intended to be unordered.\n\nMoving those values into rows removes the arbitrary slot count. Add a position or proficiency attribute only if the domain genuinely needs ordering or a measure for each membership. Do not preserve skill1 as a permanent concept merely because the old spreadsheet used that heading. Model the underlying fact first, then decide which attributes belong to that fact.\n\n## Keep identity and multiplicity explicit\n\nIf the domain permits at most one membership per learner and skill, the pair can be a candidate key of LearnerSkills. If a learner can earn the same certification repeatedly in different years, learner plus skill no longer identifies the event. A certification attempt or award identity may be needed. The intended row meaning determines the key; a mechanical split of text does not choose it for you.\n\nA surrogate identifier can identify a stored row without preventing duplicate memberships. If duplicate memberships are forbidden, a suitable uniqueness rule on the business pair is a separate invariant. Similarly, a foreign key can connect the membership to an existing learner. These constraints express integrity beyond merely presenting one skill code per cell, and actual application schema changes require their own approval and testing.\n\n## Distinguish one string from a hidden collection\n\nA learner biography is one textual document when the application stores and displays it as a document. The presence of commas does not make it a repeating group. A skill-code list is different when the application needs independent skill membership, exact matching, uniqueness and per-skill attributes. Delimiters are a symptom to investigate, not a formal rule that every comma violates normalization.\n\nA location may be one address label for mailing, or it may need separately constrained country and postal fields for search and validation. That choice follows the operations and domain semantics. Avoid the extreme instruction to split every string into individual characters or every date into three columns. Decomposition should expose meaningful facts, not destroy useful scalar domains merely because their values have internal structure.\n\n## Understand SQL support without confusing the model\n\nSQL systems can support arrays, JSON values and other structured types. Their availability does not settle a relational modeling decision. A JSON document can be an appropriate stored document, but embedding independently managed learner-skill memberships in it changes how keys, references and updates are enforced. A design should describe that tradeoff honestly rather than claiming that every supported SQL type automatically satisfies every relational-normalization goal.\n\nThis lesson uses a conventional relational interpretation for independently queried memberships. It does not prohibit every JSON column or claim that all applications must decompose every document. What matters is whether the chosen representation supports the required integrity, access patterns and update ownership. [Normalization](/learning/dbms-sql-tutorial/functional-dependency) provides further dependency reasoning once the basic facts have a suitable relational shape.\n\n## Preserve information while decomposing\n\nWhen moving a learner's skills into rows, carry the learner identity into every membership. Splitting names and skills into unrelated tables loses which learner owns which skill. A later cross join would then manufacture memberships that never existed. The relationship key is not a technical decoration; it preserves the fact that the old row was trying to express.\n\nAlso distinguish an empty list, an unknown skill inventory and an invalid imported string if the domain cares about those states. Zero membership rows may mean no recorded memberships, but that alone cannot represent every possible workflow status. A separate verification status can express that a learner has not yet supplied information. Do not encode all those meanings by inventing a fake skill code such as UNKNOWN unless that code is genuinely part of the domain.\n\n## Query the decomposed representation directly\n\nOnce the relationship is explicit, an exact membership lookup no longer needs substring search. A learner with skill code SQL is found by comparing the skill_code value, not by searching for those letters anywhere in a list. A substring search could incorrectly match a different code containing SQL or fail because of inconsistent separators and whitespace.\n\n```sql\nSELECT l.learner_id, l.learner_name\nFROM learners AS l\nWHERE EXISTS (\n  SELECT 1 FROM learner_skills AS s\n  WHERE s.learner_id = l.learner_id\n    AND s.skill_code = 'SQL'\n)\nORDER BY l.learner_id;\n```\n\nThe query assumes a well-defined skill-code comparison contract. Case sensitivity and permitted code spelling should be decided by that domain. The schema shape makes the relationship addressable, but does not by itself decide whether sql and SQL are equivalent codes. Typed values, comparison rules and constraints remain necessary parts of a complete design.\n\n## Recognize what first normal form does not guarantee\n\nA relation containing learner_id, learner_name, course_id and course_title can have one value per cell while repeating learner and course descriptions on many enrollment rows. It may therefore satisfy the intended first-normal-form shape yet still have partial or transitive dependencies. First normal form is a foundation, not a claim that update anomalies have disappeared.\n\nLikewise, choosing a primary key does not automatically resolve repeated facts hidden in other columns. A row_id beside a comma-separated skill list identifies the row but leaves the collection embedded. Keep the shape test separate from the key test and from later dependency tests. Continue with [2NF](/learning/dbms-sql-tutorial/2nf) and [3NF](/learning/dbms-sql-tutorial/3nf) to examine those additional responsibilities.\n\n## Design from allowed facts\n\nFor a first design exercise, take a learner with three unordered skill memberships and another learner with none. Draw Learners and LearnerSkills, list their candidate keys, and show the five rows needed across the entity and membership relations to represent those facts. Explain why the second learner remains present even without a skill row. Then add a proficiency measure and decide which relation owns it.\n\nFor a second exercise, change the requirement to repeated certification awards over time. Explain why a learner-skill pair can no longer identify every award and propose the smallest additional identity information justified by that requirement. These are modeling exercises rather than query-output puzzles. They test whether the design preserves multiplicity, ownership and absence without inventing unsupported schema conventions.\n\n## Define ordering only when it is a fact\n\nA set of memberships does not inherently have first, second and third positions. If a learner ranks preferred skills, that rank is a real attribute of the learner-skill relationship and needs an explicit rule for ties or uniqueness. Reconstructing display text by sorting codes alphabetically is a presentation choice, not evidence that the original source encoded that order. During conversion, preserve order only when the domain says it matters, and avoid inventing a preference ranking from arbitrary spreadsheet slot placement. Conversely, if ordered steps are the actual fact, dropping their position loses information even when every resulting cell is scalar. First-normal-form reasoning should expose that position as data rather than treating all collections as interchangeable unordered lists.\n\n## Review the representation before calling it normalized\n\nA useful review asks what one row means, which attributes describe that fact, whether a cell hides independently managed memberships, and which constraints prevent invalid repetitions. Trace a representative insert, removal and lookup. If removing one skill requires editing an unrelated learner biography or shifting skill slots, the representation probably still mixes separate responsibilities.\n\nThe lesson's SQL illustrates one benefit of explicit relationships but does not prove a migration is safe. Converting existing collections requires parsing policy, invalid-value handling, deduplication rules and preservation checks before any actual schema work. The educational conclusion is narrower: represent the domain's independent facts so that their identities and relationships can be stated and enforced directly.\n",
+  "references": [
+    {
+      "title": "MySQL 8.4 reference manual",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/glossary.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-21-1nf",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-21-1nf-1",
+          "test_id": "pt-dbms-sql-21-1nf",
+          "question_text": "Why does storing 'C1:Database Systems, C2:Operating Systems' in a single Courses cell violate 1NF?",
+          "options": [
+            "Because the cell contains a colon character",
+            "Because the cell holds multiple values (a repeating group) instead of one atomic value per attribute",
+            "Because CourseName should never appear alongside CourseID",
+            "Because the cell is too long"
+          ],
+          "correct_index": 1,
+          "explanation": "1NF requires each cell to hold exactly one atomic value; packing multiple course memberships into one delimited string is a repeating group, the classic 1NF violation.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-21-1nf-2",
+          "test_id": "pt-dbms-sql-21-1nf",
+          "question_text": "How should independent unordered learner-skill memberships be represented in this model?",
+          "options": [
+            "One learner biography containing every code",
+            "One LearnerSkills row per learner_id,skill_code membership",
+            "A new skill column for each learner",
+            "One global skill list without ownership"
+          ],
+          "correct_index": 1,
+          "explanation": "Separate entity rows from membership rows and preserve the learner identity in each relationship.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-21-1nf-3",
+          "test_id": "pt-dbms-sql-21-1nf",
+          "question_text": "Can a table with one scalar domain value per cell still have partial or transitive dependency problems?",
+          "options": [
+            "No, all dependencies disappear",
+            "Yes, first-normal-form shape alone does not establish 2NF or 3NF",
+            "Only if no primary key exists",
+            "Only if strings contain commas"
+          ],
+          "correct_index": 1,
+          "explanation": "The shape test and higher dependency tests are separate. No historical course table is assumed.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-21-1nf-4",
+          "test_id": "pt-dbms-sql-21-1nf",
+          "question_text": "Why is skill1,skill2,skill3 a poor representation for an unbounded collection of independent memberships?",
+          "options": [
+            "Every numbered attribute is forbidden regardless of meaning",
+            "It encodes repeating facts in fixed slots and makes collection growth require schema changes",
+            "Three columns always violate every normal form",
+            "The database cannot store a fourth row"
+          ],
+          "correct_index": 1,
+          "explanation": "The problem is the repeated membership fact and arbitrary slot limit, not merely a number in a column name.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-21-1nf-5",
+          "test_id": "pt-dbms-sql-21-1nf",
+          "question_text": "For independently managed skill, phone and hobby memberships in this conventional relational model, which design is NOT a 1NF problem?",
+          "options": [
+            "A single cell holding 'Python, Java, SQL' for a Skills attribute",
+            "A StudentName column split into separate FirstName and LastName columns",
+            "A single cell holding a JSON array of multiple phone numbers",
+            "Three columns Hobby1, Hobby2, Hobby3 used to store a variable number of hobbies"
+          ],
+          "correct_index": 1,
+          "explanation": "Splitting a name into FirstName/LastName is a granularity design choice, not a 1NF issue — each of those columns still holds one atomic value. The other three options all encode multiple values of one conceptual attribute.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-21-1nf-6",
+          "test_id": "pt-dbms-sql-21-1nf",
+          "question_text": "Why does an ordinary foreign key on a delimited skill-list column not validate each embedded skill separately?",
+          "options": [
+            "Foreign keys cannot reference strings",
+            "It compares the whole column value, not every parsed list element",
+            "Every comma is automatically a foreign key",
+            "Foreign keys validate every substring automatically"
+          ],
+          "correct_index": 1,
+          "explanation": "Independent membership values allow ordinary relational references to validate the intended individual codes.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-21-1nf-7",
+          "test_id": "pt-dbms-sql-21-1nf",
+          "question_text": "What is the core requirement of First Normal Form?",
+          "options": [
+            "Every non-key attribute must depend on the whole key",
+            "Every attribute value in every row must be atomic (single-valued), with no repeating groups",
+            "Every determinant must be a candidate key",
+            "There must be no transitive dependencies"
+          ],
+          "correct_index": 1,
+          "explanation": "1NF's sole concern is atomicity of values — the whole-key and transitive-dependency conditions belong to 2NF and 3NF respectively, which are separate, additional requirements.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-21-1nf-8",
+          "test_id": "pt-dbms-sql-21-1nf",
+          "question_text": "After converting the BEFORE table (one row per student, comma-separated courses) into the AFTER table (one row per student-course pair), what new capability is gained?",
+          "options": [
+            "The ability to store more students",
+            "The ability to run a simple, indexable query like WHERE CourseID = 'C1' to find all students in that course, and to enforce a real foreign key into a Course table",
+            "Automatic removal of all update anomalies",
+            "The elimination of the need for a primary key"
+          ],
+          "correct_index": 1,
+          "explanation": "Achieving 1NF makes each course membership an atomic, queryable, indexable, and foreign-key-able value — but it does NOT by itself remove the update/insertion/deletion anomalies, which need 2NF/3NF.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "cx-q-1nf-9",
+          "test_id": "pt-dbms-sql-21-1nf",
+          "question_text": "What is the strongest reason to separate learner skills into rows?",
+          "options": [
+            "Each membership is independently queried and constrained",
+            "Every comma is forbidden in SQL",
+            "Strings can never be domain values",
+            "A date must be split into characters"
+          ],
+          "correct_index": 0,
+          "explanation": "The independent fact determines the relational shape.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "cx-q-1nf-10",
+          "test_id": "pt-dbms-sql-21-1nf",
+          "question_text": "Does a comma in a biography necessarily violate 1NF?",
+          "options": [
+            "Yes always",
+            "No",
+            "Only when an index exists",
+            "Only in MySQL"
+          ],
+          "correct_index": 1,
+          "explanation": "One document value differs from a hidden collection of relationships.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "cx-test-1nf-2",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "cx-q-1nf-11",
+          "test_id": "cx-test-1nf-2",
+          "question_text": "A learner adds a fourth independently managed skill after the old design reached skill1,skill2,skill3. What does the relationship-row design allow?",
+          "options": [
+            "Drop an earlier skill to reuse its slot",
+            "Add a fourth permanent column for every learner",
+            "Add one membership row without changing the schema",
+            "Store the extra skill in the learner name"
+          ],
+          "correct_index": 2,
+          "explanation": "A row-per-membership design lets collection size grow as facts, while fixed slots tie capacity to the schema.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "cx-q-1nf-12",
+          "test_id": "cx-test-1nf-2",
+          "question_text": "What does a learner with no memberships require?",
+          "options": [
+            "Deleting the learner",
+            "A fake SQL skill",
+            "One NULL skill row for every possible code",
+            "A learner row and no membership rows"
+          ],
+          "correct_index": 3,
+          "explanation": "Entity existence is separate from membership existence.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "cx-q-1nf-13",
+          "test_id": "cx-test-1nf-2",
+          "question_text": "When is learner_id,skill_code a suitable candidate key?",
+          "options": [
+            "When at most one such membership is allowed",
+            "Whenever the columns are printed first",
+            "Even when repeated awards are separate events",
+            "Only if skill codes are numeric"
+          ],
+          "correct_index": 0,
+          "explanation": "Key choice follows permitted multiplicity.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "cx-q-1nf-14",
+          "test_id": "cx-test-1nf-2",
+          "question_text": "What can a surrogate row ID fail to prevent?",
+          "options": [
+            "Identification of a stored row",
+            "Duplicate business memberships",
+            "Every possible query",
+            "All foreign keys"
+          ],
+          "correct_index": 1,
+          "explanation": "A row identifier is not automatically business-pair uniqueness.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "cx-q-1nf-15",
+          "test_id": "cx-test-1nf-2",
+          "question_text": "Why carry learner_id into membership rows?",
+          "options": [
+            "To sort skill names automatically",
+            "To replace every other key",
+            "To preserve ownership of each relationship",
+            "To prohibit empty memberships"
+          ],
+          "correct_index": 2,
+          "explanation": "Without the relationship key reconstruction loses the original associations.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "cx-q-1nf-16",
+          "test_id": "cx-test-1nf-2",
+          "question_text": "Does 1NF eliminate every update anomaly?",
+          "options": [
+            "Yes, every dependency is resolved",
+            "Only when SELECT * is used",
+            "Only with integer IDs",
+            "No"
+          ],
+          "correct_index": 3,
+          "explanation": "Higher normal forms examine additional dependencies.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "cx-q-1nf-17",
+          "test_id": "cx-test-1nf-2",
+          "question_text": "Why avoid substring search for an exact skill membership?",
+          "options": [
+            "It can match fragments of another code",
+            "SQL cannot compare strings",
+            "EXISTS always changes storage",
+            "Substring search is always a syntax error"
+          ],
+          "correct_index": 0,
+          "explanation": "Explicit values support the intended exact comparison.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "cx-q-1nf-18",
+          "test_id": "cx-test-1nf-2",
+          "question_text": "What extra requirement changes a membership pair into an insufficient award key?",
+          "options": [
+            "A longer learner name",
+            "Repeated awards of the same skill over time",
+            "An ORDER BY clause",
+            "A renamed table alias"
+          ],
+          "correct_index": 1,
+          "explanation": "Multiple event facts can share the membership pair.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "cx-q-1nf-19",
+          "test_id": "cx-test-1nf-2",
+          "question_text": "Does SQL support for JSON settle the normalization choice?",
+          "options": [
+            "Yes, JSON always means full normalization",
+            "Yes, JSON is never usable",
+            "No, domain and integrity requirements still matter",
+            "Only when JSON text contains no commas"
+          ],
+          "correct_index": 2,
+          "explanation": "Structured storage capability is distinct from fact modeling.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "cx-q-1nf-20",
+          "test_id": "cx-test-1nf-2",
+          "question_text": "What should an actual collection migration define first?",
+          "options": [
+            "Only the new table name",
+            "Only the number of columns",
+            "Only the output color",
+            "Parsing, invalid-value, deduplication and preservation policies"
+          ],
+          "correct_index": 3,
+          "explanation": "Changing representation can otherwise lose or invent facts.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [],
+  "coding_not_applicable": "This topic assesses relational representation and preservation of membership facts. The notes contain two explicit schema-design exercises, including zero memberships and repeated awards. SQL output against an already chosen schema would not validate the modeling decision; a read-only membership example illustrates the consequence without claiming an executable proof of 1NF.",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-21-1nf-1",
+      "test_id": "pt-dbms-sql-21-1nf",
+      "question_text": "Why does storing 'C1:Database Systems, C2:Operating Systems' in a single Courses cell violate 1NF?",
+      "options": [
+        "Because the cell contains a colon character",
+        "Because the cell holds multiple values (a repeating group) instead of one atomic value per attribute",
+        "Because CourseName should never appear alongside CourseID",
+        "Because the cell is too long"
+      ],
+      "correct_index": 1,
+      "explanation": "1NF requires each cell to hold exactly one atomic value; packing multiple course memberships into one delimited string is a repeating group, the classic 1NF violation.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-21-1nf-2",
+      "test_id": "pt-dbms-sql-21-1nf",
+      "question_text": "What is the correct 1NF transformation of the BEFORE table with the comma-separated Courses column?",
+      "options": [
+        "Delete the Courses column entirely",
+        "Split each student's course list into separate rows, one per (StudentID, CourseID) pairing, as done in the StudentCourse table used throughout this chapter",
+        "Store the list as a single JSON array in the same cell",
+        "Add more columns like Course1, Course2, Course3"
+      ],
+      "correct_index": 1,
+      "explanation": "1NF is achieved by giving each (student, course) fact its own atomic row rather than packing multiple courses into one cell — exactly how StudentCourse is structured.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-21-1nf-3",
+      "test_id": "pt-dbms-sql-21-1nf",
+      "question_text": "Has the StudentCourse table used throughout topics 21.1-21.11 ever violated 1NF?",
+      "options": [
+        "Yes, because it has a composite key",
+        "No — every attribute in every row has always held a single atomic value; its redundancy and anomaly problems come from partial/transitive dependency issues (2NF/3NF), not atomicity",
+        "Yes, because InstructorOffice repeats across rows",
+        "No, but only after topic 21.13's decomposition"
+      ],
+      "correct_index": 1,
+      "explanation": "1NF is only about atomicity of values, which StudentCourse always satisfied. Its problems were caused by violations of 2NF and 3NF, which are separate, stricter conditions.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-21-1nf-4",
+      "test_id": "pt-dbms-sql-21-1nf",
+      "question_text": "Why is a fixed set of columns like Course1, Course2, Course3 (instead of a comma-separated string) still considered a 1NF violation?",
+      "options": [
+        "Because it isn't a violation at all — fixed columns always satisfy 1NF",
+        "Because it still encodes a variable-length, multi-valued fact using a rigid structure, and can't handle a student with more courses than there are columns, nor be queried/indexed the relational way",
+        "Because column names cannot include numbers",
+        "Because it uses more storage than a comma-separated string"
+      ],
+      "correct_index": 1,
+      "explanation": "Spreading a repeating group across multiple fixed columns is just a different disguise for the same underlying multi-valued-attribute problem that 1NF forbids.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-21-1nf-5",
+      "test_id": "pt-dbms-sql-21-1nf",
+      "question_text": "Which of the following is NOT a 1NF violation?",
+      "options": [
+        "A single cell holding 'Python, Java, SQL' for a Skills attribute",
+        "A StudentName column split into separate FirstName and LastName columns",
+        "A single cell holding a JSON array of multiple phone numbers",
+        "Three columns Hobby1, Hobby2, Hobby3 used to store a variable number of hobbies"
+      ],
+      "correct_index": 1,
+      "explanation": "Splitting a name into FirstName/LastName is a granularity design choice, not a 1NF issue — each of those columns still holds one atomic value. The other three options all encode multiple values of one conceptual attribute.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-21-1nf-6",
+      "test_id": "pt-dbms-sql-21-1nf",
+      "question_text": "Why can't a foreign key constraint be enforced on the CourseID values embedded inside a comma-separated Courses string?",
+      "options": [
+        "Foreign keys can be enforced on any text pattern",
+        "A foreign key constraint requires a column value to reference a specific row in another table, which is impossible when the value is buried inside free-form delimited text rather than being its own atomic column value",
+        "Because CourseID must always be numeric for foreign keys to work",
+        "Because foreign keys are incompatible with 1NF"
+      ],
+      "correct_index": 1,
+      "explanation": "Relational integrity constraints operate on discrete column values; text embedded inside a larger string isn't a distinct value the database engine can validate against another table.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-21-1nf-7",
+      "test_id": "pt-dbms-sql-21-1nf",
+      "question_text": "What is the core requirement of First Normal Form?",
+      "options": [
+        "Every non-key attribute must depend on the whole key",
+        "Every attribute value in every row must be atomic (single-valued), with no repeating groups",
+        "Every determinant must be a candidate key",
+        "There must be no transitive dependencies"
+      ],
+      "correct_index": 1,
+      "explanation": "1NF's sole concern is atomicity of values — the whole-key and transitive-dependency conditions belong to 2NF and 3NF respectively, which are separate, additional requirements.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-21-1nf-8",
+      "test_id": "pt-dbms-sql-21-1nf",
+      "question_text": "After converting the BEFORE table (one row per student, comma-separated courses) into the AFTER table (one row per student-course pair), what new capability is gained?",
+      "options": [
+        "The ability to store more students",
+        "The ability to run a simple, indexable query like WHERE CourseID = 'C1' to find all students in that course, and to enforce a real foreign key into a Course table",
+        "Automatic removal of all update anomalies",
+        "The elimination of the need for a primary key"
+      ],
+      "correct_index": 1,
+      "explanation": "Achieving 1NF makes each course membership an atomic, queryable, indexable, and foreign-key-able value — but it does NOT by itself remove the update/insertion/deletion anomalies, which need 2NF/3NF.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "worker_3",
+    "independent_review": "passed",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "author review; independent review pending",
+    "canonical_answer_indices_preserved": true,
+    "editorial_record": "Original explanations and assessments; seeded identities and canonical answer positions retained. External originality clearance unavailable.",
+    "independent_reviewer": "/root",
+    "independent_review_scope": "Full notes,20 MCQs/options/reasoning,two modeling exercises,SQL illustration and membership diagram reviewed. Domain-relative atomicity, repeating memberships, identity/multiplicity, preservation and higher-normal-form limits correct. Fixed modeling exercise arithmetic: two learner entities plus three memberships require five rows; scoped structured-value question to independently managed memberships and replaced redundant slot-definition question with a growth scenario. Exact MySQL/provider, browser and release validation remain separate."
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-21-1nf",
+    "original_note_sha256": "2b1a2e2d99983e5a7c79bd63a07424096a7186a832dca363e4d03dd878a000c0",
+    "status": "drafted; not included in prepared paired migrations"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Separate entities from their memberships",
+      "description": "One learner row survives independently of how many skill relationships are recorded.",
+      "columns": [
+        "Learner entity",
+        "Membership rows",
+        "Meaning"
+      ],
+      "rows": [
+        [
+          "Learner 1: Asha",
+          "1 + SQL; 1 + PYTHON",
+          "Two independent memberships"
+        ],
+        [
+          "Learner 2: Rohan",
+          "None",
+          "Learner exists; no recorded membership"
+        ],
+        [
+          "Learner 3: Neha",
+          "3 + SQL",
+          "One membership"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "coordinator independent manual review passed",
+    "server_rendering": "passed",
+    "browser_rendering": "unverified",
+    "independent_review": "passed",
+    "server_rendering_evidence": "2026-10-29 full Vitest:1310 passed/12 skipped; actual LessonBlock/TopicDiagrams render over230 packages. Browser visual QA remains unverified."
+  },
+  "authoring_status": "drafted; verification pending",
+  "sql_verification": {
+    "scope": "not executed; exact MySQL/provider execution pending",
+    "all_passed": false,
+    "cases": []
+  }
+}

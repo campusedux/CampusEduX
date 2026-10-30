@@ -1,21 +1,14 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Check, X, ChevronRight } from "lucide-react";
+import { ChevronRight } from "lucide-react";
+import { loadTestAttemptReview } from "@/lib/testAttemptReview";
+import { TestAttemptReview } from "@/components/learning/TestAttemptReview";
 import { createAuthedServerSupabase } from "@/lib/supabase/authed-server";
 import { getMockTest } from "@/lib/learning";
 
 export const metadata: Metadata = { robots: { index: false, follow: false } };
 export const dynamic = "force-dynamic";
-
-interface QRow {
-  id: string;
-  question_text: string;
-  options: string[];
-  correct_index: number;
-  explanation: string;
-  sort_order: number;
-}
 
 export default async function MockTestResultPage({
   params,
@@ -30,37 +23,10 @@ export default async function MockTestResultPage({
     notFound();
   }
 
-  // Own-row RLS on test_attempts — someone else's attempt id comes back null.
-  const { data: attempt } = await supabase
-    .from("test_attempts")
-    .select("id,test_id,score,total_marks,correct_count,incorrect_count,time_taken_seconds,created_at")
-    .eq("id", params.attemptId)
-    .maybeSingle();
-  if (!attempt || attempt.test_id !== params.testId) notFound();
-
-  const [{ data: answerRows }, test] = await Promise.all([
-    supabase.from("test_attempt_answers").select("question_id,selected_index,is_correct").eq("attempt_id", attempt.id),
-    getMockTest(params.testId),
-  ]);
-
-  // A chapter/course attempt's questions never belong to `attempt.test_id`
-  // itself (that test owns no test_questions — its pool is drawn from many
-  // topic tests, see practice_test_pool, 0091/063). test_attempt_answers
-  // always holds exactly the ids actually presented for THIS attempt, for
-  // every scope, so filtering by those ids works uniformly.
-  const answeredIds = (answerRows ?? []).map((a) => a.question_id as string);
-  const { data: questionRows } = answeredIds.length
-    ? await supabase
-        .from("test_questions")
-        .select("id,question_text,options,correct_index,explanation,sort_order")
-        .in("id", answeredIds)
-        .order("sort_order", { ascending: true })
-    : { data: [] as QRow[] };
-
-  const questions = (questionRows ?? []) as QRow[];
-  const answers = new Map(
-    (answerRows ?? []).map((a) => [a.question_id as string, a.selected_index as number | null]),
-  );
+  const review = await loadTestAttemptReview(supabase, params.testId, params.attemptId);
+  if (!review) notFound();
+  const { attempt } = review;
+  const test = await getMockTest(params.testId);
   const totalMarks = attempt.total_marks || 0;
   const accuracy = totalMarks > 0 ? Math.round((attempt.score / totalMarks) * 100) : 0;
   const mins = Math.floor((attempt.time_taken_seconds || 0) / 60);
@@ -97,55 +63,9 @@ export default async function MockTestResultPage({
         Time taken: {mins}m {secs}s · Submitted {new Date(attempt.created_at).toLocaleString()}
       </p>
 
-      <div className="mt-8 space-y-4">
+      <div className="mt-8">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-ink-faint">Review</h2>
-        {questions.map((q, i) => {
-          const chosen = answers.get(q.id);
-          const correct = q.correct_index;
-          const wasCorrect = chosen != null && chosen === correct;
-          return (
-            <div key={q.id} className="rounded-2xl border border-line bg-card p-4 shadow-card">
-              <div className="flex items-start gap-2">
-                {wasCorrect ? (
-                  <Check className="mt-0.5 h-4 w-4 flex-shrink-0 text-emerald-500" aria-hidden />
-                ) : (
-                  <X className="mt-0.5 h-4 w-4 flex-shrink-0 text-red-500" aria-hidden />
-                )}
-                <p className="font-medium text-ink">
-                  Q{i + 1}. {q.question_text}
-                </p>
-              </div>
-              <ul className="mt-3 space-y-1.5 text-sm">
-                {q.options.map((opt, oi) => {
-                  const isCorrect = oi === correct;
-                  const isChosen = oi === chosen;
-                  return (
-                    <li
-                      key={oi}
-                      className={`rounded-lg border px-3 py-2 ${
-                        isCorrect
-                          ? "border-success/30 bg-success/10 text-success"
-                          : isChosen
-                            ? "border-danger/30 bg-danger/10 text-danger"
-                            : "border-line text-ink-muted"
-                      }`}
-                    >
-                      {opt}
-                      {isCorrect ? " · correct answer" : isChosen ? " · your answer" : ""}
-                    </li>
-                  );
-                })}
-              </ul>
-              {chosen == null ? <p className="mt-2 text-xs text-ink-faint">Not answered.</p> : null}
-              {q.explanation ? (
-                <p className="mt-2 border-t border-line pt-2 text-sm text-ink-muted">
-                  <span className="font-medium text-ink">Explanation: </span>
-                  {q.explanation}
-                </p>
-              ) : null}
-            </div>
-          );
-        })}
+        <TestAttemptReview review={review} showSummary={false} />
       </div>
 
       <div className="mt-8 flex flex-wrap gap-3">

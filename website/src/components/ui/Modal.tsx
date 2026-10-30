@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect } from "react";
 import { X } from "lucide-react";
+import { useDialog } from "@/lib/useDialog";
 import { cn } from "@/lib/cn";
 
 /**
@@ -27,29 +27,21 @@ export function Modal({
   ariaLabel?: string;
   className?: string;
 }) {
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
-    document.addEventListener("keydown", onKey);
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.removeEventListener("keydown", onKey);
-      document.body.style.overflow = prev;
-    };
-  }, [open, onClose]);
+  const dialogRef = useDialog(open, onClose);
 
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-[110] flex items-end justify-center p-0 sm:items-center sm:p-6">
+    <div className="fixed inset-0 z-modal flex items-end justify-center p-0 sm:items-center sm:p-6">
       <div className="absolute inset-0 animate-fade-in bg-scrim/60 backdrop-blur-[2px]" onClick={onClose} aria-hidden />
       <div
+        ref={dialogRef}
+        tabIndex={-1}
         role="dialog"
         aria-modal="true"
         aria-label={title ?? ariaLabel}
         className={cn(
-          "relative w-full max-w-lg animate-slide-up rounded-t-3xl border border-line bg-card shadow-card-lg sm:animate-scale-in sm:rounded-3xl",
+          "relative max-h-[100dvh] overflow-y-auto sm:max-h-[calc(100dvh-3rem)] w-full max-w-lg animate-slide-up rounded-t-3xl border border-line bg-card shadow-card-lg sm:animate-scale-in sm:rounded-3xl",
           className,
         )}
       >

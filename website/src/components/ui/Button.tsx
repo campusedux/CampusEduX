@@ -12,7 +12,7 @@ export type ButtonVariant = "primary" | "secondary" | "ghost" | "danger" | "text
 export type ButtonSize = "sm" | "md" | "lg";
 
 const VARIANT: Record<ButtonVariant, string> = {
-  primary: "bg-primary text-white shadow-glow hover:bg-primary-600 hover:-translate-y-px",
+  primary: "bg-primary text-white hover:bg-primary-600 hover:-translate-y-px",
   secondary: "bg-primary-50 text-primary hover:bg-primary-100",
   ghost: "border border-line bg-card text-ink hover:border-primary/30 hover:bg-surface",
   danger: "bg-danger text-white hover:bg-danger/90",
@@ -20,9 +20,9 @@ const VARIANT: Record<ButtonVariant, string> = {
 };
 
 const SIZE: Record<ButtonSize, string> = {
-  sm: "h-9 px-3.5 text-[0.8rem]",
-  md: "h-11 px-5 text-sm",
-  lg: "h-12 px-6 text-[0.95rem]",
+  sm: "h-10 px-3.5 text-sm sm:h-9",
+  md: "h-10 px-4 text-sm",
+  lg: "h-10 px-5 text-sm",
 };
 
 type CommonProps = {
@@ -55,7 +55,7 @@ export function Button(props: AsButton | AsLink) {
   } = props;
 
   const classes = cn(
-    "inline-flex items-center justify-center gap-2 rounded-xl font-semibold transition active:scale-[.98] disabled:opacity-60 disabled:pointer-events-none motion-reduce:transform-none",
+    "inline-flex min-w-0 max-w-full items-center justify-center gap-2 rounded-xl font-semibold transition duration-[120ms] active:scale-[.98] disabled:opacity-60 disabled:pointer-events-none motion-reduce:transform-none",
     VARIANT[variant],
     SIZE[size],
     fullWidth && "w-full",
@@ -69,7 +69,7 @@ export function Button(props: AsButton | AsLink) {
       ) : (
         LeftIcon && <LeftIcon className="h-4 w-4" aria-hidden />
       )}
-      <span>{children}</span>
+      <span className="min-w-0 [overflow-wrap:anywhere]">{children}</span>
       {RightIcon && !loading && <RightIcon className="h-4 w-4" aria-hidden />}
     </>
   );

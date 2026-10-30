@@ -1,0 +1,508 @@
+{
+  "source_ref": "chapter-23-concurrency-control/view-serializability",
+  "slug": "view-serializability",
+  "title": "View Serializability",
+  "description": "Prove view equivalence with initial reads, read-from sources and final writers; compare blind-write witnesses with cyclic conflict graphs and recovery limits.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Compare what transactions read and which writes survive\n\nView serializability asks whether an interleaved schedule is view equivalent to some serial schedule of the same transactions. In the classical read-write model, view equivalence preserves three things: reads of initial values, the write operation supplying each read and the transaction performing the final write to each item. It is a formal account of observation and final-writer relationships, not simply a comparison of final numeric values in one example.\n\nBegin with [serial schedules](/learning/dbms-sql-tutorial/serial-schedule), [conflict serializability](/learning/dbms-sql-tutorial/conflict-serializability) and [nonserial schedules](/learning/dbms-sql-tutorial/non-serial-schedule). A view-equivalence argument must state the item model and the complete transaction programs. SQL predicates, multiple versions, commits and application meaning introduce additional questions that a small single-version schedule does not answer by itself.\n\n## Record the read-from relationships explicitly\n\nWrite r1(A) for transaction one reading item A and w2(A) for transaction two writing it. If r1 reads the database's initial A, any view-equivalent schedule must preserve that initial read. If r3 reads the value written by a particular w2, the equivalent schedule must preserve that source. A coincidentally equal value written by a different transaction is not interchangeable in this formal definition.\n\nThe final-writer condition is separate. If transaction three writes A last in the original schedule, it must also be the final writer of A in the compared serial schedule. Preserving every read without preserving the final writer can leave a different surviving write relationship. For a multi-item history, check these conditions for each item; passing the checks for A alone does not establish equivalence of a history that also touches B.\n\n## Distinguish blind writes from read-modify-write operations\n\nA blind write assigns an item without previously reading that item in the same transaction under the stated model. Assigning a supplied constant is a useful example. By contrast, adding interest based on the old balance is a read-modify-write operation when the program reads that balance. Do not hide a necessary read merely because an SQL UPDATE expresses arithmetic in one line.\n\nBlind writes can overwrite intermediate values nobody reads. Conflict equivalence preserves all conflicting-operation order, including some orderings whose intermediate writes are never observed. View equivalence can ignore certain such order differences while preserving the specified reads and final writer. This is the source of classical histories that are view serializable but fail the stricter conflict-graph test.\n\n## Work through a cyclic conflict graph\n\nConsider T1 with r1(A), w1(A), T2 with only w2(A), and T3 with only w3(A). Their interleaving is r1(A), w2(A), w1(A), w3(A). T1 reads the initial value, T2 and T3 perform blind writes, and T3 is the final writer. The transaction-local order of T1 remains read before write.\n\n| Earlier operation | Later operation | Conflict edge |\n|---|---|---|\n| r1(A) | w2(A) | T1 toT2 |\n| w2(A) | w1(A) | T2 toT1 |\n| w1(A) | w3(A) | T1 toT3 |\n| w2(A) | w3(A) | T2 toT3 |\n\nThe first two edges form a cycle, so the history is not conflict serializable. That conclusion is exact for the named test. It is not permission to conclude immediately that no view-equivalent serial schedule exists, because blind writes can make the broader criterion behave differently.\n\n## Construct a serial witness and check every condition\n\nCompare the interleaving with serial order T1, T2, T3, whose operations are r1(A), w1(A), w2(A), w3(A). T1 still reads the initial A. There are no other reads whose source must be preserved. T3 still performs the final write. These checks establish view equivalence in the declared model, despite the changed relative order of the intermediate T1 and T2 writes.\n\nThe serial witness is a complete order of transactions, not a rearrangement that splits a transaction's operations into separate blocks. Always preserve each transaction's internal program order. When several reads exist, annotate each with its source before proposing a witness; otherwise it is easy to preserve one attractive read while silently changing another.\n\n## Build constraints from reads and final writers\n\nAn initial read by Ti generally constrains other writers of that item to occur after Ti in a serial witness. A read by Ti from Tj requires Tj to supply the relevant value before Ti, with other writers positioned so they do not replace the required source before that read. The exact constraints depend on the transaction programs and which writes are last within them.\n\nA final writer must appear after other transactions writing that item in the serial order. Combine constraints across items instead of reasoning about each independently and then assuming their serial orders agree. If A requires T1 before T2 while B requires T2 before T1, the proposed witness cannot satisfy both. A failed candidate order is not automatically a proof that every candidate fails; explain why the complete constraint system is impossible.\n\n## Know the relationship to conflict serializability\n\nEvery conflict-serializable history is view serializable in the classical model. Some histories with blind writes are view serializable without being conflict serializable, as the worked example shows. In the standard setting without blind writes, the two criteria coincide. The qualification about the model matters when transferring textbook statements to a multiversion engine or a richer operation language.\n\nGeneral view-serializability testing is NP-complete, while acyclicity of the conflict graph is efficiently testable. This explains the educational usefulness of the narrower graph criterion. It does not mean every production database literally constructs that classroom graph, nor that every supported isolation level enforces serializable histories. Locking, validation and version-based protocols have their own mechanisms and guarantees.\n\n## Do not infer recovery or business correctness\n\nView serializability describes one equivalence property. It does not by itself require that a transaction read only committed values, that dependent transactions commit in a recoverable order or that uncommitted writes cannot be overwritten. Include commit and abort markers and analyze the separate recovery property when the question asks about crash or rollback behavior.\n\nSimilarly, a serial-equivalent execution can faithfully preserve transactions containing an incorrect calculation or an unauthorized business operation. The formal test does not invent missing invariants or permissions. When teaching a production workflow, state both the transaction programs' assumed correctness and the concurrency property being analyzed. Calling a schedule safe without those qualifications can promise more than the proof establishes.\n\n## Solve a changed-read counterexample\n\nFor a beginner exercise, annotate the worked history with T1's initial read and T3's final write. Write out the witness T1, T2, T3 and verify the three conditions one by one. Then compare the conflict edges and explain why the cycle does not contradict the view-equivalence proof. The two tests preserve different relationship sets.\n\nFor an intermediate exercise, add a read by T2 immediately after its own blind write. Decide whether that read sees its own write and whether the proposed witness preserves that source. The added read sees T2's own write, and serial T1, T2, T3 still preserves that source. Now use r1(A), r2(A), w2(A), w1(A), w3(A), where both reads see initial A. Neither T1-before-T2 nor T2-before-T1 preserves both initial reads, so no serial witness exists with T3 final. A new read can change the verdict.\n\nAs a second counterexample, consider r1(A), w2(A), r1(A) with T1's two reads observing the initial value and T2's new value respectively. In a serial order, T1 runs uninterrupted, so it cannot observe both sides of T2's write. Neither ordering of the two transactions preserves both reads. This is a useful small proof of failure that does not depend on arbitrary arithmetic values.\n\n## State the conclusion at the right precision\n\nA result table alone cannot demonstrate read-from identity, a serial witness or the absence of another possible witness. Preserve the symbolic history and assumptions with the answer. For advanced work, separate single-version view serializability from multiversion variants and predicate-based SQL serializability instead of treating their names as interchangeable.\n\nContinue with [precedence graphs](/learning/dbms-sql-tutorial/precedence-graph), [recoverable schedules](/learning/dbms-sql-tutorial/recoverable-schedule) and [strict schedules](/learning/dbms-sql-tutorial/strict-schedule). A complete solution names initial readers, every read source, final writers and either a valid serial witness or a sufficient impossibility argument.",
+  "references": [
+    {
+      "title": "Database System Concepts textbook materials",
+      "url": "https://www.db-book.com/"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-23-view-serializability",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-23-view-serializability-1",
+          "test_id": "pt-dbms-sql-23-view-serializability",
+          "question_text": "What are the three conditions for two schedules to be 'view equivalent'?",
+          "options": [
+            "Same number of transactions, same number of commits, same number of aborts",
+            "Same initial reads, same read-from relationships between transactions, and the same transaction performing the final write to each item",
+            "Same total execution time and same lock table state",
+            "Same set of data items accessed, regardless of order"
+          ],
+          "correct_index": 1,
+          "explanation": "View equivalence requires matching initial reads, matching read-from pairs, and matching final writers per data item — nothing about timing or locks.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-23-view-serializability-2",
+          "test_id": "pt-dbms-sql-23-view-serializability",
+          "question_text": "In the worked example (R1(A), W2(A), W1(A), W3(A)), why does this schedule fail the conflict-serializability test?",
+          "options": [
+            "Because R1(A) and W3(A) don't conflict",
+            "Because the conflicts create a cycle: R1(A) before W2(A) implies T1→T2, but W2(A) before W1(A) implies T2→T1",
+            "Because it involves three transactions instead of two",
+            "Because W3(A) is a blind write"
+          ],
+          "correct_index": 1,
+          "explanation": "The precedence graph has both a T1→T2 edge and a T2→T1 edge, forming a 2-node cycle — which means no serial reordering via legal swaps is possible.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-23-view-serializability-3",
+          "test_id": "pt-dbms-sql-23-view-serializability",
+          "question_text": "Despite failing conflict serializability, why is that same schedule view-serializable (equivalent to <T1, T2, T3>)?",
+          "options": [
+            "Because T2 and T3's writes are blind (no read), so nobody observes their relative order — only the final writer (T3) and T1's initial read matter, and both match the serial order",
+            "Because view serializability ignores write operations entirely",
+            "Because the schedule has no conflicts at all",
+            "Because T1 commits first in both schedules"
+          ],
+          "correct_index": 0,
+          "explanation": "The intermediate T1 and T2 writes change relative order, while T1 keeps its initial read and T3 remains final writer. Those are the only read/final-writer constraints in the stated history.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-23-view-serializability-4",
+          "test_id": "pt-dbms-sql-23-view-serializability",
+          "question_text": "What kind of operation is essential for a schedule to be view-serializable but NOT conflict-serializable?",
+          "options": [
+            "A blind write — a write to an item with no preceding read of it by the same transaction",
+            "A dirty read",
+            "A phantom insert",
+            "A two-phase commit"
+          ],
+          "correct_index": 0,
+          "explanation": "Without blind writes, conflict and view serializability coincide; the extra permissiveness of view serializability specifically comes from ignoring the order of writes nobody ever reads.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-23-view-serializability-5",
+          "test_id": "pt-dbms-sql-23-view-serializability",
+          "question_text": "Is every conflict-serializable schedule also view-serializable?",
+          "options": [
+            "No, they are unrelated properties",
+            "Yes — conflict serializability is strictly narrower, so anything satisfying it automatically satisfies the broader view-serializability definition too",
+            "Only if the schedule has no blind writes",
+            "Only for schedules with exactly two transactions"
+          ],
+          "correct_index": 1,
+          "explanation": "Reordering by non-conflicting swaps always preserves initial reads, read-from relationships, and final writes, so conflict-serializable schedules are always a subset of view-serializable ones.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-23-view-serializability-6",
+          "test_id": "pt-dbms-sql-23-view-serializability",
+          "question_text": "Why is the conflict-graph test a useful practical classroom criterion compared with general view-serializability testing?",
+          "options": [
+            "View serializability is not a real academic concept",
+            "The conflict-graph criterion is efficiently testable; general view-serializability testing is NP-complete.",
+            "View serializability only applies to read-only transactions",
+            "Conflict serializability produces higher final account balances"
+          ],
+          "correct_index": 1,
+          "explanation": "Real engines use different concurrency protocols and supported isolation levels; they do not all run this graph test.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-23-view-serializability-7",
+          "test_id": "pt-dbms-sql-23-view-serializability",
+          "question_text": "When does conflict serializability and view serializability coincide exactly (produce the same verdict)?",
+          "options": [
+            "Always, they are identical definitions",
+            "Never — they always disagree",
+            "When the schedule contains no blind writes",
+            "Only when there are exactly 2 transactions"
+          ],
+          "correct_index": 2,
+          "explanation": "The gap between the two notions only opens up in the presence of blind writes; without them, every view-serializable schedule is also conflict-serializable.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-23-view-serializability-8",
+          "test_id": "pt-dbms-sql-23-view-serializability",
+          "question_text": "What does the 'final write' condition of view equivalence require?",
+          "options": [
+            "Every transaction must write every data item",
+            "For each data item, the same transaction must perform the last write to it in both schedules being compared",
+            "The last operation of the schedule must be a COMMIT",
+            "All writes must happen before all reads"
+          ],
+          "correct_index": 1,
+          "explanation": "Final-write matching ensures that whichever value a subsequent reader (or the database state itself) ultimately sees for that item is attributable to the same transaction in both schedules.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-23-view-serializability-c-new-1",
+          "test_id": "pt-dbms-sql-23-view-serializability",
+          "question_text": "T1 reads an initial value in the original history. What must a view-equivalent history preserve?",
+          "options": [
+            "That initial read",
+            "Only a coincidentally equal number",
+            "Only the table name",
+            "Only the last SQL statement"
+          ],
+          "correct_index": 0,
+          "explanation": "View equivalence preserves the source relationship, not merely one observed numeric equality.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-23-view-serializability-c-new-2",
+          "test_id": "pt-dbms-sql-23-view-serializability",
+          "question_text": "Can a different transaction supply the same numeric value and count as the same read source?",
+          "options": [
+            "Yes, always",
+            "No",
+            "Only for zero",
+            "Only for integers"
+          ],
+          "correct_index": 1,
+          "explanation": "The formal relationship identifies the producing write.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-23-view-serializability-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-23-view-serializability-c-new-3",
+          "test_id": "pt-dbms-sql-23-view-serializability-application",
+          "question_text": "Why does r1(A), w2(A), w1(A), w3(A) fail conflict serializability?",
+          "options": [
+            "T3 never writes",
+            "There are no reads",
+            "It has T1-toT2 and T2-toT1 edges",
+            "All three transactions are serial"
+          ],
+          "correct_index": 2,
+          "explanation": "Conflicting chronology creates a directed cycle.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-23-view-serializability-c-new-4",
+          "test_id": "pt-dbms-sql-23-view-serializability-application",
+          "question_text": "Which serial witness preserves the worked history view?",
+          "options": [
+            "T3, T2, T1",
+            "T2, T3, T1",
+            "No witness can exist because a conflict cycle exists",
+            "T1, T2, T3"
+          ],
+          "correct_index": 3,
+          "explanation": "T1 keeps its initial read and T3 remains final writer.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-23-view-serializability-c-new-5",
+          "test_id": "pt-dbms-sql-23-view-serializability-application",
+          "question_text": "What is a blind write in the stated model?",
+          "options": [
+            "A write without an earlier read of that item by its transaction",
+            "Any write occurring at night",
+            "A write after SELECT of the same item",
+            "A failed write"
+          ],
+          "correct_index": 0,
+          "explanation": "It can create unobserved intermediate write order differences.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-23-view-serializability-c-new-6",
+          "test_id": "pt-dbms-sql-23-view-serializability-application",
+          "question_text": "Does one-line UPDATE x=x+1 logically avoid reading x?",
+          "options": [
+            "Yes, line count decides",
+            "No; the computation uses the old value",
+            "Only if x is positive",
+            "Only on an indexed column"
+          ],
+          "correct_index": 1,
+          "explanation": "Operation modeling must include the value dependency.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-23-view-serializability-c-new-7",
+          "test_id": "pt-dbms-sql-23-view-serializability-application",
+          "question_text": "What does the serial witness preserve within each transaction?",
+          "options": [
+            "Only its first operation",
+            "Only alphabetical item order",
+            "Its program operation order",
+            "An arbitrary permutation"
+          ],
+          "correct_index": 2,
+          "explanation": "A serial execution does not split or reorder the transaction program.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-23-view-serializability-c-new-8",
+          "test_id": "pt-dbms-sql-23-view-serializability-application",
+          "question_text": "Does view serializability alone guarantee cascadelessness?",
+          "options": [
+            "Yes",
+            "Only for three transactions",
+            "Only when final values match",
+            "No"
+          ],
+          "correct_index": 3,
+          "explanation": "Commit and recovery relationships are separate.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-23-view-serializability-c-new-9",
+          "test_id": "pt-dbms-sql-23-view-serializability-application",
+          "question_text": "What is true of every conflict-serializable history in the classical model?",
+          "options": [
+            "It is view serializable",
+            "It has a dirty read",
+            "It cannot have a witness",
+            "It must be physically serial"
+          ],
+          "correct_index": 0,
+          "explanation": "Preserving conflict order also preserves the view relationships.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-23-view-serializability-c-new-10",
+          "test_id": "pt-dbms-sql-23-view-serializability-application",
+          "question_text": "Why is the conflict graph a practical classroom tool?",
+          "options": [
+            "Every engine literally runs that exact graph",
+            "Its acyclicity test is efficient",
+            "It proves every business rule",
+            "It removes all blind writes"
+          ],
+          "correct_index": 1,
+          "explanation": "General view-serializability testing is more computationally difficult.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-23-view-serializability-c-new-11",
+          "test_id": "pt-dbms-sql-23-view-serializability-application",
+          "question_text": "T1 reads before and after T2 writes while T1 is uninterrupted only in a serial witness. Why can equivalence fail?",
+          "options": [
+            "The item name is too short",
+            "T2 must read first",
+            "Neither serial order preserves both different read sources",
+            "Every two-transaction history is view serializable"
+          ],
+          "correct_index": 2,
+          "explanation": "T1 cannot straddle T2 in a serial order.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-23-view-serializability-c-new-12",
+          "test_id": "pt-dbms-sql-23-view-serializability-application",
+          "question_text": "What makes a complete view-serializability proof?",
+          "options": [
+            "One matching final balance",
+            "A graph without item labels",
+            "A screenshot of a query editor",
+            "All read-source checks and final writers plus a valid serial witness or impossibility proof"
+          ],
+          "correct_index": 3,
+          "explanation": "The conclusion depends on the complete formal relationships.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [],
+  "coding_not_applicable": "View serializability is a symbolic read-from and final-writer equivalence property. Result-only SQL exercises cannot prove it. The prose supplies a complete serial witness, conflict comparison and a two-read impossibility counterexample.",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-23-view-serializability-1",
+      "test_id": "pt-dbms-sql-23-view-serializability",
+      "question_text": "What are the three conditions for two schedules to be 'view equivalent'?",
+      "options": [
+        "Same number of transactions, same number of commits, same number of aborts",
+        "Same initial reads, same read-from relationships between transactions, and the same transaction performing the final write to each item",
+        "Same total execution time and same lock table state",
+        "Same set of data items accessed, regardless of order"
+      ],
+      "correct_index": 1,
+      "explanation": "View equivalence requires matching initial reads, matching read-from pairs, and matching final writers per data item — nothing about timing or locks.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-23-view-serializability-2",
+      "test_id": "pt-dbms-sql-23-view-serializability",
+      "question_text": "In the worked example (R1(A), W2(A), W1(A), W3(A)), why does this schedule fail the conflict-serializability test?",
+      "options": [
+        "Because R1(A) and W3(A) don't conflict",
+        "Because the conflicts create a cycle: R1(A) before W2(A) implies T1→T2, but W2(A) before W1(A) implies T2→T1",
+        "Because it involves three transactions instead of two",
+        "Because W3(A) is a blind write"
+      ],
+      "correct_index": 1,
+      "explanation": "The precedence graph has both a T1→T2 edge and a T2→T1 edge, forming a 2-node cycle — which means no serial reordering via legal swaps is possible.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-23-view-serializability-3",
+      "test_id": "pt-dbms-sql-23-view-serializability",
+      "question_text": "Despite failing conflict serializability, why is that same schedule view-serializable (equivalent to <T1, T2, T3>)?",
+      "options": [
+        "Because T2 and T3's writes are blind (no read), so nobody observes their relative order — only the final writer (T3) and T1's initial read matter, and both match the serial order",
+        "Because view serializability ignores write operations entirely",
+        "Because the schedule has no conflicts at all",
+        "Because T1 commits first in both schedules"
+      ],
+      "correct_index": 0,
+      "explanation": "Since T2 and T3 never read A, reordering their blind writes has no observable effect as long as the final writer and the sole read (T1's initial read) stay consistent with the serial order — which they do here.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-23-view-serializability-4",
+      "test_id": "pt-dbms-sql-23-view-serializability",
+      "question_text": "What kind of operation is essential for a schedule to be view-serializable but NOT conflict-serializable?",
+      "options": [
+        "A blind write — a write to an item with no preceding read of it by the same transaction",
+        "A dirty read",
+        "A phantom insert",
+        "A two-phase commit"
+      ],
+      "correct_index": 0,
+      "explanation": "Without blind writes, conflict and view serializability coincide; the extra permissiveness of view serializability specifically comes from ignoring the order of writes nobody ever reads.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-23-view-serializability-5",
+      "test_id": "pt-dbms-sql-23-view-serializability",
+      "question_text": "Is every conflict-serializable schedule also view-serializable?",
+      "options": [
+        "No, they are unrelated properties",
+        "Yes — conflict serializability is strictly narrower, so anything satisfying it automatically satisfies the broader view-serializability definition too",
+        "Only if the schedule has no blind writes",
+        "Only for schedules with exactly two transactions"
+      ],
+      "correct_index": 1,
+      "explanation": "Reordering by non-conflicting swaps always preserves initial reads, read-from relationships, and final writes, so conflict-serializable schedules are always a subset of view-serializable ones.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-23-view-serializability-6",
+      "test_id": "pt-dbms-sql-23-view-serializability",
+      "question_text": "Why do real production DBMS concurrency control protocols enforce conflict serializability rather than the more general view serializability?",
+      "options": [
+        "View serializability is not a real academic concept",
+        "Testing view serializability in general is NP-complete, while conflict serializability can be tested efficiently (polynomial time) via a precedence graph",
+        "View serializability only applies to read-only transactions",
+        "Conflict serializability produces higher final account balances"
+      ],
+      "correct_index": 1,
+      "explanation": "The practical cost of testing/enforcing view serializability is prohibitive at scale, so systems accept the narrower but efficiently-checkable conflict serializability standard.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-23-view-serializability-7",
+      "test_id": "pt-dbms-sql-23-view-serializability",
+      "question_text": "When does conflict serializability and view serializability coincide exactly (produce the same verdict)?",
+      "options": [
+        "Always, they are identical definitions",
+        "Never — they always disagree",
+        "When the schedule contains no blind writes",
+        "Only when there are exactly 2 transactions"
+      ],
+      "correct_index": 2,
+      "explanation": "The gap between the two notions only opens up in the presence of blind writes; without them, every view-serializable schedule is also conflict-serializable.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-23-view-serializability-8",
+      "test_id": "pt-dbms-sql-23-view-serializability",
+      "question_text": "What does the 'final write' condition of view equivalence require?",
+      "options": [
+        "Every transaction must write every data item",
+        "For each data item, the same transaction must perform the last write to it in both schedules being compared",
+        "The last operation of the schedule must be a COMMIT",
+        "All writes must happen before all reads"
+      ],
+      "correct_index": 1,
+      "explanation": "Final-write matching ensures that whichever value a subsequent reader (or the database state itself) ultimately sees for that item is attributable to the same transaction in both schedules.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "/root/content_c",
+    "independent_review": "passed",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Independent manual content review passed within independent_review_scope; engine/browser/release gates separate.",
+    "canonical_answer_indices_preserved": true,
+    "editorial_record": "Original explanations, examples and scenarios; external originality clearance and AdSense review unperformed.",
+    "independent_reviewer": "/root",
+    "independent_review_scope": "Full notes,20MCQs/options/explanations,diagram and symbolic exercises. Initial/read-source/final-writer preservation,witnessT1/T2/T3 versus conflict cycle,blind writes and changed-read impossibility sound; own-read solution and intermediate-write explanation clarified. Manual editorial/fixture reasoning only; SQL engine,browser,originality and AdSense verification separate."
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-23-view-serializability",
+    "original_note_sha256": "97514e6966cbc68d49720951d9c77f804a7d659286b1a1e00680c76133c06478",
+    "status": "drafted; not included in prepared paired migrations"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Same view despite changed intermediate write order",
+      "description": "Both histories preserve T1 initial read and T3 final write; only the interleaving has a conflict cycle.",
+      "columns": [
+        "Property",
+        "Interleaving r1, w2, w1, w3",
+        "Serial T1, T2, T3"
+      ],
+      "rows": [
+        [
+          "T1 read source",
+          "Initial A",
+          "Initial A"
+        ],
+        [
+          "Other reads",
+          "None",
+          "None"
+        ],
+        [
+          "Final writer of A",
+          "T3",
+          "T3"
+        ],
+        [
+          "Conflict cycle",
+          "T1 toT2 toT1",
+          "None"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "technical_review": "author self-review",
+    "server_rendering": "unverified",
+    "browser_rendering": "unverified"
+  },
+  "authoring_status": "drafted; verification pending"
+}

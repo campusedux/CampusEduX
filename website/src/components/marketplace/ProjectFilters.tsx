@@ -42,9 +42,9 @@ export function ProjectFilters({
       <div>
         <span className="mb-1.5 block font-semibold text-ink">Price (₹)</span>
         <div className="flex items-center gap-2">
-          <Input type="number" name="min" min={0} placeholder="Min" defaultValue={state.min ?? ""} />
+          <Input type="number" name="min" min={0} aria-label="Minimum price in rupees" placeholder="Min" defaultValue={state.min ?? ""} />
           <span className="text-ink-faint">–</span>
-          <Input type="number" name="max" min={0} placeholder="Max" defaultValue={state.max ?? ""} />
+          <Input type="number" name="max" min={0} aria-label="Maximum price in rupees" placeholder="Max" defaultValue={state.max ?? ""} />
         </div>
       </div>
 

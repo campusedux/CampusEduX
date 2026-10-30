@@ -1,0 +1,633 @@
+{
+  "source_ref": "chapter-7-relational-algebra/outer-join",
+  "slug": "outer-join",
+  "title": "Outer Join",
+  "description": "Preserve the requested unmatched populations, place eligibility predicates deliberately, and distinguish synthetic NULL partners, real optional data and bag-safe full-coverage emulation.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Matching and preservation are separate decisions\n\nAn outer join returns qualifying matched combinations and preserves specified unmatched input occurrences. A left outer join keeps the left population even when a row has no qualifying right partner, supplying NULL values for the missing right attributes. A right outer join mirrors that preservation direction. A full outer join conceptually preserves unmatched occurrences from both inputs.\n\nThe ON predicate still determines which pairs match. Outer preservation adds behaviour beyond an inner product-and-selection result. If one source has no rows, a left join can still return left occurrences with missing right output, while an inner join returns no pairs. This simple empty-partner fixture exposes the difference more clearly than a dataset where every source row happens to match.\n\n## Define which population the report promises\n\nAn all-employees directory with optional department details should preserve employees even when their assignment is absent or unmatched. A report of employees with valid active departments is another task and can intentionally exclude others. The phrase left join does not by itself tell the reader which of those business populations the complete statement returns.\n\nThe preserved side should correspond to the intended universe. A department summary including departments without employees starts from Department rather than only Employee. A list of enrollment facts need not invent participation for an unenrolled student unless the report explicitly asks for all students. Choose the result grain and population before deciding which outer form is appropriate.\n\n## Missing partner values can be synthetic\n\nSuppose Employee 1 references Department 7, Employee 2 is unassigned, and Employee 3 names Department 99 absent from a staging catalogue. A left join preserves all three employees. The latter two have NULL department output for different reasons: one had no asserted reference, while the other asserted an unmatched value. The output alone needs further classification if the report must distinguish those states.\n\nA matched Department can also have an optional NULL name. Testing only department_name IS NULL would then confuse a real parent with an absent partner. Use a right identity guaranteed nonmissing for matched rows when detecting match presence. Preserve the difference between stored optional absence and a null-extended missing partner introduced by the join.\n\n## ON eligibility controls partner matching\n\nIf the task wants every employee with an active department shown when available, put the active-department condition in the matching policy while preserving the employee population. An employee assigned to an inactive department still appears, but no active partner is returned under that contract. That does not mean the underlying department identity is absent from the entire catalogue.\n\n```sql\nSELECT e.employee_id, d.department_name\nFROM employees e\nLEFT JOIN departments d\n  ON d.department_id = e.department_id\n AND d.status = 'active'\nORDER BY e.employee_id;\n```\n\nThe query asks for an active eligible partner, not merely any department. A diagnostic using the resulting NULL partner should label it according to that eligibility scope. Calling every such employee an orphan would be inaccurate because inactive existing departments were deliberately excluded from matching. The predicate and the interpretation of nonmatches must agree.\n\n## WHERE can reject preserved rows deliberately or accidentally\n\nAdding WHERE d.status = 'active' after the join rejects null-extended unmatched employees because the comparison is not TRUE for them. That can intentionally implement a matched-active-only report, but it defeats a promise to keep every employee. The issue is a mismatch with the task rather than a universal rule that right-side conditions in WHERE are always erroneous.\n\nA condition can also explicitly allow the unmatched case or filter the left population according to a documented requirement. Read the entire statement and SQL three-valued logic before classifying it. Moving predicates between ON and WHERE is not an unconditional semantics-preserving optimization for outer joins, even when similar transformations are valid for some inner-join expressions.\n\n## Match multiplicity is not restricted to one\n\nA left join can return several rows for one left occurrence when several right rows satisfy the predicate. Preservation promises at least the left occurrence's participation in output, not exactly one output row per left identity. If Department 7 has three employees, a Department-left-Employee join can produce three matching combinations for that department.\n\nA zero-inclusive department employee count should count a nonmissing employee identity, not COUNT(*) over the preserved output. An unmatched department contributes one synthetic output row but zero actual employees. If a second multivalued source is also joined, combinations can multiply further; group at the intended grain rather than assuming the word outer removes fan-out.\n\n## Right and left formulations need aligned projections\n\nSwapping the input roles and replacing LEFT with RIGHT can describe corresponding logical preservation under the same predicate. The selected output order and labels still need alignment to compare results. SELECT star can expose different column ordering, and unsupported or changed predicate qualification can make a textual rewrite misleading.\n\nPrefer a formulation readers can trace from the intended preserved universe. There is no need to treat the existence of RIGHT JOIN as a universal reason to reverse every query. The important contract is which occurrences remain, which pairs match, which attributes are selected, and what final order the consumer requires.\n\n## Full coverage needs a supported formulation\n\nMySQL 8.4 does not provide native FULL OUTER JOIN syntax. A supported emulation can combine a left join with only the unmatched right-side rows. Use UNION ALL for those nonoverlapping branches when preserving result occurrence multiplicity matters. A naive union of two full directional joins can either duplicate matching rows with ALL or collapse legitimate equal projected occurrences with DISTINCT.\n\nThe unmatched-right branch must test a left identity that cannot be NULL on a real match. This avoids reporting matched rows again. Each branch needs compatible selected roles and a clear missing-partner representation. The emulation should be described as a query construction with stated assumptions, not a claim that native full join syntax was executed on the target engine.\n\n## Bag-safe emulation retains separate identities\n\nTwo unmatched left records can have equal display labels and still be distinct occurrences. Keeping their source ids prevents accidental loss and makes the result inspectable. If the requested output intentionally omits all distinguishing fields, UNION DISTINCT can collapse those occurrences, which differs from a bag-preserving full-coverage contract.\n\nThe exercises use unique ids and a nonmissing group key that can repeat across different records. Matching groups can produce several left-right pairs. The left branch returns those combinations and unmatched left rows once each; the second branch adds only right rows with no left match. This makes both complete coverage and multiplicity explicit.\n\n## Anti-join reports need a precise absence policy\n\nA left join followed by a missing-right identity test can find source rows lacking a qualifying partner. That is a common anti-join pattern. If a child reference is optional, an unassigned row may be valid rather than an integrity violation. If the matching scope filters active partners, a nonmatch can mean no active partner rather than no parent at all.\n\nState whether the report seeks missing assignments, invalid nonmissing references, or absence of an eligible relationship. Those are different diagnostics. A query can calculate flags for both child absence and parent existence when needed. Do not infer external causes such as failure, deletion, or unauthorized conduct merely from a NULL in the joined result.\n\n## Outer queries do not enforce the relationship\n\nA preserving report can display invalid proposals precisely because its staging fixture has no native foreign key. That is useful for diagnosis, not proof that the database prevents invalid writes. Reference declarations, required values, trusted business operations, and authorization require evidence at their actual boundaries. A readable directory query does not grant access to every employee's details.\n\nNative MariaDB referential-action checks recorded elsewhere remain separate from these temporary query mirrors and exact MySQL/provider execution. Similarly, a snapshot of unmatched records does not prove concurrency-safe reassignment or deletion behaviour. Keep the operational verification gaps intact instead of promoting one successful output comparison into a complete system guarantee.\n\n## Validate matched and unmatched populations together\n\nUse matched pairs, unmatched left and right identities, a real right row with an optional NULL label, repeated matching group values, and an empty partner table. For an eligibility-filtered report, include inactive existing partners so the distinction from absent parents is visible. Confirm both result multiplicity and final ordering rather than relying only on a total row count.\n\nThe exercises verify an all-employees active-partner report and a bag-preserving full-coverage emulation over isolated fixtures. Outer join is useful when matching, preservation direction, predicate scope, NULL provenance, output grain, and duplicate policy are all explicit. Those decisions let the query retain the intended universe without inventing real child facts, hiding legitimate occurrences, or mislabeling every missing eligible partner as a broken reference.\n",
+  "references": [],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-7-outer-join",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-7-outer-join-1",
+          "test_id": "pt-dbms-sql-7-outer-join",
+          "question_text": "What does an Outer Join do that a regular (inner) join does not?",
+          "options": [
+            "It removes unmatched rows more aggressively",
+            "It keeps unmatched rows from one or both sides, filling in NULL for the missing side's columns",
+            "It requires both tables to have identical schemas",
+            "It always returns fewer rows than an inner join"
+          ],
+          "correct_index": 1,
+          "explanation": "Outer joins preserve unmatched rows instead of dropping them, unlike inner joins.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-7-outer-join-2",
+          "test_id": "pt-dbms-sql-7-outer-join",
+          "question_text": "Which Outer Join variant keeps all rows from the left-hand table?",
+          "options": [
+            "RIGHT JOIN",
+            "LEFT JOIN",
+            "FULL OUTER JOIN only",
+            "INNER JOIN"
+          ],
+          "correct_index": 1,
+          "explanation": "LEFT JOIN specifically preserves every row from the left (first-listed) table.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-7-outer-join-3",
+          "test_id": "pt-dbms-sql-7-outer-join",
+          "question_text": "If the report promises every employee, what effect can WHERE d.status = active have after a left join?",
+          "options": [
+            "This is correct and preserves the LEFT JOIN's intent perfectly",
+            "Filtering the outer (right) side's column in WHERE instead of ON discards the NULL-department rows the LEFT JOIN was meant to keep, effectively behaving like an inner join",
+            "LEFT JOIN cannot be combined with WHERE at all",
+            "This syntax is invalid SQL"
+          ],
+          "correct_index": 1,
+          "explanation": "It rejects null-extended unmatched rows. That is a defect for an all-employees promise, but can be intentional for a matched-active-only report.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-7-outer-join-4",
+          "test_id": "pt-dbms-sql-7-outer-join",
+          "question_text": "Is `A LEFT JOIN B` equivalent to `B RIGHT JOIN A`?",
+          "options": [
+            "No, they are unrelated operations",
+            "Yes — they are mirror images of each other, producing the same logical result with column order swapped",
+            "Only if A and B have the same number of rows",
+            "RIGHT JOIN does not exist in standard SQL"
+          ],
+          "correct_index": 1,
+          "explanation": "Equivalent preservation can be expressed by swapping roles and LEFT/RIGHT with the same predicate; output projection order and labels must be aligned.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-7-outer-join-5",
+          "test_id": "pt-dbms-sql-7-outer-join",
+          "question_text": "Which native outer-join form is absent from the stated MySQL 8.4 target syntax?",
+          "options": [
+            "LEFT JOIN",
+            "RIGHT JOIN",
+            "FULL OUTER JOIN",
+            "INNER JOIN"
+          ],
+          "correct_index": 2,
+          "explanation": "MySQL 8.4 lacks native FULL OUTER JOIN; an explicit supported emulation is a different execution claim.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-7-outer-join-6",
+          "test_id": "pt-dbms-sql-7-outer-join",
+          "question_text": "How can FULL OUTER JOIN be simulated in a dialect that lacks it?",
+          "options": [
+            "It cannot be simulated at all",
+            "Combine a left join with only unmatched right-side rows using UNION ALL and aligned projections to preserve occurrence multiplicity",
+            "By using INNER JOIN twice",
+            "By using NATURAL JOIN instead"
+          ],
+          "correct_index": 1,
+          "explanation": "Two complete directional joins with ALL duplicate matches; UNION DISTINCT can collapse legitimate equal projected occurrences.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-7-outer-join-7",
+          "test_id": "pt-dbms-sql-7-outer-join",
+          "question_text": "Which absence pattern uses LEFT JOIN to find a candidate without a matching parent row?",
+          "options": [
+            "The GROUP BY / HAVING duplicate-detection pattern",
+            "A left join followed by a NULL test on a parent key guaranteed non-NULL in real matches",
+            "The UNION-based deduplication pattern",
+            "The CHECK constraint pattern"
+          ],
+          "correct_index": 1,
+          "explanation": "A missing-parent result is a referential violation only when that relationship is required by the model; optional or NULL references need separate interpretation.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-7-outer-join-8",
+          "test_id": "pt-dbms-sql-7-outer-join",
+          "question_text": "In a LEFT JOIN where an employee has no matching department, what value appears for department_name in the result?",
+          "options": [
+            "An empty string",
+            "NULL",
+            "The employee's own name",
+            "The join is skipped entirely for that employee"
+          ],
+          "correct_index": 1,
+          "explanation": "Unmatched columns from the non-preserved side are filled with NULL rather than causing the row to be dropped.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-7-outer-join-new-9",
+          "test_id": "pt-dbms-sql-7-outer-join",
+          "question_text": "Does a left join guarantee exactly one output row per left row?",
+          "options": [
+            "Yes; it always deduplicates right matches",
+            "No; several matching right rows can create several combinations",
+            "Only if labels are NULL",
+            "Only for integer keys"
+          ],
+          "correct_index": 1,
+          "explanation": "Preservation and maximum match multiplicity differ.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-7-outer-join-new-10",
+          "test_id": "pt-dbms-sql-7-outer-join",
+          "question_text": "Why test the right primary identity rather than an optional name for a match?",
+          "options": [
+            "Every name is required globally",
+            "An id alias grants access",
+            "A real matched partner can have a NULL name",
+            "NULL names always mean missing rows"
+          ],
+          "correct_index": 2,
+          "explanation": "Stored optional absence differs from synthetic missing partner output.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-7-outer-join-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-7-outer-join-application-new-1",
+          "test_id": "pt-dbms-sql-7-outer-join-application",
+          "question_text": "What does an inactive existing department mean in an active-partner-only join?",
+          "options": [
+            "It is necessarily an orphan",
+            "The employee must be deleted",
+            "It can be an ineligible nonmatch, not an absent catalogue identity",
+            "The department key becomes NULL in storage"
+          ],
+          "correct_index": 2,
+          "explanation": "Interpret the nonmatch within the predicate’s scope.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-7-outer-join-application-new-2",
+          "test_id": "pt-dbms-sql-7-outer-join-application",
+          "question_text": "How should an empty department’s employees be counted after a preserving join?",
+          "options": [
+            "Count every preserved output row as an employee",
+            "Count department labels only",
+            "Replace every NULL with one",
+            "Count a nonmissing employee identity"
+          ],
+          "correct_index": 3,
+          "explanation": "A synthetic unmatched row is not a real employee.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-7-outer-join-application-new-3",
+          "test_id": "pt-dbms-sql-7-outer-join-application",
+          "question_text": "What makes ON-to-WHERE predicate movement risky for outer joins?",
+          "options": [
+            "It can change which unmatched rows survive",
+            "Every predicate movement is always illegal",
+            "WHERE changes schema types",
+            "ON always grants access"
+          ],
+          "correct_index": 0,
+          "explanation": "The whole output population can change.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-7-outer-join-application-new-4",
+          "test_id": "pt-dbms-sql-7-outer-join-application",
+          "question_text": "What should the second branch of a bag-safe full-coverage emulation contain?",
+          "options": [
+            "All matching pairs again",
+            "Only unmatched right-side occurrences",
+            "Only unmatched left rows again",
+            "Every possible Cartesian pair"
+          ],
+          "correct_index": 1,
+          "explanation": "The left branch already includes matched and unmatched-left occurrences.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-7-outer-join-application-new-5",
+          "test_id": "pt-dbms-sql-7-outer-join-application",
+          "question_text": "Why can UNION DISTINCT be inappropriate for occurrence-preserving emulation?",
+          "options": [
+            "It always creates more duplicates",
+            "It deletes source tables",
+            "It can collapse legitimate equal projected occurrences",
+            "It rejects every NULL"
+          ],
+          "correct_index": 2,
+          "explanation": "The requested bag or set contract matters.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-7-outer-join-application-new-6",
+          "test_id": "pt-dbms-sql-7-outer-join-application",
+          "question_text": "Does MySQL 8.4 support native FULL OUTER JOIN here?",
+          "options": [
+            "Yes; every SQL engine must",
+            "Only when tables are empty",
+            "Only if ids are text",
+            "No"
+          ],
+          "correct_index": 3,
+          "explanation": "The lesson uses an explicit emulation instead.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-7-outer-join-application-new-7",
+          "test_id": "pt-dbms-sql-7-outer-join-application",
+          "question_text": "Can an anti-join include a permitted unassigned child?",
+          "options": [
+            "Yes, unless the policy deliberately excludes it from the diagnostic",
+            "No; every nonmatch is invalid",
+            "Only if no parent exists anywhere",
+            "Only if the result is ordered"
+          ],
+          "correct_index": 0,
+          "explanation": "Absence and invalid asserted reference are different states.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-7-outer-join-application-new-8",
+          "test_id": "pt-dbms-sql-7-outer-join-application",
+          "question_text": "Does an outer report insert missing partner rows into storage?",
+          "options": [
+            "Yes; every NULL becomes a stored record",
+            "No; null-extension is a query result behaviour",
+            "Only if LEFT is used",
+            "Only if both sides are empty"
+          ],
+          "correct_index": 1,
+          "explanation": "Representation in output differs from real facts.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-7-outer-join-application-new-9",
+          "test_id": "pt-dbms-sql-7-outer-join-application",
+          "question_text": "Why retain source identities in a full-coverage result?",
+          "options": [
+            "To enforce every parent relation",
+            "To create native FULL syntax",
+            "To distinguish occurrences even when display labels match",
+            "To hide missing data"
+          ],
+          "correct_index": 2,
+          "explanation": "Result identity helps preserve and assess multiplicity.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-7-outer-join-application-new-10",
+          "test_id": "pt-dbms-sql-7-outer-join-application",
+          "question_text": "What do temporary outer-join fixtures establish?",
+          "options": [
+            "All production write invariants",
+            "Every exact provider behaviour",
+            "Application authority automatically",
+            "Their tested query populations and values on the recorded engine"
+          ],
+          "correct_index": 3,
+          "explanation": "Evidence remains scoped to actual execution.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cx-outer-active",
+      "slug": "outer-active",
+      "title": "Preserve every employee while attaching an eligible active department",
+      "difficulty": "Easy",
+      "task": "Return employee_id and department_name for every employee, matching departments only when status active. Missing, invalid and inactive partners yield NULL department_name. An existing active department with a NULL name also returns that stored NULL.",
+      "schema_sql": "CREATE TABLE employees (employee_id INT PRIMARY KEY, department_id INT NULL);\nCREATE TABLE departments (department_id INT PRIMARY KEY, department_name VARCHAR(50) NULL, status VARCHAR(20) NOT NULL);",
+      "seed_sql": "INSERT INTO departments VALUES (7,'Computing','active'),(9,'History','inactive'),(10,NULL,'active'); INSERT INTO employees VALUES (1,7),(2,9),(3,NULL),(4,99),(5,10);",
+      "expected": "employee_id\tdepartment_name\n1\tComputing\n2\tNULL\n3\tNULL\n4\tNULL\n5\tNULL",
+      "ordering": "Ascending employee_id.",
+      "constraints": [
+        "The task is eligible-partner display, not a complete orphan diagnostic."
+      ],
+      "edge_cases": [
+        "An inactive parent exists but is not eligible.",
+        "An optional name can be absent on a real matched active parent."
+      ],
+      "hints": [
+        "Keep active eligibility in the join matching policy.",
+        "Preserve the employee population without a rejecting right-side WHERE predicate."
+      ],
+      "solution_sql": "SELECT e.employee_id, d.department_name FROM employees e LEFT JOIN departments d ON d.department_id = e.department_id AND d.status = 'active' ORDER BY e.employee_id;",
+      "explanation": "The left population survives while only active eligible partners contribute attributes; a NULL label alone does not identify why the label is absent.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO employees VALUES (2,7),(1,NULL);",
+          "expected": "employee_id\tdepartment_name\n1\tNULL\n2\tNULL"
+        },
+        {
+          "seed_sql": "INSERT INTO departments VALUES (7,'Computing','active');",
+          "expected": ""
+        }
+      ]
+    },
+    {
+      "id": "cx-outer-full-emulation",
+      "slug": "outer-full-emulation",
+      "title": "Preserve both source populations without repeating matched combinations",
+      "difficulty": "Medium",
+      "task": "Return left_id and right_id for every equality match on group_id plus unmatched records from either side. Use a left join branch and an unmatched-right branch with UNION ALL. Represent missing ids as SQL NULL.",
+      "schema_sql": "CREATE TABLE left_items (left_id INT PRIMARY KEY, group_id INT NOT NULL);\nCREATE TABLE right_items (right_id INT PRIMARY KEY, group_id INT NOT NULL);",
+      "seed_sql": "INSERT INTO left_items VALUES (1,10),(2,10),(3,20); INSERT INTO right_items VALUES (7,10),(8,30);",
+      "expected": "left_id\tright_id\nNULL\t8\n1\t7\n2\t7\n3\tNULL",
+      "ordering": "Ascending left_id, right_id under the exercised MySQL/MariaDB ascending NULL-first policy.",
+      "constraints": [
+        "Source ids are unique and nonmissing; group_id can repeat.",
+        "This is an explicit full-coverage emulation, not execution of native MySQL FULL OUTER JOIN syntax."
+      ],
+      "edge_cases": [
+        "Several left occurrences can match one right occurrence.",
+        "One whole source may be empty."
+      ],
+      "hints": [
+        "The second branch must exclude right rows that already have a left match.",
+        "Test a guaranteed nonmissing left identity for the unmatched branch."
+      ],
+      "solution_sql": "SELECT l.left_id, r.right_id FROM left_items l LEFT JOIN right_items r ON r.group_id = l.group_id UNION ALL SELECT l.left_id, r.right_id FROM right_items r LEFT JOIN left_items l ON l.group_id = r.group_id WHERE l.left_id IS NULL ORDER BY left_id, right_id;",
+      "explanation": "The first branch supplies matches and unmatched-left occurrences; the disjoint second branch adds only unmatched-right occurrences, preserving occurrence semantics without repeating matches.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO right_items VALUES (9,30),(2,20);",
+          "expected": "left_id\tright_id\nNULL\t2\nNULL\t9"
+        },
+        {
+          "seed_sql": "INSERT INTO left_items VALUES (2,10),(1,10); INSERT INTO right_items VALUES (9,10),(7,10);",
+          "expected": "left_id\tright_id\n1\t7\n1\t9\n2\t7\n2\t9"
+        },
+        {
+          "seed_sql": "",
+          "expected": ""
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-7-outer-join-1",
+      "test_id": "pt-dbms-sql-7-outer-join",
+      "question_text": "What does an Outer Join do that a regular (inner) join does not?",
+      "options": [
+        "It removes unmatched rows more aggressively",
+        "It keeps unmatched rows from one or both sides, filling in NULL for the missing side's columns",
+        "It requires both tables to have identical schemas",
+        "It always returns fewer rows than an inner join"
+      ],
+      "correct_index": 1,
+      "explanation": "Outer joins preserve unmatched rows instead of dropping them, unlike inner joins.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-7-outer-join-2",
+      "test_id": "pt-dbms-sql-7-outer-join",
+      "question_text": "Which Outer Join variant keeps all rows from the left-hand table?",
+      "options": [
+        "RIGHT JOIN",
+        "LEFT JOIN",
+        "FULL OUTER JOIN only",
+        "INNER JOIN"
+      ],
+      "correct_index": 1,
+      "explanation": "LEFT JOIN specifically preserves every row from the left (first-listed) table.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-7-outer-join-3",
+      "test_id": "pt-dbms-sql-7-outer-join",
+      "question_text": "In `... LEFT JOIN departments d ON ... WHERE d.status = 'active'`, what mistake is being made?",
+      "options": [
+        "This is correct and preserves the LEFT JOIN's intent perfectly",
+        "Filtering the outer (right) side's column in WHERE instead of ON discards the NULL-department rows the LEFT JOIN was meant to keep, effectively behaving like an inner join",
+        "LEFT JOIN cannot be combined with WHERE at all",
+        "This syntax is invalid SQL"
+      ],
+      "correct_index": 1,
+      "explanation": "A WHERE condition runs after the join and excludes NULL rows from the outer side, silently undoing the LEFT JOIN's purpose — the condition belongs in ON instead.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-7-outer-join-4",
+      "test_id": "pt-dbms-sql-7-outer-join",
+      "question_text": "Is `A LEFT JOIN B` equivalent to `B RIGHT JOIN A`?",
+      "options": [
+        "No, they are unrelated operations",
+        "Yes — they are mirror images of each other, producing the same logical result with column order swapped",
+        "Only if A and B have the same number of rows",
+        "RIGHT JOIN does not exist in standard SQL"
+      ],
+      "correct_index": 1,
+      "explanation": "LEFT and RIGHT JOIN are symmetric — swapping the table order and join direction produces an equivalent result.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-7-outer-join-5",
+      "test_id": "pt-dbms-sql-7-outer-join",
+      "question_text": "Which Outer Join variant is not supported by every SQL dialect (notably lacking in older MySQL)?",
+      "options": [
+        "LEFT JOIN",
+        "RIGHT JOIN",
+        "FULL OUTER JOIN",
+        "INNER JOIN"
+      ],
+      "correct_index": 2,
+      "explanation": "FULL OUTER JOIN has historically had inconsistent dialect support, unlike LEFT/RIGHT JOIN.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-7-outer-join-6",
+      "test_id": "pt-dbms-sql-7-outer-join",
+      "question_text": "How can FULL OUTER JOIN be simulated in a dialect that lacks it?",
+      "options": [
+        "It cannot be simulated at all",
+        "By combining a LEFT JOIN and a RIGHT JOIN with UNION",
+        "By using INNER JOIN twice",
+        "By using NATURAL JOIN instead"
+      ],
+      "correct_index": 1,
+      "explanation": "UNION-ing a LEFT JOIN and a RIGHT JOIN result reconstructs the effect of a FULL OUTER JOIN.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-7-outer-join-7",
+      "test_id": "pt-dbms-sql-7-outer-join",
+      "question_text": "What real pattern from earlier in this course uses LEFT JOIN specifically to find UNMATCHED rows?",
+      "options": [
+        "The GROUP BY / HAVING duplicate-detection pattern",
+        "The anti-join pattern: LEFT JOIN followed by WHERE <parent>.id IS NULL, used to find referential-integrity violations",
+        "The UNION-based deduplication pattern",
+        "The CHECK constraint pattern"
+      ],
+      "correct_index": 1,
+      "explanation": "This is exactly the technique used in topic 5.11 (Referential Integrity) to find orphaned foreign-key references.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-7-outer-join-8",
+      "test_id": "pt-dbms-sql-7-outer-join",
+      "question_text": "In a LEFT JOIN where an employee has no matching department, what value appears for department_name in the result?",
+      "options": [
+        "An empty string",
+        "NULL",
+        "The employee's own name",
+        "The join is skipped entirely for that employee"
+      ],
+      "correct_index": 1,
+      "explanation": "Unmatched columns from the non-preserved side are filled with NULL rather than causing the row to be dropped.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "coordinator",
+    "independent_review": "unavailable; no agent tools",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Definitions and examples checked against questions; no plagiarism certification.",
+    "existing_question_corrections": [
+      "tq-dbms-sql-7-outer-join-3",
+      "tq-dbms-sql-7-outer-join-4",
+      "tq-dbms-sql-7-outer-join-5",
+      "tq-dbms-sql-7-outer-join-6",
+      "tq-dbms-sql-7-outer-join-7"
+    ],
+    "canonical_answer_indices_preserved": true,
+    "batch_review": {
+      "reviewer": "coordinator",
+      "independent": false,
+      "scope": "New package only: notes, keyed examples, original question identities and canonical indices, every correct answer, exercises and recorded fixture outputs, diagram trace, content-only paired integration.",
+      "findings_resolved": "Outer Join retained absence question clarified: missing parent is a violation only when the modeled relationship requires it. Division retains its original Hard exercise; validator permits retained Hard alongside Easy while rejecting a new Hard substitute.",
+      "remaining": "Exact MySQL/provider execution, browser QA, independent review and applied-migration behavior unverified; output fixtures do not prove required source technique."
+    }
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-7-outer-join",
+    "original_note_sha256": "eebb61eac3668c8863395c8690ece2377367d5275c7b1dbeda37583440745236",
+    "status": "paired migration prepared; not applied"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Full-coverage emulation uses two nonoverlapping result branches",
+      "description": "Matched combinations appear in the left-join branch only. The unmatched-right branch adds right occurrences lacking any qualifying left partner.",
+      "columns": [
+        "Result category",
+        "Left branch",
+        "Unmatched-right branch"
+      ],
+      "rows": [
+        [
+          "Matching left-right combination",
+          "Included",
+          "Excluded to avoid repetition"
+        ],
+        [
+          "Unmatched left occurrence",
+          "Included with NULL right id",
+          "Not included"
+        ],
+        [
+          "Unmatched right occurrence",
+          "Not included",
+          "Included with NULL left id"
+        ],
+        [
+          "Several matching occurrences",
+          "All qualifying combinations retained",
+          "No repeated matches added"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "coordinator checked predicate scope, NULL provenance and bag-safe unmatched-right emulation",
+    "server_rendering": "passed",
+    "browser_rendering": "unverified",
+    "independent_review": "unavailable; no agent tools",
+    "server_rendering_evidence": "Actual LessonBlock rendering passed in selected Vitest checks for natural-join, outer-join and division; no browser QA."
+  },
+  "sql_verification": {
+    "engine": "11.8.6-MariaDB-0+deb13u1 from Debian",
+    "scope": "MariaDB compatibility execution; exact MySQL 8.4/provider execution unverified",
+    "fingerprint": "59e1b576f34002c15259824c55aa1fd2709b49c98e27944ff2484e8785d9a7c1",
+    "cases": [
+      {
+        "problem": "outer-active",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "outer-active",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "outer-active",
+        "case": 2,
+        "passed": true
+      },
+      {
+        "problem": "outer-full-emulation",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "outer-full-emulation",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "outer-full-emulation",
+        "case": 2,
+        "passed": true
+      },
+      {
+        "problem": "outer-full-emulation",
+        "case": 3,
+        "passed": true
+      }
+    ],
+    "all_passed": true
+  }
+}

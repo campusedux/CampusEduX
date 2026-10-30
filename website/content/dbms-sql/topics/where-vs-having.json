@@ -1,0 +1,579 @@
+{
+  "source_ref": "chapter-15-group-by-and-aggregation/where-vs-having",
+  "slug": "where-vs-having",
+  "title": "WHERE vs HAVING",
+  "description": "Choose WHERE for eligible input rows and HAVING for group thresholds, with worked payment totals, signed adjustments and explicit NULL behavior.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Filter facts before asking questions about groups\n\nWHERE and HAVING both remove results that fail a condition, but they normally express conditions at different stages of a grouped query. WHERE chooses the individual input rows. HAVING chooses the groups after their aggregates can be evaluated. This distinction is essential when the report asks for a threshold over a total rather than a threshold over each contributing fact.\n\nStart with [GROUP BY](/learning/dbms-sql-tutorial/group-by), [SUM](/learning/dbms-sql-tutorial/sum) and [HAVING](/learning/dbms-sql-tutorial/having). Here the goal is to decide where a condition belongs and explain how that placement changes the answer. An optimizer may transform a query internally, but its freedom does not make semantically different written conditions interchangeable.\n\n## State what one row and one output group mean\n\nSuppose a workshop table stores one payment per row. Each payment has a workshop identifier, an amount and a status. A report asks for workshops whose posted payments total at least one hundred units. Its output grain is one workshop; its contributing population consists only of posted payments. Pending payments should never enter the aggregate for this report.\n\nThat description contains two separate decisions. Status eligibility can be decided for a single row without seeing another payment. The threshold over the workshop total needs the combined values from the surviving rows. Stating both decisions in ordinary language makes the SQL placement much less mysterious and exposes a common mistake before any code is written.\n\n## Use WHERE for the eligible population\n\n```sql\nSELECT workshop_id, SUM(amount) AS posted_total\nFROM workshop_payments\nWHERE status = 'posted'\nGROUP BY workshop_id;\n```\n\nThe status predicate runs conceptually before the grouped total. A workshop with no posted rows contributes no group in this query. A posted row with a null amount still belongs to the population, although SUM ignores its unknown numeric value. Add row and known-value counts if completeness of the total matters to the consumer.\n\nThe phrase conceptually before describes logical meaning, not a required physical algorithm. A database may exploit indexes or apply equivalent predicates earlier. Learners should first establish the correct result; examining the execution plan afterward helps explain how the engine obtains it without changing that meaning.\n\n## Use HAVING for an aggregate threshold\n\n```sql\nSELECT workshop_id, SUM(amount) AS posted_total\nFROM workshop_payments\nWHERE status = 'posted'\nGROUP BY workshop_id\nHAVING SUM(amount) >= 100\nORDER BY workshop_id;\n```\n\nTwo posted payments of sixty and fifty produce a qualifying total of one hundred ten. Neither individual payment reaches one hundred. Filtering rows with amount greater than or equal to one hundred before grouping would remove both and lose a legitimately qualifying workshop. The error is a changed question, not merely an inefficient version of the same question.\n\nLikewise, a payment of one hundred fifty and a refund of minus one hundred produce a total of fifty. Removing the refund first can make the workshop appear to qualify. Conditions about positive individual payments and conditions about a positive net balance express different business rules. Keep signed adjustments until the intended measure has been calculated.\n\n## Trace a tiny fixture by hand\n\nConsider workshop one with posted amounts sixty, fifty and minus twenty. Its posted total is ninety. Workshop two has posted amounts eighty and thirty, totaling one hundred ten. A pending payment of nine hundred belongs to neither posted total. The threshold includes workshop two only. Row order does not affect this arithmetic.\n\nNow add a null posted amount for workshop two. Its known sum remains one hundred ten, but the unknown measurement means that sum may not describe the complete real-world total. A threshold can be technically correct under known-value semantics while still requiring a completeness warning. Clause placement cannot resolve an unspecified missing-value policy.\n\n## Group-key conditions can often be moved safely\n\nA predicate that refers only to a grouping key can commonly be written in WHERE without changing which rows contribute to the remaining groups. For example, restricting workshop identifiers above ten does not split any workshop group: every row in a given group has the same identifier. Applying that condition before aggregation can reduce unnecessary grouping work.\n\nThis is different from moving a predicate on a measure such as amount. Amounts can vary inside one workshop. A condition on the grouped total cannot generally be rewritten as the same condition on each amount. Check that every proposed rewrite preserves the group population, the aggregate expression and the null behavior before treating it as an optimization.\n\n## Do not select arbitrary ungrouped details\n\nIn a grouped query, output nonaggregated columns should follow the engine's grouping rules. Selecting an arbitrary payment status or payment identifier beside a workshop total can be invalid or misleading when the group contains several records. MySQL's grouping validation, including ONLY_FULL_GROUP_BY behavior, is relevant here. Do not disable a correctness check to make ambiguous output appear valid.\n\nIf a report needs the detail row associated with a group-level condition, first define which detail row is intended. Join a grouped result to the original facts or use a suitable window function when appropriate. The need for detail does not authorize choosing an unspecified member of a group or mistaking a group's total for each member's amount.\n\n## Handle empty input and unknown aggregates\n\nWithout GROUP BY, aggregate queries normally produce one summary row even on empty input. HAVING can remove that summary row when its condition is not true. With ordinary grouping, empty input produces no groups. These behaviors matter when a caller expects a single zero-like summary instead of an absent result row.\n\nComparisons with a null aggregate evaluate as unknown rather than true. A HAVING condition comparing SUM to a numeric threshold therefore excludes an all-null total. If the product intentionally treats absent totals as zero, make the replacement explicit and document it. COUNT and SUM answer different questions and should not be substituted merely to obtain a nonnull result.\n\n## Understand aliases without assuming portability\n\nMySQL permits references to select-list aliases in HAVING in useful cases. Repeating the aggregate expression can make a teaching query easier to transfer to engines with different alias rules. An alias generally cannot be used as though it were an already computed aggregate inside the same query's WHERE clause. Name resolution and logical processing need to be checked for the chosen engine.\n\nA derived table is another way to expose a grouped result as an input relation. An outer WHERE can then filter the derived total because, at that outer level, the total is an ordinary input column. This does not contradict HAVING's purpose. There are two query levels, each with its own input and filtering stages.\n\n## Review semantics before comparing speed\n\nA good review fixture includes a group that qualifies only through several small rows, a group with a large positive row offset by a refund, an ineligible status and a null measure. Such a fixture distinguishes row thresholds from group thresholds much more effectively than a table with one positive payment per workshop.\n\nOnly after those results agree should performance comparisons begin. Prefer explicit population filters and suitably selective access paths, then inspect the plan on representative data. Neither WHERE nor HAVING grants access to otherwise private payments. Tenant and permission constraints must be enforced at their trusted boundary and remain intact through every report rewrite.\n\n## Avoid accidental existence counts after an outer join\n\nWhen a report begins with every workshop and left joins payments, a workshop with no matches still has a null-extended output row. COUNT(*) counts that row, while COUNT of a nonnull payment identifier counts actual payment matches. A HAVING condition on these two counts can therefore select different workshops. Identify which count measures the task before adding a threshold.\n\nPlace a posted-only condition inside the appropriate join predicate when unmatched workshops must remain visible. Putting a condition that requires a posted payment in WHERE removes null-extended rows and can defeat that reporting requirement. This joins the same broader principle: predicate placement follows the intended population. An outer-join preservation rule and an aggregate qualification rule must both be stated before the final result can be judged correct.\n",
+  "references": [
+    {
+      "title": "MySQL 8.4 reference manual",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/group-by-handling.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-15-where-vs-having",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-15-where-vs-having-1",
+          "test_id": "pt-dbms-sql-15-where-vs-having",
+          "question_text": "Which clause chooses individual rows before grouping?",
+          "options": [
+            "HAVING on SUM",
+            "WHERE",
+            "ORDER BY",
+            "A column alias"
+          ],
+          "correct_index": 1,
+          "explanation": "WHERE defines which facts are available to the grouping stage.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-15-where-vs-having-2",
+          "test_id": "pt-dbms-sql-15-where-vs-having",
+          "question_text": "Which clause filters groups by SUM(amount)?",
+          "options": [
+            "A same-level WHERE containing SUM",
+            "HAVING",
+            "LIMIT alone",
+            "A primary key declaration"
+          ],
+          "correct_index": 1,
+          "explanation": "A total is available for qualification at the grouped-result stage.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-15-where-vs-having-3",
+          "test_id": "pt-dbms-sql-15-where-vs-having",
+          "question_text": "Do two posted payments of sixty and fifty satisfy SUM(amount)>=100?",
+          "options": [
+            "No, each row must be 100",
+            "Yes, their sum is 110",
+            "Only with DISTINCT",
+            "Only if sorted descending"
+          ],
+          "correct_index": 1,
+          "explanation": "The threshold applies to sixty plus fifty, rather than independently to either row.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-15-where-vs-having-4",
+          "test_id": "pt-dbms-sql-15-where-vs-having",
+          "question_text": "Why is WHERE amount>=100 a different request?",
+          "options": [
+            "It sorts the same groups",
+            "It removes contributing rows before the group total",
+            "It renames the sum",
+            "It necessarily counts nulls"
+          ],
+          "correct_index": 1,
+          "explanation": "Removing small facts before aggregation prevents them from contributing to a qualifying combined total.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-15-where-vs-having-5",
+          "test_id": "pt-dbms-sql-15-where-vs-having",
+          "question_text": "What total results from 150 and -100?",
+          "options": [
+            "50",
+            "150",
+            "250",
+            "-150"
+          ],
+          "correct_index": 0,
+          "explanation": "A signed refund subtracts one hundred from the one hundred fifty inflow.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-15-where-vs-having-6",
+          "test_id": "pt-dbms-sql-15-where-vs-having",
+          "question_text": "Where does a posted-only status rule normally belong?",
+          "options": [
+            "Only ORDER BY",
+            "WHERE before grouping",
+            "Only the title",
+            "After formatting in the UI"
+          ],
+          "correct_index": 1,
+          "explanation": "Status is a property of each input payment, so eligibility can be decided before aggregation.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-15-where-vs-having-7",
+          "test_id": "pt-dbms-sql-15-where-vs-having",
+          "question_text": "What does SUM do with null amounts?",
+          "options": [
+            "It always rejects the group",
+            "It ignores unknown numeric values",
+            "It counts null as one",
+            "It fills null with the previous amount"
+          ],
+          "correct_index": 1,
+          "explanation": "A null expression supplies no known number for SUM to add.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-15-where-vs-having-8",
+          "test_id": "pt-dbms-sql-15-where-vs-having",
+          "question_text": "Does logical processing prescribe a physical scan order?",
+          "options": [
+            "Yes, every row must be read in insertion order",
+            "No, equivalent execution strategies are possible",
+            "Yes, HAVING always runs on the client",
+            "Only when an alias exists"
+          ],
+          "correct_index": 1,
+          "explanation": "The engine may choose an equivalent plan while preserving the query’s logical meaning.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-15-where-vs-having-new-9",
+          "test_id": "pt-dbms-sql-15-where-vs-having",
+          "question_text": "Which condition can commonly move to WHERE without splitting groups?",
+          "options": [
+            "A restriction on the grouping key",
+            "An arbitrary threshold on each amount",
+            "A COUNT(*) threshold",
+            "A SUM(amount) threshold"
+          ],
+          "correct_index": 0,
+          "explanation": "Every row in a group shares its grouping key, so the restriction removes whole groups.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-15-where-vs-having-new-10",
+          "test_id": "pt-dbms-sql-15-where-vs-having",
+          "question_text": "What does empty ordinary grouped input produce?",
+          "options": [
+            "One group per possible key",
+            "No groups",
+            "One zero row for each workshop",
+            "Every workshop from other tables"
+          ],
+          "correct_index": 1,
+          "explanation": "GROUP BY creates groups only from represented eligible input rows.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-15-where-vs-having-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-15-where-vs-having-application-new-1",
+          "test_id": "pt-dbms-sql-15-where-vs-having-application",
+          "question_text": "What happens when a HAVING comparison with NULL is unknown?",
+          "options": [
+            "The group always passes",
+            "NULL becomes 100",
+            "The group does not pass",
+            "The group is deleted from storage"
+          ],
+          "correct_index": 2,
+          "explanation": "HAVING retains only true conditions, and a comparison against NULL is unknown.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-15-where-vs-having-application-new-2",
+          "test_id": "pt-dbms-sql-15-where-vs-having-application",
+          "question_text": "What can an outer WHERE filter in a derived grouped query?",
+          "options": [
+            "Only the original physical table name",
+            "Only an uncomputed select alias",
+            "Only string constants",
+            "The derived aggregate column"
+          ],
+          "correct_index": 3,
+          "explanation": "The inner query has already turned the aggregate into an ordinary outer input column.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-15-where-vs-having-application-new-3",
+          "test_id": "pt-dbms-sql-15-where-vs-having-application",
+          "question_text": "Why retain negative adjustments before summing a net measure?",
+          "options": [
+            "They contribute to the stated net total",
+            "They are automatically invalid",
+            "SUM cannot read negatives",
+            "They force every group to qualify"
+          ],
+          "correct_index": 0,
+          "explanation": "Dropping a refund changes a net calculation into a different measure.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-15-where-vs-having-application-new-4",
+          "test_id": "pt-dbms-sql-15-where-vs-having-application",
+          "question_text": "What does adding a pending900 payment do to a posted-only total?",
+          "options": [
+            "Adds900",
+            "Nothing, because WHERE excludes that row",
+            "Removes all posted rows",
+            "Converts the total to NULL"
+          ],
+          "correct_index": 1,
+          "explanation": "The posted-only input condition excludes the pending row before any sum is calculated.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-15-where-vs-having-application-new-5",
+          "test_id": "pt-dbms-sql-15-where-vs-having-application",
+          "question_text": "What is wrong with an arbitrary ungrouped payment identifier beside a total?",
+          "options": [
+            "It guarantees the latest payment",
+            "It is always the smallest identifier",
+            "It may not identify a well-defined member of the group",
+            "It grants payment access"
+          ],
+          "correct_index": 2,
+          "explanation": "A group can contain several payments, and an unqualified identifier does not specify which member is intended.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-15-where-vs-having-application-new-6",
+          "test_id": "pt-dbms-sql-15-where-vs-having-application",
+          "question_text": "Can MySQL permit a select-list alias in HAVING?",
+          "options": [
+            "No, aliases are forbidden everywhere",
+            "Only for table names",
+            "Only after a commit",
+            "Yes, under its alias rules"
+          ],
+          "correct_index": 3,
+          "explanation": "MySQL supplies alias extensions, but portable SQL should check each engine’s name-resolution rules.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-15-where-vs-having-application-new-7",
+          "test_id": "pt-dbms-sql-15-where-vs-having-application",
+          "question_text": "What best tests whether a row threshold was confused with a group threshold?",
+          "options": [
+            "A qualifying group made of several individually small rows",
+            "One large payment in every group",
+            "Only an empty table",
+            "Only unique workshop names"
+          ],
+          "correct_index": 0,
+          "explanation": "A group of small facts exposes a rewrite that incorrectly filters each fact against the group threshold.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-15-where-vs-having-application-new-8",
+          "test_id": "pt-dbms-sql-15-where-vs-having-application",
+          "question_text": "Can moving a predicate across aggregation change NULL semantics?",
+          "options": [
+            "No, every predicate is interchangeable",
+            "Yes, equivalence must be checked",
+            "Only when the UI sorts",
+            "Only after deployment"
+          ],
+          "correct_index": 1,
+          "explanation": "Moving filters can alter which unknown values and empty populations reach the aggregate.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-15-where-vs-having-application-new-9",
+          "test_id": "pt-dbms-sql-15-where-vs-having-application",
+          "question_text": "Why add a known-value count beside SUM?",
+          "options": [
+            "To recover every unknown amount",
+            "To prove authorization",
+            "To expose incomplete measured input",
+            "To remove all refunds"
+          ],
+          "correct_index": 2,
+          "explanation": "Comparing known-value and row counts distinguishes incomplete observations from a fully measured sum.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-15-where-vs-having-application-new-10",
+          "test_id": "pt-dbms-sql-15-where-vs-having-application",
+          "question_text": "What should be established before comparing query speed?",
+          "options": [
+            "Only shorter SQL text",
+            "Only fewer aliases",
+            "Only a higher LIMIT",
+            "Equivalent required results and populations"
+          ],
+          "correct_index": 3,
+          "explanation": "A faster query that answers a different question is not a valid optimization.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cx-where-having-posted-population",
+      "slug": "where-having-posted-population",
+      "title": "Total the posted input population",
+      "difficulty": "Easy",
+      "task": "Return workshop_id and posted_total for workshops represented among posted rows, preserving a NULL all-unknown total. Order by workshop_id.",
+      "schema_sql": "CREATE TABLE workshop_payments(payment_id INT PRIMARY KEY,workshop_id INT NOT NULL,status VARCHAR(10) NOT NULL,amount INT NULL);",
+      "seed_sql": "INSERT INTO workshop_payments VALUES (1,1,'posted',60),(2,1,'posted',50),(3,1,'posted',-20),(4,2,'posted',80),(5,2,'posted',30),(6,1,'pending',900),(7,3,'posted',NULL);",
+      "solution_sql": "SELECT workshop_id,SUM(amount) AS posted_total FROM workshop_payments WHERE status='posted' GROUP BY workshop_id ORDER BY workshop_id;",
+      "expected": "workshop_id\tposted_total\n1\t90\n2\t110\n3\tNULL",
+      "validation_cases": [
+        {
+          "seed_sql": "",
+          "expected": ""
+        }
+      ],
+      "ordering": "Order by the keys explicitly required in the task.",
+      "constraints": [
+        "Use the supplied synthetic tables.",
+        "Return only the requested columns."
+      ],
+      "edge_cases": [
+        "Pending amount excluded",
+        "All-null group retained"
+      ],
+      "hints": [
+        "Filter status in WHERE, then group all eligible amounts."
+      ],
+      "explanation": "Filter status in WHERE, then group all eligible amounts."
+    },
+    {
+      "id": "cx-where-having-total-threshold",
+      "slug": "where-having-total-threshold",
+      "title": "Keep workshops with sufficient posted totals",
+      "difficulty": "Medium",
+      "task": "Return workshop_id,posted_total for workshops with a posted known-value total at least100. Include signed adjustments. Order by workshop_id.",
+      "schema_sql": "CREATE TABLE workshop_payments(payment_id INT PRIMARY KEY,workshop_id INT NOT NULL,status VARCHAR(10) NOT NULL,amount INT NULL);",
+      "seed_sql": "INSERT INTO workshop_payments VALUES (1,1,'posted',60),(2,1,'posted',50),(3,1,'posted',-20),(4,2,'posted',80),(5,2,'posted',30),(6,1,'pending',900),(7,3,'posted',NULL);",
+      "solution_sql": "SELECT workshop_id,SUM(amount) AS posted_total FROM workshop_payments WHERE status='posted' GROUP BY workshop_id HAVING SUM(amount)>=100 ORDER BY workshop_id;",
+      "expected": "workshop_id\tposted_total\n2\t110",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO workshop_payments VALUES (1,4,'posted',150),(2,4,'posted',-100),(3,5,'posted',60),(4,5,'posted',50);",
+          "expected": "workshop_id\tposted_total\n5\t110"
+        },
+        {
+          "seed_sql": "",
+          "expected": ""
+        }
+      ],
+      "ordering": "Order by the keys explicitly required in the task.",
+      "constraints": [
+        "Use the supplied synthetic tables.",
+        "Return only the requested columns."
+      ],
+      "edge_cases": [
+        "Small facts can qualify together",
+        "Refund can disqualify a large payment"
+      ],
+      "hints": [
+        "Filter the completed group total in HAVING rather than individual amounts."
+      ],
+      "explanation": "Filter the completed group total in HAVING rather than individual amounts."
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-15-where-vs-having-1",
+      "test_id": "pt-dbms-sql-15-where-vs-having",
+      "question_text": "Which clause can reference an aggregate function such as SUM(amount) in its condition?",
+      "options": [
+        "WHERE only",
+        "HAVING only",
+        "Both equally",
+        "Neither"
+      ],
+      "correct_index": 1,
+      "explanation": "HAVING runs after aggregation so it can reference aggregate results; WHERE runs before grouping, when aggregates don't exist yet.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-15-where-vs-having-2",
+      "test_id": "pt-dbms-sql-15-where-vs-having",
+      "question_text": "To keep only orders where amount > 100 before any grouping happens, which clause should you use?",
+      "options": [
+        "HAVING amount > 100",
+        "WHERE amount > 100",
+        "GROUP BY amount > 100",
+        "ORDER BY amount > 100"
+      ],
+      "correct_index": 1,
+      "explanation": "amount > 100 is a row-level condition on raw data, evaluated before grouping — that's exactly what WHERE is for.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-15-where-vs-having-3",
+      "test_id": "pt-dbms-sql-15-where-vs-having",
+      "question_text": "`SELECT region, SUM(amount) FROM orders WHERE region IN ('East','West') GROUP BY region;` — why does this only ever aggregate 6 of the 8 rows?",
+      "options": [
+        "GROUP BY silently drops rows with duplicate regions",
+        "WHERE removes the 2 North rows before grouping/aggregation happens",
+        "HAVING is implicitly applied",
+        "SUM() ignores rows outside alphabetical order"
+      ],
+      "correct_index": 1,
+      "explanation": "WHERE executes before GROUP BY, physically excluding North's 2 rows so only the remaining 6 (East+West) rows are ever grouped and summed.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-15-where-vs-having-4",
+      "test_id": "pt-dbms-sql-15-where-vs-having",
+      "question_text": "Why is `GROUP BY region HAVING region = 'West'` valid but generally worse practice than `WHERE region = 'West' GROUP BY region`?",
+      "options": [
+        "HAVING version is invalid SQL",
+        "The HAVING version aggregates all regions first then discards two whole groups, doing unnecessary work; the WHERE version filters rows before aggregation ever touches them",
+        "They behave completely differently and can give different results",
+        "WHERE cannot use string equality"
+      ],
+      "correct_index": 1,
+      "explanation": "Both return the same result here, but HAVING forces full aggregation of North/East/West before discarding non-West groups, while WHERE avoids aggregating the excluded rows at all — a real, if often small, cost difference.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-15-where-vs-having-5",
+      "test_id": "pt-dbms-sql-15-where-vs-having",
+      "question_text": "Given East=310, North=200, West=550 in total amount, what does `GROUP BY region HAVING SUM(amount) > 300` return?",
+      "options": [
+        "East and West",
+        "West only",
+        "All three regions",
+        "North only"
+      ],
+      "correct_index": 0,
+      "explanation": "East (310) and West (550) both exceed 300; North (200) does not.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-15-where-vs-having-6",
+      "test_id": "pt-dbms-sql-15-where-vs-having",
+      "question_text": "Which statement about clause execution order is correct?",
+      "options": [
+        "HAVING always executes before WHERE",
+        "WHERE executes before GROUP BY; HAVING executes after GROUP BY",
+        "WHERE and HAVING execute simultaneously",
+        "GROUP BY executes before WHERE"
+      ],
+      "correct_index": 1,
+      "explanation": "Logical processing order is FROM -> WHERE -> GROUP BY -> HAVING -> SELECT -> ORDER BY.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-15-where-vs-having-7",
+      "test_id": "pt-dbms-sql-15-where-vs-having",
+      "question_text": "Is `WHERE SUM(amount) > 300` valid syntax in standard SQL?",
+      "options": [
+        "Yes, always",
+        "No — aggregate functions cannot appear in WHERE because grouping/aggregation hasn't happened yet at that stage",
+        "Yes, but only in MySQL",
+        "Yes, but only inside a subquery"
+      ],
+      "correct_index": 1,
+      "explanation": "WHERE is evaluated per-row before GROUP BY forms groups and computes aggregates, so aggregate functions are illegal there in every mainstream SQL dialect.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-15-where-vs-having-8",
+      "test_id": "pt-dbms-sql-15-where-vs-having",
+      "question_text": "A query needs: (1) only Widget-product orders considered, and (2) only regions whose Widget total exceeds 100. Which combination is correct?",
+      "options": [
+        "HAVING product = 'Widget' ... WHERE SUM(amount) > 100",
+        "WHERE product = 'Widget' ... GROUP BY region ... HAVING SUM(amount) > 100",
+        "WHERE product = 'Widget' AND SUM(amount) > 100",
+        "GROUP BY region ... WHERE SUM(amount) > 100 AND product = 'Widget'"
+      ],
+      "correct_index": 1,
+      "explanation": "The row-level condition (product = 'Widget') belongs in WHERE, run before grouping; the aggregate-based condition (SUM(amount) > 100 per region) belongs in HAVING, run after grouping.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "/root/worker_2",
+    "independent_review": "passed",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "independent editorial and manual fixture review passed; engine/browser verification pending",
+    "canonical_answer_indices_preserved": true,
+    "editorial_record": "Original prose and assessments. Seed snapshots and canonical answer indices retained; external originality clearance pending.",
+    "independent_reviewer": "/root",
+    "independent_review_scope": "Full notes, all20 MCQs with options and reasoning, both exercise contracts and predicted fixtures, original diagram, metadata and internal links. Row eligibility and aggregate qualification, signed adjustments, empty/all-null groups, outer joins and derived-query scope are consistent. All20 MCQs and five sample/alternative outputs manually reviewed."
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-15-where-vs-having",
+    "original_note_sha256": "c4abcecaa1ca3d58a7458f09d5394c521c3884c9e06bbd4abdf6a90cf76a81e4",
+    "status": "drafted; not included in prepared paired migrations"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Row eligibility and group qualification answer different questions",
+      "description": "Posted payments enter aggregation before the threshold is tested.",
+      "columns": [
+        "Workshop",
+        "Posted amounts",
+        "Total",
+        "At least100?"
+      ],
+      "rows": [
+        [
+          "1",
+          "60,50,-20",
+          "90",
+          "No"
+        ],
+        [
+          "2",
+          "80,30",
+          "110",
+          "Yes"
+        ],
+        [
+          "3",
+          "NULL",
+          "NULL",
+          "Unknown; excluded"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "technical_review": "coordinator independent manual review passed",
+    "browser_rendering": "unverified",
+    "independent_review": "passed",
+    "server_rendering": "passed",
+    "server_rendering_evidence": "2026-10-29 full Vitest:1310 passed/12 skipped; actual LessonBlock/TopicDiagrams render over230 packages. Browser visual QA remains unverified."
+  },
+  "authoring_status": "drafted; verification pending",
+  "sql_verification": {
+    "scope": "not executed; exact MySQL/provider execution pending",
+    "all_passed": false,
+    "cases": []
+  }
+}

@@ -1,0 +1,635 @@
+{
+  "source_ref": "chapter-5-keys-and-integrity/surrogate-key",
+  "slug": "surrogate-key",
+  "title": "Surrogate Key",
+  "description": "Separate internal identity from mutable business labels, preserve independent uniqueness rules, and recognize the limits of generated identifiers and local identity tests.",
+  "dialect": "MySQL 8.4",
+  "notes": "## An artificial identifier names an internal fact\n\nA surrogate key is an artificial identifying value introduced for the data model rather than taken from a business attribute's natural meaning. An internal student_id can serve this role while an institutional number and student name describe other roles. The surrogate distinguishes the stored student fact without requiring every reference to carry a mutable public label or a long natural identifying combination.\n\nArtificial does not mean automatically valid or secure. The value still needs an appropriate uniqueness and nonmissing guarantee. Its generation and accepted use must follow the application contract. A numeric value, a UUID, or another scheme can serve as a surrogate under suitable rules. The defining issue is its identity role, not one mandatory representation or one particular generation algorithm.\n\n## Stability is a policy rather than a law\n\nA surrogate can remain stable when a student's email, name, or programme changes. That separation reduces unnecessary changes to referencing facts. It is useful because a descriptive business change need not redefine internal identity. An update to a student's contact address can therefore leave enrollments and assessment references attached to the same student_id.\n\nIt is too strong to claim a surrogate can never need to change. Data consolidation, identity corrections, or an authorized migration can require careful remapping. Stability is an intended lifecycle policy, not a magical property of arbitrary numbers. Review reference dependencies and supported transitions whenever an identity changes, even if its original purpose was to remain internal and business-independent.\n\n## A surrogate does not identify the business entity by itself\n\nTwo rows can receive different internal identifiers while claiming the same institutional student number. The surrogate primary key does not detect that conflict because the internal values differ. If the institutional number must independently identify one student, enforce that rule too. Otherwise the system can store contradictory representations of the same intended institutional identity under separate internal rows.\n\nThe business rule must itself be justified. Optional emails, shared household contacts, and reused external identifiers are not universally valid natural keys. Apply uniqueness only where the documented domain requires it. A surrogate does not remove genuine business constraints, but neither does it justify inventing uniqueness for every descriptive label. The fact grain and accepted policies still determine which additional rules belong in the schema.\n\n## Generation and enforcement are separate decisions\n\nA plain integer primary key does not automatically choose values. A caller can supply an allocated integer, or a supported generation feature can create one. MySQL AUTO_INCREMENT is one such feature under its actual engine and definition rules. A generated value still needs the corresponding key enforcement and should not be treated as proof that the caller is authorized to use the identified record.\n\nGeneration schemes also have operational properties. A simple independent counter on each offline client can produce the same value on different devices. A coordinated allocation or suitably designed decentralized scheme addresses that problem. UUID schemes can reduce collision risk under their specified construction, but they do not offer a universal mathematical promise that every malformed generator or copied identifier can never collide.\n\n## Gaps and ordering do not define the population\n\nGenerated integer identities can contain gaps. Rejected operations, deletions, allocation behaviour, and concurrent work can make the largest observed identifier differ from the number of stored facts. Use COUNT when the task asks for a row count. Subtracting the smallest identity from the largest is not a dependable population measurement under an ordinary surrogate-key contract.\n\nA sequential-looking identifier also does not establish an exact event timestamp or a reliable completion order for concurrent transactions. It can reveal patterns that merit consideration when exposed publicly, but those patterns are not a substitute for explicit recorded time or ordering fields. If a report needs a stable display order, request ORDER BY using the defined business and tie-breaking attributes.\n\n## Opaque values do not provide authorization\n\nA difficult-to-guess identifier can make casual enumeration harder, but knowing a record identifier must not be treated as permission to read or modify the record. Access decisions belong at trusted boundaries and must use the relevant actor and scope. Changing integers to UUIDs does not repair a missing ownership or entitlement check in an application endpoint.\n\nConversely, using an integer key is not by itself an authorization failure. Evaluate whether the server enforces the required access rules for all identified records. A key lesson can explain this boundary without redesigning authentication or claiming to test security merely by inserting fixture rows. Identity selects the fact; authority decides which actor may perform which operation on it.\n\n## Keep identity stable through descriptive updates\n\nA useful exercise updates a student's institutional label while retaining student_id. A related attendance table continues to refer to the same internal student identity. A report joining through student_id can display the new label with the existing attendance fact. Joining through the old mutable label instead can lose or misassociate the relationship if that label changes.\n\n```sql\nUPDATE students\nSET institutional_number = 'S900'\nWHERE student_id = 17;\n```\n\nThe statement targets the internal identity. Its correctness depends on whether the new label satisfies any required alternate uniqueness rule and whether the caller is authorized for the actual application operation. In isolated fixtures, these conditions can be simplified and stated explicitly. Do not generalize a local demonstration into a complete production identity-correction workflow.\n\n## A mapping connects external and internal identities\n\nImports often arrive with meaningful external identifiers while internal relationships use surrogate values. Resolve the external identifier to the intended internal row using a documented unique mapping. Preserve a proposal identity when reporting unresolved values. An unmatched code, a missing code, and multiple conflicting mapping candidates can require different review actions rather than an arbitrary choice of the first returned row.\n\nA mapping should remain within its intended scope. An institutional number unique only within a campus may require campus_code as well. Different organizations can issue the same apparent local value. Adding a surrogate internally does not make an underspecified external lookup reliable. The translation predicate must include the complete external identity contract before it can identify the correct internal record.\n\n## Physical trade-offs depend on the chosen scheme\n\nA compact integer can keep references narrow, while other schemes have different sizes and ordering properties. Those differences can affect index storage, locality, write patterns, and distributed allocation. The actual effect depends on engine, representation, workload, and configuration. Do not claim every UUID is random, every integer is centrally allocated, or every surrogate improves every query.\n\nNatural-key and surrogate-key choices also affect readability and joins. A human may recognize a course code more readily than an arbitrary number, while stable internal references can decouple business renaming. Both identifiers can be exposed in a carefully designed result. Choose the combination that preserves correct identity, useful user communication, and manageable lifecycle behaviour under the actual application requirements.\n\n## Verify internal and alternate identities independently\n\nTest that different students can share names while retaining distinct internal identities. Update a mutable business label and confirm the internal identity and associated query result remain aligned. Then challenge any genuine alternate uniqueness rule using a different internal identifier with an already claimed institutional number. The failure should test that business rule rather than only the surrogate primary key.\n\nA successful identity lookup is also not evidence that two imported records should be merged automatically. That decision needs the documented identity-resolution policy. The exercises use supplied internal identifiers to avoid conflating generated-number behaviour with identity semantics. Their temporary-table joins verify mapping and update results; they do not exercise native foreign-key actions, exact provider generation, or production authorization. A reliable surrogate-key explanation separates artificial identity, value allocation, business uniqueness, lifecycle stability, and access control. Keeping those responsibilities explicit makes the design useful without promising properties that an arbitrary generated value cannot supply.\n",
+  "references": [],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-5-surrogate-key",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-5-surrogate-key-1",
+          "test_id": "pt-dbms-sql-5-surrogate-key",
+          "question_text": "What defines a surrogate key?",
+          "options": [
+            "A key with deep real-world business meaning",
+            "An artificial identifying value introduced independently of the descriptive business attributes",
+            "A key that must always be a UUID specifically",
+            "A backup key used only when the primary key fails"
+          ],
+          "correct_index": 1,
+          "explanation": "A surrogate supplies internal identity; its public visibility and generation mechanism are separate decisions.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-5-surrogate-key-2",
+          "test_id": "pt-dbms-sql-5-surrogate-key",
+          "question_text": "Why can a surrogate key often remain stable when a student’s business labels change?",
+          "options": [
+            "Because it is encrypted",
+            "Its internal identity role is separate from those labels, though exceptional migrations or corrections still need review",
+            "Because SQL forbids updating surrogate keys",
+            "Because surrogate keys are always the same value for every row"
+          ],
+          "correct_index": 1,
+          "explanation": "Stability is a policy and design advantage, not a universal impossibility of change.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-5-surrogate-key-3",
+          "test_id": "pt-dbms-sql-5-surrogate-key",
+          "question_text": "If an institutional number is genuinely required and unique by policy, does a surrogate primary key remove that obligation?",
+          "options": [
+            "No, the surrogate key makes that unnecessary",
+            "Yes — it should still be enforced with a UNIQUE constraint, or duplicate real-world entities could be inserted as if they were different rows",
+            "Only if the table has fewer than 100 rows",
+            "Natural keys cannot coexist with surrogate keys in the same table"
+          ],
+          "correct_index": 1,
+          "explanation": "The independently justified business uniqueness rule still needs appropriate enforcement; not every email field inherently has that rule.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-5-surrogate-key-4",
+          "test_id": "pt-dbms-sql-5-surrogate-key",
+          "question_text": "What potential downside does a simple auto-incrementing integer surrogate key have?",
+          "options": [
+            "It cannot be indexed",
+            "Exposed sequential patterns can reveal information, but gaps mean they do not reliably give exact counts or event times",
+            "It always takes more storage than a UUID",
+            "It cannot be used as a primary key"
+          ],
+          "correct_index": 1,
+          "explanation": "Identifier patterns and exposure need deliberate handling; authorization must remain enforced independently.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-5-surrogate-key-5",
+          "test_id": "pt-dbms-sql-5-surrogate-key",
+          "question_text": "Why might a distributed system (e.g. offline mobile clients generating their own new-record ids) avoid a simple incrementing counter as the surrogate key scheme?",
+          "options": [
+            "Incrementing counters are illegal in distributed systems",
+            "Uncoordinated counters can collide; a suitable allocation or decentralized identifier scheme can address the risk",
+            "Distributed systems cannot use surrogate keys at all",
+            "This scenario has no real bearing on key design"
+          ],
+          "correct_index": 1,
+          "explanation": "Collision risk depends on the actual scheme and correct generation. UUID terminology alone does not prove a perfect no-collision guarantee.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-5-surrogate-key-6",
+          "test_id": "pt-dbms-sql-5-surrogate-key",
+          "question_text": "What is the main trade-off of choosing a surrogate key over a natural key?",
+          "options": [
+            "No trade-off exists",
+            "Gaining stability/simplicity at the cost of the key having no meaning outside the database",
+            "Surrogate keys are always slower for every operation",
+            "Surrogate keys cannot be used with foreign keys"
+          ],
+          "correct_index": 1,
+          "explanation": "This mirrors the natural-key trade-off from the other direction: stability and simplicity vs. real-world meaningfulness.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-5-surrogate-key-7",
+          "test_id": "pt-dbms-sql-5-surrogate-key",
+          "question_text": "Is `customer_id = 4821` on its own informative to a human reading it?",
+          "options": [
+            "Yes, it reveals the customer's name",
+            "It does not by itself reveal the customer’s descriptive identity; a lookup and authorized access may be needed",
+            "It reveals the customer's registration date exactly",
+            "It reveals the customer's email address"
+          ],
+          "correct_index": 1,
+          "explanation": "A surrogate has no required descriptive semantics, though allocation patterns can still reveal limited information.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-5-surrogate-key-8",
+          "test_id": "pt-dbms-sql-5-surrogate-key",
+          "question_text": "When a required natural identity also exists, which design can preserve both internal and business guarantees?",
+          "options": [
+            "Using only a natural key with no surrogate key ever",
+            "A surrogate key as PRIMARY KEY, with a natural key still enforced as a UNIQUE alternate key",
+            "Never enforcing uniqueness on either kind of key",
+            "Two separate surrogate keys with no natural key at all"
+          ],
+          "correct_index": 1,
+          "explanation": "A surrogate primary key and required unique alternate identity can coexist; suitability depends on the actual domain rather than a universal recommendation.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-5-surrogate-key-new-9",
+          "test_id": "pt-dbms-sql-5-surrogate-key",
+          "question_text": "Does an internal surrogate prevent two records from claiming the same required institutional number?",
+          "options": [
+            "Yes; any different ids prove different real identities",
+            "No; the alternate business rule needs enforcement",
+            "Only for UUIDs",
+            "Only when sorted"
+          ],
+          "correct_index": 1,
+          "explanation": "Surrogate uniqueness concerns its own values.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-5-surrogate-key-new-10",
+          "test_id": "pt-dbms-sql-5-surrogate-key",
+          "question_text": "Does the largest generated id reliably equal row count?",
+          "options": [
+            "Yes; every surrogate is consecutive",
+            "Only if the table has a name",
+            "No; allocation and deletion can leave gaps",
+            "Only with a SELECT alias"
+          ],
+          "correct_index": 2,
+          "explanation": "Count rows rather than infer population from identity ranges.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-5-surrogate-key-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-5-surrogate-key-application-new-1",
+          "test_id": "pt-dbms-sql-5-surrogate-key-application",
+          "question_text": "What remains unchanged when only a student’s contact label changes under a stable identity policy?",
+          "options": [
+            "Every institutional label by definition",
+            "All source facts in every table",
+            "The internal student_id",
+            "The current display position"
+          ],
+          "correct_index": 2,
+          "explanation": "Internal identity can be independent of descriptive changes.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-5-surrogate-key-application-new-2",
+          "test_id": "pt-dbms-sql-5-surrogate-key-application",
+          "question_text": "Does a hard-to-guess UUID grant access to its record?",
+          "options": [
+            "Yes; possession always means ownership",
+            "Only if it is long",
+            "Only if generated offline",
+            "No; trusted authorization is still required"
+          ],
+          "correct_index": 3,
+          "explanation": "Identity and authority are separate.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-5-surrogate-key-application-new-3",
+          "test_id": "pt-dbms-sql-5-surrogate-key-application",
+          "question_text": "What can independent offline counters do without coordination?",
+          "options": [
+            "Allocate the same identifier on different devices",
+            "Guarantee global uniqueness",
+            "Automatically merge all records",
+            "Enforce every business key"
+          ],
+          "correct_index": 0,
+          "explanation": "An allocation scheme must address cross-source collisions.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-5-surrogate-key-application-new-4",
+          "test_id": "pt-dbms-sql-5-surrogate-key-application",
+          "question_text": "Why not say surrogate keys can never change?",
+          "options": [
+            "Every surrogate must change daily",
+            "Corrections or migrations can require deliberate remapping",
+            "SQL forbids all identity policies",
+            "Only natural fields have lifecycle rules"
+          ],
+          "correct_index": 1,
+          "explanation": "Stability does not eliminate exceptional identity operations.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-5-surrogate-key-application-new-5",
+          "test_id": "pt-dbms-sql-5-surrogate-key-application",
+          "question_text": "What should resolve an imported scoped external identifier?",
+          "options": [
+            "The first matching display name",
+            "The largest surrogate id",
+            "A lookup using its complete documented scope and value",
+            "An arbitrary row position"
+          ],
+          "correct_index": 2,
+          "explanation": "Correct mapping requires the full external identity.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-5-surrogate-key-application-new-6",
+          "test_id": "pt-dbms-sql-5-surrogate-key-application",
+          "question_text": "What does an unmatched imported institutional code imply for the mapping query?",
+          "options": [
+            "A new student must be created automatically",
+            "The code is definitely malicious",
+            "The current schema has no key",
+            "No matching internal identity was found under that lookup contract"
+          ],
+          "correct_index": 3,
+          "explanation": "A missing mapping needs the defined review policy.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-5-surrogate-key-application-new-7",
+          "test_id": "pt-dbms-sql-5-surrogate-key-application",
+          "question_text": "Does PRIMARY KEY alone allocate the next integer?",
+          "options": [
+            "No; value generation is separate",
+            "Yes; every key auto-increments",
+            "Only if the column is first",
+            "Only when names repeat"
+          ],
+          "correct_index": 0,
+          "explanation": "An ordinary supplied integer key need not be generated.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-5-surrogate-key-application-new-8",
+          "test_id": "pt-dbms-sql-5-surrogate-key-application",
+          "question_text": "Which statement about surrogate performance is defensible?",
+          "options": [
+            "Every surrogate speeds every query",
+            "Representation and workload determine the actual trade-offs",
+            "Every UUID is random and unindexable",
+            "Integers never need coordination"
+          ],
+          "correct_index": 1,
+          "explanation": "No single generation label determines all physical behaviour.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-5-surrogate-key-application-new-9",
+          "test_id": "pt-dbms-sql-5-surrogate-key-application",
+          "question_text": "What does a temporary mapping exercise fail to prove?",
+          "options": [
+            "The returned fixture join values",
+            "The tested update predicate result",
+            "Production authorization and exact provider allocation behaviour",
+            "The explicitly recorded row count"
+          ],
+          "correct_index": 2,
+          "explanation": "The evidence is limited to its exercised scope.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-5-surrogate-key-application-new-10",
+          "test_id": "pt-dbms-sql-5-surrogate-key-application",
+          "question_text": "Which test challenges a required institutional alternate rule independently of the surrogate?",
+          "options": [
+            "A repeated internal id with an unrelated code only",
+            "Two valid different ids sharing a name",
+            "Two different output aliases",
+            "A different internal id with the same institutional number"
+          ],
+          "correct_index": 3,
+          "explanation": "The conflict must target the business identity being tested.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cx-surrogate-key-map",
+      "slug": "surrogate-key-map",
+      "title": "Resolve incoming institutional numbers to internal student identities",
+      "difficulty": "Easy",
+      "task": "For matching proposals return proposal_id and student_id by institutional_number. Keep separate proposals and omit unmatched codes.",
+      "schema_sql": "CREATE TABLE students (student_id INT PRIMARY KEY, institutional_number VARCHAR(20) NOT NULL UNIQUE);\nCREATE TABLE proposals (proposal_id INT PRIMARY KEY, institutional_number VARCHAR(20) NOT NULL);",
+      "seed_sql": "INSERT INTO students VALUES (17,'S17'),(24,'S24'); INSERT INTO proposals VALUES (1,'S24'),(2,'S17'),(3,'UNKNOWN'),(4,'S17');",
+      "expected": "proposal_id\tstudent_id\n1\t24\n2\t17\n4\t17",
+      "ordering": "Ascending proposal_id.",
+      "constraints": [
+        "Institutional numbers are required and unique in this single-campus fixture scope.",
+        "Identifiers are supplied, not automatically generated."
+      ],
+      "edge_cases": [
+        "Repeated proposals can resolve to the same internal identity.",
+        "Unmatched proposals are absent from this matching report."
+      ],
+      "hints": [
+        "Join using the defined external alternate identity.",
+        "Preserve proposal_id in the output."
+      ],
+      "solution_sql": "SELECT p.proposal_id, s.student_id FROM proposals p JOIN students s ON s.institutional_number = p.institutional_number ORDER BY p.proposal_id;",
+      "explanation": "The lookup translates external identities into internal identities under an explicit unique mapping, without inventing records for unmatched proposals.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO proposals VALUES (1,'UNKNOWN');",
+          "expected": ""
+        },
+        {
+          "seed_sql": "INSERT INTO students VALUES (9,'S9'); INSERT INTO proposals VALUES (2,'S9'),(1,'S9');",
+          "expected": "proposal_id\tstudent_id\n1\t9\n2\t9"
+        }
+      ]
+    },
+    {
+      "id": "cx-surrogate-key-update",
+      "slug": "surrogate-key-update",
+      "title": "Change a business label while preserving the internal relationship",
+      "difficulty": "Medium",
+      "task": "Change institutional_number to S900 only for student_id 17. Then return attendance_id, student_id and the current institutional_number for matching attendance records. Keep all supplied internal ids unchanged.",
+      "starter_sql": "-- Update the business label for internal student 17, then join attendance by student_id.",
+      "schema_sql": "CREATE TABLE students (student_id INT PRIMARY KEY, institutional_number VARCHAR(20) NOT NULL UNIQUE);\nCREATE TABLE attendance (attendance_id INT PRIMARY KEY, student_id INT NOT NULL);",
+      "seed_sql": "INSERT INTO students VALUES (17,'S17'),(24,'S24'); INSERT INTO attendance VALUES (1,17),(2,24),(3,17);",
+      "expected": "attendance_id\tstudent_id\tinstitutional_number\n1\t17\tS900\n2\t24\tS24\n3\t17\tS900",
+      "ordering": "Ascending attendance_id.",
+      "constraints": [
+        "S900 is unused initially; supplied attendance references match students.",
+        "Temporary fixtures use query mirrors without foreign keys; native reference actions and production authority are unverified."
+      ],
+      "edge_cases": [
+        "Several related facts can share the same stable student identity.",
+        "If student 17 is absent, no other student label changes."
+      ],
+      "hints": [
+        "Target the update by the internal primary identifier.",
+        "Join attendance through student_id rather than a mutable label."
+      ],
+      "solution_sql": "UPDATE students SET institutional_number = 'S900' WHERE student_id = 17;\nSELECT a.attendance_id, s.student_id, s.institutional_number FROM attendance a JOIN students s ON s.student_id = a.student_id ORDER BY a.attendance_id;",
+      "explanation": "The business label changes while internal identity and the join relationship remain stable. The exercise verifies supplied-value identity semantics, not automatic generation.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO students VALUES (24,'S24'); INSERT INTO attendance VALUES (1,24);",
+          "expected": "attendance_id\tstudent_id\tinstitutional_number\n1\t24\tS24"
+        },
+        {
+          "seed_sql": "INSERT INTO students VALUES (17,'S17');",
+          "expected": ""
+        }
+      ],
+      "negative_validation_cases": [
+        {
+          "sql": "INSERT INTO students VALUES (99,'S900');",
+          "error_codes": [
+            1062
+          ]
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-5-surrogate-key-1",
+      "test_id": "pt-dbms-sql-5-surrogate-key",
+      "question_text": "What defines a surrogate key?",
+      "options": [
+        "A key with deep real-world business meaning",
+        "An artificial identifier (e.g. auto-increment integer or UUID) with no business meaning, created purely for database convenience",
+        "A key that must always be a UUID specifically",
+        "A backup key used only when the primary key fails"
+      ],
+      "correct_index": 1,
+      "explanation": "Surrogate keys are deliberately meaningless outside the database — that's their defining trait.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-5-surrogate-key-2",
+      "test_id": "pt-dbms-sql-5-surrogate-key",
+      "question_text": "Why does a surrogate key never need to change for business reasons?",
+      "options": [
+        "Because it is encrypted",
+        "Because it has no real-world meaning to begin with, so there's nothing about the real world that could require it to be corrected",
+        "Because SQL forbids updating surrogate keys",
+        "Because surrogate keys are always the same value for every row"
+      ],
+      "correct_index": 1,
+      "explanation": "Since the value carries no business meaning, there's no real-world event that would ever necessitate changing it.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-5-surrogate-key-3",
+      "test_id": "pt-dbms-sql-5-surrogate-key",
+      "question_text": "If a table uses a surrogate id as its primary key, should the natural key (e.g. email) still be constrained?",
+      "options": [
+        "No, the surrogate key makes that unnecessary",
+        "Yes — it should still be enforced with a UNIQUE constraint, or duplicate real-world entities could be inserted as if they were different rows",
+        "Only if the table has fewer than 100 rows",
+        "Natural keys cannot coexist with surrogate keys in the same table"
+      ],
+      "correct_index": 1,
+      "explanation": "Skipping the natural-key uniqueness check lets true real-world duplicates slip in, since the surrogate id alone doesn't prevent that.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-5-surrogate-key-4",
+      "test_id": "pt-dbms-sql-5-surrogate-key",
+      "question_text": "What potential downside does a simple auto-incrementing integer surrogate key have?",
+      "options": [
+        "It cannot be indexed",
+        "It can leak information — e.g. the approximate row count or creation order — just by observing the id values",
+        "It always takes more storage than a UUID",
+        "It cannot be used as a primary key"
+      ],
+      "correct_index": 1,
+      "explanation": "Sequential ids reveal relative ordering and volume, which is why some systems prefer non-sequential UUIDs for sensitive entities.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-5-surrogate-key-5",
+      "test_id": "pt-dbms-sql-5-surrogate-key",
+      "question_text": "Why might a distributed system (e.g. offline mobile clients generating their own new-record ids) avoid a simple incrementing counter as the surrogate key scheme?",
+      "options": [
+        "Incrementing counters are illegal in distributed systems",
+        "Independently-generated counters on different clients can collide; a properly-designed UUID avoids that collision risk",
+        "Distributed systems cannot use surrogate keys at all",
+        "This scenario has no real bearing on key design"
+      ],
+      "correct_index": 1,
+      "explanation": "Without central coordination, simple counters from independent sources can produce duplicate values; UUIDs are designed to avoid this even without coordination.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-5-surrogate-key-6",
+      "test_id": "pt-dbms-sql-5-surrogate-key",
+      "question_text": "What is the main trade-off of choosing a surrogate key over a natural key?",
+      "options": [
+        "No trade-off exists",
+        "Gaining stability/simplicity at the cost of the key having no meaning outside the database",
+        "Surrogate keys are always slower for every operation",
+        "Surrogate keys cannot be used with foreign keys"
+      ],
+      "correct_index": 1,
+      "explanation": "This mirrors the natural-key trade-off from the other direction: stability and simplicity vs. real-world meaningfulness.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-5-surrogate-key-7",
+      "test_id": "pt-dbms-sql-5-surrogate-key",
+      "question_text": "Is `customer_id = 4821` on its own informative to a human reading it?",
+      "options": [
+        "Yes, it reveals the customer's name",
+        "No — a surrogate key value is deliberately meaningless without looking the row up",
+        "It reveals the customer's registration date exactly",
+        "It reveals the customer's email address"
+      ],
+      "correct_index": 1,
+      "explanation": "A surrogate key is opaque by design; it requires a lookup to learn anything about the entity it identifies.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-5-surrogate-key-8",
+      "test_id": "pt-dbms-sql-5-surrogate-key",
+      "question_text": "Which pairing is a common, recommended real-world pattern?",
+      "options": [
+        "Using only a natural key with no surrogate key ever",
+        "A surrogate key as PRIMARY KEY, with a natural key still enforced as a UNIQUE alternate key",
+        "Never enforcing uniqueness on either kind of key",
+        "Two separate surrogate keys with no natural key at all"
+      ],
+      "correct_index": 1,
+      "explanation": "This combination gets the stability of a surrogate primary key while still preventing real-world duplicate entities via a UNIQUE natural key.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "coordinator",
+    "independent_review": "unavailable; no agent tools",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Definitions and examples checked against questions; no plagiarism certification.",
+    "existing_question_corrections": [
+      "tq-dbms-sql-5-surrogate-key-1",
+      "tq-dbms-sql-5-surrogate-key-2",
+      "tq-dbms-sql-5-surrogate-key-3",
+      "tq-dbms-sql-5-surrogate-key-4",
+      "tq-dbms-sql-5-surrogate-key-5",
+      "tq-dbms-sql-5-surrogate-key-7",
+      "tq-dbms-sql-5-surrogate-key-8"
+    ],
+    "canonical_answer_indices_preserved": true
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-5-surrogate-key",
+    "original_note_sha256": "5736c58cc1208765c5a69bce4fd65a8ea30466d03c439d3600c53d17500f1a45",
+    "status": "paired migration prepared; not applied"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Stable internal identity can survive a business-label change",
+      "description": "Attendance uses student_id, so a label change does not require changing these fixture references. Native foreign-key actions are a separate verification concern.",
+      "columns": [
+        "Fact",
+        "Before",
+        "After"
+      ],
+      "rows": [
+        [
+          "Student internal identity",
+          "17",
+          "17"
+        ],
+        [
+          "Student institutional label",
+          "S17",
+          "S900"
+        ],
+        [
+          "Attendance 1 student reference",
+          "17",
+          "17"
+        ],
+        [
+          "Attendance 3 student reference",
+          "17",
+          "17"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "coordinator checked identity versus generation, exceptional changes, mapping scope and authorization separation",
+    "server_rendering": "passed",
+    "browser_rendering": "unverified",
+    "independent_review": "unavailable; no agent tools",
+    "server_rendering_evidence": "2026-10-29: actual LessonBlock rendering passed for all 79 packages; 87 focused Vitest tests passed."
+  },
+  "sql_verification": {
+    "engine": "11.8.6-MariaDB-0+deb13u1 from Debian",
+    "scope": "MariaDB compatibility execution; exact MySQL 8.4/provider execution unverified",
+    "fingerprint": "76e232b2ed39f976ef5fcc03958dcea5fb36293746b4a7c7d9cfd5d9a5049be6",
+    "cases": [
+      {
+        "problem": "surrogate-key-map",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "surrogate-key-map",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "surrogate-key-map",
+        "case": 2,
+        "passed": true
+      },
+      {
+        "problem": "surrogate-key-update",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "surrogate-key-update",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "surrogate-key-update",
+        "case": 2,
+        "passed": true
+      },
+      {
+        "problem": "surrogate-key-update",
+        "negative_case": 0,
+        "error_code": 1062,
+        "passed": true
+      }
+    ],
+    "all_passed": true
+  }
+}

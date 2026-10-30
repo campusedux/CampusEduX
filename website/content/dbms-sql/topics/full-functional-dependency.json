@@ -1,0 +1,515 @@
+{
+  "source_ref": "chapter-21-normalization-and-functional-dependencies/full-functional-dependency",
+  "slug": "full-functional-dependency",
+  "title": "Full Functional Dependency",
+  "description": "Understand full functional dependency using determinant minimality, closures, valid counterexamples and the link to 2NF, without confusing a data snapshot with a domain proof.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Ask whether every determinant attribute is necessary\n\nA functional dependency X determines Y means that any two valid relation rows agreeing on all attributes in X must also agree on Y. A full functional dependency adds a minimality requirement: Y depends on the whole determinant X, and no proper subset of X determines Y. The word full describes whether any determinant attribute can be removed without losing the dependency.\n\nConsider a campus assessment relation with student_id, assessment_id and awarded_mark. If each student receives one recorded mark for each assessment, the pair student_id and assessment_id determines awarded_mark. The dependency is full when neither student_id alone nor assessment_id alone determines that mark. The student can take different assessments, and different students can receive different marks on one assessment.\n\n## State the domain rule before examining a sample\n\nFunctional dependencies describe allowed states, not merely coincidences in one displayed table. A sample in which every student has taken only one assessment might make student_id appear to determine awarded_mark. The domain may still permit that student to take another assessment and receive a different mark. The visible agreement is therefore insufficient to establish the dependency as a rule.\n\nWrite the intended invariant in ordinary language: one current awarded mark belongs to one student-assessment pair. Also state whether attempts, components or grading revisions are separate facts. If multiple attempts can coexist, the pair may no longer determine a unique mark without an attempt identity or a defined current-result rule. Full-dependency analysis must use the actual record meaning rather than a convenient column list.\n\n## Separate dependency from full dependency\n\nIf student_id alone determines student_name, then the larger pair student_id and assessment_id also determines student_name. Adding an attribute to a determinant does not invalidate a dependency that already holds. However, the larger dependency is not full because assessment_id is unnecessary. It is a partial dependency relative to that composite determinant.\n\nThis distinction explains why a statement can be a true functional dependency yet fail the full-dependency test. The existence question asks whether agreeing on X forces agreement on Y. The minimality question asks whether every attribute in X is needed. Evaluate them in that order, because a dependency that does not hold cannot become full simply because both columns seem important to the application.\n\n## Use closures to reason systematically\n\nAttribute closure collects everything implied by a chosen determinant under a specified dependency set. To test X determines Y, compute the closure of X and check whether it contains Y. To test fullness, inspect whether any proper subset of X also has a closure containing Y. For a two-attribute determinant, the individual singleton closures are the first cases to examine.\n\nFor larger finite determinants, testing every single-attribute removal from X is sufficient for this minimality check: if any smaller proper subset determined Y, an appropriate one-attribute-removed superset would determine Y as well. This follows from augmentation of functional dependencies. Do not test only one convenient subset and assume that the remaining determinant attributes are necessary too.\n\n## Work through a campus relation\n\nLet the relation contain Student, Assessment, StudentName, AssessmentTitle and Mark. Suppose the intended dependencies are Student determines StudentName, Assessment determines AssessmentTitle, and Student plus Assessment determines Mark. The pair's closure reaches every attribute, so it is a candidate key if neither singleton reaches the whole relation. Those dependencies summarize different responsibilities within the same wide table.\n\nStudent plus Assessment determines StudentName, but not fully: Student already determines the name. The analogous dependency to AssessmentTitle is also partial. The dependency to Mark is full under the stated set because neither Student nor Assessment alone reaches Mark. The conclusion depends on these domain constraints; adding a new rule such as every assessment awarding one fixed mark could change the analysis.\n\n| Determinant | Dependent | Full under the stated rules? |\n|---|---|---|\n| Student, Assessment | Mark | Yes |\n| Student, Assessment | StudentName | No: Student suffices |\n| Student, Assessment | AssessmentTitle | No: Assessment suffices |\n\nThe table is a dependency diagram in tabular form, not evidence from a production database. Its purpose is to show which determinant components matter. A reader should be able to explain why removing Student loses the mark dependency and why removing Assessment also loses it, while removing Assessment does not lose the student-name dependency.\n\n## Use counterexamples to challenge minimality\n\nTo show Student does not determine Mark, construct two allowed rows for one student on different assessments with different marks. To show Assessment does not determine Mark, construct two allowed rows for different students on the same assessment with different marks. These are different counterexamples because they challenge different proper subsets of the pair.\n\nThe examples must be allowed by the domain. If the application permits only one assessment per student, the first counterexample is invalid and the proposed dependency analysis needs revision. A useful exercise is to describe the business permission before writing the counterexample rows. That prevents a purely visual table manipulation from contradicting the requirements the dependencies are supposed to formalize.\n\n## Do not confuse key size with fullness\n\nA composite key does not automatically make every dependency from it full. StudentName remains dependent on only Student even when the table's chosen primary key is Student plus Assessment. Conversely, a full dependency can involve an arbitrary determinant, not only the primary key. The formal definition concerns necessity within X; normalization applies that reasoning to particular keys and attributes.\n\nA single-attribute determinant has no nonempty proper subset, but the empty set is still relevant in the formal definition. A dependent that is constant throughout all permitted states can be determined by the empty set. Avoid the absolute shortcut that every dependency from one attribute is automatically full under every possible dependency system. Introductory examples often omit constants, but a careful definition explains the assumption.\n\n## Relate the idea to second normal form\n\nSecond normal form requires first normal form and no partial dependency of a nonprime attribute on any candidate key. A nonprime attribute belongs to no candidate key. Full-dependency analysis helps identify whether a nonprime attribute needs the whole composite key or is actually determined by only one component. It is therefore one tool in evaluating 2NF, rather than a complete definition of good design.\n\nCheck every candidate key, not only the key designated PRIMARY KEY in the implementation. A table can have alternate candidate keys that reveal a partial dependency missed by a primary-key-only review. Also avoid applying the nonprime restriction loosely: prime attributes have a particular role in normalization definitions, and replacing that distinction with all columns can produce an incorrect verdict.\n\n## Decompose responsibilities without losing relationships\n\nIn the campus example, separate Students(Student, StudentName), Assessments(Assessment, AssessmentTitle), and Results(Student, Assessment, Mark). Each descriptive attribute then lives with its determinant, while the result relation keeps the student-assessment relationship. This avoids repeating a student's name on every result and avoids requiring an assessment result just to store a new assessment title.\n\nA decomposition should be checked for lossless reconstruction and the preservation of relevant dependencies, not merely admired because the tables are smaller. The relationship keys must remain explicit. Renaming or deleting a key component to simplify an example can lose the very fact whose mark requires both identities. Continue with [2NF](/learning/dbms-sql-tutorial/2nf) and [functional dependencies](/learning/dbms-sql-tutorial/functional-dependency) for the associated design checks.\n\n## Use SQL as a detector, not a proof of the rule\n\nA grouped query can find a current counterexample to an asserted dependency. For example, more than one distinct known mark for the same determinant in a snapshot contradicts a simple nonnull single-mark rule. Absence of such a group does not prove that every future valid state obeys the rule. Constraints and domain analysis establish permitted states; a current data scan only observes one state.\n\n```sql\nSELECT student_id, COUNT(DISTINCT awarded_mark) AS known_marks\nFROM result_snapshot\nGROUP BY student_id\nHAVING COUNT(DISTINCT awarded_mark) > 1;\n```\n\nThis diagnostic can refute Student determines Mark when it finds different known marks for a student. It cannot decide the whole full-dependency question on its own, and COUNT DISTINCT has its own null behavior. The exercises therefore emphasize dependency reasoning and allowed counterexamples. A successful SQL scan should never be reported as a mathematical proof of the application invariant.\n",
+  "references": [
+    {
+      "title": "MySQL 8.4 reference manual",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/group-by-functional-dependence.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-21-full-functional-dependency",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-21-full-functional-dependency-1",
+          "test_id": "pt-dbms-sql-21-full-functional-dependency",
+          "question_text": "Under the stated campus rules, why is Student,Assessment determines Mark full?",
+          "options": [
+            "The pair is printed first",
+            "The pair determines Mark, and neither single identity does",
+            "Mark is numeric",
+            "The sample contains exactly one row"
+          ],
+          "correct_index": 1,
+          "explanation": "Both determinant components are necessary under the specified permitted-state rules.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-21-full-functional-dependency-2",
+          "test_id": "pt-dbms-sql-21-full-functional-dependency",
+          "question_text": "Two allowed rows have the same Assessment but different Mark values. What does this refute?",
+          "options": [
+            "The pair necessarily determines Mark",
+            "Assessment alone determines Mark",
+            "Student alone determines Mark",
+            "Every possible dependency in the relation"
+          ],
+          "correct_index": 1,
+          "explanation": "It refutes that singleton dependency only. Establishing fullness also requires the pair dependency and the other subset check.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-21-full-functional-dependency-3",
+          "test_id": "pt-dbms-sql-21-full-functional-dependency",
+          "question_text": "For a full functional dependency to exist on a composite key X = {A, B}, what must be true?",
+          "options": [
+            "Both A -> Y and B -> Y must hold individually",
+            "X -> Y must hold, AND neither A alone nor B alone may determine Y",
+            "Y must be part of the key itself",
+            "A and B must both be foreign keys"
+          ],
+          "correct_index": 1,
+          "explanation": "Full functional dependency requires the whole composite determinant, with no proper subset (here, A alone or B alone) sufficient to determine Y on its own.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-21-full-functional-dependency-4",
+          "test_id": "pt-dbms-sql-21-full-functional-dependency",
+          "question_text": "Why must a careful fullness definition consider the empty set even for a singleton determinant?",
+          "options": [
+            "The empty set contains all key attributes",
+            "A dependent fixed by the domain can be determined by the empty set",
+            "Every singleton determinant is necessarily composite",
+            "Constants can never appear in relations"
+          ],
+          "correct_index": 1,
+          "explanation": "Fullness rules out every proper determining subset. The familiar singleton shortcut assumes no empty-set dependency on the dependent.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-21-full-functional-dependency-5",
+          "test_id": "pt-dbms-sql-21-full-functional-dependency",
+          "question_text": "Under the campus rules, which dependency from Student,Assessment is partial?",
+          "options": [
+            "The dependency to Mark when neither singleton determines it",
+            "The dependency to AssessmentTitle, because Assessment alone suffices",
+            "Every dependency from any pair",
+            "Only dependencies to numeric columns"
+          ],
+          "correct_index": 1,
+          "explanation": "The student component is unnecessary for the assessment title.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-21-full-functional-dependency-6",
+          "test_id": "pt-dbms-sql-21-full-functional-dependency",
+          "question_text": "A table has key {OrderID, ProductID} and an attribute ShipDate that is the same for every ProductID within a given OrderID (the whole order ships together). Is ShipDate fully dependent on {OrderID, ProductID}?",
+          "options": [
+            "Yes, because it depends on the composite key",
+            "No — since ShipDate is determined by OrderID alone (a proper subset), it is only partially dependent, not fully dependent, on the composite key",
+            "Yes, because ShipDate is a date type",
+            "No, because ShipDate cannot be functionally dependent on anything"
+          ],
+          "correct_index": 1,
+          "explanation": "OrderID alone fixes ShipDate, so ProductID is unnecessary in that determinant. This is analogous to an assessment title determined by Assessment alone.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-21-full-functional-dependency-7",
+          "test_id": "pt-dbms-sql-21-full-functional-dependency",
+          "question_text": "What is the relevant 2NF restriction after first normal form?",
+          "options": [
+            "Every selected primary-key column must be numeric",
+            "No nonprime attribute has a partial dependency on any candidate key",
+            "Every dependent must be in every key",
+            "Only the declared primary key is examined"
+          ],
+          "correct_index": 1,
+          "explanation": "Nonprime means belonging to no candidate key, and alternate candidate keys must also be considered.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-21-full-functional-dependency-8",
+          "test_id": "pt-dbms-sql-21-full-functional-dependency",
+          "question_text": "Assume StudentID determines StudentName. Is {StudentID, CourseID} -> StudentName a full functional dependency?",
+          "options": [
+            "Yes, because StudentID is part of the composite key",
+            "No — StudentID alone already determines StudentName, so it is a partial dependency, not a full one",
+            "Yes, because CourseID is required to determine StudentName",
+            "There is not enough information to decide"
+          ],
+          "correct_index": 1,
+          "explanation": "Since StudentID by itself (a proper subset of the composite key) determines StudentName, the dependency is partial, not full — CourseID adds nothing to the determination.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "cx-q-full-functional-dependency-9",
+          "test_id": "pt-dbms-sql-21-full-functional-dependency",
+          "question_text": "What additional condition makes X determines Y full?",
+          "options": [
+            "No proper subset of X determines Y",
+            "X must be a primary key name",
+            "Y must be numeric",
+            "The table must have one row"
+          ],
+          "correct_index": 0,
+          "explanation": "Fullness is minimality of the determinant.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "cx-q-full-functional-dependency-10",
+          "test_id": "pt-dbms-sql-21-full-functional-dependency",
+          "question_text": "Does Student determine StudentName imply Student,Assessment determines StudentName?",
+          "options": [
+            "No, adding attributes invalidates dependencies",
+            "Yes, but that larger dependency is partial",
+            "Only when names are unique",
+            "Only in SQL tables"
+          ],
+          "correct_index": 1,
+          "explanation": "The added determinant attribute is unnecessary.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "cx-test-full-functional-dependency-2",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "cx-q-full-functional-dependency-11",
+          "test_id": "cx-test-full-functional-dependency-2",
+          "question_text": "Which counterexample challenges Student determines Mark?",
+          "options": [
+            "Two students with the same mark",
+            "One student with one mark",
+            "One student with different marks on two allowed assessments",
+            "Two different names only"
+          ],
+          "correct_index": 2,
+          "explanation": "Equal determinant values with different dependents refute the dependency.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "cx-q-full-functional-dependency-12",
+          "test_id": "cx-test-full-functional-dependency-2",
+          "question_text": "Which counterexample challenges Assessment determines Mark?",
+          "options": [
+            "Two assessments with different titles",
+            "One result row",
+            "A student with a repeated name",
+            "Different students with different marks on the same assessment"
+          ],
+          "correct_index": 3,
+          "explanation": "The assessment agrees while the mark differs.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "cx-q-full-functional-dependency-13",
+          "test_id": "cx-test-full-functional-dependency-2",
+          "question_text": "What establishes a dependency as a domain rule?",
+          "options": [
+            "Constraints on all permitted states",
+            "One accidental sample pattern",
+            "The column position",
+            "The query alias"
+          ],
+          "correct_index": 0,
+          "explanation": "A snapshot alone is not a general proof.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "cx-q-full-functional-dependency-14",
+          "test_id": "cx-test-full-functional-dependency-2",
+          "question_text": "How can closure test X determines Y?",
+          "options": [
+            "Count the rows in X",
+            "Check whether Y is contained in X closure",
+            "Sort Y alphabetically",
+            "Require X to contain every column initially"
+          ],
+          "correct_index": 1,
+          "explanation": "Closure collects implied attributes.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "cx-q-full-functional-dependency-15",
+          "test_id": "cx-test-full-functional-dependency-2",
+          "question_text": "For a larger determinant, what removals suffice to test minimality?",
+          "options": [
+            "Only the first removal",
+            "Only the largest-valued attribute",
+            "Every single-attribute removal",
+            "No removals if a primary key exists"
+          ],
+          "correct_index": 2,
+          "explanation": "Any determining smaller subset would imply a determining one-removal superset.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "cx-q-full-functional-dependency-16",
+          "test_id": "cx-test-full-functional-dependency-2",
+          "question_text": "What happens if multiple attempts coexist under one student-assessment pair?",
+          "options": [
+            "The pair necessarily still determines every mark",
+            "All marks become equal",
+            "The dependency is automatically full",
+            "An attempt identity or current-result rule may be needed"
+          ],
+          "correct_index": 3,
+          "explanation": "The fact grain must reflect permitted repeated attempts.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "cx-q-full-functional-dependency-17",
+          "test_id": "cx-test-full-functional-dependency-2",
+          "question_text": "Which keys matter when checking 2NF partial dependencies?",
+          "options": [
+            "All candidate keys",
+            "Only the declared primary key",
+            "Only foreign keys",
+            "Only surrogate keys"
+          ],
+          "correct_index": 0,
+          "explanation": "Alternate candidate keys can reveal partial dependencies.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "cx-q-full-functional-dependency-18",
+          "test_id": "cx-test-full-functional-dependency-2",
+          "question_text": "What is a nonprime attribute?",
+          "options": [
+            "Any numeric attribute",
+            "An attribute belonging to no candidate key",
+            "Every foreign key",
+            "Only the last column"
+          ],
+          "correct_index": 1,
+          "explanation": "2NF uses this formal distinction.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "cx-q-full-functional-dependency-19",
+          "test_id": "cx-test-full-functional-dependency-2",
+          "question_text": "Can a data scan prove a dependency for every future valid state?",
+          "options": [
+            "Yes, if the table is large",
+            "Yes, with ORDER BY",
+            "No",
+            "Only with COUNT DISTINCT"
+          ],
+          "correct_index": 2,
+          "explanation": "Current observations do not establish all allowed states.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "cx-q-full-functional-dependency-20",
+          "test_id": "cx-test-full-functional-dependency-2",
+          "question_text": "What must a proposed decomposition preserve?",
+          "options": [
+            "Only the original column order",
+            "Only the original row count in one sample",
+            "Every repeated name",
+            "A lossless relationship and relevant dependency guarantees"
+          ],
+          "correct_index": 3,
+          "explanation": "Smaller tables alone do not establish design correctness.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [],
+  "coding_not_applicable": "The learning objective is proof of determinant minimality over permitted states. SQL scans can expose a present counterexample but cannot prove universal functional dependencies. The notes provide two explicit counterexample-construction exercises and a carefully bounded SQL diagnostic; query-judged exercises would misrepresent the proof requirement.",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-21-full-functional-dependency-1",
+      "test_id": "pt-dbms-sql-21-full-functional-dependency",
+      "question_text": "Why is {StudentID, CourseID} -> EnrollmentDate classified as a FULL functional dependency?",
+      "options": [
+        "Because EnrollmentDate is a date data type",
+        "Because neither StudentID alone nor CourseID alone determines EnrollmentDate — the entire composite key is required",
+        "Because EnrollmentDate is part of the primary key",
+        "Because CourseID alone already determines EnrollmentDate"
+      ],
+      "correct_index": 1,
+      "explanation": "Full functional dependency means no proper subset of the composite key determines the attribute; here both StudentID alone and CourseID alone fail to pin down EnrollmentDate, only the pair does.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-21-full-functional-dependency-2",
+      "test_id": "pt-dbms-sql-21-full-functional-dependency",
+      "question_text": "In the sample data, C1 (Database Systems) has three different EnrollmentDate values (2026-01-10, 2026-01-11, 2026-01-12) across S1, S2, and S3. What does this prove?",
+      "options": [
+        "That CourseID alone determines EnrollmentDate",
+        "That CourseID alone does NOT determine EnrollmentDate, ruling out CourseID as a sufficient determinant by itself",
+        "That EnrollmentDate is not a valid attribute",
+        "That StudentID alone determines EnrollmentDate"
+      ],
+      "correct_index": 1,
+      "explanation": "If the same CourseID value corresponds to different EnrollmentDate values across rows, CourseID alone cannot be a determinant of EnrollmentDate — confirming the dependency needs the full composite key.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-21-full-functional-dependency-3",
+      "test_id": "pt-dbms-sql-21-full-functional-dependency",
+      "question_text": "For a full functional dependency to exist on a composite key X = {A, B}, what must be true?",
+      "options": [
+        "Both A -> Y and B -> Y must hold individually",
+        "X -> Y must hold, AND neither A alone nor B alone may determine Y",
+        "Y must be part of the key itself",
+        "A and B must both be foreign keys"
+      ],
+      "correct_index": 1,
+      "explanation": "Full functional dependency requires the whole composite determinant, with no proper subset (here, A alone or B alone) sufficient to determine Y on its own.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-21-full-functional-dependency-4",
+      "test_id": "pt-dbms-sql-21-full-functional-dependency",
+      "question_text": "Why is full functional dependency only a meaningful question when the key is composite (more than one attribute)?",
+      "options": [
+        "Because single-attribute keys never have functional dependencies",
+        "Because with a single-attribute key there is no non-empty proper subset to compare against, so every dependency on it is trivially 'full'",
+        "Because composite keys are always artificial/surrogate",
+        "Because full functional dependency requires exactly two attributes in the key"
+      ],
+      "correct_index": 1,
+      "explanation": "The 'full vs partial' distinction only makes sense when you can ask 'does some smaller subset of the key already determine this?' — a single-attribute key has no smaller non-empty subset to test.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-21-full-functional-dependency-5",
+      "test_id": "pt-dbms-sql-21-full-functional-dependency",
+      "question_text": "Which attribute in the running example is NOT fully dependent on {StudentID, CourseID} (i.e., is only partially dependent)?",
+      "options": [
+        "EnrollmentDate",
+        "CourseName, since CourseID alone already determines it",
+        "There are no partially dependent attributes in this table",
+        "StudentID itself"
+      ],
+      "correct_index": 1,
+      "explanation": "CourseName depends on CourseID alone, a proper subset of the composite key — that's a partial dependency (21.7), the opposite of full functional dependency.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-21-full-functional-dependency-6",
+      "test_id": "pt-dbms-sql-21-full-functional-dependency",
+      "question_text": "A table has key {OrderID, ProductID} and an attribute ShipDate that is the same for every ProductID within a given OrderID (the whole order ships together). Is ShipDate fully dependent on {OrderID, ProductID}?",
+      "options": [
+        "Yes, because it depends on the composite key",
+        "No — since ShipDate is determined by OrderID alone (a proper subset), it is only partially dependent, not fully dependent, on the composite key",
+        "Yes, because ShipDate is a date type",
+        "No, because ShipDate cannot be functionally dependent on anything"
+      ],
+      "correct_index": 1,
+      "explanation": "If OrderID alone already fixes ShipDate, the composite key is not fully necessary — this is a partial dependency, structurally identical to the CourseName situation in the running example.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-21-full-functional-dependency-7",
+      "test_id": "pt-dbms-sql-21-full-functional-dependency",
+      "question_text": "Why does full functional dependency matter for schema design, specifically for 2NF?",
+      "options": [
+        "It has no connection to normal forms",
+        "2NF requires every non-key attribute to be fully functionally dependent on the whole key; attributes that are only partially dependent must be moved to a different relation",
+        "Full functional dependency is only relevant to BCNF",
+        "It determines whether a table needs a foreign key"
+      ],
+      "correct_index": 1,
+      "explanation": "2NF is defined exactly in terms of full functional dependency — any attribute that is only partially dependent on the key violates 2NF and must be relocated.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-21-full-functional-dependency-8",
+      "test_id": "pt-dbms-sql-21-full-functional-dependency",
+      "question_text": "Is {StudentID, CourseID} -> StudentName a full functional dependency?",
+      "options": [
+        "Yes, because StudentID is part of the composite key",
+        "No — StudentID alone already determines StudentName, so it is a partial dependency, not a full one",
+        "Yes, because CourseID is required to determine StudentName",
+        "There is not enough information to decide"
+      ],
+      "correct_index": 1,
+      "explanation": "Since StudentID by itself (a proper subset of the composite key) determines StudentName, the dependency is partial, not full — CourseID adds nothing to the determination.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "worker_3",
+    "independent_review": "passed",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "author review; independent review pending",
+    "canonical_answer_indices_preserved": true,
+    "editorial_record": "Original explanations and assessments; seeded identities and canonical answer positions retained. External originality clearance unavailable.",
+    "independent_reviewer": "/root",
+    "independent_review_scope": "Full notes,20 MCQs/options/reasoning,dependency diagram,closure and permitted-counterexample reasoning and no-judge rationale reviewed. Whole determinant versus all proper subsets, sufficient one-attribute removals, empty-set constants and all-candidate-key/nonprime 2NF rule correct. Added explicit StudentID-to-name assumption to remove an inherited unstated prerequisite; SQL diagnostic correctly limited to snapshot counterexamples. Exact MySQL/provider, browser and release validation remain separate."
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-21-full-functional-dependency",
+    "original_note_sha256": "38ea948c5debcb1e6e952b58acfc8c50ba9c2a64d8e26097347ddc3397992376",
+    "status": "drafted; not included in prepared paired migrations"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Remove one determinant component",
+      "description": "Under the stated campus rules, both identities are needed for Mark but only one is needed for descriptive attributes.",
+      "columns": [
+        "Dependent",
+        "Student sufficient?",
+        "Assessment sufficient?",
+        "Whole pair necessary?"
+      ],
+      "rows": [
+        [
+          "Mark",
+          "No",
+          "No",
+          "Yes"
+        ],
+        [
+          "StudentName",
+          "Yes",
+          "No",
+          "No"
+        ],
+        [
+          "AssessmentTitle",
+          "No",
+          "Yes",
+          "No"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "coordinator independent manual review passed",
+    "server_rendering": "passed",
+    "browser_rendering": "unverified",
+    "independent_review": "passed",
+    "server_rendering_evidence": "2026-10-29 full Vitest:1310 passed/12 skipped; actual LessonBlock/TopicDiagrams render over230 packages. Browser visual QA remains unverified."
+  },
+  "authoring_status": "drafted; verification pending",
+  "sql_verification": {
+    "scope": "not executed; exact MySQL/provider execution pending",
+    "all_passed": false,
+    "cases": []
+  }
+}

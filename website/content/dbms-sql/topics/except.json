@@ -1,0 +1,614 @@
+{
+  "source_ref": "chapter-18-set-operations/except",
+  "slug": "except",
+  "title": "EXCEPT",
+  "description": "Find rows present only in the left SQL result with EXCEPT, distinguish distinct and multiset subtraction, and preserve NULL, projection and ordering semantics.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Ask which rows disappeared between populations\n\nEXCEPT returns rows from the left query that are absent from the right query. A campus club can compare last year's registered members with this year's registered members to find identities that did not return. The direction matters: previous minus current describes departures, while current minus previous describes new arrivals. Neither direction is a deletion command. The operation reads query results and produces another result.\n\nStart with [set compatibility](/learning/dbms-sql-tutorial/set-compatibility), [INTERSECT](/learning/dbms-sql-tutorial/intersect) and [UNION ALL](/learning/dbms-sql-tutorial/union-all). The examples target MySQL 8.4, which supports EXCEPT, including its ALL variant. Older MySQL deployments can differ, so a production integration must verify its actual engine version rather than infer support from a lesson's chosen dialect.\n\n## Align the compared projections\n\nBoth operands must return the same number of columns in matching positions, with compatible types. Column names do not match values by themselves. Selecting member_id then campus_id on the left and campus_id then member_id on the right compares the wrong tuples even if both columns are integers. Explicit projections are safer than SELECT star when comparing evolving tables.\n\n```sql\nSELECT member_id\nFROM members_previous\nEXCEPT\nSELECT member_id\nFROM members_current\nORDER BY member_id;\n```\n\nIf the previous identities are 1, 2, 3 and 4 while the current identities are 2, 3 and 5, the result is 1 and 4. Identity 5 appears only on the right and cannot enter a left-minus-right result. Reversing the operands returns 5 instead. This tiny fixture makes direction errors obvious before a larger reconciliation query is trusted.\n\nThe output column names come from the first query block. Give those columns meaningful aliases when necessary and use the final result's names for ordering. The compared expressions can be calculations, but their meaning and units must still align. Comparing a local-time calendar date on one side with a UTC date extracted differently on the other can report artificial differences.\n\n## Understand default duplicate elimination\n\nPlain EXCEPT uses distinct set-difference behavior. If the left result contains identity 1 three times and the right result contains no 1, the output contains one 1. If the right contains even one 1, that identity disappears entirely from the distinct difference. The operation compares membership, not how many copies were registered in each input.\n\nThis is appropriate for a list of missing identities. It is not a reconciliation of repeated occurrence counts. If each occurrence represents a separate ticket or event, deduplicating can hide a quantity mismatch. Choose whether the business question concerns unique values, individual fact identities or multiplicity before deciding between distinct difference and multiset subtraction.\n\n| Left copies | Right copies | EXCEPT copies | EXCEPT ALL copies |\n|---|---|---|---|\n| 3 | 0 | 1 | 3 |\n| 3 | 1 | 0 | 2 |\n| 1 | 3 | 0 | 0 |\n\n## Subtract occurrence counts with ALL\n\nEXCEPT ALL preserves the unmatched multiplicity of an equal tuple. If the left has three copies and the right has one, two remain. If the right has more copies than the left, no negative number of rows is produced. This can help compare repeated observations, but only if equality of the projected tuple accurately identifies interchangeable occurrences.\n\n```sql\nSELECT item_code\nFROM expected_items\nEXCEPT ALL\nSELECT item_code\nFROM observed_items\nORDER BY item_code;\n```\n\nA remaining code repeated twice means two unmatched expected occurrences, not necessarily two distinct physical objects. If physical objects have serial numbers, compare those serial identities instead. Projecting only item_code intentionally discards serial-level distinctions. The result can be mathematically correct for the selected tuple while answering a less precise operational question than intended.\n\n## Compare complete rows when detecting changed records\n\nEXCEPT compares the entire selected tuple. Suppose member 7 remains present but the displayed name changes. Comparing only member_id finds no departure. Comparing member_id and name reports the old tuple as absent from the new result and, in the reverse difference, the new tuple as newly present. That is a changed-record signal, not proof that the person left.\n\nFor snapshot reconciliation, decide whether the goal is missing identities, changed attributes or unmatched complete records. Normalize deliberately only when the business equality contract requires it. Trimming spaces or folding case can hide meaningful differences, while different collations or implicit type conversion can already affect string equality. Keep test cases for case, accents and trailing-space behavior when those distinctions matter to the application.\n\nA comparison is also only as coherent as its snapshots. If the two populations are read from changing operational data under inconsistent conditions, differences may reflect timing rather than real departures. Define the reporting dates, eligibility filters and consistency requirements. A set operator cannot supply a stable historical snapshot that the underlying query did not establish.\n\n## Treat NULL as set-comparison data\n\nSet operations use duplicate-comparison rules in which corresponding NULL values can count as equal for set membership. A NULL tuple on the left can therefore be removed by a matching NULL tuple on the right. This differs from a WHERE predicate using ordinary equality, where NULL equals NULL is UNKNOWN.\n\nThat difference matters when rewriting EXCEPT as NOT EXISTS. For required non-null identity columns, a distinct outer projection with an equality-based NOT EXISTS can express the same distinct membership result. For nullable compared columns, equality alone may not reproduce the set operator's matching behavior. A null-safe comparison must be considered for every projected column, and duplicate handling must be preserved separately.\n\nNOT IN has another pitfall: a NULL in the right-hand membership population can make a nonmatching comparison UNKNOWN and exclude rows unexpectedly. Do not assume all three forms are interchangeable because they look like subtraction in ordinary language. Verify their NULL, duplication and projection contracts before selecting a rewrite.\n\n## Parenthesize mixed set operations\n\nA report can combine UNION, INTERSECT and EXCEPT. Precedence rules affect the result, so make the intended grouping explicit instead of relying on a reader to recall every operator rule. In MySQL, INTERSECT binds more tightly than UNION and EXCEPT. Parentheses are especially useful when the left population itself is a combination of several cohorts.\n\nThe final ORDER BY applies to the complete set result. An ordering inside an operand does not guarantee the final sequence. A branch-local LIMIT can change membership and therefore the difference, so add it only when the requirement intentionally compares restricted subsets. Sampling each side independently is not a reliable way to decide whether two complete populations differ.\n\n## Keep result differences separate from mutations\n\nFinding departed identities does not authorize deleting them. They may have historical progress, saved attempts, payments or other records that must remain intact. An educational SELECT example should preserve source data. Any operational follow-up needs its own reviewed requirements, authorization and data-integrity plan rather than turning a reconciliation query directly into a destructive command.\n\nThe same caution applies to conclusions. An absent current registration can mean a real departure, a delayed import, a changed identifier or a mismatched eligibility filter. Describe the observed result precisely: identities present in the previous selected population and absent from the current selected population. Domain interpretation comes from the surrounding workflow and evidence.\n\nFor an audit export, retain the parameters that produced each side, including the reporting year and any status exclusions. A later reader should be able to reconstruct the compared populations rather than guess from file names. Record whether the export uses distinct identities or occurrence counts, because those policies can produce different answers from the same input rows.\n\n## Verify direction, multiplicity and missingness\n\nTest an identity appearing only on the left, only on the right, on both sides and several times on each side. Add empty-left and empty-right populations. For nullable projections, include NULL on one side and both sides. For complete-record comparison, change one attribute while preserving identity so that the expected distinction between departure and modification is visible.\n\nA useful explanation states the compared tuple and the duplicate policy before presenting the SQL. Continue with [anti-joins](/learning/dbms-sql-tutorial/anti-join) and [duplicate handling](/learning/dbms-sql-tutorial/duplicate-handling) to compare equivalent forms under explicit contracts. Measured performance can guide a final implementation only after those semantic differences have been resolved.",
+  "references": [
+    {
+      "title": "MySQL 8.4 EXCEPT clause",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/except.html"
+    },
+    {
+      "title": "MySQL 8.4 set operations",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/set-operations.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-18-except",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-18-except-1",
+          "test_id": "pt-dbms-sql-18-except",
+          "question_text": "What does A EXCEPT B return?",
+          "options": [
+            "Rows in B but not A",
+            "Rows in A but not B",
+            "Rows in both A and B",
+            "Rows in either A or B"
+          ],
+          "correct_index": 1,
+          "explanation": "EXCEPT returns rows from the first query that don't appear in the second.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-18-except-2",
+          "test_id": "pt-dbms-sql-18-except",
+          "question_text": "enrolled_2025 has IDs 1,2,3,4 and enrolled_2026 has IDs 2,3,5. What does the 2025 population EXCEPT the 2026 population return?",
+          "options": [
+            "2, 3",
+            "1, 4",
+            "5",
+            "1, 2, 3, 4"
+          ],
+          "correct_index": 1,
+          "explanation": "Students 1 and 4 were enrolled in 2025 but did not appear in 2026.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-18-except-3",
+          "test_id": "pt-dbms-sql-18-except",
+          "question_text": "For 2025 IDs 1,2,3,4 and 2026 IDs 2,3,5, what does the 2026 population EXCEPT the 2025 population return?",
+          "options": [
+            "1, 4 — the same as before",
+            "5 — the new student not present in 2025",
+            "2, 3",
+            "Nothing; EXCEPT is symmetric"
+          ],
+          "correct_index": 1,
+          "explanation": "Reversing operand order answers a completely different question — who's new in 2026.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-18-except-4",
+          "test_id": "pt-dbms-sql-18-except",
+          "question_text": "Which vendor traditionally uses MINUS as a set-difference spelling?",
+          "options": [
+            "PostgreSQL",
+            "Oracle",
+            "MySQL",
+            "SQLite"
+          ],
+          "correct_index": 1,
+          "explanation": "Oracle has traditionally used MINUS for set difference. This is a naming convention, not a claim that every modern Oracle release lacks EXCEPT.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-18-except-5",
+          "test_id": "pt-dbms-sql-18-except",
+          "question_text": "Does EXCEPT deduplicate its result by default?",
+          "options": [
+            "No, it preserves duplicates",
+            "Yes, following the same set semantics as UNION and INTERSECT",
+            "Only for numeric columns",
+            "EXCEPT cannot produce duplicate rows regardless"
+          ],
+          "correct_index": 1,
+          "explanation": "Default deduplication is consistent across all three SQL set operations in this chapter.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-18-except-6",
+          "test_id": "pt-dbms-sql-18-except",
+          "question_text": "What real-world pattern does `all_required_courses EXCEPT completed_courses` express?",
+          "options": [
+            "Which courses were completed",
+            "Which required courses are still missing",
+            "The total number of courses offered",
+            "Which courses have prerequisites"
+          ],
+          "correct_index": 1,
+          "explanation": "This is the classic 'what's missing' pattern EXCEPT is well suited for.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-18-except-7",
+          "test_id": "pt-dbms-sql-18-except",
+          "question_text": "For compatible sets of row values, ignoring output labels and display ordering, is EXCEPT commutative like UNION and INTERSECT?",
+          "options": [
+            "Yes, all three set operations are order-sensitive",
+            "No — UNION and INTERSECT don't care about operand order, but EXCEPT does",
+            "No, none of the three set operations care about order",
+            "Only INTERSECT is order-sensitive"
+          ],
+          "correct_index": 1,
+          "explanation": "EXCEPT is uniquely order-sensitive among these three set operations, since 'A minus B' differs from 'B minus A.'",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-18-except-8",
+          "test_id": "pt-dbms-sql-18-except",
+          "question_text": "How can set difference help test whether a learner completed every required course?",
+          "options": [
+            "They are unrelated",
+            "Check that required courses EXCEPT that learner's completed courses is empty",
+            "Division is a simpler synonym for EXCEPT",
+            "EXCEPT can only be used inside a Division query"
+          ],
+          "correct_index": 1,
+          "explanation": "An empty missing-course population expresses the all-required condition for the learner. Specify the empty-requirement policy and the learner population separately.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-18-except-new-9",
+          "test_id": "pt-dbms-sql-18-except",
+          "question_text": "The left input is empty and the right contains1,2. What does left EXCEPT right return?",
+          "options": [
+            "1 and2",
+            "An empty result",
+            "One NULL row",
+            "An error"
+          ],
+          "correct_index": 1,
+          "explanation": "Set difference can retain only rows supplied by the left input; an empty left contributes none.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-18-except-new-10",
+          "test_id": "pt-dbms-sql-18-except",
+          "question_text": "Three left copies and one right copy of a tuple yield how many EXCEPT ALL copies?",
+          "options": [
+            "0",
+            "1",
+            "2",
+            "3"
+          ],
+          "correct_index": 2,
+          "explanation": "ALL subtracts matching occurrence counts without producing negative counts.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-18-except-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-18-except-application-new-1",
+          "test_id": "pt-dbms-sql-18-except-application",
+          "question_text": "One left copy and three right copies of the same tuple produce how many EXCEPT ALL copies?",
+          "options": [
+            "3",
+            "2",
+            "A negative row count",
+            "0"
+          ],
+          "correct_index": 3,
+          "explanation": "Occurrence subtraction is bounded below by zero; right-side excess does not create negative rows.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-18-except-application-new-2",
+          "test_id": "pt-dbms-sql-18-except-application",
+          "question_text": "A member retains the same ID but changes name. What does comparing only IDs show?",
+          "options": [
+            "No difference for that member",
+            "A departure necessarily",
+            "Two departed members",
+            "An error"
+          ],
+          "correct_index": 0,
+          "explanation": "The projection defines what equality and difference mean.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-18-except-application-new-3",
+          "test_id": "pt-dbms-sql-18-except-application",
+          "question_text": "Can selecting ID,name instead detect the old changed tuple?",
+          "options": [
+            "No, EXCEPT always uses only the first column",
+            "Yes, the complete tuple changed",
+            "Only if the ID is NULL",
+            "Only with COUNT"
+          ],
+          "correct_index": 1,
+          "explanation": "Set comparison covers every projected position.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-18-except-application-new-4",
+          "test_id": "pt-dbms-sql-18-except-application",
+          "question_text": "How can two NULL tuples behave under EXCEPT membership comparison?",
+          "options": [
+            "They can never match",
+            "They become zero automatically",
+            "They can count as equal and cancel",
+            "They force every result to NULL"
+          ],
+          "correct_index": 2,
+          "explanation": "Set-comparison rules differ from ordinary WHERE equality.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-18-except-application-new-5",
+          "test_id": "pt-dbms-sql-18-except-application",
+          "question_text": "Why can an equality-only NOT EXISTS rewrite differ for nullable columns?",
+          "options": [
+            "NOT EXISTS always removes all NULLs",
+            "EXCEPT never accepts nullable columns",
+            "Aliases change NULL to text",
+            "NULL equality is UNKNOWN rather than set-style matching"
+          ],
+          "correct_index": 3,
+          "explanation": "A rewrite must reproduce NULL matching for each compared column.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-18-except-application-new-6",
+          "test_id": "pt-dbms-sql-18-except-application",
+          "question_text": "What does swapping operand column order risk when both columns are integers?",
+          "options": [
+            "Comparing semantically different tuple positions",
+            "An automatic name-based correction",
+            "A guaranteed syntax error",
+            "No effect ever"
+          ],
+          "correct_index": 0,
+          "explanation": "Set operations align columns by position, not by matching names.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-18-except-application-new-7",
+          "test_id": "pt-dbms-sql-18-except-application",
+          "question_text": "Which operation binds more tightly in MySQL mixed set expressions?",
+          "options": [
+            "EXCEPT always",
+            "INTERSECT",
+            "UNION always",
+            "ORDER BY within a label"
+          ],
+          "correct_index": 1,
+          "explanation": "Explicit parentheses still make the intended grouping easier to review.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-18-except-application-new-8",
+          "test_id": "pt-dbms-sql-18-except-application",
+          "question_text": "Does a departed-ID SELECT authorize deleting historical learner records?",
+          "options": [
+            "Yes, automatically",
+            "Only if ordered ascending",
+            "No",
+            "Only when EXCEPT ALL is used"
+          ],
+          "correct_index": 2,
+          "explanation": "A read result and an authorized data mutation are separate operations.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-18-except-application-new-9",
+          "test_id": "pt-dbms-sql-18-except-application",
+          "question_text": "What can an unmatched EXCEPT ALL item code represent?",
+          "options": [
+            "A negative inventory balance automatically",
+            "A guaranteed lost physical object",
+            "Only a new right-side item",
+            "An unmatched occurrence count, not necessarily a distinct physical serial identity"
+          ],
+          "correct_index": 3,
+          "explanation": "Projection can discard serial-level identity.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-18-except-application-new-10",
+          "test_id": "pt-dbms-sql-18-except-application",
+          "question_text": "What must snapshot reconciliation establish beyond operator syntax?",
+          "options": [
+            "Comparable eligibility, reporting boundaries and consistency",
+            "Only equal column-name lengths",
+            "Only one source table",
+            "A hidden deletion trigger"
+          ],
+          "correct_index": 0,
+          "explanation": "Differences can otherwise reflect timing or population mismatches.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cp-dbms-sql-left-after-2025",
+      "slug": "left-after-2025",
+      "title": "Left After 2025",
+      "difficulty": "Medium",
+      "task": "Write a query returning every `student_id` who was enrolled in 2025 but did NOT return in 2026, ordered ascending.",
+      "schema_sql": "CREATE TABLE enrolled_2025 (student_id INTEGER NOT NULL);\nCREATE TABLE enrolled_2026 (student_id INTEGER NOT NULL);",
+      "seed_sql": "INSERT INTO enrolled_2025 (student_id) VALUES (1), (2), (3), (4);\nINSERT INTO enrolled_2026 (student_id) VALUES (2), (3), (5);",
+      "expected": "student_id\n1\n4",
+      "ordering": "Retain the ordering stated in the original task.",
+      "constraints": [
+        "Preserve the original fixture and requested output."
+      ],
+      "edge_cases": [
+        "Verify the alternative seeded fixture."
+      ],
+      "hints": [
+        "Trace the required output grain and conditions."
+      ],
+      "solution_sql": "SELECT student_id FROM enrolled_2025 EXCEPT SELECT student_id FROM enrolled_2026 ORDER BY student_id;",
+      "explanation": "EXCEPT returns rows in the first query that don't appear in the second — order matters. Reference: `SELECT student_id FROM enrolled_2025 EXCEPT SELECT student_id FROM enrolled_2026 ORDER BY student_id;`",
+      "validation_cases": [
+        {
+          "hidden": true,
+          "seed_sql": "INSERT INTO enrolled_2025 (student_id) VALUES (10), (20), (30);\nINSERT INTO enrolled_2026 (student_id) VALUES (20), (40);",
+          "expected": "student_id\n10\n30"
+        }
+      ],
+      "existing_problem": true,
+      "original_description_md5": "c943134748a7e41a3a3c0e6819a6b52e",
+      "original_problem": {
+        "id": "cp-dbms-sql-left-after-2025",
+        "topic_id": null,
+        "title": "Left After 2025",
+        "difficulty": "Medium",
+        "slug": "left-after-2025",
+        "description": "Write a query returning every `student_id` who was enrolled in 2025 but did NOT return in 2026, ordered ascending.\n\n```sql\nCREATE TABLE enrolled_2025 (student_id INTEGER NOT NULL);\nCREATE TABLE enrolled_2026 (student_id INTEGER NOT NULL);\n```\n\n**Sample data**:\n\n```sql\nINSERT INTO enrolled_2025 (student_id) VALUES (1), (2), (3), (4);\nINSERT INTO enrolled_2026 (student_id) VALUES (2), (3), (5);\n```\n",
+        "examples": "[{\"input\": \"\", \"output\": \"student_id\\n1\\n4\"}]",
+        "test_cases": "[{\"hidden\": true, \"seed_sql\": \"INSERT INTO enrolled_2025 (student_id) VALUES (10), (20), (30);\\nINSERT INTO enrolled_2026 (student_id) VALUES (20), (40);\", \"expected\": \"student_id\\n10\\n30\"}]",
+        "starter_code": null,
+        "editorial": "EXCEPT returns rows in the first query that don't appear in the second — order matters. Reference: `SELECT student_id FROM enrolled_2025 EXCEPT SELECT student_id FROM enrolled_2026 ORDER BY student_id;`",
+        "supported_languages": null,
+        "sql_schema_sql": "CREATE TABLE enrolled_2025 (student_id INTEGER NOT NULL);\nCREATE TABLE enrolled_2026 (student_id INTEGER NOT NULL);",
+        "sql_seed_sql": "INSERT INTO enrolled_2025 (student_id) VALUES (1), (2), (3), (4);\nINSERT INTO enrolled_2026 (student_id) VALUES (2), (3), (5);",
+        "sql_check_sql": "",
+        "learning_topic_id": null,
+        "status": "published",
+        "is_premium": null,
+        "show_on_website": null,
+        "show_on_mobile": null,
+        "sort_order": 1
+      },
+      "check_sql": "",
+      "original_check_sql": ""
+    },
+    {
+      "id": "cx-except-unreturned-tools",
+      "slug": "except-unreturned-tools",
+      "title": "Find expected tool codes absent from returns",
+      "difficulty": "Easy",
+      "task": "Return distinct tool_code values in issued but absent from returned, ordered by tool_code.",
+      "schema_sql": "CREATE TABLE issued(tool_code INT NOT NULL); CREATE TABLE returned(tool_code INT NOT NULL);",
+      "seed_sql": "INSERT INTO issued VALUES (1),(1),(2),(3); INSERT INTO returned VALUES (2),(4);",
+      "solution_sql": "SELECT tool_code FROM issued EXCEPT SELECT tool_code FROM returned ORDER BY tool_code;",
+      "expected": "tool_code\n1\n3",
+      "explanation": "Distinct difference retains issued membership missing from the returned population.",
+      "ordering": "Apply the ORDER BY explicitly required by the task; scalar results contain one row.",
+      "constraints": [
+        "Only synthetic fixture tables are in scope."
+      ],
+      "edge_cases": [
+        "Check empty input and the supplied contrasting fixtures."
+      ],
+      "hints": [
+        "Distinct difference retains issued membership missing from the returned population."
+      ],
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO returned VALUES (1);",
+          "expected": ""
+        },
+        {
+          "seed_sql": "INSERT INTO issued VALUES (5),(5);",
+          "expected": "tool_code\n5"
+        },
+        {
+          "seed_sql": "INSERT INTO issued VALUES (5); INSERT INTO returned VALUES (5);",
+          "expected": ""
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-18-except-1",
+      "test_id": "pt-dbms-sql-18-except",
+      "question_text": "What does A EXCEPT B return?",
+      "options": [
+        "Rows in B but not A",
+        "Rows in A but not B",
+        "Rows in both A and B",
+        "Rows in either A or B"
+      ],
+      "correct_index": 1,
+      "explanation": "EXCEPT returns rows from the first query that don't appear in the second.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-18-except-2",
+      "test_id": "pt-dbms-sql-18-except",
+      "question_text": "In the running example, what does enrolled_2025 EXCEPT enrolled_2026 return?",
+      "options": [
+        "2, 3",
+        "1, 4",
+        "5",
+        "1, 2, 3, 4"
+      ],
+      "correct_index": 1,
+      "explanation": "Students 1 and 4 were enrolled in 2025 but did not appear in 2026.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-18-except-3",
+      "test_id": "pt-dbms-sql-18-except",
+      "question_text": "What would enrolled_2026 EXCEPT enrolled_2025 return instead?",
+      "options": [
+        "1, 4 — the same as before",
+        "5 — the new student not present in 2025",
+        "2, 3",
+        "Nothing; EXCEPT is symmetric"
+      ],
+      "correct_index": 1,
+      "explanation": "Reversing operand order answers a completely different question — who's new in 2026.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-18-except-4",
+      "test_id": "pt-dbms-sql-18-except",
+      "question_text": "Which vendor uses MINUS instead of EXCEPT for the same operation?",
+      "options": [
+        "PostgreSQL",
+        "Oracle",
+        "MySQL",
+        "SQLite"
+      ],
+      "correct_index": 1,
+      "explanation": "Oracle's MINUS keyword is the same relational Difference operation, just a different name.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-18-except-5",
+      "test_id": "pt-dbms-sql-18-except",
+      "question_text": "Does EXCEPT deduplicate its result by default?",
+      "options": [
+        "No, it preserves duplicates",
+        "Yes, following the same set semantics as UNION and INTERSECT",
+        "Only for numeric columns",
+        "EXCEPT cannot produce duplicate rows regardless"
+      ],
+      "correct_index": 1,
+      "explanation": "Default deduplication is consistent across all three SQL set operations in this chapter.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-18-except-6",
+      "test_id": "pt-dbms-sql-18-except",
+      "question_text": "What real-world pattern does `all_required_courses EXCEPT completed_courses` express?",
+      "options": [
+        "Which courses were completed",
+        "Which required courses are still missing",
+        "The total number of courses offered",
+        "Which courses have prerequisites"
+      ],
+      "correct_index": 1,
+      "explanation": "This is the classic 'what's missing' pattern EXCEPT is well suited for.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-18-except-7",
+      "test_id": "pt-dbms-sql-18-except",
+      "question_text": "Is EXCEPT's order-sensitivity shared with UNION and INTERSECT?",
+      "options": [
+        "Yes, all three set operations are order-sensitive",
+        "No — UNION and INTERSECT don't care about operand order, but EXCEPT does",
+        "No, none of the three set operations care about order",
+        "Only INTERSECT is order-sensitive"
+      ],
+      "correct_index": 1,
+      "explanation": "EXCEPT is uniquely order-sensitive among these three set operations, since 'A minus B' differs from 'B minus A.'",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-18-except-8",
+      "test_id": "pt-dbms-sql-18-except",
+      "question_text": "How does EXCEPT relate to the relational Division operation (7.12)?",
+      "options": [
+        "They are unrelated",
+        "Both are used for 'what's missing/satisfies relative to a full set' style questions, though Division extends this to a per-group version",
+        "Division is a simpler synonym for EXCEPT",
+        "EXCEPT can only be used inside a Division query"
+      ],
+      "correct_index": 1,
+      "explanation": "Difference (EXCEPT) finds simple set gaps; Division generalizes this to a per-group 'has ALL of' question.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "/root/worker_1",
+    "independent_review": "passed",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "author semantic review; independent review pending",
+    "canonical_answer_indices_preserved": true,
+    "independent_reviewer": "/root",
+    "independent_review_scope": "Full notes,20 MCQs/options/reasoning,both exercises with six predicted outputs and count diagram reviewed. Distinct versus ALL difference, tuple projection, NULL-safe rewrite requirements, precedence and snapshot meaning correct. Scoped commutativity question to compatible row membership and replaced repeated direction example with empty-left boundary. Portable SQLite DISTINCT-difference cases passed; ALL behavior manually reasoned only. Exact MySQL/provider, browser and release validation remain separate."
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-18-except",
+    "original_note_sha256": "cffbf7250719d9e3b13b2fffff557807f24096b6b1bed9b31e39ded2cfad24b5",
+    "status": "drafted; not included in prepared paired migrations"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Direction and duplicate policy change the answer",
+      "description": "The same repeated value illustrates membership difference and occurrence subtraction.",
+      "columns": [
+        "Tuple",
+        "Left count",
+        "Right count",
+        "EXCEPT count",
+        "EXCEPT ALL count"
+      ],
+      "rows": [
+        [
+          "A",
+          "3",
+          "1",
+          "0",
+          "2"
+        ],
+        [
+          "B",
+          "1",
+          "0",
+          "1",
+          "1"
+        ],
+        [
+          "C",
+          "0",
+          "2",
+          "0",
+          "0"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "provided",
+    "technical_review": "coordinator independent manual review passed",
+    "server_rendering": "passed",
+    "browser_rendering": "unverified",
+    "independent_review": "passed",
+    "server_rendering_evidence": "2026-10-29 full Vitest:1310 passed/12 skipped; actual LessonBlock/TopicDiagrams render over230 packages. Browser visual QA remains unverified."
+  },
+  "authoring_status": "drafted; verification pending",
+  "sql_verification": {
+    "scope": "not executed; exact MySQL/provider verification pending",
+    "all_passed": false,
+    "cases": []
+  }
+}

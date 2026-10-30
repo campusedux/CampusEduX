@@ -1,0 +1,666 @@
+{
+  "source_ref": "chapter-11-dml-and-data-modification/insert-select",
+  "slug": "insert-select",
+  "title": "INSERT SELECT",
+  "description": "Map a query result into an existing target with explicit roles, preserve selected identities and target constraints, and keep archive atomicity distinct from concurrency and retry policy.",
+  "dialect": "MySQL 8.4",
+  "notes": "## A query supplies the proposed new rows\n\nINSERT SELECT writes rows produced by a query into an existing destination table. Instead of listing each new value literally, the statement defines the source population and projection. A campus report can copy employees earning at least a stated threshold into a high_performers table without sending every selected row through an application loop.\n\nThe target table must already have its intended definition. This is not CREATE TABLE AS SELECT and does not mean the source's keys, defaults or indexes are cloned. The destination's constraints decide whether the selected values can be accepted. A correct source query and a compatible target contract are both necessary to explain the final result.\n\n## Map selected positions to explicit destination roles\n\nINSERT INTO high_performers(id,name,salary) states the target order. The SELECT expressions are matched to that order positionally, not automatically paired by whichever aliases happen to look similar. Selecting name,id,salary would not become correct merely because the source columns have familiar names. Read the complete mapping before execution.\n\nThe selected count and types must be supported for the target list, and values must meet the accepted domain. A cast can provide an intentional representation conversion, but it should not hide a semantic mismatch such as copying a department identifier into a student identifier because both are integers. Type compatibility is weaker than correct domain-role correspondence.\n\n```sql\nINSERT INTO high_performers (id, name, salary)\nSELECT id, name, salary\nFROM employees\nWHERE salary >= 80000;\n```\n\n## Source membership defines the write contract\n\nThe retained exercise asks for salary at least 80000, so a row exactly at 80000 qualifies. A row at 79000 does not. The source predicate should not introduce an unrelated department filter or omit a qualifying employee because another employee shares the same name. The accepted row identity is id, while name remains a descriptive property.\n\nAn empty qualifying result inserts no rows. It does not create a dummy high performer or erase existing target rows automatically. The retained task explicitly begins with an empty destination, which makes its expected output clear. Other workflows with preexisting target rows need their own preservation and conflict policy rather than inherit that assumption silently.\n\n## Transformations can change the destination grain\n\nThe SELECT source can filter, compute, join or aggregate before insertion. A grouped department summary has a different grain from one row per employee. Choose target keys and columns that match that output. A query that returns one row per enrollment occurrence can duplicate an employee role when the intended target is one row per employee identity.\n\nDo not add DISTINCT reflexively to hide an unexpected join multiplicity. First determine whether repeated occurrences represent legitimate facts or a modeling error. If the contract requests a distinct identity set, express that deliberately. If it requests an event bag, duplicate elimination changes the data. The write syntax does not decide that domain question for the author.\n\n## Target constraints continue to protect accepted state\n\nA duplicate primary identity, missing required value, invalid check result or unsupported parent reference can reject selected rows under the actual engine and statement semantics. A query returning rows successfully is not proof those rows can be written into the target. Inspect both the source result and destination definition when diagnosing a failed copy.\n\nThe exercises supply compatible target types and positive fixtures so the main task is a meaningful selection-and-copy operation. Selected negative cases verify destination identity protection. They do not disable constraints, invent new ids or change source data to force a copy through. Those responses would change the accepted-state contract rather than explain the intended insertion.\n\n## Query-driven copying preserves SQL occurrence semantics\n\nOrdinary SQL SELECT can return repeated occurrences, and INSERT SELECT attempts to write the returned occurrences subject to the target's rules. It does not automatically behave like a set union or ignore records already present. If a target key forbids the repeated combination, the actual write can fail instead of quietly selecting one arbitrary copy.\n\nThe high-performer source has a primary employee id and selects that id directly, so different employees remain different target rows even if their names match. The beginner task similarly preserves accepted applicant identity. These facts make the intended output grain explicit without claiming that every arbitrary source join would preserve one row per person automatically.\n\n## A database-side operation can reduce client transfer work\n\nPerforming the selection and insertion inside the database can avoid reading a large result into application memory only to send it back through many separate writes. That is a concrete reason to consider INSERT SELECT for compatible transformations. It can reduce a particular client round-trip pattern without eliminating the work of evaluating the source and enforcing the destination.\n\nA complicated join, aggregation or target index workload can still be expensive. Locking, logging and row counts depend on the engine and query. A small fixture establishes correctness over supplied rows, not a universal speed claim. Compare representative workload evidence before saying the database-side form is always faster than every alternative ingestion design.\n\n## Source observation and concurrent writes need a policy\n\nThe query reads a source state under the actual transaction isolation and statement rules. Do not claim all products and isolation levels provide the same snapshot or locking behaviour for INSERT SELECT. A long-running copy and concurrent source changes require a defined consistency contract if the application needs a particular accepted cut of data.\n\nThe fixtures are isolated and synthetic, so their source does not change during execution. That simplifies the expected result but does not prove a production archive captures every row exactly once under concurrent modification. If the copied result is intended as a historical snapshot, identify the time and transaction boundary it is supposed to represent.\n\n## Archive and deletion need the same intended population\n\nA common workflow copies selected rows to an archive and then removes those source rows. Using a supported transaction can protect against accepting only one of those table changes when the other fails, but atomic grouping alone does not prove both statements select the same logical population under every concurrency pattern.\n\nDefine the accepted set of identities, coordinate relevant changes and use the engine's supported consistency mechanism. Otherwise one predicate can observe a different population or copy stale facts while a later deletion affects updated ones. The retained exercise only copies; it does not delete source employees or claim to implement a complete archive-and-retire process.\n\n## Same-table forms and temporary restrictions need exact scope\n\nSome engines support forms that read from and insert into the same table under specific rules. That possibility is not a blanket permission for every self-referencing query shape or temporary-table use. MySQL has relevant temporary-object reopening restrictions, and compatible engines can differ. Verify the exact form rather than infer support from a loosely related example.\n\nThe exercises use distinct source and destination tables, with each relevant reference kept simple. That avoids making an unverified same-temporary-table claim while still teaching the core mapping. Native support for a different self-copy pattern belongs to its own syntax and execution check rather than a generalized statement that all INSERT SELECT arrangements are equivalent.\n\n## Retries are not automatically idempotent copies\n\nRunning the same ordinary copy again can conflict with existing target keys or append repeated occurrences when the target permits them. The first success does not turn a second call into a harmless no-op. Decide whether retry should reject, return an already accepted result or follow a defined update policy. Those choices need business identity and payload agreement rules.\n\nThe retained task guarantees an initially empty target and performs one copy. It does not add IGNORE or an upsert to conceal repeated invocation. The negative duplicate check makes target identity visible. A production import requiring restartability needs additional state and transaction decisions, which are not established by a correct one-time query result.\n\n## Preserve original checker-based assessment behaviour\n\nThe high-performer exercise's original trailing checker reads id,name,salary from the destination in id order after the submitted write. The reference submission therefore contains the INSERT SELECT only. It does not produce a second result set or alter the preserved sample source. Hidden fixtures vary salaries and identities while retaining the same threshold and empty-target preconditions.\n\nAdditional cases include the exact 80000 boundary and no qualifying rows. The beginner task copies active applicants only and tests an inactive-only source. Those cases distinguish a correct predicate from copying everything or selecting a memorized sample. Repeated displayed names remain separate when their protected identities differ, and empty results do not invent rows.\n\n## State precisely what the copy evidence supports\n\nA useful structural illustration links source selection, positional projection, target acceptance and final checker read. The notes, MCQs and expected outputs should agree on the same population and role mapping. This makes the technique understandable as a controlled state transition rather than a generic instruction to duplicate whatever data a query happens to return.\n\nRecorded MariaDB compatibility fixtures verify these supplied copies and selected target-key rejection. Exact MySQL/provider execution, untested self-copy forms, production concurrency and application migration application remain separate checks. The prepared content migration stores instructional SQL without executing those copies against application employees or applicants. Complete assessment content should not be mistaken for live archival, deployment or authorization evidence.\n",
+  "references": [
+    {
+      "title": "MySQL 8.4 INSERT SELECT",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/insert-select.html"
+    },
+    {
+      "title": "MySQL 8.4 INSERT",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/insert.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-11-insert-select",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-11-insert-select-1",
+          "test_id": "pt-dbms-sql-11-insert-select",
+          "question_text": "What does INSERT ... SELECT do?",
+          "options": [
+            "Deletes rows matching a SELECT query",
+            "Inserts rows using a SELECT query's result as the source data, instead of a literal VALUES list",
+            "Updates rows based on a SELECT query",
+            "Creates a new table from a SELECT query"
+          ],
+          "correct_index": 1,
+          "explanation": "INSERT ... SELECT populates a table with rows computed by a SELECT.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-11-insert-select-2",
+          "test_id": "pt-dbms-sql-11-insert-select",
+          "question_text": "What client-side overhead can a suitable INSERT SELECT avoid?",
+          "options": [
+            "It uses a completely different, faster storage format",
+            "Reading selected rows into an application only to send them back through separate writes",
+            "It automatically parallelizes across multiple servers",
+            "It skips all constraint checks"
+          ],
+          "correct_index": 1,
+          "explanation": "It still evaluates the query and enforces target rules; speed needs workload evidence.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-11-insert-select-3",
+          "test_id": "pt-dbms-sql-11-insert-select",
+          "question_text": "How are selected expressions matched to an explicit target list?",
+          "options": [
+            "No requirement — any mismatch is automatically resolved",
+            "By corresponding positions with supported count, type and accepted-value compatibility",
+            "They must have identical column names",
+            "The SELECT must return exactly one row"
+          ],
+          "correct_index": 1,
+          "explanation": "Similar source aliases do not automatically remap domain roles.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-11-insert-select-4",
+          "test_id": "pt-dbms-sql-11-insert-select",
+          "question_text": "What must an archive-then-delete workflow coordinate beyond supported transactional grouping?",
+          "options": [
+            "It's not necessary; either order is always safe",
+            "The intended row population and concurrency policy so the copy and removal concern the same accepted facts",
+            "Because SQL requires it syntactically",
+            "To make the operation run faster"
+          ],
+          "correct_index": 1,
+          "explanation": "Atomicity alone does not establish every snapshot and predicate relationship.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-11-insert-select-5",
+          "test_id": "pt-dbms-sql-11-insert-select",
+          "question_text": "Can supported engines permit some same-source-and-target forms?",
+          "options": [
+            "Yes, always",
+            "Yes, subject to exact query and object restrictions that need verification",
+            "This operation is not supported by any SQL engine",
+            "It only works between databases, never within one"
+          ],
+          "correct_index": 1,
+          "explanation": "This does not prove every MySQL temporary self-reference form is supported.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-11-insert-select-6",
+          "test_id": "pt-dbms-sql-11-insert-select",
+          "question_text": "What happens if the SELECT in an INSERT ... SELECT returns a different number of columns than the target table expects?",
+          "options": [
+            "Extra columns are silently ignored",
+            "The statement fails",
+            "Missing columns are filled with random values",
+            "The target table's schema is automatically altered to match"
+          ],
+          "correct_index": 1,
+          "explanation": "A column-count mismatch causes the statement to fail, just as with a literal VALUES list.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-11-insert-select-7",
+          "test_id": "pt-dbms-sql-11-insert-select",
+          "question_text": "Is INSERT ... SELECT limited to copying rows verbatim, or can it transform data?",
+          "options": [
+            "Only verbatim copying is possible",
+            "The SELECT can compute, filter, aggregate, or otherwise transform data before it's inserted — it's a full query, not just a copy",
+            "It can only copy a single column at a time",
+            "Transformation requires a separate UPDATE afterward"
+          ],
+          "correct_index": 1,
+          "explanation": "Since the source is a full SELECT query, any expression, filter, or aggregation it supports can shape the inserted data.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-11-insert-select-8",
+          "test_id": "pt-dbms-sql-11-insert-select",
+          "question_text": "What real-world task is INSERT ... SELECT especially well suited for?",
+          "options": [
+            "Deleting obsolete rows",
+            "Deriving or copying a filtered/transformed subset of data from one table into another, entirely within the database",
+            "Changing a table's column data types",
+            "Renaming a table"
+          ],
+          "correct_index": 1,
+          "explanation": "This is exactly the copy/derive-data use case INSERT ... SELECT is designed for.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-11-insert-select-new-9",
+          "test_id": "pt-dbms-sql-11-insert-select",
+          "question_text": "Does INSERT SELECT create the destination definition automatically?",
+          "options": [
+            "Yes",
+            "No",
+            "Only with a key",
+            "Only if the query is empty"
+          ],
+          "correct_index": 1,
+          "explanation": "This is not CREATE TABLE AS SELECT.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-11-insert-select-new-10",
+          "test_id": "pt-dbms-sql-11-insert-select",
+          "question_text": "Which salary satisfies at least 80000?",
+          "options": [
+            "79000",
+            "A missing value automatically",
+            "80000",
+            "Only values above 80000"
+          ],
+          "correct_index": 2,
+          "explanation": "The inclusive boundary matters.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-11-insert-select-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-11-insert-select-application-new-1",
+          "test_id": "pt-dbms-sql-11-insert-select-application",
+          "question_text": "Do source aliases automatically fix swapped target positions?",
+          "options": [
+            "Yes",
+            "Only if both are integers",
+            "No",
+            "Only if sorted"
+          ],
+          "correct_index": 2,
+          "explanation": "Role mapping follows the explicit positional contract.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-11-insert-select-application-new-2",
+          "test_id": "pt-dbms-sql-11-insert-select-application",
+          "question_text": "Does an empty SELECT invent a destination row?",
+          "options": [
+            "Yes",
+            "Only with a primary key",
+            "Only with TEXT",
+            "No"
+          ],
+          "correct_index": 3,
+          "explanation": "No selected row means no proposed inserted row.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-11-insert-select-application-new-3",
+          "test_id": "pt-dbms-sql-11-insert-select-application",
+          "question_text": "What can a source join accidentally change?",
+          "options": [
+            "Multiplicity and result grain",
+            "Every access grant",
+            "The target table name",
+            "The default database automatically"
+          ],
+          "correct_index": 0,
+          "explanation": "One-to-many matches can produce repeated identity roles.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-11-insert-select-application-new-4",
+          "test_id": "pt-dbms-sql-11-insert-select-application",
+          "question_text": "Does ordinary INSERT SELECT automatically skip existing target keys?",
+          "options": [
+            "Yes",
+            "No",
+            "Only if source names match",
+            "Only if the key is integer"
+          ],
+          "correct_index": 1,
+          "explanation": "Retry/conflict behaviour needs an explicit supported policy.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-11-insert-select-application-new-5",
+          "test_id": "pt-dbms-sql-11-insert-select-application",
+          "question_text": "What must the target still enforce?",
+          "options": [
+            "Only the source aliases",
+            "Only output order",
+            "Its applicable integrity rules",
+            "No rules during copying"
+          ],
+          "correct_index": 2,
+          "explanation": "Successful selection is not sufficient accepted-state evidence.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-11-insert-select-application-new-6",
+          "test_id": "pt-dbms-sql-11-insert-select-application",
+          "question_text": "Why keep the retained checker after the write?",
+          "options": [
+            "To change source salary",
+            "To create a second unsolicited result",
+            "To remove target keys",
+            "To observe actual destination state under the original assessment contract"
+          ],
+          "correct_index": 3,
+          "explanation": "The submission supplies the write and the checker supplies the read.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-11-insert-select-application-new-7",
+          "test_id": "pt-dbms-sql-11-insert-select-application",
+          "question_text": "Does one transaction alone prove archive and delete predicates see every intended fact identically?",
+          "options": [
+            "No",
+            "Yes",
+            "Only if both statements are short",
+            "Only with integer keys"
+          ],
+          "correct_index": 0,
+          "explanation": "Consistency and concurrency require their own policy.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-11-insert-select-application-new-8",
+          "test_id": "pt-dbms-sql-11-insert-select-application",
+          "question_text": "Why retain id when two high performers share a name?",
+          "options": [
+            "Names are globally unique",
+            "They remain distinct accepted employee identities",
+            "DISTINCT name preserves all employees",
+            "The key generates a report alias"
+          ],
+          "correct_index": 1,
+          "explanation": "Description equality does not merge identity.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-11-insert-select-application-new-9",
+          "test_id": "pt-dbms-sql-11-insert-select-application",
+          "question_text": "Does the local distinct-table example verify every same-table temporary form?",
+          "options": [
+            "Yes",
+            "Only when empty",
+            "No",
+            "Only if MariaDB accepts a nearby form"
+          ],
+          "correct_index": 2,
+          "explanation": "Target-specific restrictions must be tested directly.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-11-insert-select-application-new-10",
+          "test_id": "pt-dbms-sql-11-insert-select-application",
+          "question_text": "What remains outside the recorded copy cases?",
+          "options": [
+            "The supplied threshold result",
+            "The preserved source rows",
+            "The tested target identity rejection",
+            "Production snapshots and exact provider behaviour"
+          ],
+          "correct_index": 3,
+          "explanation": "Execution evidence remains scoped to the actual fixtures.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cx-insert-select-active-applicants",
+      "slug": "insert-select-active-applicants",
+      "title": "Copy the active applicant population into its accepted target",
+      "difficulty": "Easy",
+      "task": "Copy applicant_id and name from applicants where active=1 into initially empty accepted_applicants using an explicit target list. Preserve every qualifying identity and leave the source unchanged. Return applicant_id,name from the destination.",
+      "schema_sql": "CREATE TABLE applicants (applicant_id INT PRIMARY KEY,name VARCHAR(40) NOT NULL,active INT NOT NULL); CREATE TABLE accepted_applicants (applicant_id INT PRIMARY KEY,name VARCHAR(40) NOT NULL);",
+      "seed_sql": "INSERT INTO applicants VALUES (1,'Asha',1),(2,'Ben',0),(3,'Asha',1);",
+      "expected": "applicant_id\tname\n1\tAsha\n3\tAsha",
+      "ordering": "Ascending applicant_id.",
+      "constraints": [
+        "Destination initially empty.",
+        "Identity is applicant_id rather than display name."
+      ],
+      "edge_cases": [
+        "No active applicants produces no rows.",
+        "Repeated names with different ids remain distinct."
+      ],
+      "hints": [
+        "Filter the source and map its roles explicitly.",
+        "Do not add DISTINCT name or alter source rows."
+      ],
+      "solution_sql": "INSERT INTO accepted_applicants (applicant_id,name) SELECT applicant_id,name FROM applicants WHERE active=1; SELECT applicant_id,name FROM accepted_applicants ORDER BY applicant_id;",
+      "explanation": "The source predicate chooses the requested population and explicit role mapping preserves the accepted identities.",
+      "validation_cases": [
+        {
+          "seed_sql": "",
+          "expected": ""
+        },
+        {
+          "seed_sql": "INSERT INTO applicants VALUES (7,'Mira',0);",
+          "expected": ""
+        }
+      ]
+    },
+    {
+      "id": "cp-dbms-sql-copy-high-performers",
+      "slug": "copy-high-performers",
+      "title": "Copy High Performers",
+      "difficulty": "Medium",
+      "existing_problem": true,
+      "original_description_md5": "d5d1d667263006f0bb611066e30d7acb",
+      "original_check_sql": "SELECT id, name, salary FROM high_performers ORDER BY id;",
+      "check_sql": "SELECT id, name, salary FROM high_performers ORDER BY id;",
+      "task": "Copy each employee with salary>=80000 into initially empty high_performers, mapping id,name,salary explicitly. Preserve source employees. Submit the write only; the retained trailing checker reads the destination in id order. This is a one-time copy, not an automatic idempotent retry policy.",
+      "schema_sql": "CREATE TABLE employees (id INTEGER PRIMARY KEY, name TEXT NOT NULL, salary INTEGER NOT NULL);\nCREATE TABLE high_performers (id INTEGER PRIMARY KEY, name TEXT NOT NULL, salary INTEGER NOT NULL);",
+      "seed_sql": "INSERT INTO employees (id, name, salary) VALUES\n(1, 'Asha', 85000), (2, 'Rohan', 62000), (3, 'Neha', 91000);",
+      "expected": "id\tname\tsalary\n1\tAsha\t85000\n3\tNeha\t91000",
+      "ordering": "The original checker orders destination rows by id.",
+      "constraints": [
+        "Original identity, schema, sample source and trailing checker retained.",
+        "Inclusive threshold and initially empty destination."
+      ],
+      "edge_cases": [
+        "Salary exactly 80000 qualifies.",
+        "No qualifying source returns an empty destination."
+      ],
+      "hints": [
+        "Name the three target roles in the intended order.",
+        "Use the inclusive source predicate."
+      ],
+      "solution_sql": "INSERT INTO high_performers (id,name,salary) SELECT id,name,salary FROM employees WHERE salary>=80000;",
+      "explanation": "The source query selects the exact qualifying identity population and the retained checker verifies the accepted target rows.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO employees (id, name, salary) VALUES\n(5, 'Zara', 79000), (6, 'Omar', 88000);",
+          "expected": "id\tname\tsalary\n6\tOmar\t88000"
+        },
+        {
+          "seed_sql": "INSERT INTO employees VALUES (7,'Boundary',80000),(8,'Lower',79999);",
+          "expected": "id\tname\tsalary\n7\tBoundary\t80000"
+        },
+        {
+          "seed_sql": "",
+          "expected": ""
+        }
+      ],
+      "negative_validation_cases": [
+        {
+          "sql": "INSERT INTO high_performers VALUES (1,'Conflict',90000);",
+          "error_codes": [
+            1062
+          ]
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-11-insert-select-1",
+      "test_id": "pt-dbms-sql-11-insert-select",
+      "question_text": "What does INSERT ... SELECT do?",
+      "options": [
+        "Deletes rows matching a SELECT query",
+        "Inserts rows using a SELECT query's result as the source data, instead of a literal VALUES list",
+        "Updates rows based on a SELECT query",
+        "Creates a new table from a SELECT query"
+      ],
+      "correct_index": 1,
+      "explanation": "INSERT ... SELECT populates a table with rows computed by a SELECT.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-11-insert-select-2",
+      "test_id": "pt-dbms-sql-11-insert-select",
+      "question_text": "Why is INSERT ... SELECT more efficient than a select-then-loop-insert pattern in application code?",
+      "options": [
+        "It uses a completely different, faster storage format",
+        "The entire operation happens inside the database engine, avoiding the network round trips of reading rows out and inserting them back one at a time",
+        "It automatically parallelizes across multiple servers",
+        "It skips all constraint checks"
+      ],
+      "correct_index": 1,
+      "explanation": "Keeping the whole operation in the database avoids client-server round-trip overhead entirely.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-11-insert-select-3",
+      "test_id": "pt-dbms-sql-11-insert-select",
+      "question_text": "What requirement do the SELECT's columns and the target table's columns share?",
+      "options": [
+        "No requirement — any mismatch is automatically resolved",
+        "They must be compatible in count and type, similar to Union's union-compatibility requirement",
+        "They must have identical column names",
+        "The SELECT must return exactly one row"
+      ],
+      "correct_index": 1,
+      "explanation": "Column count and type compatibility between source and destination is required, mirroring Union's rules.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-11-insert-select-4",
+      "test_id": "pt-dbms-sql-11-insert-select",
+      "question_text": "In an archive-then-delete pattern (INSERT INTO archive SELECT ...; DELETE FROM original WHERE ...), why should both statements run in one transaction?",
+      "options": [
+        "It's not necessary; either order is always safe",
+        "So a failure between the two steps can't leave data duplicated (if delete fails) or lost (if insert fails but delete somehow ran)",
+        "Because SQL requires it syntactically",
+        "To make the operation run faster"
+      ],
+      "correct_index": 1,
+      "explanation": "Wrapping both steps in one transaction ensures they succeed or fail together, preventing an inconsistent partial state.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-11-insert-select-5",
+      "test_id": "pt-dbms-sql-11-insert-select",
+      "question_text": "Does INSERT ... SELECT require the source and destination to be different tables?",
+      "options": [
+        "Yes, always",
+        "No — INSERT ... SELECT can also read and write the same table, subject to engine-specific rules about self-referencing updates",
+        "This operation is not supported by any SQL engine",
+        "It only works between databases, never within one"
+      ],
+      "correct_index": 1,
+      "explanation": "While copying between two different tables is the most common case, some engines support self-referencing INSERT SELECT with care.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-11-insert-select-6",
+      "test_id": "pt-dbms-sql-11-insert-select",
+      "question_text": "What happens if the SELECT in an INSERT ... SELECT returns a different number of columns than the target table expects?",
+      "options": [
+        "Extra columns are silently ignored",
+        "The statement fails",
+        "Missing columns are filled with random values",
+        "The target table's schema is automatically altered to match"
+      ],
+      "correct_index": 1,
+      "explanation": "A column-count mismatch causes the statement to fail, just as with a literal VALUES list.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-11-insert-select-7",
+      "test_id": "pt-dbms-sql-11-insert-select",
+      "question_text": "Is INSERT ... SELECT limited to copying rows verbatim, or can it transform data?",
+      "options": [
+        "Only verbatim copying is possible",
+        "The SELECT can compute, filter, aggregate, or otherwise transform data before it's inserted — it's a full query, not just a copy",
+        "It can only copy a single column at a time",
+        "Transformation requires a separate UPDATE afterward"
+      ],
+      "correct_index": 1,
+      "explanation": "Since the source is a full SELECT query, any expression, filter, or aggregation it supports can shape the inserted data.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-11-insert-select-8",
+      "test_id": "pt-dbms-sql-11-insert-select",
+      "question_text": "What real-world task is INSERT ... SELECT especially well suited for?",
+      "options": [
+        "Deleting obsolete rows",
+        "Deriving or copying a filtered/transformed subset of data from one table into another, entirely within the database",
+        "Changing a table's column data types",
+        "Renaming a table"
+      ],
+      "correct_index": 1,
+      "explanation": "This is exactly the copy/derive-data use case INSERT ... SELECT is designed for.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "coordinator",
+    "independent_review": "unavailable; no agent tools",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Definitions and examples checked against questions; no plagiarism certification.",
+    "existing_question_corrections": [
+      "tq-dbms-sql-11-insert-select-2",
+      "tq-dbms-sql-11-insert-select-3",
+      "tq-dbms-sql-11-insert-select-4",
+      "tq-dbms-sql-11-insert-select-5"
+    ],
+    "canonical_answer_indices_preserved": true,
+    "batch_review": {
+      "reviewer": "coordinator",
+      "independent": false,
+      "scope": "This new package: explained definitions and boundaries, retained source question identities/canonical indices, new correct answers and explanations, exercise solutions and recorded fixtures, diagram trace and prepared integration.",
+      "execution_evidence": "Focused MariaDB reference cases and selected actual LessonBlock rendering passed; no browser QA or exact MySQL/provider execution.",
+      "source_preservation": "Original snapshots retained; eight retained exercises across this continuation matched source identity, difficulty, schema, seed and trailing checker.",
+      "limits": "No independent worker available. Output fixtures do not prove arbitrary student submissions used a requested technique. Native PostgreSQL/other-engine concepts remain documented or explicitly mirrored, not verified by MariaDB."
+    }
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-11-insert-select",
+    "original_note_sha256": "15b5051b17f64bdcde47cb2dce303dce661adffb25d85900f5f16e08c10916a8",
+    "status": "paired migration prepared; not applied"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "A source query and an existing target definition have different jobs",
+      "description": "The inclusive salary predicate chooses membership, selected positions map roles and the target enforces accepted-state rules before the checker reads the result.",
+      "columns": [
+        "Stage",
+        "Contract",
+        "Example"
+      ],
+      "rows": [
+        [
+          "Source selection",
+          "salary >= 80000",
+          "80000 included; 79999 excluded"
+        ],
+        [
+          "Projection",
+          "id, name, salary positions",
+          "Matches explicit destination role order"
+        ],
+        [
+          "Target acceptance",
+          "Existing high_performers definition",
+          "Identity and required values remain enforced"
+        ],
+        [
+          "Checker read",
+          "Destination ordered by id",
+          "No additional source mutation or invented row"
+        ],
+        [
+          "Retry boundary",
+          "Separate invocation policy",
+          "Ordinary repeat is not an automatic no-op"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "coordinator checked inclusive threshold, positional role mapping, original trailing checker and source-versus-target state boundaries",
+    "server_rendering": "passed",
+    "browser_rendering": "unverified",
+    "independent_review": "unavailable; no agent tools",
+    "server_rendering_evidence": "Selected actual LessonBlock Vitest rendering passed for this batch; no browser QA."
+  },
+  "sql_verification": {
+    "engine": "11.8.6-MariaDB-0+deb13u1 from Debian",
+    "scope": "MariaDB compatibility execution; exact MySQL 8.4/provider execution unverified",
+    "fingerprint": "1211c3a499a3dd6592dcae4c3cff42da6db9f29fb7d77f435043fa6cd1ffe477",
+    "cases": [
+      {
+        "problem": "insert-select-active-applicants",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "insert-select-active-applicants",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "insert-select-active-applicants",
+        "case": 2,
+        "passed": true
+      },
+      {
+        "problem": "copy-high-performers",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "copy-high-performers",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "copy-high-performers",
+        "case": 2,
+        "passed": true
+      },
+      {
+        "problem": "copy-high-performers",
+        "case": 3,
+        "passed": true
+      },
+      {
+        "problem": "copy-high-performers",
+        "negative_case": 0,
+        "error_code": 1062,
+        "passed": true
+      }
+    ],
+    "all_passed": true
+  }
+}

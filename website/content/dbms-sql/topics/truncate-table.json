@@ -1,0 +1,665 @@
+{
+  "source_ref": "chapter-9-ddl-and-schema-design/truncate-table",
+  "slug": "truncate-table",
+  "title": "TRUNCATE TABLE",
+  "description": "Clear a complete table while preserving its usable definition, distinguish MySQL identity and transaction behaviour from other engines, and validate reload boundaries on disposable data.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Truncation clears the whole table population\n\nTRUNCATE TABLE removes a table's current rows while leaving a usable table structure. A campus import workflow might clear a disposable staging table before loading a replacement batch. This is a table-wide operation: it does not mean remove whichever rows match a date filter. If the requirement concerns only expired records, choosing TRUNCATE changes the requested population incorrectly.\n\nThe distinction is visible after execution. A SELECT can still reference the table but observes no old rows. New INSERT statements can use the retained columns and constraints. DROP TABLE has a different postcondition because the old table object no longer exists. DELETE can preserve the structure too, but its row-level semantics and supported filtering differ from truncation.\n\n## No WHERE clause selects a truncation subset\n\nTRUNCATE TABLE staging_rows expresses a complete reset of that table's rows. A WHERE predicate is not available in the illustrated MySQL statement form. Do not describe truncation as a faster spelling of DELETE WHERE batch_id = 7. That selective deletion preserves other batches, whereas truncation would clear them as well.\n\nThe correct choice follows the data contract. If every old staging row is disposable and the object must remain for a new load, a complete reset can be meaningful. If some rows must remain, use a suitable selective operation and consider its own consistency requirements. Performance expectations cannot justify returning a different accepted state than the application asked for.\n\n```sql\nTRUNCATE TABLE staging_rows;\n```\n\n## Retained structure includes more than column labels\n\nA useful table definition includes types, required-value rules and identity constraints. Clearing rows does not mean these rules should disappear. A subsequent duplicate primary key or missing required property should still be rejected under the supported definition. This is why the introductory exercise loads a new row after truncation rather than merely asserting a zero count.\n\nThe original columns remain the relevant interface for the next load. Replacing the table with an unconstrained query result is a different operation and could weaken integrity even if the displayed sample rows look correct. Compare the actual retained definition and accepted writes when an alternative implementation claims to be equivalent to the requested reset.\n\n## Implementation can differ from deleting rows one by one\n\nDatabase engines can implement truncation using table-level storage operations rather than performing the same work as a sequence of ordinary row deletes. That can make it suitable for certain large resets. The exact storage work, logging and locking remain product and object dependent. Saying that truncation has no logging or is always instantaneous overstates what the keyword guarantees.\n\nA small fixture establishes membership and accepted-state behaviour, not a production speedup ratio. Existing dependencies, concurrent transactions, metadata locks, storage configuration and engine details can affect whether the operation runs and how long it takes. The explanation should separate its logical whole-table result from a performance claim that would need a representative workload measurement.\n\n## MySQL identity state can reset\n\nFor the illustrated MySQL auto-increment table, truncation resets the auto-increment counter. A subsequent insert omitting the identifier can therefore receive the initial value again. Ordinary DELETE does not imply the same reset. This is an observable difference even when both statements would leave no rows before the next insert.\n\nAn identifier reused after a reset does not make the new row the same historical entity as an old row with that number. Applications and external references may treat identity differently from a disposable staging fixture. The exercise uses a local, expendable identity precisely so the reset can be observed without claiming that reusing business identifiers is appropriate for every dataset.\n\n## Transaction rollback rules require an engine label\n\nMySQL TRUNCATE TABLE has DDL and implicit-commit semantics rather than the ordinary transactional behaviour expected from a filtered InnoDB DELETE. Wrapping it in BEGIN and later issuing ROLLBACK is not a general undo mechanism for the truncation. The operation's atomic DDL properties do not make it a user-rollbackable row deletion.\n\nPostgreSQL supports transactional truncation, so an uncommitted truncate can be rolled back under its rules. Other products have their own supported cases and identity options. The cross-engine lesson is to verify the target's actual behaviour rather than memorize the phrase truncate can never roll back. Local MariaDB observations are not exact proof of every MySQL or PostgreSQL transaction detail.\n\n## Foreign-key restrictions are structural dependencies\n\nAn enforced reference from another table can prevent truncating a parent in MySQL/InnoDB under its documented rules. An empty child table does not automatically remove that foreign-key definition. It is therefore inaccurate to explain every failure solely as other rows still referencing a current parent row. The presence and kind of dependency matter.\n\nDo not assume TRUNCATE will run referential ON DELETE actions like an ordinary row delete. PostgreSQL has its own truncation dependency and CASCADE rules, while MySQL does not offer a portable equivalent just because that word appears elsewhere in SQL. Disabling foreign-key enforcement to make a reset succeed changes integrity protection and is not part of these exercises.\n\n## Row-delete triggers are not a universal reset audit\n\nMySQL truncation does not invoke ordinary row-level DELETE triggers as if each old row had been deleted individually. An audit design relying only on those triggers can therefore miss a table-wide reset. This is a semantic difference that matters even when the final row count appears identical. Define the intended audit event explicitly rather than inferring it from an empty table.\n\nPostgreSQL supports its own TRUNCATE trigger events, which are distinct from ordinary row-delete events. A trigger comparison should name the event and engine. The lab does not create triggers and cannot claim to verify an auditing system. Its notes explain why an application needs to choose an observation mechanism compatible with the actual operation being authorized.\n\n## A failed reload can expose an empty intermediate state\n\nConsider a reset followed by loading a replacement batch. If the target engine commits the reset independently and the later load fails, the old rows are not restored merely because the application intended the steps as one logical refresh. Readers may encounter an empty or incomplete dataset unless the workflow has an appropriate design for that failure boundary.\n\nA transactional refresh on a product that supports it has different guarantees, while a staging-and-switch design introduces other compatibility and locking questions. Do not suggest one universal remedy without its assumptions. The exercises use an isolated single-session table and a valid supplied reload; they do not claim to establish crash recovery or concurrent-reader guarantees for a production import pipeline.\n\n## Temporary practice still needs correctly scoped claims\n\nThe local fixtures use temporary tables so each case begins with its own disposable rows and definitions. That prevents one case's staging contents from becoming another case's hidden dependency. Native persistent foreign-key behaviour is not inferred from those temporary tables, whose constraints and support can differ from persistent objects under the engine's rules.\n\nThe first task starts with explicit old identifiers, truncates the table, inserts one new label and reports the resulting id. The second resets a constrained staging table and copies all replacement-input occurrences. Each task has a stated output contract, so a solution that merely appends to old rows produces visibly incorrect results. Required source technique still needs review beyond output comparison.\n\n## Validate emptiness, replacement and identity separately\n\nUse an initially populated target and an initially empty one. For the auto-increment task, start with a high old id so the post-reset insert distinguishes reset identity from merely continuing the old sequence. For the replacement task, include empty replacement input, several replacement rows and an unrelated sentinel table that must retain its state.\n\nAlso reject a duplicate key and a missing required label after the reset in the identity exercise. Those cases establish that accepted structure survived rather than checking row count alone. The replacement exercise permits repeated values deliberately, so duplicates must remain separate occurrences. Neither test should silently impose a distinctness rule that the supplied definition does not contain.\n\n## Completion means the stated reset contract is observable\n\nA clear explanation identifies which rows are disposable, which definition remains, what happens to the relevant identity state, and which engine's transaction and dependency rules apply. That is more useful than a blanket claim that truncate is always safer or faster than delete. Choose the operation from the requested postcondition and actual environment.\n\nRecorded compatibility fixtures demonstrate the supplied synthetic reset and reload results. Exact MySQL/provider execution, native persistent dependencies, application migration application and production failure recovery remain separate checks. Keeping those gaps explicit does not reduce the explanatory package's completeness; it prevents an accurate lab result from becoming an unsupported promise about a different engine, actor or workload.\n",
+  "references": [
+    {
+      "title": "MySQL 8.4 TRUNCATE TABLE",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/truncate-table.html"
+    },
+    {
+      "title": "PostgreSQL 18 TRUNCATE",
+      "url": "https://www.postgresql.org/docs/18/sql-truncate.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-9-truncate-table",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-9-truncate-table-1",
+          "test_id": "pt-dbms-sql-9-truncate-table",
+          "question_text": "What logical population change does TRUNCATE TABLE request?",
+          "options": [
+            "Removes the table structure entirely",
+            "Remove all current rows while retaining a usable table definition",
+            "Removes only rows matching a WHERE clause",
+            "Renames the table"
+          ],
+          "correct_index": 1,
+          "explanation": "Actual duration depends on engine, dependencies and workload.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-9-truncate-table-2",
+          "test_id": "pt-dbms-sql-9-truncate-table",
+          "question_text": "Which statement can be filtered with a WHERE clause: TRUNCATE TABLE or DELETE?",
+          "options": [
+            "Both can",
+            "Neither can",
+            "Only DELETE",
+            "Only TRUNCATE TABLE"
+          ],
+          "correct_index": 2,
+          "explanation": "TRUNCATE always removes every row; only DELETE supports a WHERE clause.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-9-truncate-table-3",
+          "test_id": "pt-dbms-sql-9-truncate-table",
+          "question_text": "Why can truncation cost differ from ordinary row-by-row deletion?",
+          "options": [
+            "It uses a different programming language internally",
+            "The engine can use table-level storage operations rather than the same per-row delete path",
+            "It compresses the data first",
+            "It only removes half the rows"
+          ],
+          "correct_index": 1,
+          "explanation": "This does not imply zero logging or a guaranteed speedup.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-9-truncate-table-4",
+          "test_id": "pt-dbms-sql-9-truncate-table",
+          "question_text": "Is it accurate to say 'TRUNCATE can never be rolled back' across all database engines?",
+          "options": [
+            "Yes, this is universally true",
+            "No — it is engine-dependent: PostgreSQL and SQL Server support rollback within a transaction, while MySQL/InnoDB implicitly commits and cannot roll it back",
+            "No, TRUNCATE can never be used inside any transaction",
+            "Yes, but only for temporary tables"
+          ],
+          "correct_index": 1,
+          "explanation": "This is a common oversimplification; rollback support for TRUNCATE varies by engine.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-9-truncate-table-5",
+          "test_id": "pt-dbms-sql-9-truncate-table",
+          "question_text": "What happens to AUTO_INCREMENT in the illustrated MySQL truncate case?",
+          "options": [
+            "Both reset the counter identically",
+            "Its counter resets, unlike an ordinary DELETE that does not imply that reset",
+            "DELETE always resets it; TRUNCATE never does",
+            "Neither statement affects the counter"
+          ],
+          "correct_index": 1,
+          "explanation": "Other engines have their own identity options and rules.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-9-truncate-table-6",
+          "test_id": "pt-dbms-sql-9-truncate-table",
+          "question_text": "Why can MySQL/InnoDB reject truncating a parent even when the child table is empty?",
+          "options": [
+            "TRUNCATE never fails under any condition",
+            "An enforced foreign-key definition from another table can still block the operation",
+            "Because TRUNCATE requires the table to have no indexes",
+            "Because foreign keys are automatically dropped by TRUNCATE"
+          ],
+          "correct_index": 1,
+          "explanation": "The structural dependency is not removed merely because no child rows currently exist.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-9-truncate-table-7",
+          "test_id": "pt-dbms-sql-9-truncate-table",
+          "question_text": "What is a practical consequence of TRUNCATE typically not firing row-level AFTER DELETE triggers?",
+          "options": [
+            "Nothing, triggers always fire regardless of the statement used",
+            "Auditing/logging logic that relies on delete triggers may silently miss truncations",
+            "The table becomes read-only afterward",
+            "TRUNCATE becomes slower than DELETE as a result"
+          ],
+          "correct_index": 1,
+          "explanation": "Since most engines skip row-level triggers during TRUNCATE, trigger-based auditing can miss these events.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-9-truncate-table-8",
+          "test_id": "pt-dbms-sql-9-truncate-table",
+          "question_text": "A nightly ETL job uses TRUNCATE TABLE staging_orders; followed by a bulk load, wrapped in BEGIN...COMMIT on PostgreSQL. What happens if the bulk load fails before COMMIT?",
+          "options": [
+            "The truncate is already permanent and cannot be undone",
+            "Both the truncate and the failed load are rolled back together since Postgres supports transactional TRUNCATE",
+            "Only the load is rolled back; the table stays truncated",
+            "The database crashes"
+          ],
+          "correct_index": 1,
+          "explanation": "Because PostgreSQL treats TRUNCATE as transactional, a failure before COMMIT rolls back the whole block, including the truncate.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-9-truncate-table-new-9",
+          "test_id": "pt-dbms-sql-9-truncate-table",
+          "question_text": "Can TRUNCATE use WHERE to retain another batch?",
+          "options": [
+            "Yes, like DELETE",
+            "No",
+            "Only for old rows",
+            "Only when indexed"
+          ],
+          "correct_index": 1,
+          "explanation": "The illustrated statement resets the whole table population.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-9-truncate-table-new-10",
+          "test_id": "pt-dbms-sql-9-truncate-table",
+          "question_text": "Does an empty result after reset prove constraints were retained?",
+          "options": [
+            "Yes, always",
+            "Only with ORDER BY",
+            "No; accepted and rejected writes provide additional evidence",
+            "Only with no indexes"
+          ],
+          "correct_index": 2,
+          "explanation": "An unconstrained replacement could also initially be empty.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-9-truncate-table-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-9-truncate-table-application-new-1",
+          "test_id": "pt-dbms-sql-9-truncate-table-application",
+          "question_text": "What does the new auto-increment id test distinguish?",
+          "options": [
+            "Whether names are unique",
+            "Whether access was granted",
+            "Counter reset from merely clearing rows without that reset",
+            "Whether every engine uses sequences"
+          ],
+          "correct_index": 2,
+          "explanation": "A high old id makes the boundary visible.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-9-truncate-table-application-new-2",
+          "test_id": "pt-dbms-sql-9-truncate-table-application",
+          "question_text": "Does a reused staging id imply the same historical entity?",
+          "options": [
+            "Yes, universally",
+            "Only with VARCHAR",
+            "Only if the old table was populated",
+            "No"
+          ],
+          "correct_index": 3,
+          "explanation": "Identity scope matters beyond the displayed number.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-9-truncate-table-application-new-3",
+          "test_id": "pt-dbms-sql-9-truncate-table-application",
+          "question_text": "Can MySQL BEGIN make TRUNCATE behave like rollbackable DELETE?",
+          "options": [
+            "No",
+            "Yes, on every target",
+            "Only with DISTINCT",
+            "Only with a short table name"
+          ],
+          "correct_index": 0,
+          "explanation": "DDL and implicit-commit semantics differ.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-9-truncate-table-application-new-4",
+          "test_id": "pt-dbms-sql-9-truncate-table-application",
+          "question_text": "Why might a delete-trigger audit miss a MySQL truncate?",
+          "options": [
+            "It changes every trigger name",
+            "The operation does not invoke ordinary row-level DELETE triggers",
+            "It grants anonymous access",
+            "It always preserves all rows"
+          ],
+          "correct_index": 1,
+          "explanation": "The audit event must match the operation.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-9-truncate-table-application-new-5",
+          "test_id": "pt-dbms-sql-9-truncate-table-application",
+          "question_text": "What can happen if a committed reset is followed by a failed reload?",
+          "options": [
+            "The old dataset always reappears",
+            "The table is guaranteed to vanish",
+            "The prior rows are not automatically restored",
+            "Every identity becomes NULL"
+          ],
+          "correct_index": 2,
+          "explanation": "A logical refresh needs an explicit failure model.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-9-truncate-table-application-new-6",
+          "test_id": "pt-dbms-sql-9-truncate-table-application",
+          "question_text": "Does an empty child table remove its foreign-key definition?",
+          "options": [
+            "Yes",
+            "Only if sorted",
+            "Only if it has text",
+            "No"
+          ],
+          "correct_index": 3,
+          "explanation": "Structural dependencies survive absent rows.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-9-truncate-table-application-new-7",
+          "test_id": "pt-dbms-sql-9-truncate-table-application",
+          "question_text": "Which evidence would support a production speed claim?",
+          "options": [
+            "Representative workload and engine measurements",
+            "Only a three-row lab",
+            "Only a diagram",
+            "Only a shorter SQL statement"
+          ],
+          "correct_index": 0,
+          "explanation": "Correctness fixtures do not benchmark scale.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-9-truncate-table-application-new-8",
+          "test_id": "pt-dbms-sql-9-truncate-table-application",
+          "question_text": "What must the replacement-input task do with repeated supplied values?",
+          "options": [
+            "Deduplicate them unconditionally",
+            "Preserve their occurrences under the stated bag contract",
+            "Reject all repeats",
+            "Convert them to NULL"
+          ],
+          "correct_index": 1,
+          "explanation": "The target has no unstated uniqueness rule.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-9-truncate-table-application-new-9",
+          "test_id": "pt-dbms-sql-9-truncate-table-application",
+          "question_text": "Does temporary-table execution prove persistent referential-action behaviour?",
+          "options": [
+            "Yes, for every foreign key",
+            "Only when empty",
+            "No",
+            "Only with AUTO_INCREMENT"
+          ],
+          "correct_index": 2,
+          "explanation": "Native persistent checks are a separate scope.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-9-truncate-table-application-new-10",
+          "test_id": "pt-dbms-sql-9-truncate-table-application",
+          "question_text": "What remains after successful truncation in the logical contract?",
+          "options": [
+            "Only the old name as plain text",
+            "Every old row",
+            "No columns",
+            "A usable table structure ready for permitted new rows"
+          ],
+          "correct_index": 3,
+          "explanation": "Clearing population is different from object removal.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cx-truncate-auto-increment",
+      "slug": "truncate-auto-increment",
+      "title": "Observe a disposable auto-increment reset after truncation",
+      "difficulty": "Easy",
+      "task": "TRUNCATE the supplied temporary import_items table, insert label fresh without specifying item_id, then return item_id and label. The isolated MySQL-style exercise expects the AUTO_INCREMENT counter to reset to 1. Preserve the table definition.",
+      "schema_sql": "CREATE TEMPORARY TABLE import_items (item_id INT PRIMARY KEY AUTO_INCREMENT, label VARCHAR(40) NOT NULL) ENGINE=InnoDB;",
+      "seed_sql": "INSERT INTO import_items VALUES (40,'old');",
+      "expected": "item_id\tlabel\n1\tfresh",
+      "ordering": "Ascending item_id; exactly one new row.",
+      "constraints": [
+        "Use the supplied disposable temporary object.",
+        "Keep the identity and required label constraints."
+      ],
+      "edge_cases": [
+        "An initially empty target still supports the reset and insert.",
+        "High old ids must not determine the new id after reset."
+      ],
+      "hints": [
+        "Reset before inserting the new label.",
+        "Omit item_id from the new insert."
+      ],
+      "solution_sql": "TRUNCATE TABLE import_items; INSERT INTO import_items (label) VALUES ('fresh'); SELECT item_id,label FROM import_items ORDER BY item_id;",
+      "explanation": "The new row exposes the reset counter while retaining the original column contract.",
+      "validation_cases": [
+        {
+          "seed_sql": "",
+          "expected": "item_id\tlabel\n1\tfresh"
+        },
+        {
+          "seed_sql": "INSERT INTO import_items VALUES (90,'first'),(120,'second');",
+          "expected": "item_id\tlabel\n1\tfresh"
+        }
+      ],
+      "negative_validation_cases": [
+        {
+          "sql": "INSERT INTO import_items VALUES (1,'duplicate');",
+          "error_codes": [
+            1062
+          ]
+        },
+        {
+          "sql": "INSERT INTO import_items (label) VALUES (NULL);",
+          "error_codes": [
+            1048
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cx-truncate-replacement-batch",
+      "slug": "truncate-replacement-batch",
+      "title": "Replace a complete staging population without touching the sentinel",
+      "difficulty": "Medium",
+      "task": "TRUNCATE staging_values and copy every replacement_input value into it, preserving repeated occurrences. Return row_count, value_total and sentinel_count. Do not delete or change sentinel_rows. Empty replacement input means an empty staging population with total zero.",
+      "schema_sql": "CREATE TEMPORARY TABLE staging_values (value INT NOT NULL); CREATE TEMPORARY TABLE replacement_input (value INT NOT NULL); CREATE TEMPORARY TABLE sentinel_rows (id INT PRIMARY KEY);",
+      "seed_sql": "INSERT INTO staging_values VALUES (99),(100); INSERT INTO replacement_input VALUES (2),(2),(3); INSERT INTO sentinel_rows VALUES (1),(2);",
+      "expected": "row_count\tvalue_total\tsentinel_count\n3\t7\t2",
+      "ordering": "Exactly one aggregate result row.",
+      "constraints": [
+        "The complete old staging population is disposable.",
+        "Occurrence-preserving copy, no DISTINCT."
+      ],
+      "edge_cases": [
+        "Empty replacement clears all old staging rows.",
+        "Sentinel state is independent of reset."
+      ],
+      "hints": [
+        "Reset only staging_values before the INSERT SELECT.",
+        "Use independent aggregates rather than a multiplying join."
+      ],
+      "solution_sql": "TRUNCATE TABLE staging_values; INSERT INTO staging_values SELECT value FROM replacement_input; SELECT COUNT(*) AS row_count,COALESCE(SUM(value),0) AS value_total,(SELECT COUNT(*) FROM sentinel_rows) AS sentinel_count FROM staging_values;",
+      "explanation": "The old population is cleared, the exact supplied bag is loaded, and the independent sentinel count verifies the intended narrow target.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO staging_values VALUES (40); INSERT INTO sentinel_rows VALUES (1);",
+          "expected": "row_count\tvalue_total\tsentinel_count\n0\t0\t1"
+        },
+        {
+          "seed_sql": "INSERT INTO replacement_input VALUES (5),(8);",
+          "expected": "row_count\tvalue_total\tsentinel_count\n2\t13\t0"
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-9-truncate-table-1",
+      "test_id": "pt-dbms-sql-9-truncate-table",
+      "question_text": "What does TRUNCATE TABLE do?",
+      "options": [
+        "Removes the table structure entirely",
+        "Quickly removes all rows from a table while keeping its structure intact",
+        "Removes only rows matching a WHERE clause",
+        "Renames the table"
+      ],
+      "correct_index": 1,
+      "explanation": "TRUNCATE clears all data but preserves the table's columns, constraints, and indexes.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-9-truncate-table-2",
+      "test_id": "pt-dbms-sql-9-truncate-table",
+      "question_text": "Which statement can be filtered with a WHERE clause: TRUNCATE TABLE or DELETE?",
+      "options": [
+        "Both can",
+        "Neither can",
+        "Only DELETE",
+        "Only TRUNCATE TABLE"
+      ],
+      "correct_index": 2,
+      "explanation": "TRUNCATE always removes every row; only DELETE supports a WHERE clause.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-9-truncate-table-3",
+      "test_id": "pt-dbms-sql-9-truncate-table",
+      "question_text": "Why is TRUNCATE typically much faster than DELETE on a very large table?",
+      "options": [
+        "It uses a different programming language internally",
+        "It deallocates data pages wholesale instead of removing rows one at a time with full logging",
+        "It compresses the data first",
+        "It only removes half the rows"
+      ],
+      "correct_index": 1,
+      "explanation": "TRUNCATE's page-deallocation approach avoids the overhead of row-by-row logged deletion.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-9-truncate-table-4",
+      "test_id": "pt-dbms-sql-9-truncate-table",
+      "question_text": "Is it accurate to say 'TRUNCATE can never be rolled back' across all database engines?",
+      "options": [
+        "Yes, this is universally true",
+        "No — it is engine-dependent: PostgreSQL and SQL Server support rollback within a transaction, while MySQL/InnoDB implicitly commits and cannot roll it back",
+        "No, TRUNCATE can never be used inside any transaction",
+        "Yes, but only for temporary tables"
+      ],
+      "correct_index": 1,
+      "explanation": "This is a common oversimplification; rollback support for TRUNCATE varies by engine.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-9-truncate-table-5",
+      "test_id": "pt-dbms-sql-9-truncate-table",
+      "question_text": "What commonly happens to a table's auto-increment/identity counter after TRUNCATE, compared to DELETE?",
+      "options": [
+        "Both reset the counter identically",
+        "TRUNCATE typically resets it (fully or via an explicit option); DELETE does not reset it",
+        "DELETE always resets it; TRUNCATE never does",
+        "Neither statement affects the counter"
+      ],
+      "correct_index": 1,
+      "explanation": "TRUNCATE is commonly associated with resetting identity counters (e.g., PostgreSQL's RESTART IDENTITY option, MySQL's default behavior), unlike DELETE.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-9-truncate-table-6",
+      "test_id": "pt-dbms-sql-9-truncate-table",
+      "question_text": "Why might a TRUNCATE TABLE statement fail on a table referenced by foreign keys from another table?",
+      "options": [
+        "TRUNCATE never fails under any condition",
+        "Because other rows still reference this table's rows, and TRUNCATE cannot proceed without CASCADE or resolving those dependencies",
+        "Because TRUNCATE requires the table to have no indexes",
+        "Because foreign keys are automatically dropped by TRUNCATE"
+      ],
+      "correct_index": 1,
+      "explanation": "Referential integrity blocks truncation of a table whose rows are still referenced elsewhere, similar in spirit to DROP TABLE dependency checks.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-9-truncate-table-7",
+      "test_id": "pt-dbms-sql-9-truncate-table",
+      "question_text": "What is a practical consequence of TRUNCATE typically not firing row-level AFTER DELETE triggers?",
+      "options": [
+        "Nothing, triggers always fire regardless of the statement used",
+        "Auditing/logging logic that relies on delete triggers may silently miss truncations",
+        "The table becomes read-only afterward",
+        "TRUNCATE becomes slower than DELETE as a result"
+      ],
+      "correct_index": 1,
+      "explanation": "Since most engines skip row-level triggers during TRUNCATE, trigger-based auditing can miss these events.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-9-truncate-table-8",
+      "test_id": "pt-dbms-sql-9-truncate-table",
+      "question_text": "A nightly ETL job uses TRUNCATE TABLE staging_orders; followed by a bulk load, wrapped in BEGIN...COMMIT on PostgreSQL. What happens if the bulk load fails before COMMIT?",
+      "options": [
+        "The truncate is already permanent and cannot be undone",
+        "Both the truncate and the failed load are rolled back together since Postgres supports transactional TRUNCATE",
+        "Only the load is rolled back; the table stays truncated",
+        "The database crashes"
+      ],
+      "correct_index": 1,
+      "explanation": "Because PostgreSQL treats TRUNCATE as transactional, a failure before COMMIT rolls back the whole block, including the truncate.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "coordinator",
+    "independent_review": "unavailable; no agent tools",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Definitions and examples checked against questions; no plagiarism certification.",
+    "existing_question_corrections": [
+      "tq-dbms-sql-9-truncate-table-1",
+      "tq-dbms-sql-9-truncate-table-3",
+      "tq-dbms-sql-9-truncate-table-5",
+      "tq-dbms-sql-9-truncate-table-6"
+    ],
+    "canonical_answer_indices_preserved": true,
+    "batch_review": {
+      "reviewer": "coordinator",
+      "independent": false,
+      "scope": "This new package: explained definitions and boundaries, retained source question identities/canonical indices, new correct answers and explanations, exercise solutions and recorded fixtures, diagram trace and prepared integration.",
+      "execution_evidence": "Focused MariaDB reference cases and selected actual LessonBlock rendering passed; no browser QA or exact MySQL/provider execution.",
+      "source_preservation": "Original snapshots retained; eight retained exercises across this continuation matched source identity, difficulty, schema, seed and trailing checker.",
+      "limits": "No independent worker available. Output fixtures do not prove arbitrary student submissions used a requested technique. Native PostgreSQL/other-engine concepts remain documented or explicitly mirrored, not verified by MariaDB."
+    }
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-9-truncate-table",
+    "original_note_sha256": "089a7985b93ef3a5111b3a4134267f922238c97467d3baa14d6aa4e8631a389b",
+    "status": "paired migration prepared; not applied"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Reset and reload have separately observable states",
+      "description": "Old staging rows vanish, the definition remains, and a new load supplies its own occurrences. A failed reload needs engine-specific recovery reasoning.",
+      "columns": [
+        "Stage",
+        "Rows",
+        "Definition",
+        "MySQL identity example"
+      ],
+      "rows": [
+        [
+          "Before reset",
+          "Old batch",
+          "Present",
+          "Next value follows old state"
+        ],
+        [
+          "After TRUNCATE",
+          "Empty",
+          "Usable structure retained",
+          "Counter reset"
+        ],
+        [
+          "After valid reload",
+          "Only replacement occurrences",
+          "Constraints still apply",
+          "New generated value begins at reset"
+        ],
+        [
+          "Failure boundary",
+          "Depends on completed operations",
+          "Not a promise of old-data recovery",
+          "BEGIN alone does not undo MySQL truncate"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "coordinator checked whole-table semantics, counter reset, constraint survival and temporary-versus-persistent dependency scope",
+    "server_rendering": "passed",
+    "browser_rendering": "unverified",
+    "independent_review": "unavailable; no agent tools",
+    "server_rendering_evidence": "Selected actual LessonBlock Vitest rendering passed for this batch; no browser QA."
+  },
+  "sql_verification": {
+    "engine": "11.8.6-MariaDB-0+deb13u1 from Debian",
+    "scope": "MariaDB compatibility execution; exact MySQL 8.4/provider execution unverified",
+    "fingerprint": "cc806738b9f83cdcbc1f536fd5c39ffdfdef46915a6b490d36c42d0f7f5bad7e",
+    "cases": [
+      {
+        "problem": "truncate-auto-increment",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "truncate-auto-increment",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "truncate-auto-increment",
+        "case": 2,
+        "passed": true
+      },
+      {
+        "problem": "truncate-auto-increment",
+        "negative_case": 0,
+        "error_code": 1062,
+        "passed": true
+      },
+      {
+        "problem": "truncate-auto-increment",
+        "negative_case": 1,
+        "error_code": 1048,
+        "passed": true
+      },
+      {
+        "problem": "truncate-replacement-batch",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "truncate-replacement-batch",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "truncate-replacement-batch",
+        "case": 2,
+        "passed": true
+      }
+    ],
+    "all_passed": true
+  }
+}

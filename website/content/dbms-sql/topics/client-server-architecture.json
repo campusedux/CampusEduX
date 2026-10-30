@@ -1,0 +1,509 @@
+{
+  "source_ref": "chapter-2-dbms-architecture/client-server-architecture",
+  "slug": "client-server-architecture",
+  "title": "Client Server Architecture",
+  "description": "Trace requests and results between database clients and servers, distinguish file access from server-side query processing, and handle access checks, concurrency, and uncertain network failures.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Separating the request from its execution\n\nClient-server database architecture divides responsibilities between a client that requests work and a database server that manages shared data. The client may be a desktop application, an application-server process, or another supported consumer. It sends operations through a database interface, and the server executes them under its storage, transaction, integrity, and permission rules. Results and status information travel back to the caller.\n\nThe term describes roles rather than a fixed number of physical computers. A development client and server can run on one machine, while a production deployment can separate them across a network. Several applications can act as clients of the same server. Likewise, an application server is a server to a browser but a client when it talks to a database.\n\nThis separation lets multiple consumers use shared database services without each independently interpreting raw storage files. It also introduces a communication boundary: a request, its execution, and the response are distinct events. A robust application must account for that boundary instead of treating a remote database call as an infallible local function.\n\n## Following a student-result request\n\nConsider a simplified Marks relation with StudentID, AssessmentID, and Score. A student-facing application needs the authenticated student's results. A teaching query for student 101 could be written as follows, with an explicit order for the requested assessment sequence.\n\n```sql\nSELECT * FROM Marks WHERE StudentID = 101\nORDER BY AssessmentID;\n```\n\nThe example preserves a recognizable query shape, but a real interface should normally list its promised columns explicitly. It should also bind values through the driver's supported parameter mechanism instead of concatenating untrusted input. The database or trusted application boundary must establish which student's records the actor is allowed to request; the number 101 by itself proves no ownership.\n\nIf student 101 has scores seventy-eight and ninety-one for assessments two and five, those qualifying rows are returned in assessment order. The server may read many physical records, use an available index, or find information in memory while producing that result. The client receives the requested data representation rather than being required to locate and decode the underlying table files.\n\n## Understanding what crosses the connection\n\nThe database protocol carries more than bare SQL and result values. Depending on the driver and operation, it can carry parameters, authentication exchanges, session commands, metadata, affected-row counts, warnings, and errors. The important architectural distinction is that the server processes database operations rather than making the client fetch raw database files to evaluate the query itself.\n\nResult size still matters. A request selecting every mark for every student can transfer substantial data even though query execution is server-side. Filtering, projecting relevant attributes, and using an appropriate bounded result can reduce unnecessary work and exposure. Client-server architecture does not guarantee small network traffic for poorly scoped requests.\n\nA connection also has state and lifecycle. Establishment, authentication, use, transaction completion, and close or pool release must be handled deliberately. Repeatedly opening connections can add overhead, while retaining too many idle sessions can consume server resources. Connection pooling addresses reuse and capacity under its own contract; it is not an automatic property of every client-server installation.\n\n## Locating integrity and access enforcement\n\nThe database server can centrally enforce configured keys, constraints, privileges, and transaction behavior across its clients. This is a major benefit of a database service: clients do not each get to invent the meaning of a valid shared write. If two applications update the same relation, the trusted rules should apply to both rather than depending on one application's cooperative behavior.\n\nBusiness authorization may also require a trusted application service. The architecture does not imply that the database understands every product rule without explicit implementation. A browser must not receive privileged credentials merely because it is called a client. Trace the actual enforcement boundary and ensure an untrusted request cannot bypass the relevant actor and ownership checks.\n\nClient-side validation remains useful for feedback, but it is not authority. A modified client can omit a check or construct a different request. For the result example, hiding another student's identifier in a dropdown does not prevent a caller from supplying it directly. The server-side path must establish the permitted scope independently of visual controls.\n\n## Comparing database service with shared file access\n\nIn a file-server design, a client accesses file content and performs more of the data interpretation locally. Depending on the software, it may transfer blocks or portions of files rather than literally downloading the whole dataset every time. The comparison is about where database processing and shared coordination occur, not a universal promise about one exact transfer size.\n\nFile systems and file-based applications can provide locking and coordination. It would be inaccurate to claim that every file-server arrangement has none. However, coordinating rich database constraints and transactions independently across clients is a different responsibility from using a database server designed to enforce them centrally. The actual guarantees depend on the implementation in either case.\n\nFor a shared marks dataset, independent clients reading and writing file contents need a reliable agreement about concurrent changes and validity rules. A database service offers a central place for those database guarantees. This does not mean that any server configuration is correct by default or that the application's own authorization requirements disappear.\n\n## Handling simultaneous clients\n\nTwo clients can attempt to update the same student's result. The database must handle these operations under its configured isolation and concurrency mechanisms. A transaction can define the intended unit of work, while constraints protect permitted states. The exact lock behavior and visibility depend on the database engine and isolation level, not merely on the client-server label.\n\nCentral execution does not eliminate contention. Long transactions can keep resources busy, and excessive simultaneous work can overwhelm CPU, memory, connections, or storage. A growing direct-client population can create pressure for connection reuse and a shared application tier. Moving to another architecture is a design response to measured needs, not an automatic cure for every slow query.\n\nA client can also become difficult to maintain if it embeds extensive vendor-specific SQL and changeable business logic. Updating many independently deployed clients can be costly. A middle application tier can centralize some responsibilities, but the database remains responsible for its configured integrity and transaction guarantees. Each tier's role should be explicit rather than inferred from the number of boxes.\n\n## Treating network failures as ambiguous events\n\nA connection can fail before a request reaches the server, during execution, or after a transaction commits but before the client receives confirmation. These situations are not equivalent. A timeout tells the caller that it did not receive a timely response; it does not always establish that the operation had no effect.\n\nFor an uncommitted transaction on a lost session, server cleanup commonly ends unfinished transactional work according to the engine's behavior. But a lost commit response leaves a different problem: the client may be uncertain whether the commit completed. Blindly repeating a write can duplicate effects. A retry policy must distinguish safe reads, known failures, and uncertain writes using an appropriate operation contract.\n\nCancellation also needs precise semantics. Stopping a local wait is not necessarily proof that remote execution stopped. The driver and server may provide cancellation facilities, but their guarantees require verification. Report uncertainty accurately, preserve transaction boundaries, and avoid exposing raw credentials or private request values in diagnostic logs.\n\n## Reviewing the whole request path\n\nTrace a representative request from client input through parameter binding, trusted authorization, server execution, and response handling. Check ordinary results, empty results, invalid input, denied access, concurrent writes, and connection failures. A query that succeeds once establishes little about those other paths. The architecture is useful when it clarifies who owns each responsibility.\n\nClient-server database design centralizes shared data processing while letting consumers request information through logical interfaces. Its benefits depend on correctly enforced rules and disciplined connection handling. Understand both sides of the communication boundary, keep authority on trusted paths, and treat result semantics, capacity, and failure outcomes as concrete contracts that can be inspected and tested.\n",
+  "references": [],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-2-client-server-architecture",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-2-client-server-architecture-1",
+          "test_id": "pt-dbms-sql-2-client-server-architecture",
+          "question_text": "Which description best captures the usual database client-server exchange?",
+          "options": [
+            "The entire data file",
+            "The client sends database operations and parameters; the server returns results, metadata, and status rather than requiring raw table-file processing",
+            "The server's internal schema definition",
+            "A copy of the server's operating system"
+          ],
+          "correct_index": 1,
+          "explanation": "The protocol can include authentication, metadata, errors, and commands as well as queries and rows.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-2-client-server-architecture-2",
+          "test_id": "pt-dbms-sql-2-client-server-architecture",
+          "question_text": "Where are configured database constraints, privileges, and concurrency mechanisms enforced for multiple clients?",
+          "options": [
+            "Each individual client independently",
+            "On the database server; additional product authorization may also belong to a trusted application service",
+            "The network router",
+            "No one; it is left unmanaged"
+          ],
+          "correct_index": 1,
+          "explanation": "Central database guarantees still require explicit configuration and do not replace all application rules.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-2-client-server-architecture-3",
+          "test_id": "pt-dbms-sql-2-client-server-architecture",
+          "question_text": "What example query does a student's laptop (client) send to the database server in the notes?",
+          "options": [
+            "CREATE INDEX ON Marks(StudentID)",
+            "SELECT * FROM Marks WHERE StudentID = 101",
+            "DROP TABLE Marks",
+            "GRANT SELECT ON Marks TO student"
+          ],
+          "correct_index": 1,
+          "explanation": "The example given is a client sending this SELECT query to retrieve one student's marks.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-2-client-server-architecture-4",
+          "test_id": "pt-dbms-sql-2-client-server-architecture",
+          "question_text": "How does shared file access differ from database client-server processing?",
+          "options": [
+            "File-server sends only results; client-server sends whole files",
+            "File-based clients interpret file content locally; a database server executes database operations and returns results",
+            "Both models send identical amounts of data",
+            "Neither model involves any network traffic"
+          ],
+          "correct_index": 1,
+          "explanation": "File access may transfer portions or blocks; it does not always send an entire file.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-2-client-server-architecture-5",
+          "test_id": "pt-dbms-sql-2-client-server-architecture",
+          "question_text": "What coordination challenge can independently processing shared-file clients face compared with a central database service?",
+          "options": [
+            "They need a reliable shared agreement for validity and concurrent changes rather than automatically obtaining database-server guarantees",
+            "Because file-server always uses faster networks",
+            "Because client-server architecture has no concept of a server at all",
+            "Because file-server systems do not allow multiple clients"
+          ],
+          "correct_index": 0,
+          "explanation": "File systems can provide locks. The question concerns the richer coordination responsibility, not a claim that all file designs have no locking.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-2-client-server-architecture-6",
+          "test_id": "pt-dbms-sql-2-client-server-architecture",
+          "question_text": "What problem does a 'fat client' (one with too much embedded business logic) create in a client-server system?",
+          "options": [
+            "It has no effect on the architecture",
+            "It blurs the client-server boundary and creates scaling/maintenance problems that motivate three-tier architecture",
+            "It automatically improves network performance",
+            "It eliminates the need for a database server entirely"
+          ],
+          "correct_index": 1,
+          "explanation": "Embedding too much logic in the client is exactly the issue that later motivates moving to a three-tier design with a separate middle tier.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-2-client-server-architecture-7",
+          "test_id": "pt-dbms-sql-2-client-server-architecture",
+          "question_text": "A connection is lost around transaction commit. What must the application handle explicitly?",
+          "options": [
+            "Nothing; client-server architecture guarantees this never happens",
+            "The outcome may be uncertain; retries must account for possible committed effects rather than assume rollback",
+            "The client must restart the entire database server",
+            "The internal schema must be redesigned"
+          ],
+          "correct_index": 1,
+          "explanation": "A lost response is not proof that the write had no effect.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-2-client-server-architecture-8",
+          "test_id": "pt-dbms-sql-2-client-server-architecture",
+          "question_text": "As the number of concurrent clients directly connecting to one database server grows very large, what architectural pressure does this create, according to the notes?",
+          "options": [
+            "None; client-server architecture scales infinitely by design",
+            "Pressure on the server to manage locking/isolation for all clients, which motivates alternative designs like two-tier vs. three-tier architecture",
+            "A requirement to switch back to the file-server model",
+            "A requirement to remove all business logic from the server"
+          ],
+          "correct_index": 1,
+          "explanation": "Scaling concerns from many concurrent direct connections are exactly what motivates the tiered architecture choices discussed in the following topics.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-2-client-server-architecture-new-9",
+          "test_id": "pt-dbms-sql-2-client-server-architecture",
+          "question_text": "Can one process be a server to a browser and a client to a database?",
+          "options": [
+            "No; every process has only one possible role",
+            "Yes; client and server describe roles in an interaction",
+            "Only if it reads raw disk sectors",
+            "Only if no network is involved"
+          ],
+          "correct_index": 1,
+          "explanation": "An application server receives browser requests and requests database work.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-2-client-server-architecture-new-10",
+          "test_id": "pt-dbms-sql-2-client-server-architecture",
+          "question_text": "Does a server-side query guarantee a small result transfer?",
+          "options": [
+            "Yes; every result contains one row",
+            "Yes; servers never send metadata",
+            "No; an overly broad query can still return substantial data",
+            "Only query text affects traffic"
+          ],
+          "correct_index": 2,
+          "explanation": "Filtering and projection still matter for network volume and exposure.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-2-client-server-architecture-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-2-client-server-architecture-application-new-1",
+          "test_id": "pt-dbms-sql-2-client-server-architecture-application",
+          "question_text": "StudentID = 101 appears in a request. What is still required before exposing that student's results?",
+          "options": [
+            "Only hiding other IDs in the dropdown",
+            "Only an index on the score",
+            "A trusted check that the actor may read those records",
+            "Only a successful TCP connection"
+          ],
+          "correct_index": 2,
+          "explanation": "A supplied identifier does not prove authorization.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-2-client-server-architecture-application-new-2",
+          "test_id": "pt-dbms-sql-2-client-server-architecture-application",
+          "question_text": "A timeout occurs after the server may have committed a write. What is unsafe?",
+          "options": [
+            "Recording that the outcome is uncertain",
+            "Checking the operation's retry contract",
+            "Distinguishing reads from writes",
+            "Assuming no effect and blindly repeating the write"
+          ],
+          "correct_index": 3,
+          "explanation": "Repeating an uncertain committed write can duplicate effects.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-2-client-server-architecture-application-new-3",
+          "test_id": "pt-dbms-sql-2-client-server-architecture-application",
+          "question_text": "A file-based application uses file locks. Does that contradict the accurate architecture comparison?",
+          "options": [
+            "No; file designs can coordinate, but their database guarantees must be assessed",
+            "Yes; file systems can never lock",
+            "Yes; every file client is automatically a database server",
+            "Only SQL views can provide coordination"
+          ],
+          "correct_index": 0,
+          "explanation": "The difference is not a blanket claim that file systems lack all locking.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-2-client-server-architecture-application-new-4",
+          "test_id": "pt-dbms-sql-2-client-server-architecture-application",
+          "question_text": "A query returns two rows after inspecting many pages. Who ordinarily performs that storage work?",
+          "options": [
+            "The student's UI must decode table pages",
+            "The database service and its engine",
+            "The browser theme engine",
+            "The file name itself"
+          ],
+          "correct_index": 1,
+          "explanation": "The service translates logical requests into storage access.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-2-client-server-architecture-application-new-5",
+          "test_id": "pt-dbms-sql-2-client-server-architecture-application",
+          "question_text": "Two clients update the same result. Which property needs inspection?",
+          "options": [
+            "Only the client window size",
+            "Only how many columns are visible",
+            "The engine's transaction, constraint, and isolation behavior",
+            "Only which client connected first"
+          ],
+          "correct_index": 2,
+          "explanation": "The architecture alone does not specify every concurrency guarantee.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-2-client-server-architecture-application-new-6",
+          "test_id": "pt-dbms-sql-2-client-server-architecture-application",
+          "question_text": "A client constructs SQL by concatenating untrusted text. What should the request path use instead?",
+          "options": [
+            "A longer connection timeout alone",
+            "A smaller display font",
+            "A second raw string concatenation",
+            "The driver's supported parameter-binding mechanism"
+          ],
+          "correct_index": 3,
+          "explanation": "Binding values avoids treating untrusted values as SQL structure.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-2-client-server-architecture-application-new-7",
+          "test_id": "pt-dbms-sql-2-client-server-architecture-application",
+          "question_text": "An application stops waiting locally. What cannot automatically be inferred?",
+          "options": [
+            "That remote execution has stopped",
+            "That the local wait ended",
+            "That cancellation behavior needs a contract",
+            "That a response was not received in time"
+          ],
+          "correct_index": 0,
+          "explanation": "Local cancellation and server-side cancellation are separate events.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-2-client-server-architecture-application-new-8",
+          "test_id": "pt-dbms-sql-2-client-server-architecture-application",
+          "question_text": "Thousands of direct clients hold idle sessions. Which pressure can a shared application tier help manage?",
+          "options": [
+            "The meaning of StudentID automatically changes",
+            "Bounded reusable database connections",
+            "All query predicates disappear",
+            "Server constraints become unnecessary"
+          ],
+          "correct_index": 1,
+          "explanation": "Pooling can reduce repeated setup and session demand under its own lifecycle.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-2-client-server-architecture-application-new-9",
+          "test_id": "pt-dbms-sql-2-client-server-architecture-application",
+          "question_text": "A modified client skips its score-range validation. What should still protect trusted shared state?",
+          "options": [
+            "The old dropdown alone",
+            "The hidden UI label",
+            "Configured server-side validity rules",
+            "The client's published screenshot"
+          ],
+          "correct_index": 2,
+          "explanation": "Untrusted client checks cannot be the sole authority for integrity.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-2-client-server-architecture-application-new-10",
+          "test_id": "pt-dbms-sql-2-client-server-architecture-application",
+          "question_text": "All supported clients use the same logical request, but storage layout changes. Which separation helps them remain compatible?",
+          "options": [
+            "Every client stores the physical page address",
+            "Every client decodes raw file records",
+            "Every result is permanently cached",
+            "Logical operations are translated by the service into physical work"
+          ],
+          "correct_index": 3,
+          "explanation": "Keeping physical representation behind the service reduces consumer coupling.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [],
+  "coding_not_applicable": "This topic concerns request ownership, communication failure, and trusted enforcement. SQL-output problems cannot establish network or concurrency architecture; SELECT, transactions, and access behavior have dedicated practice topics.",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-2-client-server-architecture-1",
+      "test_id": "pt-dbms-sql-2-client-server-architecture",
+      "question_text": "In Client-Server Architecture, what travels across the network when a client makes a request?",
+      "options": [
+        "The entire data file",
+        "Only the query and the resulting data, not the whole file",
+        "The server's internal schema definition",
+        "A copy of the server's operating system"
+      ],
+      "correct_index": 1,
+      "explanation": "Client-server architecture sends only queries to the server and only results back, unlike the older file-server model.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-2-client-server-architecture-2",
+      "test_id": "pt-dbms-sql-2-client-server-architecture",
+      "question_text": "Who is responsible for enforcing security, integrity, and locking in a client-server architecture?",
+      "options": [
+        "Each individual client independently",
+        "The server, centrally, for all clients",
+        "The network router",
+        "No one; it is left unmanaged"
+      ],
+      "correct_index": 1,
+      "explanation": "The server centrally manages security, integrity constraints, and concurrency control in client-server architecture.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-2-client-server-architecture-3",
+      "test_id": "pt-dbms-sql-2-client-server-architecture",
+      "question_text": "What example query does a student's laptop (client) send to the database server in the notes?",
+      "options": [
+        "CREATE INDEX ON Marks(StudentID)",
+        "SELECT * FROM Marks WHERE StudentID = 101",
+        "DROP TABLE Marks",
+        "GRANT SELECT ON Marks TO student"
+      ],
+      "correct_index": 1,
+      "explanation": "The example given is a client sending this SELECT query to retrieve one student's marks.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-2-client-server-architecture-4",
+      "test_id": "pt-dbms-sql-2-client-server-architecture",
+      "question_text": "How does the file-server model differ from client-server architecture in terms of network traffic?",
+      "options": [
+        "File-server sends only results; client-server sends whole files",
+        "File-server ships entire data files to the client; client-server sends only queries and results",
+        "Both models send identical amounts of data",
+        "Neither model involves any network traffic"
+      ],
+      "correct_index": 1,
+      "explanation": "The file-server model moves whole files across the network, causing much heavier traffic than client-server's query/result exchange.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-2-client-server-architecture-5",
+      "test_id": "pt-dbms-sql-2-client-server-architecture",
+      "question_text": "Why does the file-server model provide weaker integrity/concurrency control than client-server architecture?",
+      "options": [
+        "Because file-server clients process the file independently with no centralized locking or integrity enforcement",
+        "Because file-server always uses faster networks",
+        "Because client-server architecture has no concept of a server at all",
+        "Because file-server systems do not allow multiple clients"
+      ],
+      "correct_index": 0,
+      "explanation": "Without a central server enforcing rules, independent client-side processing in the file-server model lacks centralized integrity and locking control.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-2-client-server-architecture-6",
+      "test_id": "pt-dbms-sql-2-client-server-architecture",
+      "question_text": "What problem does a 'fat client' (one with too much embedded business logic) create in a client-server system?",
+      "options": [
+        "It has no effect on the architecture",
+        "It blurs the client-server boundary and creates scaling/maintenance problems that motivate three-tier architecture",
+        "It automatically improves network performance",
+        "It eliminates the need for a database server entirely"
+      ],
+      "correct_index": 1,
+      "explanation": "Embedding too much logic in the client is exactly the issue that later motivates moving to a three-tier design with a separate middle tier.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-2-client-server-architecture-7",
+      "test_id": "pt-dbms-sql-2-client-server-architecture",
+      "question_text": "A network connection drops while a client's transaction is mid-execution on the server. Based on the notes, what must the system explicitly handle?",
+      "options": [
+        "Nothing; client-server architecture guarantees this never happens",
+        "Retries and/or transaction rollback, since client and server are physically separate and the connection can fail",
+        "The client must restart the entire database server",
+        "The internal schema must be redesigned"
+      ],
+      "correct_index": 1,
+      "explanation": "Because the client and server communicate over a network that can fail, mid-transaction network failures must be explicitly handled via retry or rollback logic.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-2-client-server-architecture-8",
+      "test_id": "pt-dbms-sql-2-client-server-architecture",
+      "question_text": "As the number of concurrent clients directly connecting to one database server grows very large, what architectural pressure does this create, according to the notes?",
+      "options": [
+        "None; client-server architecture scales infinitely by design",
+        "Pressure on the server to manage locking/isolation for all clients, which motivates alternative designs like two-tier vs. three-tier architecture",
+        "A requirement to switch back to the file-server model",
+        "A requirement to remove all business logic from the server"
+      ],
+      "correct_index": 1,
+      "explanation": "Scaling concerns from many concurrent direct connections are exactly what motivates the tiered architecture choices discussed in the following topics.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "coordinator",
+    "independent_review": "unavailable; no agent tools",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Definitions and examples checked against questions; no plagiarism certification.",
+    "existing_question_corrections": [
+      "tq-dbms-sql-2-client-server-architecture-1",
+      "tq-dbms-sql-2-client-server-architecture-2",
+      "tq-dbms-sql-2-client-server-architecture-4",
+      "tq-dbms-sql-2-client-server-architecture-5",
+      "tq-dbms-sql-2-client-server-architecture-7"
+    ],
+    "canonical_answer_indices_preserved": true
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-2-client-server-architecture",
+    "original_note_sha256": "c5753e7d436f2d93acbc14521fbd9a5e6e0d6473a4426ce79729ff9b8a5fc50e",
+    "status": "paired migration prepared; not applied"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Student-result request responsibilities",
+      "description": "The path separates untrusted input, trusted scope checks, database execution, and response handling. A timeout can leave a write outcome uncertain.",
+      "columns": [
+        "Step",
+        "Responsibility",
+        "Important limit"
+      ],
+      "rows": [
+        [
+          "Client request",
+          "Bind the desired operation and values",
+          "A supplied StudentID does not prove ownership"
+        ],
+        [
+          "Trusted service/database boundary",
+          "Enforce actor scope and configured data rules",
+          "Visual hiding is insufficient"
+        ],
+        [
+          "Database engine",
+          "Resolve logical operations and execute under transaction rules",
+          "Central execution does not eliminate contention"
+        ],
+        [
+          "Response handling",
+          "Interpret rows, status, and failures",
+          "A lost commit response does not prove rollback"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "coordinator review",
+    "server_rendering": "passed",
+    "browser_rendering": "unverified",
+    "independent_review": "unavailable; no agent tools",
+    "rendering_check": "2026-10-28: actual LessonBlock/TopicDiagrams server rendering; 30 authored-package tests passed. Desktop/mobile browser rendering unverified."
+  }
+}

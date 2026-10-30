@@ -25,31 +25,45 @@ export default function VersionHistory({ resumeId, initialVersions }: { resumeId
   }
 
   async function handleSaveVersion() {
+    if (saving || restoringId) return;
     setSaving(true);
     setError(null);
-    const result = await createResumeVersionAction(resumeId, label.trim() || "Manual save");
-    setSaving(false);
-    if ("error" in result) {
-      setError(result.error);
-      return;
+    try {
+      const result = await createResumeVersionAction(resumeId, label.trim() || "Manual save");
+      setSaving(false);
+      if ("error" in result) {
+        setError(result.error);
+        return;
+      }
+      setLabel("");
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
+    } finally {
+      setSaving(false);
     }
-    setLabel("");
-    await refresh();
   }
 
   async function handleRestore(versionId: string) {
+    if (saving || restoringId) return;
     if (!window.confirm("Restore this version? Your current content will be saved as a new version first, so you can undo this.")) {
       return;
     }
     setRestoringId(versionId);
     setError(null);
-    const result = await restoreResumeVersionAction(versionId);
-    setRestoringId(null);
-    if ("error" in result) {
-      setError(result.error);
-      return;
+    try {
+      const result = await restoreResumeVersionAction(versionId);
+      setRestoringId(null);
+      if ("error" in result) {
+        setError(result.error);
+        return;
+      }
+      router.push(`/account/resume/${resumeId}/edit`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
+    } finally {
+      setRestoringId(null);
     }
-    router.push(`/account/resume/${resumeId}/edit`);
   }
 
   return (

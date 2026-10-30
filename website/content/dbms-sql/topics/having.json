@@ -1,0 +1,600 @@
+{
+  "source_ref": "chapter-15-group-by-and-aggregation/having",
+  "slug": "having",
+  "title": "HAVING",
+  "description": "Filter SQL groups with HAVING, distinguish group eligibility from row filtering, and handle missing aggregates, thresholds and outer-join counts accurately.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Decide which groups belong in a report\n\nHAVING tests a condition on the groups produced by an aggregate query. A scholarship office might want departments with at least three eligible applications, or a workshop organizer might want sessions whose confirmed payments exceed a target. The important question is about each group's summary. It cannot be answered by checking every application or payment separately before the summary exists.\n\nRead [GROUP BY](/learning/dbms-sql-tutorial/group-by), [aggregate functions](/learning/dbms-sql-tutorial/aggregate-functions) and [SUM](/learning/dbms-sql-tutorial/sum) first. A clear grouping key establishes one output row's meaning. HAVING then determines which of those possible output rows survive. The clause changes eligibility; it does not change the members of a surviving group after the aggregate has been calculated.\n\n## Start with a small payment ledger\n\nSuppose each payment row represents one confirmed or pending contribution to a campus event. Amounts are signed: a refund is negative. Event 10 has confirmed amounts of 80 and minus 20, while event 20 has confirmed amounts of 30 and 40. A pending contribution of 900 for event 10 must not enter a report about confirmed totals. The confirmed totals are therefore 60 and 70.\n\n```sql\nCREATE TABLE payments (\n  payment_id INT PRIMARY KEY,\n  event_id INT NOT NULL,\n  status VARCHAR(12) NOT NULL,\n  amount INT NULL\n);\nINSERT INTO payments VALUES\n(1,10,'confirmed',80),(2,10,'confirmed',-20),\n(3,10,'pending',900),(4,20,'confirmed',30),\n(5,20,'confirmed',40);\n\nSELECT event_id, SUM(amount) AS net_confirmed\nFROM payments\nWHERE status = 'confirmed'\nGROUP BY event_id\nHAVING SUM(amount) >= 65\nORDER BY event_id;\n-- event_id 20, net_confirmed 70\n```\n\nThe WHERE condition defines which rows can contribute. GROUP BY gathers those rows by event. SUM calculates each group's net amount, and HAVING retains only groups that meet the threshold. ORDER BY controls presentation after group eligibility is decided. This is a useful logical reading order, not a promise that the optimizer executes a literal sequence of physical steps.\n\n## Do not replace a net threshold with a row threshold\n\nChanging the query to WHERE amount greater than or equal to 65 would retain the individual payment of 80 but discard the refund and both smaller payments. The resulting answer would favor event 10 even though event 20 is the event whose full confirmed total meets the original target. Both queries are syntactically reasonable, but they answer different questions.\n\nMoving an aggregate predicate into WHERE at the same query level is also invalid. A same-level aggregate result does not exist for an individual input row. If a calculation is produced by an inner grouped query, its result becomes an ordinary column for an outer query, which can filter it with WHERE. That rewrite is valid because the query boundary changes what counts as an input row.\n\n```sql\nSELECT event_id, net_confirmed\nFROM (\n  SELECT event_id, SUM(amount) AS net_confirmed\n  FROM payments\n  WHERE status = 'confirmed'\n  GROUP BY event_id\n) AS event_totals\nWHERE net_confirmed >= 65\nORDER BY event_id;\n```\n\nThe derived-table version is sometimes easier to extend when several summaries will be joined. It is not automatically faster. Prefer the form that expresses the required grain clearly, then inspect execution behavior for a real workload. Rewriting an expression without understanding its population can preserve a syntax check while changing the report.\n\n## Combine aggregate conditions intentionally\n\nHAVING accepts compound Boolean predicates. A policy requiring at least three confirmed contributions and a known net above 100 needs both tests. Parentheses matter when AND and OR are mixed. Write the verbal rule first, because a condition accepting either a high total or a large count differs from a condition requiring both.\n\n```sql\nSELECT event_id, COUNT(*) AS payment_count,\n       COUNT(amount) AS known_count, SUM(amount) AS known_net\nFROM payments\nWHERE status = 'confirmed'\nGROUP BY event_id\nHAVING COUNT(*) >= 3 AND SUM(amount) > 100\nORDER BY event_id;\n```\n\nCOUNT star counts rows, while COUNT of amount counts known amounts. A group with three rows and only one known amount satisfies a row-count threshold but may not contain enough evidence for the business decision. If every amount must be known, compare the two counts as another eligibility condition. That requirement is stronger than silently treating unknown amounts as zero.\n\n## Include missingness in the decision\n\nSUM ignores NULL inputs and returns NULL when no known inputs contribute. Comparing that result with a numeric threshold produces UNKNOWN, so the group is not retained by HAVING. This differs from a known sum of zero. A group containing amounts 5 and minus 5 has measured cancellation; a group containing only NULL has no known total.\n\nUsing COALESCE around SUM changes the policy by substituting a display or decision value. It can be appropriate when missing totals are explicitly defined as zero, but it should not be added simply to make every result numeric. In eligibility decisions, preserving the distinction can prevent an unsupported approval or rejection. Show the known-value count when readers need to judge completeness.\n\nHAVING can appear without explicit GROUP BY in an aggregate query. The input forms one implicit aggregate group. An ungrouped COUNT returns one summary row even when the input is empty, but HAVING can remove that row. In contrast, grouping an empty input by event produces no event groups. Tests should distinguish these two shapes rather than assume that every aggregate query produces a visible row.\n\n## Count outer-join matches at the correct grain\n\nAn event with no confirmed payments can be retained by a LEFT JOIN from events to payments. The join creates a null-extended row for an unmatched event. Counting every joined row therefore gives one, even though there are zero real payment matches. Count a non-null payment identifier instead when measuring matched payments.\n\n```sql\nSELECT e.event_id, COUNT(p.payment_id) AS confirmed_count\nFROM events AS e\nLEFT JOIN payments AS p\n  ON p.event_id = e.event_id AND p.status = 'confirmed'\nGROUP BY e.event_id\nHAVING COUNT(p.payment_id) = 0\nORDER BY e.event_id;\n```\n\nPlacing the payment status condition in WHERE would discard unmatched rows and could remove precisely the events the report seeks. The join condition defines eligible matches; HAVING then checks the resulting count. This pattern is useful, although NOT EXISTS can express absence more directly when no aggregate output is needed. Choose based on the complete report rather than a slogan about one clause being universally better.\n\n## Respect grouping validity and stable presentation\n\nMySQL allows some alias references in HAVING, but repeating a short aggregate expression makes introductory examples less dependent on that extension. Under ONLY_FULL_GROUP_BY, selected nonaggregated values must meet grouping or functional-dependence rules. An arbitrary payment status does not become meaningful just because an event has a valid total. Select values that describe the group rather than a convenient member row.\n\nA threshold does not imply ordering. If the caller expects the largest qualifying total first, specify that ordering and include a stable tie-breaker when pagination or exact results require one. LIMIT without an explicit intended order cannot establish which qualifying groups are most important. Keep selection, ranking and display requirements separate in the query specification.\n\n## Avoid confusing aggregate filtering with row ranking\n\nHAVING does not choose the highest payment within an event. A request for the largest payment row requires a different query shape, such as a ranking expression or a comparison to a per-event maximum. If several payments tie for that maximum, decide whether every tied fact should appear. Selecting an ungrouped identifier beside MAX does not define a portable winner and can violate strict grouping rules.\n\nLikewise, a request for the top three qualifying events needs both the eligibility threshold and an explicit ordering of the surviving summaries. The count of groups is different from the count of source payments. When a report combines several joins, preaggregating each one-to-many source to the event grain can prevent accidental cross-multiplication. HAVING cannot repair an inflated sum merely by checking that it exceeds a threshold; the underlying summary must be correct before its eligibility condition is meaningful.\n\nA query review should therefore trace every aggregate back to its source fact identity before approving any group-level decision.\n\n## Check both sides of every threshold\n\nVerify a group below the threshold, exactly on it and just above it. Include a negative adjustment, an all-unknown group and an event with no eligible rows. If the report counts matches after joins, add a one-to-many relationship that can multiply payments and confirm that the intended payment grain survives. A total that looks plausible on one row per event may be wrong after tags or attendees are joined.\n\nExplain the final query as a sentence: group confirmed payment facts by event and retain events whose known net reaches the agreed amount. That description exposes mistaken row filters, missing-value substitutions and join multiplication. Continue with [WHERE versus HAVING](/learning/dbms-sql-tutorial/where-vs-having) and [conditional aggregation](/learning/dbms-sql-tutorial/conditional-aggregation) when a report needs several populations summarized together.",
+  "references": [
+    {
+      "title": "MySQL 8.4 SELECT syntax",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/select.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-15-having",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-15-having-1",
+          "test_id": "pt-dbms-sql-15-having",
+          "question_text": "What does HAVING filter?",
+          "options": [
+            "Individual rows before grouping",
+            "Groups, after aggregation has been computed",
+            "Columns in the SELECT list",
+            "Tables in a JOIN"
+          ],
+          "correct_index": 1,
+          "explanation": "HAVING filters the aggregated groups produced by GROUP BY, evaluated after aggregate values are computed.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-15-having-2",
+          "test_id": "pt-dbms-sql-15-having",
+          "question_text": "Given per-region totals East=310, North=200, West=550, what does `... GROUP BY region HAVING SUM(amount) > 400` return?",
+          "options": [
+            "All three regions",
+            "Only West",
+            "Only East and West",
+            "No rows"
+          ],
+          "correct_index": 1,
+          "explanation": "Only West's total (550) exceeds 400; East (310) and North (200) do not.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-15-having-3",
+          "test_id": "pt-dbms-sql-15-having",
+          "question_text": "Why can HAVING reference `SUM(amount)` directly while WHERE cannot?",
+          "options": [
+            "HAVING is just a synonym for WHERE",
+            "HAVING runs after aggregation, when per-group aggregate values already exist; WHERE runs before grouping, when they don't yet exist",
+            "SUM() is disallowed in WHERE due to a syntax restriction with no logical reason",
+            "WHERE can actually reference SUM() too"
+          ],
+          "correct_index": 1,
+          "explanation": "At the point WHERE executes, rows haven't been grouped or aggregated yet, so aggregate values don't exist; HAVING executes after aggregation.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-15-having-4",
+          "test_id": "pt-dbms-sql-15-having",
+          "question_text": "East has count 3 and average 103.33; North has count 2 and average 100; West has count 3 and average 183.33. Which region fails HAVING COUNT(*) > 2 AND AVG(amount) > 100?",
+          "options": [
+            "East only",
+            "West only",
+            "North only",
+            "All three fail"
+          ],
+          "correct_index": 2,
+          "explanation": "North has COUNT(*) = 2, which fails the COUNT(*) > 2 condition, so it's excluded even though its AVG (100.00) is not > 100 either.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-15-having-5",
+          "test_id": "pt-dbms-sql-15-having",
+          "question_text": "What does `SELECT SUM(amount) FROM orders HAVING SUM(amount) > 5000;` return, given the total of all orders is 1060?",
+          "options": [
+            "A row showing 1060",
+            "Zero rows",
+            "An error, since GROUP BY is missing",
+            "A row showing 5000"
+          ],
+          "correct_index": 1,
+          "explanation": "Without GROUP BY, HAVING treats the entire table as one implicit group. Since 1060 is not greater than 5000, that single group is filtered out, leaving zero rows.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-15-having-6",
+          "test_id": "pt-dbms-sql-15-having",
+          "question_text": "Is `SELECT region, product, SUM(amount) FROM orders GROUP BY region HAVING product = 'Widget'` valid in PostgreSQL?",
+          "options": [
+            "Yes, HAVING can reference any column freely",
+            "No — product is neither grouped nor aggregated, so it can't appear in SELECT or HAVING",
+            "Yes, because HAVING implicitly aggregates it",
+            "No, because HAVING cannot use equality comparisons"
+          ],
+          "correct_index": 1,
+          "explanation": "The same GROUP BY column rule applies inside HAVING: an ungrouped, non-aggregated column like product cannot be referenced.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-15-having-7",
+          "test_id": "pt-dbms-sql-15-having",
+          "question_text": "For a valid query grouped by region, which predicates may appear in HAVING?",
+          "options": [
+            "SUM(amount) > 100 only",
+            "region = 'West' only",
+            "Both SUM(amount) > 100 and a grouped-key condition region = West",
+            "Neither condition"
+          ],
+          "correct_index": 2,
+          "explanation": "Both the aggregate predicate and grouped-key predicate can be legal. A key-only condition can often be expressed in WHERE, and an optimizer may push a safe condition down; no measured performance claim follows merely from clause placement.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-15-having-8",
+          "test_id": "pt-dbms-sql-15-having",
+          "question_text": "In MySQL 8.4, can HAVING total_amount > 400 refer to SELECT SUM(amount) AS total_amount?",
+          "options": [
+            "Never — aliases are always rejected in HAVING",
+            "Yes, MySQL permits this alias reference; PostgreSQL does not permit the same SELECT alias in HAVING",
+            "Only in HAVING, never in WHERE, for any database",
+            "Only if the alias is quoted"
+          ],
+          "correct_index": 1,
+          "explanation": "MySQL allows SELECT-list aliases in HAVING. PostgreSQL requires repeating the aggregate expression or using an outer query. Preserve dialect distinctions instead of assuming the same alias rule.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-15-having-new-9",
+          "test_id": "pt-dbms-sql-15-having",
+          "question_text": "Confirmed amounts are 80 and -20. Does HAVING SUM(amount)>=65 retain the group?",
+          "options": [
+            "Yes, because one payment is 80",
+            "No, the net is 60",
+            "Yes, because refunds disappear",
+            "It returns both payments separately"
+          ],
+          "correct_index": 1,
+          "explanation": "HAVING checks the complete grouped net, including the negative adjustment.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-15-having-new-10",
+          "test_id": "pt-dbms-sql-15-having",
+          "question_text": "Which clause chooses confirmed input payments before grouping?",
+          "options": [
+            "ORDER BY",
+            "LIMIT",
+            "WHERE",
+            "HAVING COUNT(*) alone"
+          ],
+          "correct_index": 2,
+          "explanation": "Row eligibility belongs before aggregation.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-15-having-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-15-having-application-new-1",
+          "test_id": "pt-dbms-sql-15-having-application",
+          "question_text": "What happens to HAVING SUM(amount)>0 for an all-NULL group?",
+          "options": [
+            "The group is always included",
+            "SUM returns one",
+            "NULL is automatically a measured zero",
+            "The group is excluded because the comparison is UNKNOWN"
+          ],
+          "correct_index": 3,
+          "explanation": "A missing aggregate does not satisfy the positive threshold.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-15-having-application-new-2",
+          "test_id": "pt-dbms-sql-15-having-application",
+          "question_text": "What does COUNT(amount) measure?",
+          "options": [
+            "Rows with known amount values",
+            "All groups before filtering",
+            "Only positive amounts",
+            "Only unique payment identities"
+          ],
+          "correct_index": 0,
+          "explanation": "COUNT(expression) excludes NULL expression values.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-15-having-application-new-3",
+          "test_id": "pt-dbms-sql-15-having-application",
+          "question_text": "Which test requires every amount in a group to be known?",
+          "options": [
+            "SUM(amount)=COUNT(*)",
+            "COUNT(amount)=COUNT(*)",
+            "COUNT(amount)=0 always",
+            "MAX(amount) IS NULL"
+          ],
+          "correct_index": 1,
+          "explanation": "The count of known amounts must equal the number of group rows.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-15-having-application-new-4",
+          "test_id": "pt-dbms-sql-15-having-application",
+          "question_text": "How can an outer query filter a derived aggregate with WHERE?",
+          "options": [
+            "WHERE gains access to future aggregates",
+            "Grouping is disabled",
+            "The inner aggregate result is an input column at the outer level",
+            "The outer table becomes empty"
+          ],
+          "correct_index": 2,
+          "explanation": "Query boundaries determine which values are already available.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-15-having-application-new-5",
+          "test_id": "pt-dbms-sql-15-having-application",
+          "question_text": "Which count detects zero matches after a LEFT JOIN?",
+          "options": [
+            "COUNT(*)=0",
+            "COUNT(parent_id)=0",
+            "COUNT(*)=1 means one child",
+            "COUNT(nonnullable_child_id)=0"
+          ],
+          "correct_index": 3,
+          "explanation": "The unmatched placeholder has a NULL child identifier but still counts as a joined row.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-15-having-application-new-6",
+          "test_id": "pt-dbms-sql-15-having-application",
+          "question_text": "Where should eligible child status usually be placed when preserving parents with no match?",
+          "options": [
+            "In the LEFT JOIN ON condition",
+            "In a WHERE condition rejecting NULL children",
+            "Only in ORDER BY",
+            "In the output alias"
+          ],
+          "correct_index": 0,
+          "explanation": "The ON condition restricts matches while preserving unmatched left rows.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-15-having-application-new-7",
+          "test_id": "pt-dbms-sql-15-having-application",
+          "question_text": "Does HAVING imply result order?",
+          "options": [
+            "Yes, descending by the aggregate",
+            "No, specify ORDER BY",
+            "Yes, ascending by the threshold",
+            "Yes, insertion order"
+          ],
+          "correct_index": 1,
+          "explanation": "Group filtering and result presentation are independent contracts.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-15-having-application-new-8",
+          "test_id": "pt-dbms-sql-15-having-application",
+          "question_text": "An ungrouped empty-input COUNT with HAVING COUNT(*)>0 produces what?",
+          "options": [
+            "One row containing NULL",
+            "One row containing one",
+            "No visible result row",
+            "An error in every SQL engine"
+          ],
+          "correct_index": 2,
+          "explanation": "The implicit summary group has count zero and is removed by HAVING.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-15-having-application-new-9",
+          "test_id": "pt-dbms-sql-15-having-application",
+          "question_text": "Why can filtering out negative amounts before SUM be wrong?",
+          "options": [
+            "SUM never accepts negatives",
+            "HAVING can only compare counts",
+            "Negative values become strings",
+            "It converts a net calculation into a different population"
+          ],
+          "correct_index": 3,
+          "explanation": "Eligibility of facts must match the measure the report claims to calculate.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-15-having-application-new-10",
+          "test_id": "pt-dbms-sql-15-having-application",
+          "question_text": "Which fixtures test an inclusive threshold accurately?",
+          "options": [
+            "Below, equal to and above the threshold",
+            "Only one group far above it",
+            "Only NULL group names",
+            "Only randomly ordered identifiers"
+          ],
+          "correct_index": 0,
+          "explanation": "Boundary fixtures distinguish > from >= and expose off-by-one policy mistakes.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cp-dbms-sql-high-revenue-regions-only",
+      "slug": "high-revenue-regions-only",
+      "title": "High-Revenue Regions Only",
+      "difficulty": "Medium",
+      "task": "Write a query returning `region` and `total` (sum of `amount`) only for regions whose total revenue exceeds 500, ordered by `region`.",
+      "schema_sql": "CREATE TABLE orders (\n  id INTEGER PRIMARY KEY,\n  region TEXT NOT NULL,\n  product TEXT NOT NULL,\n  amount INTEGER NOT NULL\n);",
+      "seed_sql": "INSERT INTO orders (id, region, product, amount) VALUES\n(1, 'North', 'Widget', 200),\n(2, 'North', 'Gadget', 150),\n(3, 'South', 'Widget', 100),\n(4, 'South', 'Gadget', 50),\n(5, 'North', 'Widget', 300),\n(6, 'East', 'Widget', 400);",
+      "expected": "region\ttotal\nNorth\t650",
+      "ordering": "Retain the ordering stated in the original task.",
+      "constraints": [
+        "Retain the supplied original fixture and output contract."
+      ],
+      "edge_cases": [
+        "Check the provided alternative fixture."
+      ],
+      "hints": [
+        "Identify the required row grain and output order before writing SQL."
+      ],
+      "solution_sql": "SELECT region, SUM(amount) AS total FROM orders GROUP BY region HAVING SUM(amount) > 500 ORDER BY region;",
+      "explanation": "HAVING filters groups by an aggregate condition, after GROUP BY has run. Reference: `SELECT region, SUM(amount) AS total FROM orders GROUP BY region HAVING SUM(amount) > 500 ORDER BY region;`",
+      "validation_cases": [
+        {
+          "hidden": true,
+          "seed_sql": "INSERT INTO orders (id, region, product, amount) VALUES\n(1, 'West', 'Widget', 500),\n(2, 'West', 'Gadget', 200),\n(3, 'East', 'Widget', 100),\n(4, 'East', 'Gadget', 300);",
+          "expected": "region\ttotal\nWest\t700"
+        }
+      ],
+      "existing_problem": true,
+      "original_description_md5": "d6a95e41b301b956f6a769f1df28dc5c",
+      "original_problem": {
+        "id": "cp-dbms-sql-high-revenue-regions-only",
+        "topic_id": null,
+        "title": "High-Revenue Regions Only",
+        "difficulty": "Medium",
+        "slug": "high-revenue-regions-only",
+        "description": "Write a query returning `region` and `total` (sum of `amount`) only for regions whose total revenue exceeds 500, ordered by `region`.\n\n```sql\nCREATE TABLE orders (\n  id INTEGER PRIMARY KEY,\n  region TEXT NOT NULL,\n  product TEXT NOT NULL,\n  amount INTEGER NOT NULL\n);\n```\n\n**Sample data**:\n\n```sql\nINSERT INTO orders (id, region, product, amount) VALUES\n(1, 'North', 'Widget', 200),\n(2, 'North', 'Gadget', 150),\n(3, 'South', 'Widget', 100),\n(4, 'South', 'Gadget', 50),\n(5, 'North', 'Widget', 300),\n(6, 'East', 'Widget', 400);\n```\n",
+        "examples": "[{\"input\": \"\", \"output\": \"region\\ttotal\\nNorth\\t650\"}]",
+        "test_cases": "[{\"hidden\": true, \"seed_sql\": \"INSERT INTO orders (id, region, product, amount) VALUES\\n(1, 'West', 'Widget', 500),\\n(2, 'West', 'Gadget', 200),\\n(3, 'East', 'Widget', 100),\\n(4, 'East', 'Gadget', 300);\", \"expected\": \"region\\ttotal\\nWest\\t700\"}]",
+        "starter_code": null,
+        "editorial": "HAVING filters groups by an aggregate condition, after GROUP BY has run. Reference: `SELECT region, SUM(amount) AS total FROM orders GROUP BY region HAVING SUM(amount) > 500 ORDER BY region;`",
+        "supported_languages": null,
+        "sql_schema_sql": "CREATE TABLE orders (\n  id INTEGER PRIMARY KEY,\n  region TEXT NOT NULL,\n  product TEXT NOT NULL,\n  amount INTEGER NOT NULL\n);",
+        "sql_seed_sql": "INSERT INTO orders (id, region, product, amount) VALUES\n(1, 'North', 'Widget', 200),\n(2, 'North', 'Gadget', 150),\n(3, 'South', 'Widget', 100),\n(4, 'South', 'Gadget', 50),\n(5, 'North', 'Widget', 300),\n(6, 'East', 'Widget', 400);",
+        "sql_check_sql": "",
+        "learning_topic_id": null,
+        "status": "published",
+        "is_premium": null,
+        "show_on_website": null,
+        "show_on_mobile": null,
+        "sort_order": 1
+      },
+      "check_sql": "",
+      "original_check_sql": ""
+    },
+    {
+      "id": "cx-having-minimum-contributions",
+      "slug": "having-minimum-contributions",
+      "title": "Keep events with at least two payments",
+      "difficulty": "Easy",
+      "task": "Return event_id and payment_count for events having at least two rows; order by event_id.",
+      "schema_sql": "CREATE TABLE contributions(id INT PRIMARY KEY,event_id INT NOT NULL);",
+      "seed_sql": "INSERT INTO contributions VALUES (1,3),(2,3),(3,7);",
+      "solution_sql": "SELECT event_id,COUNT(*) AS payment_count FROM contributions GROUP BY event_id HAVING COUNT(*)>=2 ORDER BY event_id;",
+      "expected": "event_id\tpayment_count\n3\t2",
+      "explanation": "Group payment facts by event before applying the minimum count.",
+      "ordering": "Use the explicit ORDER BY in the required query; a scalar result has one row.",
+      "constraints": [
+        "Only the supplied synthetic tables are in scope."
+      ],
+      "edge_cases": [
+        "A larger group passes while a singleton fails."
+      ],
+      "hints": [
+        "Group payment facts by event before applying the minimum count."
+      ],
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO contributions VALUES (1,9),(2,9),(3,9),(4,2);",
+          "expected": "event_id\tpayment_count\n9\t3"
+        },
+        {
+          "seed_sql": "",
+          "expected": ""
+        },
+        {
+          "seed_sql": "INSERT INTO contributions VALUES (1,2),(2,2),(3,8);",
+          "expected": "event_id\tpayment_count\n2\t2"
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-15-having-1",
+      "test_id": "pt-dbms-sql-15-having",
+      "question_text": "What does HAVING filter?",
+      "options": [
+        "Individual rows before grouping",
+        "Groups, after aggregation has been computed",
+        "Columns in the SELECT list",
+        "Tables in a JOIN"
+      ],
+      "correct_index": 1,
+      "explanation": "HAVING filters the aggregated groups produced by GROUP BY, evaluated after aggregate values are computed.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-15-having-2",
+      "test_id": "pt-dbms-sql-15-having",
+      "question_text": "Given per-region totals East=310, North=200, West=550, what does `... GROUP BY region HAVING SUM(amount) > 400` return?",
+      "options": [
+        "All three regions",
+        "Only West",
+        "Only East and West",
+        "No rows"
+      ],
+      "correct_index": 1,
+      "explanation": "Only West's total (550) exceeds 400; East (310) and North (200) do not.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-15-having-3",
+      "test_id": "pt-dbms-sql-15-having",
+      "question_text": "Why can HAVING reference `SUM(amount)` directly while WHERE cannot?",
+      "options": [
+        "HAVING is just a synonym for WHERE",
+        "HAVING runs after aggregation, when per-group aggregate values already exist; WHERE runs before grouping, when they don't yet exist",
+        "SUM() is disallowed in WHERE due to a syntax restriction with no logical reason",
+        "WHERE can actually reference SUM() too"
+      ],
+      "correct_index": 1,
+      "explanation": "At the point WHERE executes, rows haven't been grouped or aggregated yet, so aggregate values don't exist; HAVING executes after aggregation.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-15-having-4",
+      "test_id": "pt-dbms-sql-15-having",
+      "question_text": "In the compound example `HAVING COUNT(*) > 2 AND AVG(amount) > 100`, which region(s) fail?",
+      "options": [
+        "East only",
+        "West only",
+        "North only",
+        "All three fail"
+      ],
+      "correct_index": 2,
+      "explanation": "North has COUNT(*) = 2, which fails the COUNT(*) > 2 condition, so it's excluded even though its AVG (100.00) is not > 100 either.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-15-having-5",
+      "test_id": "pt-dbms-sql-15-having",
+      "question_text": "What does `SELECT SUM(amount) FROM orders HAVING SUM(amount) > 5000;` return, given the total of all orders is 1060?",
+      "options": [
+        "A row showing 1060",
+        "Zero rows",
+        "An error, since GROUP BY is missing",
+        "A row showing 5000"
+      ],
+      "correct_index": 1,
+      "explanation": "Without GROUP BY, HAVING treats the entire table as one implicit group. Since 1060 is not greater than 5000, that single group is filtered out, leaving zero rows.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-15-having-6",
+      "test_id": "pt-dbms-sql-15-having",
+      "question_text": "Is `SELECT region, product, SUM(amount) FROM orders GROUP BY region HAVING product = 'Widget'` valid in PostgreSQL?",
+      "options": [
+        "Yes, HAVING can reference any column freely",
+        "No — product is neither grouped nor aggregated, so it can't appear in SELECT or HAVING",
+        "Yes, because HAVING implicitly aggregates it",
+        "No, because HAVING cannot use equality comparisons"
+      ],
+      "correct_index": 1,
+      "explanation": "The same GROUP BY column rule applies inside HAVING: an ungrouped, non-aggregated column like product cannot be referenced.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-15-having-7",
+      "test_id": "pt-dbms-sql-15-having",
+      "question_text": "Which of these is a legitimate, if inefficient, use of HAVING?",
+      "options": [
+        "HAVING SUM(amount) > 100 (aggregate condition)",
+        "HAVING region = 'West' (row-level condition usable via WHERE instead)",
+        "Both of the above are syntactically legal",
+        "Neither is legal"
+      ],
+      "correct_index": 2,
+      "explanation": "Both are syntactically legal; the second is just wasteful since it could be pushed into WHERE before aggregation (see Topic 15.3).",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-15-having-8",
+      "test_id": "pt-dbms-sql-15-having",
+      "question_text": "In PostgreSQL/MySQL, is `HAVING total_amount > 400` (referring to a SELECT-list alias `total_amount`) generally accepted?",
+      "options": [
+        "Never — aliases are always rejected in HAVING",
+        "Yes, both commonly allow referencing the SELECT alias, though `HAVING SUM(amount) > 400` is more portable across all SQL dialects",
+        "Only in HAVING, never in WHERE, for any database",
+        "Only if the alias is quoted"
+      ],
+      "correct_index": 1,
+      "explanation": "PostgreSQL and MySQL both permit HAVING to reference SELECT-list aliases as a convenience, but strict standard SQL doesn't guarantee it, so writing out the aggregate expression is safer for portability.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "/root/worker_1",
+    "independent_review": "passed",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "author semantic review; independent review pending",
+    "canonical_answer_indices_preserved": true,
+    "independent_reviewer": "/root",
+    "independent_review_scope": "Full notes,20 MCQs/options/explanations,two exercises with six sample/alternative fixture outputs, diagram, metadata and links. Corrected PostgreSQL alias claim verified against official SELECT documentation; fixture-dependent questions now self-contained; equality and empty fixtures added. Engine/browser verification separate and pending."
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-15-having",
+    "original_note_sha256": "ae3c413db8db6b7ffc2ba90ae8f69a20d86caa553cd4a7acb2aad4f3d827f3ad",
+    "status": "drafted; not included in prepared paired migrations"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Row eligibility and group eligibility answer different questions",
+      "description": "The negative adjustment stays in the confirmed net.",
+      "columns": [
+        "Event",
+        "Confirmed amounts",
+        "Net",
+        "Meets 65"
+      ],
+      "rows": [
+        [
+          "10",
+          "80, -20",
+          "60",
+          "No"
+        ],
+        [
+          "20",
+          "30, 40",
+          "70",
+          "Yes"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "provided",
+    "technical_review": "coordinator independent manual review passed",
+    "server_rendering": "passed",
+    "browser_rendering": "unverified",
+    "independent_review": "passed",
+    "server_rendering_evidence": "2026-10-29 full Vitest:1310 passed/12 skipped; actual LessonBlock/TopicDiagrams render over230 packages. Browser visual QA remains unverified."
+  },
+  "authoring_status": "drafted; verification pending",
+  "sql_verification": {
+    "scope": "not executed; exact MySQL/provider verification pending",
+    "all_passed": false,
+    "cases": []
+  }
+}

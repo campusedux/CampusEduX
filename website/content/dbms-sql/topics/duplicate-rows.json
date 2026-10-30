@@ -1,0 +1,583 @@
+{
+  "source_ref": "chapter-16-joins/duplicate-rows",
+  "slug": "duplicate-rows",
+  "title": "Duplicate Rows",
+  "description": "Diagnose repeated SQL results by row identity and join grain, distinguish valid repetition from faulty multiplication, and choose DISTINCT, aggregation or existence correctly.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Explain what repeated output represents\n\nA query result can contain equal-looking rows for several different reasons. Two learners can share a display name. One learner can enroll in several workshops. A join can multiply the same enrollment through several unrelated tags. A source table can also contain repeated facts that violate its intended business key. These cases require different decisions. The first task is to identify what one output row is meant to represent.\n\nSQL generally preserves repeated rows unless an operation explicitly removes or summarizes them. This bag behavior differs from a mathematical set of unique tuples. A query returning the same label twice is not automatically wrong, and adding DISTINCT is not automatically a repair. Review [join cardinality](/learning/dbms-sql-tutorial/join-cardinality), [primary keys](/learning/dbms-sql-tutorial/primary-key) and [SELECT DISTINCT](/learning/dbms-sql-tutorial/distinct) before diagnosing repetition in a larger report.\n\n## Keep source identities visible while debugging\n\nSuppose learners 10 and 20 are both named Mira. Selecting only learner_name returns two identical strings, but there are still two distinct people. Selecting learner_id beside the name reveals the distinction. Removing one name with DISTINCT is appropriate for a vocabulary of names, but wrong for a learner roster that must preserve every person's identity.\n\n```sql\nSELECT l.learner_id, l.learner_name, e.enrollment_id, e.workshop_id\nFROM learners AS l\nJOIN enrollments AS e ON e.learner_id = l.learner_id\nORDER BY l.learner_id, e.enrollment_id;\n```\n\nThe enrollment identifier also explains why a learner appears several times. If the report is an enrollment list, this is expected. If the report is a learner list restricted to learners with an enrollment, the join may be doing more work than the requirement needs. State the desired grain before deciding which repeated values should collapse.\n\nDebugging with SELECT star can make this harder because repeated column names and irrelevant values obscure which identity changed. Choose the identifiers from each participating source explicitly. Count how often the intended fact identifier occurs after every added join. The first step where its multiplicity increases is usually the most useful place to investigate.\n\n## Recognize legitimate one-to-many expansion\n\nA workshop can have many enrollments. Joining workshops to enrollments creates one row per matching enrollment, so workshop titles repeat. That is the relationship being requested. A uniqueness constraint on workshop_id in workshops does not make workshop_id unique in the joined result. The child relationship determines how often the parent can appear.\n\nFor a summary of enrollment counts by workshop, aggregate enrollment facts deliberately. COUNT star counts joined rows. In a LEFT JOIN that preserves workshops with no enrollments, count a non-null enrollment identifier instead so the null-extended placeholder does not become an enrollment. Distinguish this intended aggregation from simply hiding repeated workshop titles.\n\n```sql\nSELECT w.workshop_id, COUNT(e.enrollment_id) AS enrollment_count\nFROM workshops AS w\nLEFT JOIN enrollments AS e ON e.workshop_id = w.workshop_id\nGROUP BY w.workshop_id\nORDER BY w.workshop_id;\n```\n\nIf enrollment itself has a repeated business fact, counting identifiers may still overstate the intended measure. A unique row identifier proves physical row identity; it does not prove that the same learner-workshop enrollment was not entered twice. Business-key constraints and data-quality checks address that separate issue.\n\n## Detect multiplication between independent children\n\nA workshop with three enrollments and two tags can produce six joined rows when enrollments and tags are joined independently through the workshop. Each enrollment appears once for each tag. Summing a fee stored on enrollment then counts every fee twice. Both joins can have valid-looking equality predicates, so the presence of ON conditions does not guarantee a safe measure grain.\n\nIf tags only determine whether a workshop is eligible, use an existence condition rather than projecting every matching tag. If both tag counts and enrollment counts belong in the output, summarize each child source independently to one row per workshop before joining the summaries. The right solution follows the intended output contract rather than mechanically inserting DISTINCT.\n\nA useful diagnostic groups the joined result by enrollment_id and checks for counts above one. Include the workshop and tag identifiers while inspecting the affected rows. This exposes which relationship created the multiplicity. An inflated SUM is often a downstream symptom of an earlier expansion, so changing the final aggregate alone may conceal the real defect.\n\n## Use EXISTS when only membership matters\n\nTo return each learner who has at least one enrollment, EXISTS expresses a yes-or-no condition for each outer learner row. Multiple matching enrollments do not produce multiple outer rows. This fits an eligibility request without introducing child rows that the caller never needed.\n\n```sql\nSELECT l.learner_id, l.learner_name\nFROM learners AS l\nWHERE EXISTS (\n  SELECT 1 FROM enrollments AS e\n  WHERE e.learner_id = l.learner_id\n)\nORDER BY l.learner_id;\n```\n\nEXISTS does not deduplicate an already duplicated outer source. Its benefit here follows from the outer learners table containing one row per learner identity. If the outer source is itself a multiplying join, that earlier duplication remains. Always trace the complete query rather than assuming an existence condition makes every result unique.\n\n## Understand exactly what DISTINCT compares\n\nSELECT DISTINCT removes repeated combinations of the entire selected expression list. Selecting learner_id and name preserves two people with the same name because their identifiers differ. Selecting name alone can collapse them. Adding a child identifier to a previously distinct projection can increase the result size because the complete selected tuples are no longer equal.\n\nDISTINCT does not choose the newest, oldest or preferred row from a group. If two records differ in updated_at, selecting both columns retains both. A requirement to keep one representative row needs an explicit tie-breaking policy, often implemented with ranking or a comparison to a chosen key. Arbitrary grouping of nonaggregated values is not a reliable replacement for that policy.\n\nDISTINCT also does not prove that the database stores clean data. It can hide repeated projections while the underlying duplicated facts continue to affect other reports and updates. Use a source check grouped by the proposed business key, then decide whether the duplication is legitimate history, a missing dimension or a true integrity defect.\n\n## Do not deduplicate a measure by its numeric value\n\nSUM DISTINCT amount adds each different amount once. It does not add each distinct enrollment once. If two valid enrollments both cost 50, their correct combined fee is 100, while SUM DISTINCT amount returns 50. This makes numeric distinctness a particularly dangerous repair for join multiplication.\n\nDeduplicate or aggregate at the fact identity before summing when the requirement calls for one contribution per fact. Better still, shape joins so each fact appears the intended number of times. Keep separate equal amounts in the test data; a fixture with all different values can accidentally make a wrong DISTINCT repair look correct.\n\n## Distinguish missing matches from duplicate matches\n\nAn outer join creates a placeholder for a missing child, while multiple matching children create several actual rows. These are different cardinality cases. A report that replaces every missing child label with a common string can make several distinct parents look equal after projection. Removing those displayed repetitions may delete valid parents from the output.\n\nNULL values also need care in source-quality checks. GROUP BY groups NULL keys together, but a group of missing business identifiers is not necessarily proof that those rows describe the same real-world entity. In MySQL, nullable unique-index behavior is another reason not to assume that a proposed nullable key provides the same guarantee as a required primary key. Model identity explicitly.\n\nPreserve a reproducible small fixture with each multiplicity defect so that later query edits cannot silently restore the same error.\n\n## Verify grain with contrasting fixtures\n\nUse two different learners with the same name, one learner with several enrollments, a workshop with several tags and two legitimate equal fees. Add a learner with no enrollment and a workshop with no children. Predict row counts at each join boundary, then verify the final query against the stated roster, enrollment or summary requirement.\n\nA good defect report says which fact repeated, through which relationship, and why that repetition changed the requested measure or membership. Continue with [semi-joins](/learning/dbms-sql-tutorial/semi-join) and [aggregate query optimization](/learning/dbms-sql-tutorial/aggregate-query-optimization) once the result is correct. Performance improvements should preserve the established grain, not redefine it to make a query appear smaller.",
+  "references": [
+    {
+      "title": "MySQL 8.4 DISTINCT optimization",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/distinct-optimization.html"
+    },
+    {
+      "title": "MySQL 8.4 EXISTS and NOT EXISTS",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/exists-and-not-exists-subqueries.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-16-duplicate-rows",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-16-duplicate-rows-1",
+          "test_id": "pt-dbms-sql-16-duplicate-rows",
+          "question_text": "One Engineering department row matches exactly two different employee rows by the intended department key. Is repeating Engineering in those two joined pairs necessarily a bug?",
+          "options": [
+            "Yes, always a bug requiring DISTINCT",
+            "No — it's the expected consequence of Engineering having two employees, an intended result of one-to-many cardinality",
+            "Yes, because department names should never repeat",
+            "This can only be determined by running EXPLAIN"
+          ],
+          "correct_index": 1,
+          "explanation": "Repeated values reflecting a genuine one-to-many relationship are correct, not duplicated data.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-16-duplicate-rows-2",
+          "test_id": "pt-dbms-sql-16-duplicate-rows",
+          "question_text": "What does each output row represent in a one-to-many join like departments to employees?",
+          "options": [
+            "One unique department",
+            "One (department, employee) PAIR — there are as many rows as there are matching pairs",
+            "One unique employee, ignoring department",
+            "A random sample of the relationship"
+          ],
+          "correct_index": 1,
+          "explanation": "Each row is a pairing, so a department with multiple employees naturally produces multiple rows.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-16-duplicate-rows-3",
+          "test_id": "pt-dbms-sql-16-duplicate-rows",
+          "question_text": "Should DISTINCT be applied automatically whenever a join produces repeated-looking values?",
+          "options": [
+            "Yes, always apply DISTINCT to be safe",
+            "Not necessarily — first understand WHY the repetition occurs; blindly applying DISTINCT can mask an actual join-condition bug",
+            "DISTINCT has no effect on join results",
+            "DISTINCT should only be used with CROSS JOIN"
+          ],
+          "correct_index": 1,
+          "explanation": "Understanding the cause of duplication should precede reaching for DISTINCT as a fix.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-16-duplicate-rows-4",
+          "test_id": "pt-dbms-sql-16-duplicate-rows",
+          "question_text": "A join uses the correct complete intended key predicate, but an assumed one-to-one match still produces several rows. Which data-quality defect could explain this?",
+          "options": [
+            "This can never happen if the join syntax is correct",
+            "A data-quality issue, like two rows on the 'one' side accidentally sharing the same key value",
+            "Using INNER JOIN instead of LEFT JOIN",
+            "Selecting too many columns"
+          ],
+          "correct_index": 1,
+          "explanation": "A broken uniqueness assumption in the data itself can silently produce more matches than the intended one-to-one relationship allows.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-16-duplicate-rows-5",
+          "test_id": "pt-dbms-sql-16-duplicate-rows",
+          "question_text": "Is repeated data in a join result always identical to the underlying stored rows being duplicated in the table?",
+          "options": [
+            "Yes, always",
+            "No; a join can repeat projected values even when source facts are unique, and repetition alone does not prove stored duplicates",
+            "The stored table is always modified by a SELECT with a join",
+            "This distinction doesn't matter in practice"
+          ],
+          "correct_index": 1,
+          "explanation": "Output multiplicity and source data quality are separate questions. A SELECT join does not modify the source tables.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-16-duplicate-rows-6",
+          "test_id": "pt-dbms-sql-16-duplicate-rows",
+          "question_text": "How does a valid one-to-many relationship explain repeated parent labels?",
+          "options": [
+            "They are unrelated",
+            "Duplicate-looking rows are a direct, expected consequence of one-to-many join cardinality",
+            "Duplicate rows only occur with many-to-many cardinality, never one-to-many",
+            "Cardinality only affects column count, not row repetition"
+          ],
+          "correct_index": 1,
+          "explanation": "Understanding cardinality directly explains why and how much repetition to expect.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-16-duplicate-rows-7",
+          "test_id": "pt-dbms-sql-16-duplicate-rows",
+          "question_text": "If a one-to-one relationship unexpectedly produces duplicated rows, what should be investigated?",
+          "options": [
+            "Nothing — this is normal for one-to-one joins",
+            "Verify the join predicate is complete and correct, and verify the assumed uniqueness of the matching keys",
+            "Whether DISTINCT was used correctly, and nothing else",
+            "Whether the SELECT statement used too many columns"
+          ],
+          "correct_index": 1,
+          "explanation": "Unexpected multiplicity can come from an incomplete or incorrect predicate, from violated key assumptions, or both. Inspect the matching identities before applying DISTINCT.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-16-duplicate-rows-8",
+          "test_id": "pt-dbms-sql-16-duplicate-rows",
+          "question_text": "Does understanding expected cardinality help distinguish 'normal repetition' from 'a real bug'?",
+          "options": [
+            "No, cardinality is unrelated to this judgment",
+            "Yes — knowing the expected relationship shape helps determine whether observed repetition is expected or a red flag",
+            "Only DISTINCT can make this determination",
+            "This can only be verified by contacting the database vendor"
+          ],
+          "correct_index": 1,
+          "explanation": "Cardinality expectations are exactly the tool for judging whether repeated values are legitimate or a symptom of a problem.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-16-duplicate-rows-new-9",
+          "test_id": "pt-dbms-sql-16-duplicate-rows",
+          "question_text": "Two learners share a name but have different learner IDs. Is repeating the name necessarily a defect?",
+          "options": [
+            "Yes, names must be unique",
+            "No, they may be distinct valid people",
+            "Yes, SQL forbids repeated strings",
+            "Only if ordered by name"
+          ],
+          "correct_index": 1,
+          "explanation": "Displayed equality does not establish entity identity.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-16-duplicate-rows-new-10",
+          "test_id": "pt-dbms-sql-16-duplicate-rows",
+          "question_text": "What does SELECT DISTINCT compare?",
+          "options": [
+            "Only the first column",
+            "Only primary keys not selected",
+            "The complete selected expression tuple",
+            "Only numeric values"
+          ],
+          "correct_index": 2,
+          "explanation": "Changing the projection changes which rows count as equal.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-16-duplicate-rows-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-16-duplicate-rows-application-new-1",
+          "test_id": "pt-dbms-sql-16-duplicate-rows-application",
+          "question_text": "A workshop has 3 enrollments and 2 independent tags. How many rows can their joined combinations produce?",
+          "options": [
+            "3",
+            "2",
+            "5",
+            "6"
+          ],
+          "correct_index": 3,
+          "explanation": "Each enrollment can pair with every tag for that workshop.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-16-duplicate-rows-application-new-2",
+          "test_id": "pt-dbms-sql-16-duplicate-rows-application",
+          "question_text": "What query shape expresses learners having at least one enrollment without expanding enrollments?",
+          "options": [
+            "EXISTS from a one-row-per-learner source",
+            "An unconditional CROSS JOIN",
+            "SUM(DISTINCT learner_name)",
+            "A child join with no predicate"
+          ],
+          "correct_index": 0,
+          "explanation": "EXISTS checks membership rather than projecting every matching child.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-16-duplicate-rows-application-new-3",
+          "test_id": "pt-dbms-sql-16-duplicate-rows-application",
+          "question_text": "Does EXISTS remove duplicates already present in its outer source?",
+          "options": [
+            "Always",
+            "No",
+            "Only when SELECT 1 is used",
+            "Only for text rows"
+          ],
+          "correct_index": 1,
+          "explanation": "An existence predicate does not change outer-source multiplicity.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-16-duplicate-rows-application-new-4",
+          "test_id": "pt-dbms-sql-16-duplicate-rows-application",
+          "question_text": "Two legitimate fees are both 50. What does SUM(DISTINCT fee) return?",
+          "options": [
+            "100",
+            "0",
+            "50",
+            "NULL"
+          ],
+          "correct_index": 2,
+          "explanation": "Numeric value distinctness is different from distinct fact identity.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-16-duplicate-rows-application-new-5",
+          "test_id": "pt-dbms-sql-16-duplicate-rows-application",
+          "question_text": "What should debugging output expose first?",
+          "options": [
+            "Only formatted labels",
+            "Only a final grand total",
+            "Only a LIMIT 1 result",
+            "Identifiers from each source and the intended fact grain"
+          ],
+          "correct_index": 3,
+          "explanation": "Source identities reveal the relationship that caused expansion.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-16-duplicate-rows-application-new-6",
+          "test_id": "pt-dbms-sql-16-duplicate-rows-application",
+          "question_text": "What does DISTINCT choose when rows differ in updated_at?",
+          "options": [
+            "It retains both different selected tuples",
+            "The latest automatically",
+            "The oldest automatically",
+            "A random winner by contract"
+          ],
+          "correct_index": 0,
+          "explanation": "Representative-row selection requires a separate deterministic policy.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-16-duplicate-rows-application-new-7",
+          "test_id": "pt-dbms-sql-16-duplicate-rows-application",
+          "question_text": "Which count measures actual children after a LEFT JOIN?",
+          "options": [
+            "COUNT(*) always",
+            "COUNT(nonnullable_child_id)",
+            "COUNT(parent_id) always",
+            "COUNT of a constant"
+          ],
+          "correct_index": 1,
+          "explanation": "The unmatched placeholder has no real child identifier.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-16-duplicate-rows-application-new-8",
+          "test_id": "pt-dbms-sql-16-duplicate-rows-application",
+          "question_text": "What can a unique surrogate row ID fail to prevent?",
+          "options": [
+            "Two rows sharing the same row ID",
+            "A primary-key constraint",
+            "Two rows representing the same business enrollment",
+            "Every foreign-key relation"
+          ],
+          "correct_index": 2,
+          "explanation": "Physical identity and business-key uniqueness are separate contracts.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-16-duplicate-rows-application-new-9",
+          "test_id": "pt-dbms-sql-16-duplicate-rows-application",
+          "question_text": "If both child summaries are needed, how can independent multiplication be avoided?",
+          "options": [
+            "Add DISTINCT to SUM values",
+            "Delete repeated parent titles",
+            "Ignore one join predicate",
+            "Preaggregate each child to the parent grain before joining"
+          ],
+          "correct_index": 3,
+          "explanation": "Each joined summary then has at most one row per parent key.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-16-duplicate-rows-application-new-10",
+          "test_id": "pt-dbms-sql-16-duplicate-rows-application",
+          "question_text": "Which fixture exposes an unsafe SUM DISTINCT repair?",
+          "options": [
+            "Different valid facts with equal amounts",
+            "Only one fact",
+            "All unique amounts",
+            "An empty SELECT list"
+          ],
+          "correct_index": 0,
+          "explanation": "Equal legitimate measures must remain separate contributions.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cx-duplicate-rows-distinct-labels",
+      "slug": "duplicate-rows-distinct-labels",
+      "title": "Return unique workshop labels",
+      "difficulty": "Easy",
+      "task": "Return each distinct label once, ordered by label. This is a label vocabulary, not an entity roster.",
+      "schema_sql": "CREATE TABLE workshops(id INT PRIMARY KEY,label VARCHAR(20) NOT NULL);",
+      "seed_sql": "INSERT INTO workshops VALUES (1,'SQL'),(2,'SQL'),(3,'DBMS');",
+      "solution_sql": "SELECT DISTINCT label FROM workshops ORDER BY label;",
+      "expected": "label\nDBMS\nSQL",
+      "explanation": "The explicit requirement concerns unique displayed labels.",
+      "ordering": "Apply the ORDER BY explicitly required by the task; scalar results contain one row.",
+      "constraints": [
+        "Only synthetic fixture tables are in scope."
+      ],
+      "edge_cases": [
+        "Check empty input and the supplied contrasting fixtures."
+      ],
+      "hints": [
+        "The explicit requirement concerns unique displayed labels."
+      ],
+      "validation_cases": [
+        {
+          "seed_sql": "",
+          "expected": ""
+        },
+        {
+          "seed_sql": "INSERT INTO workshops VALUES (1,'SQL'),(2,'SQL');",
+          "expected": "label\nSQL"
+        }
+      ]
+    },
+    {
+      "id": "cx-duplicate-rows-enrolled-learners",
+      "slug": "duplicate-rows-enrolled-learners",
+      "title": "Keep learner identities despite repeated enrollments",
+      "difficulty": "Medium",
+      "task": "Return learner_id,name for each learner with at least one enrollment, once per learner, ordered by learner_id.",
+      "schema_sql": "CREATE TABLE learners(learner_id INT PRIMARY KEY,name VARCHAR(20) NOT NULL); CREATE TABLE enrollments(enrollment_id INT PRIMARY KEY,learner_id INT NOT NULL);",
+      "seed_sql": "INSERT INTO learners VALUES (1,'Mira'),(2,'Mira'),(3,'Dev'); INSERT INTO enrollments VALUES (10,1),(11,1),(12,2);",
+      "solution_sql": "SELECT l.learner_id,l.name FROM learners AS l WHERE EXISTS(SELECT 1 FROM enrollments AS e WHERE e.learner_id=l.learner_id) ORDER BY l.learner_id;",
+      "expected": "learner_id\tname\n1\tMira\n2\tMira",
+      "explanation": "An existence check preserves each eligible outer identity without expanding its child rows.",
+      "ordering": "Apply the ORDER BY explicitly required by the task; scalar results contain one row.",
+      "constraints": [
+        "Only synthetic fixture tables are in scope."
+      ],
+      "edge_cases": [
+        "Check empty input and the supplied contrasting fixtures."
+      ],
+      "hints": [
+        "An existence check preserves each eligible outer identity without expanding its child rows."
+      ],
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO learners VALUES (7,'Mira');",
+          "expected": ""
+        },
+        {
+          "seed_sql": "INSERT INTO learners VALUES (7,'Mira'); INSERT INTO enrollments VALUES (1,7),(2,7);",
+          "expected": "learner_id\tname\n7\tMira"
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-16-duplicate-rows-1",
+      "test_id": "pt-dbms-sql-16-duplicate-rows",
+      "question_text": "When Engineering appears twice in a departments-to-employees join result, is this a bug?",
+      "options": [
+        "Yes, always a bug requiring DISTINCT",
+        "No — it's the expected consequence of Engineering having two employees, an intended result of one-to-many cardinality",
+        "Yes, because department names should never repeat",
+        "This can only be determined by running EXPLAIN"
+      ],
+      "correct_index": 1,
+      "explanation": "Repeated values reflecting a genuine one-to-many relationship are correct, not duplicated data.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-16-duplicate-rows-2",
+      "test_id": "pt-dbms-sql-16-duplicate-rows",
+      "question_text": "What does each output row represent in a one-to-many join like departments to employees?",
+      "options": [
+        "One unique department",
+        "One (department, employee) PAIR — there are as many rows as there are matching pairs",
+        "One unique employee, ignoring department",
+        "A random sample of the relationship"
+      ],
+      "correct_index": 1,
+      "explanation": "Each row is a pairing, so a department with multiple employees naturally produces multiple rows.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-16-duplicate-rows-3",
+      "test_id": "pt-dbms-sql-16-duplicate-rows",
+      "question_text": "Should DISTINCT be applied automatically whenever a join produces repeated-looking values?",
+      "options": [
+        "Yes, always apply DISTINCT to be safe",
+        "Not necessarily — first understand WHY the repetition occurs; blindly applying DISTINCT can mask an actual join-condition bug",
+        "DISTINCT has no effect on join results",
+        "DISTINCT should only be used with CROSS JOIN"
+      ],
+      "correct_index": 1,
+      "explanation": "Understanding the cause of duplication should precede reaching for DISTINCT as a fix.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-16-duplicate-rows-4",
+      "test_id": "pt-dbms-sql-16-duplicate-rows",
+      "question_text": "What could cause TRUE unintended duplicate rows in a join meant to be one-to-one?",
+      "options": [
+        "This can never happen if the join syntax is correct",
+        "A data-quality issue, like two rows on the 'one' side accidentally sharing the same key value",
+        "Using INNER JOIN instead of LEFT JOIN",
+        "Selecting too many columns"
+      ],
+      "correct_index": 1,
+      "explanation": "A broken uniqueness assumption in the data itself can silently produce more matches than the intended one-to-one relationship allows.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-16-duplicate-rows-5",
+      "test_id": "pt-dbms-sql-16-duplicate-rows",
+      "question_text": "Is repeated data in a join result always identical to the underlying stored rows being duplicated in the table?",
+      "options": [
+        "Yes, always",
+        "No — the repetition happens in the JOIN's output, not because the stored table itself contains duplicate rows",
+        "The stored table is always modified by a SELECT with a join",
+        "This distinction doesn't matter in practice"
+      ],
+      "correct_index": 1,
+      "explanation": "The base tables remain unchanged; only the joined result exhibits value repetition reflecting the relationship.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-16-duplicate-rows-6",
+      "test_id": "pt-dbms-sql-16-duplicate-rows",
+      "question_text": "What is the relationship between this topic and join cardinality (16.10)?",
+      "options": [
+        "They are unrelated",
+        "Duplicate-looking rows are a direct, expected consequence of one-to-many join cardinality",
+        "Duplicate rows only occur with many-to-many cardinality, never one-to-many",
+        "Cardinality only affects column count, not row repetition"
+      ],
+      "correct_index": 1,
+      "explanation": "Understanding cardinality directly explains why and how much repetition to expect.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-16-duplicate-rows-7",
+      "test_id": "pt-dbms-sql-16-duplicate-rows",
+      "question_text": "If a one-to-one relationship unexpectedly produces duplicated rows, what should be investigated?",
+      "options": [
+        "Nothing — this is normal for one-to-one joins",
+        "Whether a data-quality problem broke the intended uniqueness on the 'one' side",
+        "Whether DISTINCT was used correctly, and nothing else",
+        "Whether the SELECT statement used too many columns"
+      ],
+      "correct_index": 1,
+      "explanation": "Unexpected duplication in a supposedly one-to-one relationship points to a genuine data integrity issue worth investigating.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-16-duplicate-rows-8",
+      "test_id": "pt-dbms-sql-16-duplicate-rows",
+      "question_text": "Does understanding expected cardinality help distinguish 'normal repetition' from 'a real bug'?",
+      "options": [
+        "No, cardinality is unrelated to this judgment",
+        "Yes — knowing the expected relationship shape helps determine whether observed repetition is expected or a red flag",
+        "Only DISTINCT can make this determination",
+        "This can only be verified by contacting the database vendor"
+      ],
+      "correct_index": 1,
+      "explanation": "Cardinality expectations are exactly the tool for judging whether repeated values are legitimate or a symptom of a problem.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "/root/worker_1",
+    "independent_review": "passed",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "author semantic review; independent review pending",
+    "canonical_answer_indices_preserved": true,
+    "independent_reviewer": "/root",
+    "independent_review_scope": "Full notes,20 MCQs/options/reasoning,both exercises with six fixture predictions and table diagram reviewed. Identity versus labels, legitimate child expansion, independent-child multiplication, full-tuple DISTINCT and fact versus measure distinctness correct. Corrected inherited one-to-one duplication questions to inspect both predicate completeness and key uniqueness. All six portable SQLite fixtures passed. Exact MySQL/provider, browser and release validation remain separate."
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-16-duplicate-rows",
+    "original_note_sha256": "332063c2f1fe485142989a64eb53de237eefdd7ea5c3f2b1001668ab900947d3",
+    "status": "drafted; not included in prepared paired migrations"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "One fact can repeat through independent child relationships",
+      "description": "Two tags duplicate each enrollment row before a sum is calculated.",
+      "columns": [
+        "Enrollment",
+        "Tag A",
+        "Tag B",
+        "Occurrences"
+      ],
+      "rows": [
+        [
+          "Enrollment 1",
+          "Pair 1-A",
+          "Pair 1-B",
+          "2"
+        ],
+        [
+          "Enrollment 2",
+          "Pair 2-A",
+          "Pair 2-B",
+          "2"
+        ],
+        [
+          "Enrollment 3",
+          "Pair 3-A",
+          "Pair 3-B",
+          "2"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "provided",
+    "technical_review": "coordinator independent manual review passed",
+    "server_rendering": "passed",
+    "browser_rendering": "unverified",
+    "independent_review": "passed",
+    "server_rendering_evidence": "2026-10-29 full Vitest:1310 passed/12 skipped; actual LessonBlock/TopicDiagrams render over230 packages. Browser visual QA remains unverified."
+  },
+  "authoring_status": "drafted; verification pending",
+  "sql_verification": {
+    "scope": "not executed; exact MySQL/provider verification pending",
+    "all_passed": false,
+    "cases": []
+  }
+}

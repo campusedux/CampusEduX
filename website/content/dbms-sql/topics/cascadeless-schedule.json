@@ -1,0 +1,508 @@
+{
+  "slug": "cascadeless-schedule",
+  "source_ref": "chapter-23-concurrency-control/cascadeless-schedule",
+  "title": "Cascadeless Schedule",
+  "description": "Trace read-from dependencies to distinguish cascadeless, recoverable and strict schedules, with rollback chains, blind-write counterexamples and solved exercises.",
+  "dialect": "MySQL 8.4; engine-specific behavior labeled",
+  "references": [
+    {
+      "title": "Database System Concepts transactions",
+      "url": "https://www.db-book.com/slides-dir/PDF-dir/ch17.pdf"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-23-cascadeless-schedule",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-23-cascadeless-schedule-1",
+          "test_id": "pt-dbms-sql-23-cascadeless-schedule",
+          "question_text": "What additional problem does a merely-recoverable (but not cascadeless) schedule risk that a cascadeless schedule avoids?",
+          "options": [
+            "Deadlock",
+            "Cascading rollback — a chain reaction where one transaction's abort forces other transactions (that read its dirty data) to also abort",
+            "Data type mismatch errors",
+            "Running out of disk space"
+          ],
+          "correct_index": 1,
+          "explanation": "Recoverability only guarantees the schedule CAN eventually be reconciled; it doesn't prevent a costly chain reaction of forced rollbacks if a transaction that others read dirty data from ends up aborting.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-23-cascadeless-schedule-2",
+          "test_id": "pt-dbms-sql-23-cascadeless-schedule",
+          "question_text": "What is the precise definition of a cascadeless schedule?",
+          "options": [
+            "No transaction may ever abort",
+            "A transaction reads a value written by another transaction only after that writer has committed",
+            "All transactions commit in start order",
+            "Two transactions never touch the same item"
+          ],
+          "correct_index": 1,
+          "explanation": "The cross-transaction read-from condition excludes dirty reads; a transaction may still read its own pending writes.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-23-cascadeless-schedule-3",
+          "test_id": "pt-dbms-sql-23-cascadeless-schedule",
+          "question_text": "In the 'Recoverable but NOT Cascadeless' worked example, T2 reads A at step 2 before T1 commits at step 3, yet the overall schedule commits successfully. Why is this schedule still classified as NOT cascadeless?",
+          "options": [
+            "Because T2 eventually committed after T1",
+            "Because the schedule's STRUCTURE permitted a dirty read (T2 read before T1's commit) — had T1 aborted instead, T2 would have been forced into a cascading rollback, regardless of what actually happened",
+            "Because T1 never wrote anything",
+            "Because cascadelessness only applies to writes, not reads"
+          ],
+          "correct_index": 1,
+          "explanation": "Cascadelessness is about whether the schedule's structure ever ALLOWS a dirty read to occur — it did here — not about whether things happened to work out because T1 committed rather than aborted.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-23-cascadeless-schedule-4",
+          "test_id": "pt-dbms-sql-23-cascadeless-schedule",
+          "question_text": "Is every cascadeless schedule also recoverable?",
+          "options": [
+            "No, they are unrelated properties",
+            "Yes — if reads only ever happen after the writer commits, the writer trivially commits before the reader even reads, let alone commits, satisfying recoverability automatically",
+            "Only if there are exactly two transactions",
+            "Only for read-only transactions"
+          ],
+          "correct_index": 1,
+          "explanation": "Cascadelessness is strictly stronger than recoverability: enforcing 'commit before read' automatically satisfies the weaker 'commit before commit' requirement of recoverability.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-23-cascadeless-schedule-5",
+          "test_id": "pt-dbms-sql-23-cascadeless-schedule",
+          "question_text": "Is every recoverable schedule also cascadeless?",
+          "options": [
+            "Yes, they are equivalent definitions",
+            "No — a schedule can be recoverable (correct commit order) while still permitting dirty reads that would trigger cascading rollback if the writer aborted",
+            "Yes, but only for schedules with fewer than 3 transactions",
+            "No such recoverable-but-not-cascadeless schedule can exist"
+          ],
+          "correct_index": 1,
+          "explanation": "Recoverability only fixes the commit ORDER; it doesn't forbid dirty reads outright, which is exactly the gap cascadelessness closes.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-23-cascadeless-schedule-6",
+          "test_id": "pt-dbms-sql-23-cascadeless-schedule",
+          "question_text": "How do lock-based concurrency control protocols typically implement cascadelessness?",
+          "options": [
+            "By disallowing all locks",
+            "By retaining the writer’s conflicting exclusive lock until commit or abort, or otherwise withholding its uncommitted value from readers",
+            "By requiring every transaction to run serially",
+            "By allowing dirty reads and marking them later"
+          ],
+          "correct_index": 1,
+          "explanation": "Writer lock retention can make conflicting reads wait; multiversion committed reads can instead use an older committed version.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-23-cascadeless-schedule-7",
+          "test_id": "pt-dbms-sql-23-cascadeless-schedule",
+          "question_text": "What does cascadelessness explicitly NOT restrict, which the even-stronger strict schedule property (23.9) adds?",
+          "options": [
+            "It doesn't restrict reads at all",
+            "It doesn't restrict two transactions both writing the same uncommitted item (a blind-write scenario) before either commits",
+            "It doesn't allow any transaction to ever abort",
+            "It doesn't apply to bank account examples"
+          ],
+          "correct_index": 1,
+          "explanation": "Cascadelessness is purely about avoiding dirty READS; it says nothing about a second transaction overwriting an uncommitted write, which strict schedules additionally forbid.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-23-cascadeless-schedule-8",
+          "test_id": "pt-dbms-sql-23-cascadeless-schedule",
+          "question_text": "In a worst-case cascading rollback scenario where T3 reads dirty data from T2, which in turn read dirty data from T1, what happens if T1 aborts?",
+          "options": [
+            "Only T1 is affected",
+            "T2 must abort (it read invalid data from T1), and T3 must also abort (it read invalid data from the now-aborted T2) — a rollback chain reaction",
+            "T3 is unaffected because it never touched T1's data directly",
+            "The database automatically repairs itself without any rollbacks"
+          ],
+          "correct_index": 1,
+          "explanation": "Cascading rollback ripples through every transaction in the dependency chain: T1's abort invalidates T2, which invalidates T3, and so on for however long the chain of dirty reads extends.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "cx-cascadeless-schedule-fundamentals-9",
+          "test_id": "pt-dbms-sql-23-cascadeless-schedule",
+          "question_text": "Does cascadeless mean no transaction may abort?",
+          "options": [
+            "No",
+            "Yes, by definition",
+            "Only for read-only transactions",
+            "Only after a checkpoint"
+          ],
+          "correct_index": 0,
+          "explanation": "It prevents dirty-read dependency cascades, not every independent failure.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "cx-cascadeless-schedule-fundamentals-10",
+          "test_id": "pt-dbms-sql-23-cascadeless-schedule",
+          "question_text": "Which event must precede R2(A) when it reads T1’s write in a cascadeless schedule?",
+          "options": [
+            "C2 only",
+            "C1",
+            "W2(A) only",
+            "Any unrelated commit"
+          ],
+          "correct_index": 1,
+          "explanation": "The source writer must commit before the dependent read.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "cx-cascadeless-schedule-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "cx-cascadeless-schedule-application-1",
+          "test_id": "cx-cascadeless-schedule-application",
+          "question_text": "Is W1(A), R2(A), C1, C2 cascadeless?",
+          "options": [
+            "Yes, both eventually committed",
+            "No, R2 read too early",
+            "Only if A is numeric",
+            "Only if transaction names are short"
+          ],
+          "correct_index": 1,
+          "explanation": "Later commit order does not remove the earlier dirty read.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "cx-cascadeless-schedule-application-2",
+          "test_id": "cx-cascadeless-schedule-application",
+          "question_text": "Which property does that sequence satisfy for its read dependency?",
+          "options": [
+            "Strictness",
+            "No-write execution",
+            "Recoverability",
+            "Deadlock freedom"
+          ],
+          "correct_index": 2,
+          "explanation": "The writer commits before its dependent reader commits.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "cx-cascadeless-schedule-application-3",
+          "test_id": "cx-cascadeless-schedule-application",
+          "question_text": "Is reading your own pending write a cross-transaction dirty read?",
+          "options": [
+            "Yes, always",
+            "Only for an INSERT",
+            "Only before a SELECT",
+            "No"
+          ],
+          "correct_index": 3,
+          "explanation": "The restriction concerns values obtained from another unfinished transaction.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "cx-cascadeless-schedule-application-4",
+          "test_id": "cx-cascadeless-schedule-application",
+          "question_text": "Why can a no-read schedule satisfy cascadelessness?",
+          "options": [
+            "There are no cross-transaction reads violating the condition",
+            "It has no writes necessarily",
+            "Every transaction has committed already",
+            "It must be serial"
+          ],
+          "correct_index": 0,
+          "explanation": "The read restriction can hold vacuously while other hazards remain.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "cx-cascadeless-schedule-application-5",
+          "test_id": "cx-cascadeless-schedule-application",
+          "question_text": "Which additional access does strictness prohibit after an unfinished write?",
+          "options": [
+            "Every read of unrelated committed data",
+            "Another transaction’s write to that same item",
+            "Every future commit",
+            "All independent calculations"
+          ],
+          "correct_index": 1,
+          "explanation": "Strictness constrains dirty writes as well as dirty reads.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "cx-cascadeless-schedule-application-6",
+          "test_id": "cx-cascadeless-schedule-application",
+          "question_text": "What does a cycle in a conflict graph establish?",
+          "options": [
+            "Failure of every recovery property automatically",
+            "That no transaction can commit",
+            "Failure of conflict serializability",
+            "That a backup is missing"
+          ],
+          "correct_index": 2,
+          "explanation": "Recovery dependency properties and serial-equivalence properties require separate tests.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "cx-cascadeless-schedule-application-7",
+          "test_id": "cx-cascadeless-schedule-application",
+          "question_text": "Can a multiversion read avoid dirty data without blocking on the current writer?",
+          "options": [
+            "No, every reader must block",
+            "Only if it deletes the writer",
+            "Only if it disables transactions",
+            "Yes, by using an appropriate committed version"
+          ],
+          "correct_index": 3,
+          "explanation": "Committed-version visibility is another implementation mechanism.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "cx-cascadeless-schedule-application-8",
+          "test_id": "cx-cascadeless-schedule-application",
+          "question_text": "T3 reads a T2 result derived from T1’s dirty value. Can T1’s abort affect T3?",
+          "options": [
+            "Yes, through the dependency chain",
+            "No, only direct readers matter",
+            "Only if names are consecutive",
+            "Only if T3 updates A itself"
+          ],
+          "correct_index": 0,
+          "explanation": "Indirect dependencies can invalidate downstream work.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "cx-cascadeless-schedule-application-9",
+          "test_id": "cx-cascadeless-schedule-application",
+          "question_text": "What is needed to prove a schedule cascadeless?",
+          "options": [
+            "Check only the final output total",
+            "Check every relevant read source and preceding writer commit",
+            "Sort transaction identifiers",
+            "Count primary keys"
+          ],
+          "correct_index": 1,
+          "explanation": "One safe read does not establish the condition for all other reads.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "cx-cascadeless-schedule-application-10",
+          "test_id": "cx-cascadeless-schedule-application",
+          "question_text": "What does a single-session query result fail to establish?",
+          "options": [
+            "The displayed literal value",
+            "The syntax of its SELECT",
+            "The engine’s cross-connection dirty-read behavior",
+            "Its column heading"
+          ],
+          "correct_index": 2,
+          "explanation": "Concurrency observations require an actual controlled interleaving.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-23-cascadeless-schedule-1",
+      "test_id": "pt-dbms-sql-23-cascadeless-schedule",
+      "question_text": "What additional problem does a merely-recoverable (but not cascadeless) schedule risk that a cascadeless schedule avoids?",
+      "options": [
+        "Deadlock",
+        "Cascading rollback — a chain reaction where one transaction's abort forces other transactions (that read its dirty data) to also abort",
+        "Data type mismatch errors",
+        "Running out of disk space"
+      ],
+      "correct_index": 1,
+      "explanation": "Recoverability only guarantees the schedule CAN eventually be reconciled; it doesn't prevent a costly chain reaction of forced rollbacks if a transaction that others read dirty data from ends up aborting.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-23-cascadeless-schedule-2",
+      "test_id": "pt-dbms-sql-23-cascadeless-schedule",
+      "question_text": "What is the precise definition of a cascadeless schedule?",
+      "options": [
+        "No transaction may ever abort",
+        "A transaction may only read a data item after the transaction that last wrote it has already committed — dirty reads are never permitted",
+        "All transactions must commit in the order they started",
+        "Two transactions may never touch the same data item"
+      ],
+      "correct_index": 1,
+      "explanation": "Cascadelessness requires the read itself (not just the reader's eventual commit) to happen only after the writer commits, eliminating dirty reads entirely.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-23-cascadeless-schedule-3",
+      "test_id": "pt-dbms-sql-23-cascadeless-schedule",
+      "question_text": "In the 'Recoverable but NOT Cascadeless' worked example, T2 reads A at step 2 before T1 commits at step 3, yet the overall schedule commits successfully. Why is this schedule still classified as NOT cascadeless?",
+      "options": [
+        "Because T2 eventually committed after T1",
+        "Because the schedule's STRUCTURE permitted a dirty read (T2 read before T1's commit) — had T1 aborted instead, T2 would have been forced into a cascading rollback, regardless of what actually happened",
+        "Because T1 never wrote anything",
+        "Because cascadelessness only applies to writes, not reads"
+      ],
+      "correct_index": 1,
+      "explanation": "Cascadelessness is about whether the schedule's structure ever ALLOWS a dirty read to occur — it did here — not about whether things happened to work out because T1 committed rather than aborted.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-23-cascadeless-schedule-4",
+      "test_id": "pt-dbms-sql-23-cascadeless-schedule",
+      "question_text": "Is every cascadeless schedule also recoverable?",
+      "options": [
+        "No, they are unrelated properties",
+        "Yes — if reads only ever happen after the writer commits, the writer trivially commits before the reader even reads, let alone commits, satisfying recoverability automatically",
+        "Only if there are exactly two transactions",
+        "Only for read-only transactions"
+      ],
+      "correct_index": 1,
+      "explanation": "Cascadelessness is strictly stronger than recoverability: enforcing 'commit before read' automatically satisfies the weaker 'commit before commit' requirement of recoverability.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-23-cascadeless-schedule-5",
+      "test_id": "pt-dbms-sql-23-cascadeless-schedule",
+      "question_text": "Is every recoverable schedule also cascadeless?",
+      "options": [
+        "Yes, they are equivalent definitions",
+        "No — a schedule can be recoverable (correct commit order) while still permitting dirty reads that would trigger cascading rollback if the writer aborted",
+        "Yes, but only for schedules with fewer than 3 transactions",
+        "No such recoverable-but-not-cascadeless schedule can exist"
+      ],
+      "correct_index": 1,
+      "explanation": "Recoverability only fixes the commit ORDER; it doesn't forbid dirty reads outright, which is exactly the gap cascadelessness closes.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-23-cascadeless-schedule-6",
+      "test_id": "pt-dbms-sql-23-cascadeless-schedule",
+      "question_text": "How do lock-based concurrency control protocols typically implement cascadelessness?",
+      "options": [
+        "By disallowing all locks",
+        "By holding a transaction's read locks (or delaying its reads) on data written by another transaction until that writer has committed",
+        "By running all transactions serially",
+        "By allowing dirty reads but flagging them for later cleanup"
+      ],
+      "correct_index": 1,
+      "explanation": "To guarantee no dirty reads occur, the DBMS makes a reader wait/block until the last writer of the data item has committed, which is exactly what cascadelessness requires structurally.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-23-cascadeless-schedule-7",
+      "test_id": "pt-dbms-sql-23-cascadeless-schedule",
+      "question_text": "What does cascadelessness explicitly NOT restrict, which the even-stronger strict schedule property (23.9) adds?",
+      "options": [
+        "It doesn't restrict reads at all",
+        "It doesn't restrict two transactions both writing the same uncommitted item (a blind-write scenario) before either commits",
+        "It doesn't allow any transaction to ever abort",
+        "It doesn't apply to bank account examples"
+      ],
+      "correct_index": 1,
+      "explanation": "Cascadelessness is purely about avoiding dirty READS; it says nothing about a second transaction overwriting an uncommitted write, which strict schedules additionally forbid.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-23-cascadeless-schedule-8",
+      "test_id": "pt-dbms-sql-23-cascadeless-schedule",
+      "question_text": "In a worst-case cascading rollback scenario where T3 reads dirty data from T2, which in turn read dirty data from T1, what happens if T1 aborts?",
+      "options": [
+        "Only T1 is affected",
+        "T2 must abort (it read invalid data from T1), and T3 must also abort (it read invalid data from the now-aborted T2) — a rollback chain reaction",
+        "T3 is unaffected because it never touched T1's data directly",
+        "The database automatically repairs itself without any rollbacks"
+      ],
+      "correct_index": 1,
+      "explanation": "Cascading rollback ripples through every transaction in the dependency chain: T1's abort invalidates T2, which invalidates T3, and so on for however long the chain of dirty reads extends.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "coding_problems": [],
+  "coding_not_applicable": "The topic analyzes symbolic read-from and commit ordering, including two solved schedule exercises. Result-only SQL judging cannot prove the property or a concurrent engine’s implementation.",
+  "review": {
+    "reviewer": "/root",
+    "independent_review": "passed",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Independent manual content review passed within independent_review_scope; engine/browser/release gates separate.",
+    "editorial_record": "Original scenario-led prose and assessments. External originality and AdSense review unperformed.",
+    "canonical_answer_indices_preserved": true,
+    "independent_reviewer": "/root/finish_e_transactions",
+    "independent_review_scope": "Full notes,20MCQs/options/explanations,diagram and worked proofs. Read-from/commit relations,strict-but-cyclic example and blind-write distinction sound. Manual reasoning only;engine,provider,browser,originality and AdSense evidence remain separate."
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-23-cascadeless-schedule",
+    "original_note_sha256": "d2168aad3826c2cc90c08420d91b1a7500425b98f80194183c3cbecea3999dc4",
+    "status": "drafted; not included in prepared paired migrations"
+  },
+  "notes": "## Prevent one unfinished transaction from supplying another's input\n\nA cascadeless schedule prevents a transaction from reading a value written by another transaction before that writer commits. It removes dirty-read dependencies that could force cascading rollback. The word does not mean transactions never abort. A transaction can still fail for its own invalid request, a deadlock or another documented error. The property limits how one unfinished transaction can become the source of another transaction's computation.\n\nUse a single-version read/write schedule model with transaction order preserved. Write W1(A) for transaction one writing A, R2(A) for transaction two reading A, C1 for transaction one's commit and A1 for its abort. For a read, identify the write whose value it actually observes. Initial committed data is also a possible source. A transaction reading its own earlier write is not a cross-transaction dirty read.\n\n## Start from the cascading-rollback problem\n\nSuppose A initially represents one hundred units of available credit. T1 tentatively writes eighty. T2 reads that eighty and uses it to decide whether to approve an operation. If T1 then aborts, its tentative change is not part of the committed history. T2's decision depended on an invalidated source and cannot simply be accepted as though it had read the original committed value.\n\n```text\nW1(A=80)\nR2(A) -> reads T1's uncommitted 80\nA1\nA2 -> discard dependent work rather than commit it\n```\n\nIf T3 had already read a value produced by T2's dependent computation, the effect can propagate further. T3 can require rollback even without reading A directly. The dependency chain matters more than whether transaction names are adjacent in the transcript. External effects complicate the recovery further: an email or remote approval sent by T2 is not automatically undone by rolling back its local database changes.\n\n## Compare recoverable and cascadeless schedules\n\nA recoverable schedule requires a transaction that reads another transaction's value to commit only after the writer commits. It constrains commit order but can still permit an early uncommitted read. A cascadeless schedule imposes the stronger condition that the writer commits before the dependent read occurs. Consequently the writer has already committed before the reader can later commit, giving recoverability for that dependency.\n\n```text\nRecoverable but not cascadeless:\nW1(A) R2(A) C1 C2\n\nCascadeless:\nW1(A) C1 R2(A) C2\n\nUnrecoverable dependent commit:\nW1(A) R2(A) C2 A1\n```\n\nIn the first schedule T2 reads too early for cascadelessness, even though both transactions eventually commit in recoverable order. A happy outcome does not erase the structure of the earlier dirty read. In the last schedule T2 commits before the source transaction resolves and T1 then aborts. The system can no longer repair that dependency merely by aborting the already committed T2 as part of ordinary transaction rollback.\n\n## Inspect read-from relationships explicitly\n\nTo classify a schedule, scan each read of a value written by another transaction. Determine its source under the stated version model and check whether that source transaction committed before the read. Do not compare only the two commits, because that establishes the weaker recoverability condition. Do not assume a read obtains the immediately preceding line if that line concerns a different item or a different specified version.\n\nA useful annotation lists the reader, item, source writer and writer outcome position. One counterexample is sufficient to show a schedule is not cascadeless. To prove it is cascadeless, cover every relevant read. A schedule with no cross-transaction reads satisfies this condition vacuously, which immediately explains why cascadelessness alone cannot solve every possible write interaction.\n\n| Sequence | Read source | Commit before read? | Classification |\n|---|---|---|---|\n| W1(A), R2(A), C1, C2 | T1 supplies T2 | No | Recoverable, not cascadeless |\n| W1(A), C1, R2(A), C2 | T1 supplies T2 | Yes | Cascadeless for this dependency |\n| W1(A), W2(A), C1, C2 | No cross-transaction read | No read to test | Cascadeless condition alone permits it |\n\n## Separate cascadelessness from strictness\n\nA strict schedule prevents another transaction from reading or writing an item written by an unfinished transaction until that writer commits or aborts. It therefore excludes both dirty reads and dirty writes in the ordinary single-version schedule model. Cascadelessness excludes the dirty reads but does not independently prohibit two unfinished writers touching the same item without reading one another's values.\n\nFor example, W1(A), W2(A), C1, C2 has no read violating cascadelessness, yet W2 occurs while T1 remains unfinished. It is not strict. This blind-write example is useful because it isolates the extra restriction instead of mixing in another dirty read. The resulting recovery hazards explain why write coordination remains necessary even when every ordinary query uses committed input.\n\nThe implication chain is strict implies cascadeless implies recoverable. Reverse implications fail, as the two examples show. These properties concern recovery dependencies and access to unfinished writes. They do not by themselves state that the complete schedule is equivalent to a serial execution. A recoverable or strict schedule can still have a cycle among committed-value read/write dependencies.\n\n## Keep serializability as a separate proof\n\nConsider R1(A), R2(B), W1(B), C1, W2(A), C2, where both reads obtain initial committed values. No transaction reads an unfinished write, so the schedule is cascadeless. It is also strict for the shown writes: T1 ends before T2 writes A, and no transaction accesses B after T1's write while it remains unfinished. Nevertheless R1(A) before W2(A) gives T1→T2, while R2(B) before W1(B) gives T2→T1.\n\nThat conflict cycle shows the schedule is not conflict serializable. The example separates a safe read source for recovery from a globally serial-equivalent computation. When a business rule spans A and B, committed inputs alone may still support incompatible concurrent decisions. Analyze the invariant and the appropriate concurrency control, rather than promoting cascadelessness into a universal correctness claim.\n\n## Connect the model to engine behavior carefully\n\nA lock-based implementation can keep a writer's exclusive lock until commit or abort so conflicting readers cannot observe the unfinished write. Multiversion engines can instead supply an older committed version to an ordinary read. Both can prevent dirty reads while producing different waiting and freshness behavior. Do not teach that every committed-read query must block behind every writer.\n\nActual isolation levels, locking reads and storage engines determine the available behavior. READ UNCOMMITTED can permit dirty observations in engines that support them. Choosing a stronger read contract does not remove all deadlocks or enforce every cross-row invariant. A controlled two-connection experiment can demonstrate a particular observation, while the symbolic schedule proof explains the property under its explicit model. Keep these evidence types separate.\n\n## Distinguish a restored value from an aborted source\n\nIf T1 aborts before T2 reads A and the engine supplies A's restored committed value, T2 is not reading T1's aborted write. The read-from annotation must identify the older valid source. Merely placing a read after an abort does not create a dirty read. Conversely, placing a commit later in the transcript cannot retroactively sanitize a value that was already consumed while its source remained unfinished.\n\nFor open schedules, record which transactions remain active instead of inventing missing outcomes. A prefix may have no offending reads yet while future operations could violate the property. When comparing complete schedules, include the commit or abort events relevant to every dependent operation. This disciplined event accounting also clarifies why a diagram showing only final balances is inadequate: it omits both the source of intermediate observations and the moment those sources became committed. Two histories can reach the same numeric final state while carrying different recovery dependencies.\n\n## Solve two dependency exercises\n\nFirst exercise: classify W1(A), R2(A), W2(B), R3(B), C1, C2, C3. T2 reads before T1 commits and T3 reads before T2 commits, so it is not cascadeless. The listed commit order is recoverable for those dependencies. If T1 aborts before committing instead, dependent uncommitted work in T2 and T3 must be discarded rather than treated as independent successful operations.\n\nSecond exercise: move each reader after its source writer's commit while preserving each transaction's program order. One valid solution is W1(A), C1, R2(A), W2(B), C2, R3(B), C3. Check both reads individually. Then compare the blind-write example to explain why this result does not establish strictness for arbitrary additional operations. Continue with [recoverable schedules](/learning/dbms-sql-tutorial/recoverable-schedule), [strict schedules](/learning/dbms-sql-tutorial/strict-schedule) and [conflict serializability](/learning/dbms-sql-tutorial/conflict-serializability) for the separate guarantees a complete design may require.\n",
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Move the source commit before the dependent read",
+      "description": "Recoverability orders commits. Cascadelessness orders the writer commit before the dependent read. Strictness adds protection against dirty writes.",
+      "columns": [
+        "Property",
+        "Required event order",
+        "What it still does not prove"
+      ],
+      "rows": [
+        [
+          "Recoverable",
+          "W1(A), R2(A), C1, C2 is permitted",
+          "No cascading rollback"
+        ],
+        [
+          "Cascadeless",
+          "W1(A), C1, R2(A), C2",
+          "No dirty writes or full serializability"
+        ],
+        [
+          "Strict",
+          "Other reads/writes wait for writer outcome",
+          "Conflict serializability by itself"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "technical_review": "author self-review only",
+    "server_rendering": "pending",
+    "browser_rendering": "unverified",
+    "independent_review": "pending"
+  },
+  "sql_verification": {
+    "scope": "not executed; concurrency/recovery/provider verification separate",
+    "all_passed": false,
+    "cases": []
+  }
+}

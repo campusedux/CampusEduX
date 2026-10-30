@@ -1,0 +1,635 @@
+{
+  "source_ref": "chapter-9-ddl-and-schema-design/sequences",
+  "slug": "sequences",
+  "title": "Sequences",
+  "description": "Reason about standalone numeric generators, shared allocation and non-gapless state, with PostgreSQL sequence semantics kept distinct from executable MySQL AUTO_INCREMENT mirrors.",
+  "dialect": "MySQL 8.4",
+  "notes": "## A sequence is a generator object\n\nA sequence is an independently addressable database object that supplies numeric values according to its configured progression. In PostgreSQL, a caller can request another value through nextval. The sequence is not itself the business table receiving the value. That separation lets several permitted callers obtain numbers from one generator without defining a separate identity mechanism for each target column.\n\nFor example, two campus request categories might share one internal allocation stream. The generator can supply different numbers for library and facilities requests. Those numbers are allocation tokens, not proof that each request was committed, approved or processed in numeric order. The application still needs a defined relationship between an allocated number and the fact it ultimately stores.\n\n## Generation is different from integrity enforcement\n\nA generator normally supplies distinct successive values within its configured progression, but that is not an unconditional uniqueness guarantee over every historical use. A restart, cycle, manual explicit value or conflicting independent generator can reissue a number. Appropriate key constraints on stored records remain necessary to enforce the actual uniqueness contract.\n\nSharing one generator can support a coordinated identifier space, provided every relevant writer uses it consistently and its configuration avoids unintended reuse. A second writer that bypasses the allocator can still create a collision. Do not describe a shared sequence as automatic global uniqueness across disconnected systems, every tenant or all time without defining those boundaries and controls.\n\n## Parameters define progression and exhaustion\n\nA sequence can have a start, increment, bounds and cycle policy under the engine's supported syntax. An increasing progression need not use an increment of one. A limited range can eventually exhaust. That is a predictable state requiring an explicit policy, not evidence that the database forgot how to generate identifiers.\n\nCYCLE permits reuse after the progression reaches its configured boundary. That can be suitable for particular bounded-token tasks, but it is dangerous if old stored rows still use the repeated numbers as unique identity. A primary key may reject the collision, yet the application still has to handle the failed operation. Cycling does not automatically find a safe unused historical identifier.\n\n## PostgreSQL nextval advances the generator\n\nCalling nextval obtains and advances the PostgreSQL sequence under its rules. The value can be requested before an application inserts a target row, so allocation and successful business insertion are distinct events. An unused allocation does not have to appear in the business table. That distinction explains why a missing number is not reliable evidence of a deleted row.\n\nThe call can also occur in a statement that later fails or in a transaction that rolls back its ordinary table changes. PostgreSQL does not restore the consumed nextval value merely because that transaction is rolled back. A sequence is therefore inappropriate as a promise of gapless committed-document numbering without an additional, deliberately designed workflow.\n\n```sql\nSELECT nextval('request_numbers');\n```\n\n## Session-local observation does not allocate again\n\nPostgreSQL currval reports the value most recently obtained for the specified sequence through nextval in the current session, without advancing it. A session that has not established that value cannot treat another session's latest allocation as its own currval. Connection scope is part of the meaning, not a presentation detail.\n\nThis matters with pooled connections. A later application step may not run on the same physical session unless the provider's transaction or connection contract keeps it there. Using a supported insertion-return mechanism can avoid guessing at session continuity. Do not replace a properly scoped result with a global MAX over another table and assume it identifies the current caller's allocation.\n\n## Cached values trade allocation work for reserved state\n\nA supported CACHE setting can reserve values to reduce the overhead of repeatedly acquiring generator state. The implementation and lifetime of that reservation are product specific. Under relevant events, reserved values may never appear in accepted business rows, contributing to gaps. Explain the possibility without promising that every product discards cached numbers on exactly the same disconnect or restart event.\n\nCaching also means numeric allocation patterns need not mirror the intuitive story of one caller finishing before the next begins. Performance tuning requires the actual workload and engine settings. A small teaching fixture can demonstrate a chosen progression but cannot establish the latency or contention benefit of a particular cache size in a production system.\n\n## Restarting needs collision and ownership review\n\nA supported ALTER SEQUENCE RESTART operation changes where future allocation begins under the engine's rules. After an import, the intended next value must be compatible with all surviving references and permitted writers. Restarting at an arbitrary round number does not prove that number is unused, nor does it validate imported identity semantics.\n\nThe operation can race with other allocations if performed without the required coordination. A sequence shared across several tables needs review across that entire identifier space, not merely the maximum id in one convenient table. State which actor owns generator administration and which populations consume its values before treating a restart as a routine local correction.\n\n## Identity columns associate a generator with a column\n\nPostgreSQL identity columns use an associated implicit sequence to supply values for the defined column. A standalone sequence can be addressed independently, while identity expresses generation as part of the table-column definition. These forms can serve related purposes, but their dependency and lifecycle rules are not identical just because both can produce integers.\n\nA computed generated column is another distinct feature. It derives a row expression such as quantity multiplied by price, rather than allocating the next number from an independent progression. Keep these concepts separate when reading GENERATED syntax. The source of the value and the intended integrity rule matter more than the shared word generated.\n\n## MySQL compatibility needs a different executable model\n\nThe MySQL target used elsewhere in this tutorial does not provide PostgreSQL's native standalone sequence syntax. MariaDB has its own sequence support, which must not be presented as proof that exact MySQL accepts that syntax. A compatibility engine's extra feature is a reason to label the dialect clearly, not an opportunity to hide the target's limitation.\n\nThe coding exercises therefore use explicitly labeled MySQL AUTO_INCREMENT mirrors to explore shared allocation and non-gapless behaviour. They do not claim to implement the complete semantics of a PostgreSQL sequence. A central allocation table can illustrate a shared numeric space, while a rolled-back InnoDB insert can illustrate that automatic allocation should not be equated with a gapless ledger.\n\n## A shared allocation table is still a table\n\nThe introductory mirror stores an allocation id, destination role and label in one temporary table. Requests from different destination roles pass through that same auto-increment column. This makes coordination visible and avoids pretending two independent per-table counters automatically form a global namespace. Required input ordering makes the isolated sample trace deterministic.\n\nThat mirror also stores rows and therefore has different storage, access and transaction concerns from a native sequence object. A real design needs to decide what allocation records mean and whether unused allocations should remain observable. Passing the mirror fixture does not establish standalone-sequence caching, cycle, ownership or restart behaviour. Those remain separate native concepts and verification targets.\n\n## Test allocation boundaries rather than a numbering myth\n\nThe first exercise includes two destination roles with repeated labels, so labels cannot be mistaken for identity. Empty input creates no business allocations. The second deliberately rolls back an inserted temporary InnoDB row before another allocation, exposing the difference between table state and generator progression in the controlled fixture. Explicit high starting ids provide a second meaningful boundary.\n\nA correct output shows the recorded reference behaviour under the fixture's increment settings. It does not mean every failed statement in every product consumes the same number of values. Concurrent allocation order, commit order and observed business chronology remain different questions. Use dedicated fields and policies when the application requires an authoritative event ordering.\n\n## Complete the explanation with honest execution scope\n\nA useful sequence model distinguishes generator state, allocated tokens and committed business facts. It also identifies bounds, reuse policy, consumers and the actor allowed to administer the generator. Those distinctions make it possible to explain a gap without inventing a missing student request or claiming that a reset automatically repairs historical identity.\n\nRecorded MariaDB compatibility checks cover the MySQL-style mirrors only. They do not verify native PostgreSQL nextval, currval, cache or restart execution, exact MySQL/provider behaviour, or a gapless accounting process. The assessments retain these boundaries explicitly so students can learn the general concept while still recognizing which syntax and guarantees belong to the actual product they use.\n",
+  "references": [
+    {
+      "title": "PostgreSQL 18 Sequence functions",
+      "url": "https://www.postgresql.org/docs/18/functions-sequence.html"
+    },
+    {
+      "title": "MySQL 8.4 AUTO_INCREMENT",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/example-auto-increment.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-9-sequences",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-9-sequences-1",
+          "test_id": "pt-dbms-sql-9-sequences",
+          "question_text": "What is a standalone sequence object?",
+          "options": [
+            "A column-level auto-increment attribute tied to one table",
+            "An independently addressable numeric generator with configured progression and reuse rules",
+            "A type of index",
+            "A synonym for a view"
+          ],
+          "correct_index": 1,
+          "explanation": "Uniqueness across stored historical values still requires appropriate constraints and policy.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-9-sequences-2",
+          "test_id": "pt-dbms-sql-9-sequences",
+          "question_text": "How can a shared sequence help several tables?",
+          "options": [
+            "Sequences are always faster at every scale",
+            "It can coordinate one allocation space if all writers and generator settings obey that contract",
+            "Sequences require no syntax to use",
+            "Identity columns cannot be used as primary keys"
+          ],
+          "correct_index": 1,
+          "explanation": "Cycling, resets or bypassing writers can still introduce collisions.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-9-sequences-3",
+          "test_id": "pt-dbms-sql-9-sequences",
+          "question_text": "What is a possible consequence of reserving sequence values through caching?",
+          "options": [
+            "It stores computed query results; no risk involved",
+            "Some reserved values may never appear in accepted rows, with exact events depending on the engine",
+            "It prevents the sequence from ever producing duplicate values",
+            "It encrypts the sequence's current value"
+          ],
+          "correct_index": 1,
+          "explanation": "Do not generalize one product’s cache lifetime to every product.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-9-sequences-4",
+          "test_id": "pt-dbms-sql-9-sequences",
+          "question_text": "If a transaction calls nextval('order_seq') and then rolls back, what happens to that consumed sequence value in PostgreSQL?",
+          "options": [
+            "It is returned to the sequence and reused by the next call",
+            "It is not restored — sequence advancement is non-transactional, so a gap results",
+            "The entire sequence is reset to its start value",
+            "The transaction cannot roll back once nextval is called"
+          ],
+          "correct_index": 1,
+          "explanation": "PostgreSQL intentionally does not roll back sequence advancement, to avoid serializing inserts through a single row lock.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-9-sequences-5",
+          "test_id": "pt-dbms-sql-9-sequences",
+          "question_text": "What risk does a CYCLE sequence introduce after it wraps around to MINVALUE?",
+          "options": [
+            "No risk; it is always perfectly safe",
+            "It can reissue a value already used by an old surviving row, risking constraint violations or silent collisions",
+            "The sequence permanently stops working",
+            "It automatically drops the table it's used in"
+          ],
+          "correct_index": 1,
+          "explanation": "Wrapping around risks reissuing values still in use by existing rows if old data wasn't cleaned up.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-9-sequences-6",
+          "test_id": "pt-dbms-sql-9-sequences",
+          "question_text": "In an appropriate PostgreSQL context, which form requests a next allocation restart at 5000?",
+          "options": [
+            "TRUNCATE SEQUENCE order_seq TO 5000;",
+            "ALTER SEQUENCE order_seq RESTART WITH 5000;",
+            "DELETE SEQUENCE order_seq WHERE value < 5000;",
+            "UPDATE order_seq SET value = 5000;"
+          ],
+          "correct_index": 1,
+          "explanation": "This is PostgreSQL syntax; collision and concurrency review is still needed.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-9-sequences-7",
+          "test_id": "pt-dbms-sql-9-sequences",
+          "question_text": "How is a PostgreSQL identity column related to a generator?",
+          "options": [
+            "They are entirely unrelated features",
+            "It uses an associated implicit sequence under the identity dependency rules",
+            "Sequences are implemented using identity columns internally",
+            "Only one of the two features can exist in a given database"
+          ],
+          "correct_index": 1,
+          "explanation": "It is distinct from an arbitrary standalone sequence lifecycle.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-9-sequences-8",
+          "test_id": "pt-dbms-sql-9-sequences",
+          "question_text": "What does currval('order_seq') return, in contrast to nextval('order_seq')?",
+          "options": [
+            "It advances the sequence and returns a brand-new value, same as nextval",
+            "It returns the last value obtained by nextval() in the current session, without advancing the sequence",
+            "It resets the sequence to its starting value",
+            "It returns the total count of rows in the associated table"
+          ],
+          "correct_index": 1,
+          "explanation": "currval() reads back the most recently obtained value in the current session rather than generating a new one.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-9-sequences-new-9",
+          "test_id": "pt-dbms-sql-9-sequences",
+          "question_text": "Does a shared generator remove the need for stored key constraints?",
+          "options": [
+            "Yes",
+            "No",
+            "Only if CACHE is large",
+            "Only with integer labels"
+          ],
+          "correct_index": 1,
+          "explanation": "Generation and stored integrity are different boundaries.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-9-sequences-new-10",
+          "test_id": "pt-dbms-sql-9-sequences",
+          "question_text": "Why can CYCLE collide with old records?",
+          "options": [
+            "It changes every key to text",
+            "It deletes old rows first",
+            "It can reissue a number still used by a surviving fact",
+            "It grants all users access"
+          ],
+          "correct_index": 2,
+          "explanation": "Reuse policy must match historical identity.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-9-sequences-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-9-sequences-application-new-1",
+          "test_id": "pt-dbms-sql-9-sequences-application",
+          "question_text": "Does PostgreSQL rollback restore an already consumed nextval token?",
+          "options": [
+            "Yes",
+            "Only if sorted",
+            "No",
+            "Only when CACHE is absent"
+          ],
+          "correct_index": 2,
+          "explanation": "Allocation is not a gapless committed-row ledger.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-9-sequences-application-new-2",
+          "test_id": "pt-dbms-sql-9-sequences-application",
+          "question_text": "Can currval from one session be treated as another caller’s own allocation?",
+          "options": [
+            "Yes",
+            "Only if ids are positive",
+            "Only with aliases",
+            "No"
+          ],
+          "correct_index": 3,
+          "explanation": "The function’s observation has session scope.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-9-sequences-application-new-3",
+          "test_id": "pt-dbms-sql-9-sequences-application",
+          "question_text": "Why review all consumers before a shared-generator restart?",
+          "options": [
+            "The identifier space can include more than one table",
+            "Only one table can ever use a sequence",
+            "It guarantees a backup",
+            "It removes all duplicates"
+          ],
+          "correct_index": 0,
+          "explanation": "One table’s maximum may not describe the whole space.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-9-sequences-application-new-4",
+          "test_id": "pt-dbms-sql-9-sequences-application",
+          "question_text": "Does MariaDB native sequence support prove exact MySQL accepts it?",
+          "options": [
+            "Yes",
+            "No",
+            "Only when names match",
+            "Only for increments of one"
+          ],
+          "correct_index": 1,
+          "explanation": "Compatible products can expose extra features.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-9-sequences-application-new-5",
+          "test_id": "pt-dbms-sql-9-sequences-application",
+          "question_text": "What is the first exercise’s central table?",
+          "options": [
+            "A complete PostgreSQL sequence implementation",
+            "A guarantee of gapless commits",
+            "An explicit allocation mirror using AUTO_INCREMENT",
+            "A remote generator service"
+          ],
+          "correct_index": 2,
+          "explanation": "The executable model has a deliberately narrower scope.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-9-sequences-application-new-6",
+          "test_id": "pt-dbms-sql-9-sequences-application",
+          "question_text": "Is a generated row total the same as a sequence value?",
+          "options": [
+            "Yes, always",
+            "Only for DECIMAL",
+            "Only for STORED",
+            "No"
+          ],
+          "correct_index": 3,
+          "explanation": "One derives current row inputs; the other allocates progression values.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-9-sequences-application-new-7",
+          "test_id": "pt-dbms-sql-9-sequences-application",
+          "question_text": "What can a gap establish by itself?",
+          "options": [
+            "Only that accepted visible ids are not contiguous",
+            "That a specific row was deleted",
+            "That fraud occurred",
+            "That a backup failed"
+          ],
+          "correct_index": 0,
+          "explanation": "The cause requires additional evidence.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-9-sequences-application-new-8",
+          "test_id": "pt-dbms-sql-9-sequences-application",
+          "question_text": "Does the next allocated number prove transaction completion order?",
+          "options": [
+            "Yes",
+            "No",
+            "Only with a primary key",
+            "Only for one destination role"
+          ],
+          "correct_index": 1,
+          "explanation": "Allocation and commit events can occur in different orders.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-9-sequences-application-new-9",
+          "test_id": "pt-dbms-sql-9-sequences-application",
+          "question_text": "Why define increment settings in a controlled fixture?",
+          "options": [
+            "To prove all production settings match",
+            "To eliminate every possible gap",
+            "To make its expected reference progression explicit",
+            "To grant sequence ownership"
+          ],
+          "correct_index": 2,
+          "explanation": "Determinism is scoped to the lab setup.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-9-sequences-application-new-10",
+          "test_id": "pt-dbms-sql-9-sequences-application",
+          "question_text": "Which check remains unperformed by the AUTO_INCREMENT mirror?",
+          "options": [
+            "The recorded mirror result",
+            "The supplied destination labels",
+            "The local rollback fixture output",
+            "Native PostgreSQL sequence execution"
+          ],
+          "correct_index": 3,
+          "explanation": "The model must not close a native-engine gap it did not exercise.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cx-sequence-shared-mirror",
+      "slug": "sequence-shared-mirror",
+      "title": "Model a shared allocation stream with one MySQL generator",
+      "difficulty": "Easy",
+      "task": "This is a MySQL allocation-table mirror, not native PostgreSQL sequence syntax. Set auto_increment_increment and offset to 1. Create TEMPORARY allocations(allocation_id INT PRIMARY KEY AUTO_INCREMENT,destination VARCHAR(20) NOT NULL,label VARCHAR(40) NOT NULL). Insert request_input in input_id order and return allocation_id,destination,label.",
+      "schema_sql": "CREATE TABLE request_input (input_id INT PRIMARY KEY,destination VARCHAR(20) NOT NULL,label VARCHAR(40) NOT NULL);",
+      "seed_sql": "INSERT INTO request_input VALUES (2,'library','Same'),(1,'facilities','Same');",
+      "expected": "allocation_id\tdestination\tlabel\n1\tfacilities\tSame\n2\tlibrary\tSame",
+      "ordering": "Ascending allocation_id after input_id-ordered insertion.",
+      "constraints": [
+        "All destination roles use one allocation column.",
+        "Explicitly a conceptual mirror, not native sequence verification."
+      ],
+      "edge_cases": [
+        "Labels can repeat across destination roles.",
+        "Empty input allocates no rows."
+      ],
+      "hints": [
+        "One central table supplies the shared ids.",
+        "Keep destination in the result to preserve its role."
+      ],
+      "solution_sql": "SET SESSION auto_increment_increment=1; SET SESSION auto_increment_offset=1; CREATE TEMPORARY TABLE allocations (allocation_id INT PRIMARY KEY AUTO_INCREMENT,destination VARCHAR(20) NOT NULL,label VARCHAR(40) NOT NULL) ENGINE=InnoDB; INSERT INTO allocations (destination,label) SELECT destination,label FROM request_input ORDER BY input_id; SELECT allocation_id,destination,label FROM allocations ORDER BY allocation_id;",
+      "explanation": "One table-bound generator illustrates coordinated allocation across destination roles without claiming standalone-sequence semantics.",
+      "validation_cases": [
+        {
+          "seed_sql": "",
+          "expected": ""
+        },
+        {
+          "seed_sql": "INSERT INTO request_input VALUES (8,'library','Book');",
+          "expected": "allocation_id\tdestination\tlabel\n1\tlibrary\tBook"
+        }
+      ]
+    },
+    {
+      "id": "cx-sequence-rollback-mirror",
+      "slug": "sequence-rollback-mirror",
+      "title": "Observe table rollback separately from automatic allocation",
+      "difficulty": "Medium",
+      "task": "This is an isolated InnoDB AUTO_INCREMENT mirror, not native PostgreSQL nextval execution. Set auto_increment_increment and offset to 1. Begin a transaction, insert label discarded, roll it back, then insert label kept. Return all retained allocation_id,label rows. Preserve any original seed rows.",
+      "schema_sql": "CREATE TEMPORARY TABLE allocation_log (allocation_id INT PRIMARY KEY AUTO_INCREMENT,label VARCHAR(40) NOT NULL) ENGINE=InnoDB;",
+      "seed_sql": "SET SESSION auto_increment_increment=1; SET SESSION auto_increment_offset=1;",
+      "expected": "allocation_id\tlabel\n2\tkept",
+      "ordering": "Ascending allocation_id.",
+      "constraints": [
+        "The discarded row is rolled back.",
+        "The allocation state is not described as a gapless row count."
+      ],
+      "edge_cases": [
+        "A preexisting high explicit key changes the controlled progression.",
+        "Original retained rows survive the rolled-back insertion."
+      ],
+      "hints": [
+        "Keep temporary table creation outside the transaction under test.",
+        "Compare retained rows with the generated id after rollback."
+      ],
+      "solution_sql": "SET SESSION auto_increment_increment=1; SET SESSION auto_increment_offset=1; START TRANSACTION; INSERT INTO allocation_log (label) VALUES ('discarded'); ROLLBACK; INSERT INTO allocation_log (label) VALUES ('kept'); SELECT allocation_id,label FROM allocation_log ORDER BY allocation_id;",
+      "explanation": "The rolled-back row disappears while the next allocation exposes why generated identifiers are not a gapless committed-record count.",
+      "validation_cases": [
+        {
+          "seed_sql": "SET SESSION auto_increment_increment=1; SET SESSION auto_increment_offset=1; INSERT INTO allocation_log VALUES (40,'original');",
+          "expected": "allocation_id\tlabel\n40\toriginal\n42\tkept"
+        },
+        {
+          "seed_sql": "SET SESSION auto_increment_increment=1; SET SESSION auto_increment_offset=1; INSERT INTO allocation_log VALUES (3,'old');",
+          "expected": "allocation_id\tlabel\n3\told\n5\tkept"
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-9-sequences-1",
+      "test_id": "pt-dbms-sql-9-sequences",
+      "question_text": "What is a sequence in SQL?",
+      "options": [
+        "A column-level auto-increment attribute tied to one table",
+        "A standalone, schema-level object that generates unique numeric values independent of any single table",
+        "A type of index",
+        "A synonym for a view"
+      ],
+      "correct_index": 1,
+      "explanation": "A sequence is an independent generator object, distinct from being bound to one specific column like an identity column.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-9-sequences-2",
+      "test_id": "pt-dbms-sql-9-sequences",
+      "question_text": "What is a key advantage of a sequence over a per-table identity column?",
+      "options": [
+        "Sequences are always faster at every scale",
+        "A single sequence can be shared across multiple tables/columns to guarantee globally unique values across them",
+        "Sequences require no syntax to use",
+        "Identity columns cannot be used as primary keys"
+      ],
+      "correct_index": 1,
+      "explanation": "Sequences are standalone and can be reused across several tables, unlike identity columns which are bound to one column.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-9-sequences-3",
+      "test_id": "pt-dbms-sql-9-sequences",
+      "question_text": "What does the CACHE option on a sequence do, and what risk does it introduce?",
+      "options": [
+        "It stores computed query results; no risk involved",
+        "It pre-allocates a block of values to a session for speed, but unused cached values are lost on restart/disconnect, causing gaps",
+        "It prevents the sequence from ever producing duplicate values",
+        "It encrypts the sequence's current value"
+      ],
+      "correct_index": 1,
+      "explanation": "CACHE improves performance by pre-allocating values but risks losing unused cached values, creating gaps.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-9-sequences-4",
+      "test_id": "pt-dbms-sql-9-sequences",
+      "question_text": "If a transaction calls nextval('order_seq') and then rolls back, what happens to that consumed sequence value in PostgreSQL?",
+      "options": [
+        "It is returned to the sequence and reused by the next call",
+        "It is not restored — sequence advancement is non-transactional, so a gap results",
+        "The entire sequence is reset to its start value",
+        "The transaction cannot roll back once nextval is called"
+      ],
+      "correct_index": 1,
+      "explanation": "PostgreSQL intentionally does not roll back sequence advancement, to avoid serializing inserts through a single row lock.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-9-sequences-5",
+      "test_id": "pt-dbms-sql-9-sequences",
+      "question_text": "What risk does a CYCLE sequence introduce after it wraps around to MINVALUE?",
+      "options": [
+        "No risk; it is always perfectly safe",
+        "It can reissue a value already used by an old surviving row, risking constraint violations or silent collisions",
+        "The sequence permanently stops working",
+        "It automatically drops the table it's used in"
+      ],
+      "correct_index": 1,
+      "explanation": "Wrapping around risks reissuing values still in use by existing rows if old data wasn't cleaned up.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-9-sequences-6",
+      "test_id": "pt-dbms-sql-9-sequences",
+      "question_text": "Which statement correctly resets a sequence's next value to a specific number after a bulk data migration?",
+      "options": [
+        "TRUNCATE SEQUENCE order_seq TO 5000;",
+        "ALTER SEQUENCE order_seq RESTART WITH 5000;",
+        "DELETE SEQUENCE order_seq WHERE value < 5000;",
+        "UPDATE order_seq SET value = 5000;"
+      ],
+      "correct_index": 1,
+      "explanation": "ALTER SEQUENCE ... RESTART WITH is the standard way to manually reset a sequence's counter.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-9-sequences-7",
+      "test_id": "pt-dbms-sql-9-sequences",
+      "question_text": "How are identity columns and sequences related in an engine like PostgreSQL?",
+      "options": [
+        "They are entirely unrelated features",
+        "Identity columns are typically implemented internally using a hidden sequence bound to that one column",
+        "Sequences are implemented using identity columns internally",
+        "Only one of the two features can exist in a given database"
+      ],
+      "correct_index": 1,
+      "explanation": "PostgreSQL implements identity columns on top of a hidden sequence object dedicated to that column.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-9-sequences-8",
+      "test_id": "pt-dbms-sql-9-sequences",
+      "question_text": "What does currval('order_seq') return, in contrast to nextval('order_seq')?",
+      "options": [
+        "It advances the sequence and returns a brand-new value, same as nextval",
+        "It returns the last value obtained by nextval() in the current session, without advancing the sequence",
+        "It resets the sequence to its starting value",
+        "It returns the total count of rows in the associated table"
+      ],
+      "correct_index": 1,
+      "explanation": "currval() reads back the most recently obtained value in the current session rather than generating a new one.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "coordinator",
+    "independent_review": "unavailable; no agent tools",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Definitions and examples checked against questions; no plagiarism certification.",
+    "existing_question_corrections": [
+      "tq-dbms-sql-9-sequences-1",
+      "tq-dbms-sql-9-sequences-2",
+      "tq-dbms-sql-9-sequences-3",
+      "tq-dbms-sql-9-sequences-6",
+      "tq-dbms-sql-9-sequences-7"
+    ],
+    "canonical_answer_indices_preserved": true,
+    "batch_review": {
+      "reviewer": "coordinator",
+      "independent": false,
+      "scope": "This new package: explained definitions and boundaries, retained source question identities/canonical indices, new correct answers and explanations, exercise solutions and recorded fixtures, diagram trace and prepared integration.",
+      "execution_evidence": "Focused MariaDB reference cases and selected actual LessonBlock rendering passed; no browser QA or exact MySQL/provider execution.",
+      "source_preservation": "Original snapshots retained; eight retained exercises across this continuation matched source identity, difficulty, schema, seed and trailing checker.",
+      "limits": "No independent worker available. Output fixtures do not prove arbitrary student submissions used a requested technique. Native PostgreSQL/other-engine concepts remain documented or explicitly mirrored, not verified by MariaDB."
+    }
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-9-sequences",
+    "original_note_sha256": "55a01d3fb1712634ab6f435c155c37b6b9d777265550b7f82a792ffcdf900025",
+    "status": "paired migration prepared; not applied"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "An allocated token can outlive the transaction that attempted to use it",
+      "description": "The native PostgreSQL concept and the executable MySQL-style mirror both motivate separating generator state from accepted rows; their complete semantics are not asserted identical.",
+      "columns": [
+        "Event",
+        "Generator observation",
+        "Committed business fact"
+      ],
+      "rows": [
+        [
+          "Request next token",
+          "A value is allocated",
+          "Not established yet"
+        ],
+        [
+          "Attempt a write",
+          "Token may be used",
+          "Still subject to transaction outcome"
+        ],
+        [
+          "Rollback write",
+          "Allocation need not be undone",
+          "Attempted row absent"
+        ],
+        [
+          "Later allocation",
+          "Can leave a visible gap",
+          "Requires its own accepted write"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "coordinator checked generator versus integrity, reuse boundaries, PostgreSQL session semantics and explicit mirror labeling",
+    "server_rendering": "passed",
+    "browser_rendering": "unverified",
+    "independent_review": "unavailable; no agent tools",
+    "server_rendering_evidence": "Selected actual LessonBlock Vitest rendering passed for this batch; no browser QA."
+  },
+  "sql_verification": {
+    "engine": "11.8.6-MariaDB-0+deb13u1 from Debian",
+    "scope": "MariaDB compatibility execution; exact MySQL 8.4/provider execution unverified",
+    "fingerprint": "5cea2401eed30fe767de38f4e0262afa20860b2f83d724f07bb28debd32f297a",
+    "cases": [
+      {
+        "problem": "sequence-shared-mirror",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "sequence-shared-mirror",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "sequence-shared-mirror",
+        "case": 2,
+        "passed": true
+      },
+      {
+        "problem": "sequence-rollback-mirror",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "sequence-rollback-mirror",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "sequence-rollback-mirror",
+        "case": 2,
+        "passed": true
+      }
+    ],
+    "all_passed": true
+  }
+}

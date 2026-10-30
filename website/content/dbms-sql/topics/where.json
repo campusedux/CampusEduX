@@ -1,0 +1,616 @@
+{
+  "source_ref": "chapter-12-select-and-filtering/where",
+  "slug": "where",
+  "title": "WHERE",
+  "description": "Use SQL WHERE to filter rows with exact boundaries, AND and OR grouping, NULL handling, and parameters; distinguish filtering from ordering.",
+  "dialect": "MySQL 8.4",
+  "notes": "## A predicate chooses the qualifying rows\n\nWHERE expresses a condition that each candidate row must satisfy to remain in a query result. A campus shop might need electronic products priced above a purchase threshold. Selecting the price column alone does not perform that restriction; the condition must describe both the category and the threshold. The result then contains the selected properties of each qualifying source row.\n\nThink of a predicate as a question with a row-specific answer. For the shop request, ask whether this row belongs to Electronics and whether its price is strictly above fifty thousand. Only rows satisfying both requirements should survive. Starting from the English requirement helps avoid writing a convenient condition that accidentally answers a broader or narrower question.\n\n## Keep filtering distinct from projection\n\nWHERE corresponds to row selection in [relational algebra](/learning/dbms-sql-tutorial/relational-algebra-expressions). The SELECT list determines the properties returned, often called [projection](/learning/dbms-sql-tutorial/projection). A query can filter on category without returning category. Conversely, returning a column does not filter it. These roles are independent: choose which rows qualify, then expose only the properties the consumer needs to understand or use the result.\n\nThe retained exercise returns product identity, name and price. It filters by category and price but does not display category or stock. Stock is irrelevant to that requirement, even when it is zero or unknown. Adding an in-stock condition because it sounds useful would change the requested population. A correct solution follows the stated contract rather than silently invent another eligibility rule.\n\n```sql\nSELECT id, name, price\nFROM products\nWHERE category = 'Electronics' AND price > 50000\nORDER BY id;\n```\n\n## TRUE is the only retained truth value\n\nSQL predicates can evaluate to TRUE, FALSE or UNKNOWN. WHERE retains only TRUE. FALSE and UNKNOWN are both excluded, although they represent different logical situations. A comparison involving a missing value commonly produces UNKNOWN. That row is not an error by itself; it simply does not satisfy a condition that requires a known positive comparison.\n\nFor example, stock greater than zero excludes both zero stock and NULL stock. If the requirement also admits unknown stock, express that separately with an IS NULL branch. Writing stock equals NULL does not test for missingness. The distinction matters when a result is meant to find products needing investigation rather than products definitely known to have positive inventory.\n\n## Translate boundary words precisely\n\nAbove means strictly greater than when the requirement uses an ordinary numeric threshold. A price equal to fifty thousand therefore does not qualify for priced above fifty thousand. At least would include equality. Below, at most and between similarly need explicit endpoints. A sample without boundary values cannot expose an accidental greater-than-or-equal substitution.\n\nTest values just below, exactly at and just above the threshold. Keep the category rule fixed while testing that boundary, then vary category independently. A very expensive book should still be excluded from an Electronics-only request. This small matrix separates failures in the numeric predicate from failures in the category predicate and makes an incorrect OR immediately visible.\n\n## Combine conditions according to the requirement\n\nAND requires both component conditions to be true. OR admits a row when either relevant branch is true. Replacing AND with OR in the shop query admits every electronic product regardless of price and every expensive product regardless of category. Neither population matches the original request. Short SQL is not necessarily clear SQL if it obscures those branches.\n\nWhen requirements combine alternatives with shared conditions, use parentheses. For example, a request may allow Electronics or Home products but require every admitted product to have known positive stock. Group the allowed categories before combining them with stock. Without the intended grouping, precedence can cause the stock restriction to apply to only one category and admit unavailable products from another.\n\n## Logical query stages explain aggregate boundaries\n\nConceptually, WHERE filters candidate rows before GROUP BY forms groups and ordinary aggregation computes group results. A total sales condition for each category belongs in an appropriate aggregate stage such as HAVING. A row-level price predicate belongs in WHERE. Keeping those roles distinct prevents an attempt to use a group sum as though it were already a property of each original row.\n\nThis is a logical model rather than a promise about the physical execution sequence. An optimizer can rearrange suitable work while preserving SQL semantics. Do not assume that conditions written left to right are executed in that order or that a cheap first condition protects every later expression from invalid input. Use expressions that are safe under the actual engine's documented evaluation rules.\n\n## Aliases have a scope\n\nA SELECT-list alias gives an output expression a useful name. It is not generally available to the same query block's WHERE clause because WHERE conceptually determines input eligibility before that output expression is named. Repeat an appropriate expression or place the computed value in a derived query when a later block needs to filter by that named result.\n\nQualification also matters when several tables have similarly named columns. A join can expose product status and request status at once. A bare status reference may be ambiguous or become fragile when the query changes. Use table aliases to identify which fact the predicate tests, and confirm that the relationship predicate itself is correct before filtering the joined population further.\n\n## Parameters preserve values without choosing policy\n\nApplications should supply untrusted values through supported parameters rather than concatenate them into SQL. The bound category and threshold still need validation and a clearly defined role. An omitted category parameter must not accidentally remove every restriction when the endpoint promises a category-specific result. Parameter binding handles representation, while application logic establishes the required predicate and permission boundary.\n\nA browser-side WHERE-like filter does not enforce database authorization. A caller might request another category or bypass the interface entirely. Trusted access rules determine which rows the caller may read, and the query then applies its business condition within that permitted scope. Do not place secrets or privileged decisions in a client merely because the UI normally hides some options.\n\n## Filtering is not presentation ordering\n\nWHERE does not sort its surviving rows. Add ORDER BY when the output contract requires a sequence, and choose a stable key when ties matter. The retained task orders by id so students and checkers see a deterministic result. LIMIT is another distinct operation: it restricts how many output rows are returned, not what eligibility rule those rows satisfy.\n\nA query with no qualifying rows is a valid result. Do not manufacture a fallback product or relax the threshold merely to make the display nonempty. The application can show a clear empty state while preserving the contract. Distinguish an empty permitted result from a failed query, a denied request or incomplete loading so the consumer does not draw the wrong conclusion.\n\n## Match query cost to the needed population\n\nA broad SELECT without WHERE does not mutate rows, but it can still return excessive data, expose information if access controls are wrong or consume substantial resources. Calling every unrestricted read harmless hides those risks. Select the permitted properties and population needed by the actual feature, and use an appropriate bounded retrieval contract for large result sets.\n\nIndexes can help the engine locate qualifying rows, but a predicate does not guarantee index use or a particular response time. Types, selectivity, expressions and available indexes influence the plan. First verify the intended result, then inspect representative plans if performance requires attention. Replacing an exact condition with an easier indexed condition is not an optimization if it changes which rows qualify.\n\n## Build fixtures that distinguish near misses\n\nThe first exercise retains the existing expensive-electronics identity and setup. Its alternative inputs test the exact price boundary and a high-priced product from another category. The second exercise applies a grouped category choice with a shared positive-stock requirement. Together they reveal missing filters, wrong comparison endpoints and misplaced parentheses while preserving deterministic result ordering.\n\nExplain each expected row in terms of the predicate. Then explain at least one excluded row that almost qualifies, such as an expensive book or an electronic product exactly at the threshold. This reasoning is stronger than repeating a memorized query: it connects the requirement, three-valued conditions, selected properties and final result while making assumptions about access and missing values visible.\n",
+  "references": [
+    {
+      "title": "MySQL 8.4 SELECT syntax and WHERE scope",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/select.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-12-where",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-12-where-1",
+          "test_id": "pt-dbms-sql-12-where",
+          "question_text": "What does WHERE retain?",
+          "options": [
+            "Rows whose predicate is FALSE",
+            "Rows for which its predicate is TRUE",
+            "Every row with a selected column",
+            "Only rows with the smallest identifier"
+          ],
+          "correct_index": 1,
+          "explanation": "UNKNOWN and FALSE do not survive WHERE.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-12-where-2",
+          "test_id": "pt-dbms-sql-12-where",
+          "question_text": "Which relational-algebra operation best corresponds to WHERE?",
+          "options": [
+            "Projection of selected properties",
+            "Selection of qualifying rows",
+            "Union of result sets",
+            "Renaming an output alias"
+          ],
+          "correct_index": 1,
+          "explanation": "The SELECT list performs the separate projection role.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-12-where-3",
+          "test_id": "pt-dbms-sql-12-where",
+          "question_text": "Why cannot an ordinary group SUM be used directly as a row-level WHERE condition in the same query block?",
+          "options": [
+            "SUM is forbidden everywhere",
+            "WHERE conceptually filters input before grouping and aggregate results",
+            "WHERE can only inspect text",
+            "Grouping permanently removes all rows"
+          ],
+          "correct_index": 1,
+          "explanation": "Use the appropriate aggregate-stage condition.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-12-where-4",
+          "test_id": "pt-dbms-sql-12-where",
+          "question_text": "What happens when a WHERE predicate evaluates to UNKNOWN?",
+          "options": [
+            "The row is retained as TRUE",
+            "The row is excluded",
+            "The query always raises an error",
+            "The value becomes zero"
+          ],
+          "correct_index": 1,
+          "explanation": "Only TRUE qualifies.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-12-where-5",
+          "test_id": "pt-dbms-sql-12-where",
+          "question_text": "What risk can a broad SELECT have despite not modifying rows?",
+          "options": [
+            "It automatically deletes all rows",
+            "Excessive data exposure or resource use if scope and access are wrong",
+            "It can never have any operational risk",
+            "It always changes every primary key"
+          ],
+          "correct_index": 1,
+          "explanation": "Read semantics do not imply every broad read is harmless.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-12-where-6",
+          "test_id": "pt-dbms-sql-12-where",
+          "question_text": "Which expressions can form row conditions?",
+          "options": [
+            "Only column names",
+            "Comparisons, logical combinations, membership, patterns and missing-value tests",
+            "Only output aliases from the same SELECT list",
+            "Only aggregate SUM calls"
+          ],
+          "correct_index": 1,
+          "explanation": "Choose a condition matching the requirement.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-12-where-7",
+          "test_id": "pt-dbms-sql-12-where",
+          "question_text": "Why parenthesize mixed alternatives and shared restrictions?",
+          "options": [
+            "To guarantee a faster execution plan",
+            "To make the intended grouping explicit",
+            "To disable UNKNOWN",
+            "Because every simple comparison requires parentheses"
+          ],
+          "correct_index": 1,
+          "explanation": "Grouping clarifies which restriction applies to each branch.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-12-where-8",
+          "test_id": "pt-dbms-sql-12-where",
+          "question_text": "Where does WHERE fit in the logical grouping model?",
+          "options": [
+            "Only after HAVING",
+            "Before GROUP BY and ordinary aggregation",
+            "After every ORDER BY",
+            "It cannot accompany grouping"
+          ],
+          "correct_index": 1,
+          "explanation": "Physical optimizations must preserve that logical meaning.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-12-where-new-9",
+          "test_id": "pt-dbms-sql-12-where",
+          "question_text": "For price > 50000, does a price of exactly 50000 qualify?",
+          "options": [
+            "No",
+            "Yes",
+            "Only for Electronics",
+            "Only with an index"
+          ],
+          "correct_index": 0,
+          "explanation": "The comparison is strict.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-12-where-new-10",
+          "test_id": "pt-dbms-sql-12-where",
+          "question_text": "Electronics AND price > 50000 should exclude which row?",
+          "options": [
+            "An Electronics product priced 60000",
+            "A Books product priced 90000",
+            "An Electronics product priced 70000",
+            "An Electronics product priced 80000"
+          ],
+          "correct_index": 1,
+          "explanation": "Both category and threshold are required.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-12-where-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-12-where-application-new-1",
+          "test_id": "pt-dbms-sql-12-where-application",
+          "question_text": "What changes if AND is replaced with OR in the retained query?",
+          "options": [
+            "The output stays identical for all data",
+            "Rows satisfying only category or only price can now qualify",
+            "Every row is deleted",
+            "The price becomes an aggregate"
+          ],
+          "correct_index": 1,
+          "explanation": "The logical population becomes broader.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-12-where-application-new-2",
+          "test_id": "pt-dbms-sql-12-where-application",
+          "question_text": "How should a predicate include unknown stock explicitly?",
+          "options": [
+            "Compare stock = NULL",
+            "Assume stock > 0 accepts NULL",
+            "Use a deliberate stock IS NULL branch",
+            "Replace missing stock with a random number"
+          ],
+          "correct_index": 2,
+          "explanation": "NULL testing requires its own semantics.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-12-where-application-new-3",
+          "test_id": "pt-dbms-sql-12-where-application",
+          "question_text": "Does selecting stock automatically require positive stock?",
+          "options": [
+            "Yes, every selected number must be positive",
+            "Only if stock is nullable",
+            "Only if the query sorts",
+            "No, selection and filtering are different roles"
+          ],
+          "correct_index": 3,
+          "explanation": "A property in the SELECT list is not an eligibility condition.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-12-where-application-new-4",
+          "test_id": "pt-dbms-sql-12-where-application",
+          "question_text": "Why can an output alias be unavailable in the same query block WHERE?",
+          "options": [
+            "It names a result expression after the logical filtering stage",
+            "Aliases are never legal SQL",
+            "WHERE cannot inspect numbers",
+            "Aliases require a primary key"
+          ],
+          "correct_index": 0,
+          "explanation": "A derived query can provide a named input expression for an outer filter.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-12-where-application-new-5",
+          "test_id": "pt-dbms-sql-12-where-application",
+          "question_text": "Does predicate text order guarantee safe expression evaluation order?",
+          "options": [
+            "Yes, SQL always executes text in order",
+            "No, do not rely on left-to-right execution as a guard",
+            "Only when the first predicate is cheap",
+            "Only with three conditions"
+          ],
+          "correct_index": 1,
+          "explanation": "Optimizations can rearrange work while preserving semantics.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-12-where-application-new-6",
+          "test_id": "pt-dbms-sql-12-where-application",
+          "question_text": "What does ORDER BY id add to a filtered result?",
+          "options": [
+            "A stricter category condition",
+            "Automatic duplicate deletion",
+            "A deterministic presentation sequence by identity",
+            "Additional authorization"
+          ],
+          "correct_index": 2,
+          "explanation": "Sorting is separate from row eligibility.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-12-where-application-new-7",
+          "test_id": "pt-dbms-sql-12-where-application",
+          "question_text": "What does zero qualifying rows mean?",
+          "options": [
+            "A syntax error necessarily",
+            "Permission denial necessarily",
+            "A reason to relax the threshold silently",
+            "A valid empty result if the query completed successfully"
+          ],
+          "correct_index": 3,
+          "explanation": "Keep empty, failed and denied outcomes distinct.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-12-where-application-new-8",
+          "test_id": "pt-dbms-sql-12-where-application",
+          "question_text": "What does parameter binding fail to decide?",
+          "options": [
+            "Which business predicate and access scope the endpoint requires",
+            "How to supply a value separately from SQL text",
+            "Whether placeholders can hold ordinary values",
+            "Whether SQL strings need representation"
+          ],
+          "correct_index": 0,
+          "explanation": "Correct structure and authority remain the application responsibility.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-12-where-application-new-9",
+          "test_id": "pt-dbms-sql-12-where-application",
+          "question_text": "Which fixture exposes a missing shared stock restriction?",
+          "options": [
+            "Only qualifying rows",
+            "An allowed-category product with zero stock",
+            "Only one disallowed-category row",
+            "An empty table"
+          ],
+          "correct_index": 1,
+          "explanation": "Near-miss rows reveal overly broad predicates.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-12-where-application-new-10",
+          "test_id": "pt-dbms-sql-12-where-application",
+          "question_text": "What should happen before tuning a predicate for indexes?",
+          "options": [
+            "Replace it with any faster condition",
+            "Remove all access checks",
+            "Verify that it returns the intended population",
+            "Assume every WHERE uses an index"
+          ],
+          "correct_index": 2,
+          "explanation": "Performance changes must preserve the result contract.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cp-dbms-sql-expensive-electronics",
+      "slug": "expensive-electronics",
+      "title": "Expensive Electronics",
+      "difficulty": "Easy",
+      "task": "Return id,name,price for products whose category is Electronics and price is strictly greater than 50000. Order by id. Preserve all rows and do not add a stock requirement. An empty result is valid.",
+      "schema_sql": "CREATE TABLE products (\n  id INTEGER PRIMARY KEY,\n  name TEXT NOT NULL,\n  category TEXT NOT NULL,\n  price INTEGER NOT NULL,\n  stock INTEGER\n);",
+      "seed_sql": "INSERT INTO products (id, name, category, price, stock) VALUES\n(1, 'ProLaptop', 'Electronics', 85000, 12),\n(2, 'Notebook', 'Stationery', 40, NULL),\n(3, 'Python Basics', 'Books', 350, 5),\n(4, 'ProPhone', 'Electronics', 45000, 0),\n(5, 'Novel', 'Books', 220, NULL),\n(6, 'Desk Lamp', 'Home', 900, 8);",
+      "expected": "id\tname\tprice\n1\tProLaptop\t85000",
+      "ordering": "As explicitly ordered in the result query.",
+      "constraints": [
+        "Use only the supplied synthetic tables and requested transition.",
+        "Preserve unrelated rows."
+      ],
+      "edge_cases": [
+        "An exact-threshold row is excluded.",
+        "Zero stock does not exclude an otherwise qualifying retained product."
+      ],
+      "hints": [
+        "Combine category and price using AND.",
+        "Use the strict threshold and retain id ordering."
+      ],
+      "solution_sql": "SELECT id,name,price FROM products WHERE category='Electronics' AND price>50000 ORDER BY id;",
+      "explanation": "The category equality and strict price threshold must both hold. Stock is intentionally outside the retained requirement.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO products (id, name, category, price, stock) VALUES\n(1, 'ProTablet', 'Electronics', 32000, 4),\n(2, 'Pencil Set', 'Stationery', 60, NULL),\n(3, 'SQL Guide', 'Books', 500, 10),\n(4, 'ProSpeaker', 'Electronics', 6000, 0);",
+          "expected": ""
+        },
+        {
+          "seed_sql": "INSERT INTO products VALUES (1,'Boundary','Electronics',50000,5),(2,'Above','Electronics',50001,0),(3,'Book','Books',90000,9);",
+          "expected": "id\tname\tprice\n2\tAbove\t50001"
+        },
+        {
+          "seed_sql": "INSERT INTO products VALUES (4,'Lower','Electronics',40000,7);",
+          "expected": ""
+        }
+      ],
+      "existing_problem": true,
+      "original_description_md5": "b25714e5248b110246213257867a55f4",
+      "original_check_sql": "",
+      "check_sql": ""
+    },
+    {
+      "id": "cx-where-shared-stock-filter",
+      "slug": "where-shared-stock-filter",
+      "title": "Apply stock to both allowed categories",
+      "difficulty": "Medium",
+      "task": "Return id,name for products in Electronics or Home with known stock greater than zero. A shared positive-stock requirement applies to both categories. Order by id.",
+      "schema_sql": "CREATE TABLE products (\n  id INTEGER PRIMARY KEY,\n  name TEXT NOT NULL,\n  category TEXT NOT NULL,\n  price INTEGER NOT NULL,\n  stock INTEGER\n);",
+      "seed_sql": "INSERT INTO products VALUES (1,'Camera','Electronics',500,0),(2,'Lamp','Home',20,4),(3,'Book','Books',10,8),(4,'Mic','Electronics',80,2),(5,'Desk','Home',50,NULL);",
+      "expected": "id\tname\n2\tLamp\n4\tMic",
+      "ordering": "As explicitly ordered in the result query.",
+      "constraints": [
+        "Use only the supplied synthetic tables and requested transition.",
+        "Preserve unrelated rows."
+      ],
+      "edge_cases": [
+        "Unknown stock cannot qualify.",
+        "An Electronics row does not bypass the common stock rule."
+      ],
+      "hints": [
+        "Group the category alternatives.",
+        "A positive comparison excludes NULL in WHERE."
+      ],
+      "solution_sql": "SELECT id,name FROM products WHERE (category='Electronics' OR category='Home') AND stock>0 ORDER BY id;",
+      "explanation": "The grouped alternatives form one allowed-category predicate; the shared AND rejects unknown or nonpositive stock for either category.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO products VALUES (1,'Camera','Electronics',10,NULL),(2,'Lamp','Home',10,0);",
+          "expected": ""
+        },
+        {
+          "seed_sql": "INSERT INTO products VALUES (8,'Stand','Home',10,1),(9,'Camera','Electronics',10,1);",
+          "expected": "id\tname\n8\tStand\n9\tCamera"
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-12-where-1",
+      "test_id": "pt-dbms-sql-12-where",
+      "question_text": "What does WHERE do?",
+      "options": [
+        "Sorts rows",
+        "Filters rows, keeping only those where the condition is TRUE",
+        "Groups rows into categories",
+        "Renames a column"
+      ],
+      "correct_index": 1,
+      "explanation": "WHERE is SQL's row-filtering clause.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-12-where-2",
+      "test_id": "pt-dbms-sql-12-where",
+      "question_text": "Which relational algebra operation does WHERE directly correspond to?",
+      "options": [
+        "Projection",
+        "Selection",
+        "Union",
+        "Cartesian Product"
+      ],
+      "correct_index": 1,
+      "explanation": "WHERE is the SQL implementation of Selection (7.1).",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-12-where-3",
+      "test_id": "pt-dbms-sql-12-where",
+      "question_text": "Why can't a WHERE clause reference an aggregate function like SUM(price)?",
+      "options": [
+        "Aggregate functions are never allowed anywhere in SQL",
+        "WHERE is evaluated before any grouping/aggregation happens, so aggregate values don't exist yet at that stage",
+        "WHERE can only compare text values",
+        "This is simply a made-up SQL rule with no real reason"
+      ],
+      "correct_index": 1,
+      "explanation": "Aggregates are computed during/after GROUP BY, which runs after WHERE — hence HAVING exists for aggregate-based filtering.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-12-where-4",
+      "test_id": "pt-dbms-sql-12-where",
+      "question_text": "What happens to a row where the WHERE condition evaluates to UNKNOWN (e.g. due to a NULL comparison)?",
+      "options": [
+        "It is included, treated the same as TRUE",
+        "It is excluded, treated the same as FALSE",
+        "It causes an error",
+        "It is included but flagged specially"
+      ],
+      "correct_index": 1,
+      "explanation": "WHERE only keeps rows where the condition is definitely TRUE; UNKNOWN rows are filtered out just like FALSE ones.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-12-where-5",
+      "test_id": "pt-dbms-sql-12-where",
+      "question_text": "Is omitting WHERE from a SELECT statement dangerous the same way it is for UPDATE/DELETE?",
+      "options": [
+        "Yes, equally dangerous in all cases",
+        "No — a WHERE-less SELECT just returns every row (harmless read), while a WHERE-less UPDATE/DELETE modifies/removes every row (potentially damaging write)",
+        "SELECT requires WHERE by SQL syntax rules",
+        "WHERE cannot be omitted from any statement"
+      ],
+      "correct_index": 1,
+      "explanation": "The risk profile differs because SELECT only reads data, while UPDATE/DELETE change it.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-12-where-6",
+      "test_id": "pt-dbms-sql-12-where",
+      "question_text": "Which of these building-block techniques can appear inside a WHERE condition?",
+      "options": [
+        "Only simple equality comparisons",
+        "Comparisons, logical operators, BETWEEN, IN, LIKE, and IS NULL, among others",
+        "Only aggregate functions",
+        "Only column names with no operators"
+      ],
+      "correct_index": 1,
+      "explanation": "WHERE conditions can combine any of these filtering techniques, all covered in this chapter.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-12-where-7",
+      "test_id": "pt-dbms-sql-12-where",
+      "question_text": "Why is explicit parenthesization of compound WHERE conditions good practice, even when not strictly required?",
+      "options": [
+        "It has no real benefit",
+        "It makes the intended evaluation order clear and avoids operator-precedence mistakes",
+        "Parentheses are mandatory in every WHERE clause",
+        "It makes the query run faster"
+      ],
+      "correct_index": 1,
+      "explanation": "Clarity and avoiding precedence bugs are the practical benefits of explicit parentheses.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-12-where-8",
+      "test_id": "pt-dbms-sql-12-where",
+      "question_text": "At what stage of query processing does WHERE run relative to GROUP BY?",
+      "options": [
+        "After GROUP BY",
+        "Before GROUP BY",
+        "Simultaneously, with no defined order",
+        "WHERE and GROUP BY cannot appear in the same query"
+      ],
+      "correct_index": 1,
+      "explanation": "WHERE filters individual rows first; GROUP BY then operates on the already-filtered rows.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "coordinator",
+    "independent_review": "passed",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Independent manual review passed; native MySQL fixture evidence recorded separately; provider/browser/Supabase release gates remain separate.",
+    "existing_question_corrections": [
+      "tq-dbms-sql-12-where-1",
+      "tq-dbms-sql-12-where-2",
+      "tq-dbms-sql-12-where-3",
+      "tq-dbms-sql-12-where-4",
+      "tq-dbms-sql-12-where-5",
+      "tq-dbms-sql-12-where-6",
+      "tq-dbms-sql-12-where-7",
+      "tq-dbms-sql-12-where-8"
+    ],
+    "canonical_answer_indices_preserved": true,
+    "editorial_record": "Original snapshots retained. Questions rewritten for precise dialect and topic coverage while preserving identities and canonical answer positions; technical and independent review pending.",
+    "independent_reviewer": "Codex reviewer, current 2026-10-30 session",
+    "independent_review_scope": "Read full notes, all 640 MCQ stems/options/canonical answers/explanations, 64 exercise contracts/solutions/fixtures, and all 32 diagrams. Verified retained identities/answers through source-continuity tests; SQL execution evidence is recorded separately. No external originality, provider, live application or Supabase authorization clearance.",
+    "independent_review_record": "reports/independent-review-2026-10-30.json",
+    "content_sha256": "274b96f7a708466b2c94d6afbf1fe6fdaee67aff8932be1f50c0a66c1f010469"
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-12-where",
+    "original_note_sha256": "52bd1d1e4bf18cdeb55ae8f933e850aaa2e28719f99697d343705021b8f404fb",
+    "status": "drafted; not yet included in prepared paired migrations"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Both retained predicates must hold for expensive electronics",
+      "description": "Stock is deliberately irrelevant to this retained exercise.",
+      "columns": [
+        "Category",
+        "Price",
+        "Category matches",
+        "Above 50000",
+        "Qualifies"
+      ],
+      "rows": [
+        [
+          "Electronics",
+          "85000",
+          "TRUE",
+          "TRUE",
+          "Yes"
+        ],
+        [
+          "Electronics",
+          "50000",
+          "TRUE",
+          "FALSE",
+          "No"
+        ],
+        [
+          "Books",
+          "90000",
+          "FALSE",
+          "TRUE",
+          "No"
+        ],
+        [
+          "Electronics",
+          "45000",
+          "TRUE",
+          "FALSE",
+          "No"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "drafted — verification pending",
+    "server_rendering": "pending",
+    "browser_rendering": "unverified",
+    "independent_review": "pending"
+  },
+  "authoring_status": "drafted — verification pending",
+  "sql_verification": {
+    "scope": "not executed; exact MySQL/provider verification pending",
+    "all_passed": false,
+    "cases": []
+  }
+}

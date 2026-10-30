@@ -1,0 +1,597 @@
+{
+  "slug": "complex-views",
+  "source_ref": "chapter-19-views/complex-views",
+  "title": "Complex Views",
+  "description": "Design reusable aggregate and join views with stable result grains, correct counts, explicit aliases, and clear update and performance limits.",
+  "dialect": "MySQL 8.4; engine-specific behavior labeled",
+  "references": [
+    {
+      "title": "MySQL views",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/views.html"
+    },
+    {
+      "title": "MySQL view updatability",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/view-updatability.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-19-complex-views",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-19-complex-views-1",
+          "test_id": "pt-dbms-sql-19-complex-views",
+          "question_text": "Which characteristic distinguishes a complex view from a simple view?",
+          "options": [
+            "It must be materialized",
+            "It involves joins, aggregation, GROUP BY, DISTINCT, or set operations",
+            "It cannot be queried with WHERE",
+            "It is stored as a physical table"
+          ],
+          "correct_index": 1,
+          "explanation": "Complex views combine multiple tables and/or use aggregate functions, GROUP BY, DISTINCT, or UNION — unlike the single-table, non-aggregating simple view.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-19-complex-views-2",
+          "test_id": "pt-dbms-sql-19-complex-views",
+          "question_text": "In `department_summary` (LEFT JOIN departments to employees, GROUP BY department, COUNT(e.id) AS headcount), what happens to a department with zero employees?",
+          "options": [
+            "It is excluded from the view's results",
+            "It appears with headcount = 0 because COUNT ignores the NULLs produced by the LEFT JOIN",
+            "It causes an error",
+            "It appears with headcount = NULL"
+          ],
+          "correct_index": 1,
+          "explanation": "LEFT JOIN preserves departments with no matching employees (producing NULL employee columns), and COUNT(e.id) counts only non-NULL values, yielding 0 rather than excluding the department.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-19-complex-views-3",
+          "test_id": "pt-dbms-sql-19-complex-views",
+          "question_text": "Why can't the database unambiguously map an aggregated view row back to a single underlying table row?",
+          "options": [
+            "Because aggregation functions are deprecated in modern SQL",
+            "Because one aggregated output row (e.g., a department's average salary) summarizes many underlying employee rows, with no unique 1:1 correspondence",
+            "Because views cannot contain GROUP BY at all",
+            "Because aggregate columns are always NULL"
+          ],
+          "correct_index": 1,
+          "explanation": "An aggregate row represents a summary of potentially many base rows, so there is no single row to target for an update — this is the core reason complex/aggregate views are not directly updatable.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-19-complex-views-4",
+          "test_id": "pt-dbms-sql-19-complex-views",
+          "question_text": "Which of these views would be classified as complex?",
+          "options": [
+            "CREATE VIEW v AS SELECT id, name FROM employees WHERE department = 'Sales';",
+            "CREATE VIEW v AS SELECT id, name, salary FROM employees;",
+            "CREATE VIEW v AS SELECT department, COUNT(*) FROM employees GROUP BY department;",
+            "CREATE VIEW v AS SELECT * FROM employees WHERE salary > 50000;"
+          ],
+          "correct_index": 2,
+          "explanation": "This view uses GROUP BY and an aggregate function (COUNT), making it a complex view; the others are single-table filters/projections with no aggregation.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-19-complex-views-5",
+          "test_id": "pt-dbms-sql-19-complex-views",
+          "question_text": "What is the main practical benefit of wrapping a multi-join, aggregated query in a complex view?",
+          "options": [
+            "It permanently speeds up the underlying tables",
+            "It hides the join/aggregation complexity so consumers can query a simple, stable interface",
+            "It removes the need for indexes",
+            "It converts the query into a stored procedure"
+          ],
+          "correct_index": 1,
+          "explanation": "The main value is abstraction: consumers write simple SELECTs against the view without needing to know how the underlying tables relate or how the aggregation is computed.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-19-complex-views-6",
+          "test_id": "pt-dbms-sql-19-complex-views",
+          "question_text": "A correlated subquery view (`above_avg_earners`) compares each employee's salary to the AVG salary of their own department. What SQL feature makes this 'correlated'?",
+          "options": [
+            "The subquery references a column (e2.department = e.department) from the outer query",
+            "The subquery uses UNION",
+            "The subquery has no WHERE clause",
+            "The subquery selects from a different database"
+          ],
+          "correct_index": 0,
+          "explanation": "Correlation is a logical dependence on the outer row. The optimizer can transform or reuse eligible work; physical repeated execution must be established from the actual plan and measurements.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-19-complex-views-7",
+          "test_id": "pt-dbms-sql-19-complex-views",
+          "question_text": "Why might querying a single department's data through department_summary be less efficient than querying employees directly for that department?",
+          "options": [
+            "Views always create a full physical copy of the data first",
+            "Depending on the optimizer, the aggregation for all departments may be computed before the WHERE filter narrows results, unless the predicate can be pushed down",
+            "Views cannot accept WHERE clauses",
+            "GROUP BY is not allowed in views"
+          ],
+          "correct_index": 1,
+          "explanation": "Unless the optimizer can push the outer WHERE predicate into the view's grouping, the full aggregation across all groups may be computed before filtering — a common motivation to consider a materialized view.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-19-complex-views-8",
+          "test_id": "pt-dbms-sql-19-complex-views",
+          "question_text": "Can a complex view be used as one table in a JOIN within another query?",
+          "options": [
+            "No, views can only be queried standalone",
+            "Yes, a view can be referenced anywhere a base table can, including as a JOIN operand",
+            "Only simple views can be joined",
+            "Only if the view is materialized"
+          ],
+          "correct_index": 1,
+          "explanation": "Views are queried like tables in every respect, including being joined to other tables or views in a larger query.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "cx-complex-views-fundamentals-9",
+          "test_id": "pt-dbms-sql-19-complex-views",
+          "question_text": "What is stored by an ordinary MySQL view?",
+          "options": [
+            "A query definition",
+            "A permanently refreshed copy of every result row",
+            "An independent database engine",
+            "Only an execution time estimate"
+          ],
+          "correct_index": 0,
+          "explanation": "Ordinary views derive results from underlying data.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "cx-complex-views-fundamentals-10",
+          "test_id": "pt-dbms-sql-19-complex-views",
+          "question_text": "What is the grain of a view grouping employees by department?",
+          "options": [
+            "One row per salary value always",
+            "One row per represented department",
+            "One row per employee",
+            "One row per database"
+          ],
+          "correct_index": 1,
+          "explanation": "GROUP BY determines the summary grain.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "cx-complex-views-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "cx-complex-views-application-1",
+          "test_id": "cx-complex-views-application",
+          "question_text": "Why is a SUM and GROUP BY view not directly updatable in MySQL?",
+          "options": [
+            "It has a short name",
+            "Its summary rows do not map to single base rows",
+            "Every view is forbidden to query",
+            "It stores duplicate passwords"
+          ],
+          "correct_index": 1,
+          "explanation": "Aggregated values represent multiple contributing records.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "cx-complex-views-application-2",
+          "test_id": "cx-complex-views-application",
+          "question_text": "Which expression counts real employees after a departments LEFT JOIN?",
+          "options": [
+            "COUNT(*) for every case",
+            "SUM(DISTINCT salary)",
+            "COUNT(e.id) for nonnull employee IDs",
+            "COUNT(d.id) for every case"
+          ],
+          "correct_index": 2,
+          "explanation": "The child identifier excludes the unmatched placeholder.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "cx-complex-views-application-3",
+          "test_id": "cx-complex-views-application",
+          "question_text": "What does salary NOT NULL guarantee for COUNT(*) versus COUNT(salary) over employees?",
+          "options": [
+            "Both return NULL",
+            "They always differ by one",
+            "COUNT(*) becomes illegal",
+            "They count the same rows"
+          ],
+          "correct_index": 3,
+          "explanation": "Every employee has a known salary value under that constraint.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "cx-complex-views-application-4",
+          "test_id": "cx-complex-views-application",
+          "question_text": "Why can SUM(salary) over an assignment join be too large?",
+          "options": [
+            "An employee can appear once per assignment",
+            "Views cannot sum integers",
+            "SUM always ignores duplicates",
+            "Assignment names determine salary"
+          ],
+          "correct_index": 0,
+          "explanation": "Join multiplicity can repeat employee salary contributions.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "cx-complex-views-application-5",
+          "test_id": "cx-complex-views-application",
+          "question_text": "Where should consumers specify guaranteed result ordering?",
+          "options": [
+            "Only in the view name",
+            "In their outer query ORDER BY",
+            "In a comment",
+            "Ordering is guaranteed by GROUP BY"
+          ],
+          "correct_index": 1,
+          "explanation": "A relation does not supply a universal display order.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "cx-complex-views-application-6",
+          "test_id": "cx-complex-views-application",
+          "question_text": "Does a view automatically cache an expensive aggregation permanently?",
+          "options": [
+            "Yes, every aggregate is materialized forever",
+            "Only if named summary",
+            "No",
+            "Only if it uses COUNT"
+          ],
+          "correct_index": 2,
+          "explanation": "The execution strategy is determined by the engine and query.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "cx-complex-views-application-7",
+          "test_id": "cx-complex-views-application",
+          "question_text": "Which operation changes the population before departmental grouping?",
+          "options": [
+            "Filtering summary headcount afterward",
+            "Renaming the view",
+            "Ordering final departments",
+            "Filtering base employees by salary"
+          ],
+          "correct_index": 3,
+          "explanation": "A base WHERE changes which employees contribute.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "cx-complex-views-application-8",
+          "test_id": "cx-complex-views-application",
+          "question_text": "For salaries 95000 and 40000, what does SUM(salary) DIV COUNT(*) return?",
+          "options": [
+            "67500",
+            "135000",
+            "95000",
+            "40000"
+          ],
+          "correct_index": 0,
+          "explanation": "The integer quotient of 135000 divided by two is 67500.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "cx-complex-views-application-9",
+          "test_id": "cx-complex-views-application",
+          "question_text": "What happens to an existing SELECT * view when a base column is later added in MySQL?",
+          "options": [
+            "It always gains every new column immediately",
+            "Its stored expanded definition does not automatically gain the column",
+            "It becomes a permanent snapshot",
+            "It deletes the new column"
+          ],
+          "correct_index": 1,
+          "explanation": "View definitions must be reviewed explicitly during schema evolution.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "cx-complex-views-application-10",
+          "test_id": "cx-complex-views-application",
+          "question_text": "Why inspect a view consumer execution plan?",
+          "options": [
+            "Views never use indexes",
+            "A plan proves business authorization",
+            "Its expanded work may include expensive joins or grouping",
+            "The view name determines cost"
+          ],
+          "correct_index": 2,
+          "explanation": "The caller and definition together determine execution work.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-19-complex-views-1",
+      "test_id": "pt-dbms-sql-19-complex-views",
+      "question_text": "Which characteristic distinguishes a complex view from a simple view?",
+      "options": [
+        "It must be materialized",
+        "It involves joins, aggregation, GROUP BY, DISTINCT, or set operations",
+        "It cannot be queried with WHERE",
+        "It is stored as a physical table"
+      ],
+      "correct_index": 1,
+      "explanation": "Complex views combine multiple tables and/or use aggregate functions, GROUP BY, DISTINCT, or UNION — unlike the single-table, non-aggregating simple view.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-19-complex-views-2",
+      "test_id": "pt-dbms-sql-19-complex-views",
+      "question_text": "In `department_summary` (LEFT JOIN departments to employees, GROUP BY department, COUNT(e.id) AS headcount), what happens to a department with zero employees?",
+      "options": [
+        "It is excluded from the view's results",
+        "It appears with headcount = 0 because COUNT ignores the NULLs produced by the LEFT JOIN",
+        "It causes an error",
+        "It appears with headcount = NULL"
+      ],
+      "correct_index": 1,
+      "explanation": "LEFT JOIN preserves departments with no matching employees (producing NULL employee columns), and COUNT(e.id) counts only non-NULL values, yielding 0 rather than excluding the department.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-19-complex-views-3",
+      "test_id": "pt-dbms-sql-19-complex-views",
+      "question_text": "Why can't the database unambiguously map an aggregated view row back to a single underlying table row?",
+      "options": [
+        "Because aggregation functions are deprecated in modern SQL",
+        "Because one aggregated output row (e.g., a department's average salary) summarizes many underlying employee rows, with no unique 1:1 correspondence",
+        "Because views cannot contain GROUP BY at all",
+        "Because aggregate columns are always NULL"
+      ],
+      "correct_index": 1,
+      "explanation": "An aggregate row represents a summary of potentially many base rows, so there is no single row to target for an update — this is the core reason complex/aggregate views are not directly updatable.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-19-complex-views-4",
+      "test_id": "pt-dbms-sql-19-complex-views",
+      "question_text": "Which of these views would be classified as complex?",
+      "options": [
+        "CREATE VIEW v AS SELECT id, name FROM employees WHERE department = 'Sales';",
+        "CREATE VIEW v AS SELECT id, name, salary FROM employees;",
+        "CREATE VIEW v AS SELECT department, COUNT(*) FROM employees GROUP BY department;",
+        "CREATE VIEW v AS SELECT * FROM employees WHERE salary > 50000;"
+      ],
+      "correct_index": 2,
+      "explanation": "This view uses GROUP BY and an aggregate function (COUNT), making it a complex view; the others are single-table filters/projections with no aggregation.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-19-complex-views-5",
+      "test_id": "pt-dbms-sql-19-complex-views",
+      "question_text": "What is the main practical benefit of wrapping a multi-join, aggregated query in a complex view?",
+      "options": [
+        "It permanently speeds up the underlying tables",
+        "It hides the join/aggregation complexity so consumers can query a simple, stable interface",
+        "It removes the need for indexes",
+        "It converts the query into a stored procedure"
+      ],
+      "correct_index": 1,
+      "explanation": "The main value is abstraction: consumers write simple SELECTs against the view without needing to know how the underlying tables relate or how the aggregation is computed.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-19-complex-views-6",
+      "test_id": "pt-dbms-sql-19-complex-views",
+      "question_text": "A correlated subquery view (`above_avg_earners`) compares each employee's salary to the AVG salary of their own department. What SQL feature makes this 'correlated'?",
+      "options": [
+        "The subquery references a column (e2.department = e.department) from the outer query",
+        "The subquery uses UNION",
+        "The subquery has no WHERE clause",
+        "The subquery selects from a different database"
+      ],
+      "correct_index": 0,
+      "explanation": "A correlated subquery references a column from the enclosing query (here, e.department from the outer employees alias e), so it is re-evaluated per outer row.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-19-complex-views-7",
+      "test_id": "pt-dbms-sql-19-complex-views",
+      "question_text": "Why might querying a single department's data through department_summary be less efficient than querying employees directly for that department?",
+      "options": [
+        "Views always create a full physical copy of the data first",
+        "Depending on the optimizer, the aggregation for all departments may be computed before the WHERE filter narrows results, unless the predicate can be pushed down",
+        "Views cannot accept WHERE clauses",
+        "GROUP BY is not allowed in views"
+      ],
+      "correct_index": 1,
+      "explanation": "Unless the optimizer can push the outer WHERE predicate into the view's grouping, the full aggregation across all groups may be computed before filtering — a common motivation to consider a materialized view.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-19-complex-views-8",
+      "test_id": "pt-dbms-sql-19-complex-views",
+      "question_text": "Can a complex view be used as one table in a JOIN within another query?",
+      "options": [
+        "No, views can only be queried standalone",
+        "Yes, a view can be referenced anywhere a base table can, including as a JOIN operand",
+        "Only simple views can be joined",
+        "Only if the view is materialized"
+      ],
+      "correct_index": 1,
+      "explanation": "Views are queried like tables in every respect, including being joined to other tables or views in a larger query.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cx-department-headcount-view",
+      "slug": "department-headcount-view",
+      "title": "Create department headcounts",
+      "difficulty": "Easy",
+      "task": "Create a view named department_counts exposing department and headcount for every department represented in employees. The checker reads it ordered by department.",
+      "schema_sql": "CREATE TABLE employees(id INT PRIMARY KEY,department VARCHAR(30) NOT NULL);",
+      "seed_sql": "INSERT INTO employees VALUES(1,'Arts'),(2,'Arts'),(3,'Science');",
+      "solution_sql": "CREATE VIEW department_counts AS SELECT department,COUNT(*) AS headcount FROM employees GROUP BY department;",
+      "check_sql": "SELECT department,headcount FROM department_counts ORDER BY department;",
+      "expected": "department\theadcount\nArts\t2\nScience\t1",
+      "ordering": "Checker orders department ascending.",
+      "edge_cases": [
+        "One employee department.",
+        "Empty employees.",
+        "Several employees in one department."
+      ],
+      "hints": [
+        "Group by the exposed department."
+      ],
+      "explanation": "The view exposes one group per represented department and counts employee rows.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO employees VALUES(7,'Law'),(8,'Law');",
+          "expected": "department\theadcount\nLaw\t2"
+        }
+      ]
+    },
+    {
+      "id": "cp-dbms-sql-create-a-department-summary-view",
+      "slug": "create-a-department-summary-view",
+      "title": "Create a Department Summary View",
+      "difficulty": "Medium",
+      "existing_problem": true,
+      "original_problem": {
+        "id": "cp-dbms-sql-create-a-department-summary-view",
+        "topic_id": null,
+        "title": "Create a Department Summary View",
+        "difficulty": "Medium",
+        "slug": "create-a-department-summary-view",
+        "description": "Write a `CREATE VIEW` statement named `department_summary` with columns `department`, `headcount` (employee count), and `avg_salary` (integer average salary, using `SUM(salary) DIV COUNT(*)`), one row per department. The checker will query your view afterward.\n\n```sql\nCREATE TABLE employees (\n  id INTEGER PRIMARY KEY,\n  name TEXT NOT NULL,\n  department TEXT NOT NULL,\n  salary INTEGER NOT NULL\n);\n```\n\n**Sample data**:\n\n```sql\nINSERT INTO employees (id, name, department, salary) VALUES\n(1, 'Asha', 'Engineering', 90000),\n(2, 'Rohan', 'Engineering', 60000),\n(3, 'Neha', 'Sales', 70000),\n(4, 'Vikram', 'Sales', 50000);\n```\n",
+        "examples": "[{\"input\": \"\", \"output\": \"department\\theadcount\\tavg_salary\\nEngineering\\t2\\t75000\\nSales\\t2\\t60000\"}]",
+        "test_cases": "[{\"hidden\": true, \"seed_sql\": \"INSERT INTO employees (id, name, department, salary) VALUES\\n(1, 'Zara', 'Finance', 95000),\\n(2, 'Omar', 'Finance', 40000),\\n(3, 'Leo', 'Marketing', 60000);\", \"expected\": \"department\\theadcount\\tavg_salary\\nFinance\\t2\\t67500\\nMarketing\\t1\\t60000\"}]",
+        "starter_code": null,
+        "editorial": "A complex view can involve GROUP BY and aggregate functions, unlike a simple single-table view. Reference: `CREATE VIEW department_summary AS SELECT department, COUNT(*) AS headcount, SUM(salary) DIV COUNT(*) AS avg_salary FROM employees GROUP BY department;`",
+        "supported_languages": null,
+        "sql_schema_sql": "CREATE TABLE employees (\n  id INTEGER PRIMARY KEY,\n  name TEXT NOT NULL,\n  department TEXT NOT NULL,\n  salary INTEGER NOT NULL\n);",
+        "sql_seed_sql": "INSERT INTO employees (id, name, department, salary) VALUES\n(1, 'Asha', 'Engineering', 90000),\n(2, 'Rohan', 'Engineering', 60000),\n(3, 'Neha', 'Sales', 70000),\n(4, 'Vikram', 'Sales', 50000);",
+        "sql_check_sql": "SELECT department, headcount, avg_salary FROM department_summary ORDER BY department;",
+        "learning_topic_id": null,
+        "status": "published",
+        "is_premium": null,
+        "show_on_website": null,
+        "show_on_mobile": null,
+        "sort_order": 1
+      },
+      "original_description_md5": "768d01e3967821e5946437d3c61b953d",
+      "schema_sql": "CREATE TABLE employees (\n  id INTEGER PRIMARY KEY,\n  name TEXT NOT NULL,\n  department TEXT NOT NULL,\n  salary INTEGER NOT NULL\n);",
+      "seed_sql": "INSERT INTO employees (id, name, department, salary) VALUES\n(1, 'Asha', 'Engineering', 90000),\n(2, 'Rohan', 'Engineering', 60000),\n(3, 'Neha', 'Sales', 70000),\n(4, 'Vikram', 'Sales', 50000);",
+      "task": "Write a `CREATE VIEW` statement named `department_summary` with columns `department`, `headcount` (employee count), and `avg_salary` (integer average salary, using `SUM(salary) DIV COUNT(*)`), one row per department. The checker will query your view afterward.",
+      "solution_sql": "CREATE VIEW department_summary AS SELECT department,COUNT(*) AS headcount,SUM(salary) DIV COUNT(*) AS avg_salary FROM employees GROUP BY department;",
+      "expected": "department\theadcount\tavg_salary\nEngineering\t2\t75000\nSales\t2\t60000",
+      "ordering": "Use the explicit ORDER BY required by the task.",
+      "edge_cases": [
+        "Empty input.",
+        "Different valid fixture.",
+        "Repeated contributing values."
+      ],
+      "hints": [
+        "Preserve the requested result grain and aliases."
+      ],
+      "explanation": "The query preserves the required source identities and evaluates the requested operation on all eligible fixture rows.",
+      "validation_cases": [
+        {
+          "hidden": true,
+          "seed_sql": "INSERT INTO employees (id, name, department, salary) VALUES\n(1, 'Zara', 'Finance', 95000),\n(2, 'Omar', 'Finance', 40000),\n(3, 'Leo', 'Marketing', 60000);",
+          "expected": "department\theadcount\tavg_salary\nFinance\t2\t67500\nMarketing\t1\t60000"
+        },
+        {
+          "seed_sql": "INSERT INTO employees VALUES(1,'Ada','Research',11),(2,'Lin','Research',12);",
+          "expected": "department\theadcount\tavg_salary\nResearch\t2\t11"
+        }
+      ],
+      "check_sql": "SELECT department, headcount, avg_salary FROM department_summary ORDER BY department;",
+      "original_check_sql": "SELECT department, headcount, avg_salary FROM department_summary ORDER BY department;"
+    }
+  ],
+  "coding_not_applicable": "",
+  "review": {
+    "reviewer": "/root/finish_f",
+    "independent_review": "passed",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Independent manual content review passed within independent_review_scope; engine/browser/release gates separate.",
+    "editorial_record": "Original scenario-led prose and assessments. External originality and AdSense review unperformed.",
+    "canonical_answer_indices_preserved": true,
+    "independent_reviewer": "/root/review_f_and_foundations",
+    "independent_review_scope": "Full notes,20MCQs with every option,canonical answer position and explanation,original diagrams,and all exercise contracts/fixtures or solved conceptual labs. Original identities/indices checked against public seed cache where applicable. Reported substantive findings corrected by coordinator and filtered recheck accepted;identified learner-facing spacing polished. Manual technical/editorial reasoning only;engine,provider,browser,external originality and AdSense evidence separate."
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-19-complex-views",
+    "original_note_sha256": "ff917e72233177f8282a1287ad7733c752e9d58878dc45634bcefc77bc30a69b",
+    "status": "drafted; not included in prepared paired migrations"
+  },
+  "notes": "## Give a derived relation a stable name\n\nA view is a stored query definition exposed through a table like interface. A complex view combines operations such as joins, grouping, aggregates, expressions, or set operations. The term complex is descriptive rather than a separate MySQL object type. A view containing an aggregate remains a view; its query shape determines properties such as whether updates can map unambiguously to underlying rows.\n\nA campus finance dashboard needs departmental headcounts and average salaries. Repeating the grouping query in several reports invites inconsistent definitions. A departmental summary view gives those reports a shared relational interface. The view does not create a permanent stored copy of the summary rows in ordinary MySQL use, and it does not automatically make an expensive aggregation cheap.\n\n## Define the report grain\n\nAn employee table has one row per employee, while the summary has one row per department. That change in grain is the central contract. The department label becomes the grouping key; headcount and salary totals describe all employees in that group. A consumer must not treat headcount as a row identifier or expect to update one employee by editing the aggregated average.\n\n```sql\nCREATE TABLE employees(id INT PRIMARY KEY,name VARCHAR(30),\n department VARCHAR(30) NOT NULL,salary INT NOT NULL);\nINSERT INTO employees VALUES\n (1,'Asha','Engineering',90000),(2,'Rohan','Engineering',60000),\n (3,'Neha','Sales',70000),(4,'Vikram','Sales',50000);\nCREATE VIEW department_summary AS\nSELECT department,COUNT(*) AS headcount,\n       SUM(salary) DIV COUNT(*) AS avg_salary\nFROM employees GROUP BY department;\nSELECT department,headcount,avg_salary\nFROM department_summary ORDER BY department;\n```\n\nThe output is Engineering with headcount 2 and average 75000, followed by Sales with headcount 2 and average 60000. DIV deliberately produces an integer quotient in this exercise. A financial application may require a decimal average instead, so choose the representation from the reporting requirement rather than assuming that truncation is always appropriate.\n\n## Views are interfaces, not snapshots\n\nWhen a qualifying employee is inserted and a later query reads the view, the summary is derived from the underlying data visible to that query. Transaction isolation still governs which committed or transactional changes are visible. The definition does not freeze the original sample result. A saved export or an intentionally maintained summary table has different freshness and maintenance properties.\n\nUse explicit selected columns and clear aliases when defining the interface. SELECT * can make a view harder to reason about and can interact badly with later schema evolution. MySQL stores the expanded view definition at creation time; adding a column to a base table does not mean that a previously defined SELECT * view automatically gains that column. Verify dependent contracts during schema changes.\n\n## Joins introduce multiplicity\n\nA view that joins employees to departments can enrich each employee with a department name if the department key is unique. A view joining employees to many project assignments has a different grain: one row per assignment, with employee attributes repeated. A consumer summing salary from that assignment view would count salary repeatedly unless the query intentionally accounts for employee identity.\n\nJoin several independent detail tables only after deciding how their measures should combine. Joining project assignments and reimbursements directly through employee identity can multiply both sets. Preaggregate each detail source at employee grain and then join the summaries when the report asks for one employee row. Encapsulating a faulty join in a view makes it reusable, but does not make its totals correct.\n\n## Aggregates, nulls, and empty departments\n\nCOUNT(*) counts employee rows. COUNT(salary) counts only nonnull salaries. The provided exercise declares salary NOT NULL, making those counts equal. If that constraint changes, SUM(salary) divided by COUNT(*) treats unknown salaries differently from AVG(salary), which averages known values. Keep the schema assumption with the calculation so future maintainers do not silently change the measure's meaning.\n\nGrouping employees alone produces no row for a department with no employees. To include empty departments, begin with departments and left join employees. Count a nonnull employee identifier to obtain zero for the empty department. COUNT(*) would count the null extended placeholder and incorrectly report one. A zero headcount also requires deliberate handling before dividing a salary total.\n\n```sql\nSELECT d.id,COUNT(e.id) AS headcount\nFROM departments d LEFT JOIN employees e ON e.department_id=d.id\nGROUP BY d.id ORDER BY d.id;\n```\n\nThis is a separate schema design using department_id rather than the label based exercise table. The example illustrates the outer join pattern, not a query to paste unchanged into the earlier fixture. Keeping examples explicit about their schemas prevents learners from mistaking a conceptual variation for an unexplained missing column.\n\n## Updatability has a boundary\n\nA grouped view with COUNT or SUM is not updatable in MySQL. One summary row can represent many employees, and changing its average does not identify which base salaries should change. Issue authorized changes against the appropriate base records through the application's trusted write path. Do not present a read only reporting interface as a general employee editing endpoint.\n\nSome join views can be updatable under MySQL's documented restrictions, so complexity alone is not a complete updatability test. Inspect the actual definition and the specific operation. INSERT, UPDATE, and DELETE have related but distinct requirements. Computed expressions may be readable while their projected columns are not directly assignable. Treat the interface's read and write capabilities as explicit contracts.\n\n## Worked exercise: departmental summary\n\nThe retained exercise requires a view named department_summary with department, headcount, and integer avg_salary. Build the SELECT first and verify its grouped results, then place CREATE VIEW before that SELECT. The checker queries the resulting view afterward. An ORDER BY in the checker defines displayed order; the view should not be relied upon to guarantee ordering for every consumer.\n\nFor a Finance department with salaries 95000 and 40000, the expected average is 67500 and headcount is 2. A department with one employee returns that employee's salary as its average. Equal salaries remain separate employees and must both contribute to headcount. An empty employees table produces no departmental summary rows rather than a single row of zeros.\n\n## Worked exercise: report departments above a threshold\n\nA second report can query the existing view and apply WHERE headcount >= 2 without repeating the aggregation definition. The condition filters summary rows, not individual employees. Contrast this with putting salary >= 60000 into the base query before grouping, which changes which employees contribute to both the count and average. Predicate placement expresses different reporting populations.\n\nChanging a view definition can affect every dependent consumer, including consumers outside the current application surface. Inventory dependencies, compare column names and types, and validate representative reports before an approved replacement. A rollback should restore the previous definition and preserve expected privileges. These operational considerations are part of maintaining a shared interface even though the ordinary view stores no report rows.\n\n## Validate the exposed contract\n\nCompare both column names and values when testing a view. A query returning correct numbers under unstable generated expression names is awkward for callers and may break a checker expecting explicit aliases. Include a department whose average is not an integer to verify the intended truncation rule. Also insert a new employee after creating the view and query it again; the changed summary demonstrates that this interface derives current visible data rather than retaining the original fixture. These are correctness checks on behavior, distinct from measuring performance or proving deployment compatibility.\n\n## Performance, security, and related study\n\nMySQL may merge a view query into its caller or use an internal temporary result according to the definition and optimizer rules. An aggregate view cannot be treated as a promise of cached results. Inspect the combined consumer plan, because a view's apparent simplicity can hide substantial joins or grouping. Appropriate indexes belong on the underlying tables, with choices driven by the real workload.\n\nView security also depends on privileges and the selected security context. Hiding a sensitive column in a view is useful only with correct grants and write boundaries. Do not assume a view replaces application authorization. Continue with [View Limitations](/learning/dbms-sql-tutorial/view-limitations), [Join Cardinality](/learning/dbms-sql-tutorial/join-cardinality), and [Subquery in SELECT](/learning/dbms-sql-tutorial/subquery-in-select) to connect reusable relations with their correctness and operational limits.\n",
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "A grouped view changes the result grain",
+      "description": "Four employee rows become two departmental summary rows; no single employee owns an aggregate average.",
+      "columns": [
+        "Department",
+        "Employee salaries",
+        "Headcount",
+        "Integer average"
+      ],
+      "rows": [
+        [
+          "Engineering",
+          "90000, 60000",
+          "2",
+          "75000"
+        ],
+        [
+          "Sales",
+          "70000, 50000",
+          "2",
+          "60000"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "technical_review": "Independent manual diagram/content consistency review passed;actual static/browser rendering tracked separately.",
+    "server_rendering": "pending",
+    "browser_rendering": "unverified",
+    "independent_review": "passed"
+  },
+  "sql_verification": {
+    "scope": "not executed; concurrency/recovery/provider verification separate",
+    "all_passed": false,
+    "cases": []
+  }
+}

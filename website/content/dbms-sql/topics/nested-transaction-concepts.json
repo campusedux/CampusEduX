@@ -1,0 +1,517 @@
+{
+  "slug": "nested-transaction-concepts",
+  "source_ref": "chapter-22-transactions/nested-transaction-concepts",
+  "title": "Nested Transaction Concepts",
+  "description": "Define transaction ownership across helpers, distinguish savepoints from independent inner commits, and test MySQL boundary, framework and cleanup failure cases.",
+  "dialect": "MySQL 8.4; engine-specific behavior labeled",
+  "references": [
+    {
+      "title": "MySQL8.4 savepoints",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/savepoint.html"
+    },
+    {
+      "title": "MySQL8.4 implicit commits",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/implicit-commit.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-22-nested-transaction-concepts",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-22-nested-transaction-concepts-1",
+          "test_id": "pt-dbms-sql-22-nested-transaction-concepts",
+          "question_text": "In MySQL, does issuing START TRANSACTION inside an active transaction create an independently nested child transaction?",
+          "options": [
+            "Yes, with independent child durability",
+            "No; it can end the current transaction, so use an explicitly designed savepoint contract for scoped recovery",
+            "Only if the child has one statement",
+            "Every SQL engine guarantees this behavior"
+          ],
+          "correct_index": 1,
+          "explanation": "Scope the claim to MySQL rather than an unsupported count of most SQL databases.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-22-nested-transaction-concepts-2",
+          "test_id": "pt-dbms-sql-22-nested-transaction-concepts",
+          "question_text": "What commonly happens if you issue START TRANSACTION while a transaction is already open?",
+          "options": [
+            "It always creates a fully independent nested transaction",
+            "Dialect-specific behavior — commonly an implicit commit of the current transaction, a warning/error, or a no-op continuing the existing transaction",
+            "It always raises a fatal, unrecoverable error",
+            "It automatically converts to a SAVEPOINT"
+          ],
+          "correct_index": 1,
+          "explanation": "This behavior varies by database and is not genuine nesting in any case.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-22-nested-transaction-concepts-3",
+          "test_id": "pt-dbms-sql-22-nested-transaction-concepts",
+          "question_text": "What should be verified before relying on a framework nested-transaction API?",
+          "options": [
+            "Only its method name",
+            "Its documented savepoint, bookkeeping or rollback-only behavior and actual connection statements",
+            "Only the table row count",
+            "Only its UI label"
+          ],
+          "correct_index": 1,
+          "explanation": "Frameworks differ; a nested scope is not proof of an independent inner commit.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-22-nested-transaction-concepts-4",
+          "test_id": "pt-dbms-sql-22-nested-transaction-concepts",
+          "question_text": "What is the real correctness trap with issuing a second START TRANSACTION while one is open?",
+          "options": [
+            "There is no trap — it's always safe",
+            "Some databases implicitly commit the outer transaction first, silently committing work the caller thought was still pending",
+            "It always throws a compile-time error",
+            "It permanently locks the database"
+          ],
+          "correct_index": 1,
+          "explanation": "Silent implicit-commit behavior on a second START TRANSACTION is a genuine, dialect-specific correctness hazard.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-22-nested-transaction-concepts-5",
+          "test_id": "pt-dbms-sql-22-nested-transaction-concepts",
+          "question_text": "What practical benefit does SAVEPOINT provide as a substitute for true nested transactions?",
+          "options": [
+            "Fully independent commit of an inner unit without affecting the outer transaction",
+            "The ability to isolate and undo just a portion of a larger transaction, without discarding the whole thing",
+            "Automatic conflict resolution between concurrent transactions",
+            "Encryption of transaction data"
+          ],
+          "correct_index": 1,
+          "explanation": "SAVEPOINT covers the most common real use case for 'nesting' — partial rollback — without requiring true nested transaction support.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-22-nested-transaction-concepts-6",
+          "test_id": "pt-dbms-sql-22-nested-transaction-concepts",
+          "question_text": "Which assumption about transaction nesting is unsafe across engines and frameworks?",
+          "options": [
+            "Savepoint semantics should be inspected",
+            "Independent inner commit/rollback is automatically portable because an API is named nested",
+            "Transaction ownership should be documented",
+            "Mandatory business work must succeed together"
+          ],
+          "correct_index": 1,
+          "explanation": "Portability depends on the actual engine and framework contract; savepoints and independent autonomous work are distinct mechanisms.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-22-nested-transaction-concepts-7",
+          "test_id": "pt-dbms-sql-22-nested-transaction-concepts",
+          "question_text": "Does rolling back an 'inner transaction' (SAVEPOINT-based) undo the outer transaction's earlier work?",
+          "options": [
+            "Yes, always",
+            "No — SAVEPOINT-based rollback only undoes statements after that savepoint, leaving the outer transaction's earlier work intact and still open",
+            "It undoes the entire session",
+            "It commits the outer transaction instead"
+          ],
+          "correct_index": 1,
+          "explanation": "This mirrors SAVEPOINT's actual behavior (22.11) — only the inner portion is undone.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-22-nested-transaction-concepts-8",
+          "test_id": "pt-dbms-sql-22-nested-transaction-concepts",
+          "question_text": "Why is it risky for application code to assume 'starting a transaction is always safe' regardless of current state?",
+          "options": [
+            "It's never risky",
+            "Because a second START TRANSACTION's behavior is dialect-specific and can silently commit an already-open outer transaction",
+            "Because START TRANSACTION always fails the second time",
+            "Because transactions can only be started once per database lifetime"
+          ],
+          "correct_index": 1,
+          "explanation": "This dialect-specific silent-commit risk is exactly why understanding your specific database's behavior matters here.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "cx-nested-transaction-concepts-fundamentals-9",
+          "test_id": "pt-dbms-sql-22-nested-transaction-concepts",
+          "question_text": "Who should own the final outcome in the stated caller-managed design?",
+          "options": [
+            "The coordinated outer workflow",
+            "Every helper independently",
+            "The browser theme",
+            "A savepoint name chosen by a user"
+          ],
+          "correct_index": 0,
+          "explanation": "The complete business operation determines commit or rollback.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "cx-nested-transaction-concepts-fundamentals-10",
+          "test_id": "pt-dbms-sql-22-nested-transaction-concepts",
+          "question_text": "Does RELEASE SAVEPOINT make an inner operation independently durable?",
+          "options": [
+            "Yes, always",
+            "No",
+            "Only for integer rows",
+            "Only after a SELECT"
+          ],
+          "correct_index": 1,
+          "explanation": "Release removes a marker while changes remain in the outer pending transaction.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "cx-nested-transaction-concepts-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "cx-nested-transaction-concepts-application-1",
+          "test_id": "cx-nested-transaction-concepts-application",
+          "question_text": "What can MySQL START TRANSACTION do when another transaction is active?",
+          "options": [
+            "Create an independent nested child automatically",
+            "Implicitly commit the current transaction before beginning another",
+            "Always do nothing",
+            "Roll back only a badge"
+          ],
+          "correct_index": 1,
+          "explanation": "Repeated starts are not a portable nesting mechanism.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "cx-nested-transaction-concepts-application-2",
+          "test_id": "cx-nested-transaction-concepts-application",
+          "question_text": "Does autocommit equal 1 prove that no explicit transaction is active?",
+          "options": [
+            "Yes",
+            "Only for MySQL",
+            "No",
+            "Only if the connection is pooled"
+          ],
+          "correct_index": 2,
+          "explanation": "An explicit transaction can coexist with the enabled session mode.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "cx-nested-transaction-concepts-application-3",
+          "test_id": "cx-nested-transaction-concepts-application",
+          "question_text": "What risk comes from reusing a generic savepoint name?",
+          "options": [
+            "It always creates a backup",
+            "It prevents every commit",
+            "It disables all row locks",
+            "It can replace another scope’s recovery marker"
+          ],
+          "correct_index": 3,
+          "explanation": "Savepoint ownership must account for nested call structure.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "cx-nested-transaction-concepts-application-4",
+          "test_id": "cx-nested-transaction-concepts-application",
+          "question_text": "What happens to later savepoints after rollback to an earlier one?",
+          "options": [
+            "They are removed",
+            "They become durable",
+            "They move to another connection",
+            "They commit their changes"
+          ],
+          "correct_index": 0,
+          "explanation": "The marker lifetime follows the actual transaction history.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "cx-nested-transaction-concepts-application-5",
+          "test_id": "cx-nested-transaction-concepts-application",
+          "question_text": "Can a failed mandatory audit be discarded as optional merely by using a savepoint?",
+          "options": [
+            "Yes, savepoints define the business rule",
+            "No",
+            "Only if the helper is short",
+            "Only after a retry"
+          ],
+          "correct_index": 1,
+          "explanation": "The complete authorization and integrity requirement determines acceptable outcomes.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "cx-nested-transaction-concepts-application-6",
+          "test_id": "cx-nested-transaction-concepts-application",
+          "question_text": "Does database partial rollback recall an external email?",
+          "options": [
+            "Yes, automatically",
+            "Only if it contains SQL",
+            "No",
+            "Only if sent locally"
+          ],
+          "correct_index": 2,
+          "explanation": "External delivery is a separate resource boundary.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "cx-nested-transaction-concepts-application-7",
+          "test_id": "cx-nested-transaction-concepts-application",
+          "question_text": "Can framework nesting use bookkeeping without independent inner commits?",
+          "options": [
+            "No, every nested API commits independently",
+            "Only when the database is empty",
+            "Only for read-only rows",
+            "Yes"
+          ],
+          "correct_index": 3,
+          "explanation": "Inspect the framework’s actual savepoint or rollback-only contract.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "cx-nested-transaction-concepts-application-8",
+          "test_id": "cx-nested-transaction-concepts-application",
+          "question_text": "What happens to a helper savepoint after the engine aborts the whole transaction?",
+          "options": [
+            "It no longer provides a recovery target",
+            "It restores the ended transaction",
+            "It becomes a permanent backup",
+            "It commits the prefix"
+          ],
+          "correct_index": 0,
+          "explanation": "A savepoint cannot revive an aborted transaction.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "cx-nested-transaction-concepts-application-9",
+          "test_id": "cx-nested-transaction-concepts-application",
+          "question_text": "What final quantity follows full rollback of the stated ten-seat experiment?",
+          "options": [
+            "Nine",
+            "Ten",
+            "Eight",
+            "Eleven"
+          ],
+          "correct_index": 1,
+          "explanation": "Earlier supported changes were still pending and belong to the outer rollback.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "cx-nested-transaction-concepts-application-10",
+          "test_id": "cx-nested-transaction-concepts-application",
+          "question_text": "What must a nested-helper test inspect beyond a success boolean?",
+          "options": [
+            "Only the display color",
+            "Only function names",
+            "Base data, outcome scope and connection state",
+            "Only line count"
+          ],
+          "correct_index": 2,
+          "explanation": "A boolean can conceal unexpected commits or unresolved session state.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-22-nested-transaction-concepts-1",
+      "test_id": "pt-dbms-sql-22-nested-transaction-concepts",
+      "question_text": "Do most SQL databases support true nested transactions?",
+      "options": [
+        "Yes, universally and identically",
+        "No — most don't; SAVEPOINT provides the practical substitute for the most common use case",
+        "Only NoSQL databases support this",
+        "Nested transactions are part of the core SQL standard, always supported"
+      ],
+      "correct_index": 1,
+      "explanation": "True independent nested transactions are not commonly supported — SAVEPOINT covers the practical need instead.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-22-nested-transaction-concepts-2",
+      "test_id": "pt-dbms-sql-22-nested-transaction-concepts",
+      "question_text": "What commonly happens if you issue START TRANSACTION while a transaction is already open?",
+      "options": [
+        "It always creates a fully independent nested transaction",
+        "Dialect-specific behavior — commonly an implicit commit of the current transaction, a warning/error, or a no-op continuing the existing transaction",
+        "It always raises a fatal, unrecoverable error",
+        "It automatically converts to a SAVEPOINT"
+      ],
+      "correct_index": 1,
+      "explanation": "This behavior varies by database and is not genuine nesting in any case.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-22-nested-transaction-concepts-3",
+      "test_id": "pt-dbms-sql-22-nested-transaction-concepts",
+      "question_text": "How do ORMs/frameworks typically implement a 'nested transaction' API?",
+      "options": [
+        "Using genuine database-level independent nested transactions",
+        "Usually via SAVEPOINT under the hood, not true database-level nesting",
+        "By opening a separate database connection for each nested call",
+        "Nested transaction APIs don't exist in any framework"
+      ],
+      "correct_index": 1,
+      "explanation": "Framework 'nested transactions' are typically SAVEPOINT-based wrappers, which explains their actual (non-independent) behavior.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-22-nested-transaction-concepts-4",
+      "test_id": "pt-dbms-sql-22-nested-transaction-concepts",
+      "question_text": "What is the real correctness trap with issuing a second START TRANSACTION while one is open?",
+      "options": [
+        "There is no trap — it's always safe",
+        "Some databases implicitly commit the outer transaction first, silently committing work the caller thought was still pending",
+        "It always throws a compile-time error",
+        "It permanently locks the database"
+      ],
+      "correct_index": 1,
+      "explanation": "Silent implicit-commit behavior on a second START TRANSACTION is a genuine, dialect-specific correctness hazard.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-22-nested-transaction-concepts-5",
+      "test_id": "pt-dbms-sql-22-nested-transaction-concepts",
+      "question_text": "What practical benefit does SAVEPOINT provide as a substitute for true nested transactions?",
+      "options": [
+        "Fully independent commit of an inner unit without affecting the outer transaction",
+        "The ability to isolate and undo just a portion of a larger transaction, without discarding the whole thing",
+        "Automatic conflict resolution between concurrent transactions",
+        "Encryption of transaction data"
+      ],
+      "correct_index": 1,
+      "explanation": "SAVEPOINT covers the most common real use case for 'nesting' — partial rollback — without requiring true nested transaction support.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-22-nested-transaction-concepts-6",
+      "test_id": "pt-dbms-sql-22-nested-transaction-concepts",
+      "question_text": "Are true nested transactions (independent inner commit/rollback) part of the SQL standard's common core?",
+      "options": [
+        "Yes, universally standardized",
+        "No — where they exist at all, they're typically proprietary extensions in specific database systems, not portable",
+        "They are only available in NoSQL systems",
+        "SAVEPOINT and true nested transactions are the exact same feature"
+      ],
+      "correct_index": 1,
+      "explanation": "True nested transaction support, where it exists, is not a portable, standard SQL feature.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-22-nested-transaction-concepts-7",
+      "test_id": "pt-dbms-sql-22-nested-transaction-concepts",
+      "question_text": "Does rolling back an 'inner transaction' (SAVEPOINT-based) undo the outer transaction's earlier work?",
+      "options": [
+        "Yes, always",
+        "No — SAVEPOINT-based rollback only undoes statements after that savepoint, leaving the outer transaction's earlier work intact and still open",
+        "It undoes the entire session",
+        "It commits the outer transaction instead"
+      ],
+      "correct_index": 1,
+      "explanation": "This mirrors SAVEPOINT's actual behavior (22.11) — only the inner portion is undone.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-22-nested-transaction-concepts-8",
+      "test_id": "pt-dbms-sql-22-nested-transaction-concepts",
+      "question_text": "Why is it risky for application code to assume 'starting a transaction is always safe' regardless of current state?",
+      "options": [
+        "It's never risky",
+        "Because a second START TRANSACTION's behavior is dialect-specific and can silently commit an already-open outer transaction",
+        "Because START TRANSACTION always fails the second time",
+        "Because transactions can only be started once per database lifetime"
+      ],
+      "correct_index": 1,
+      "explanation": "This dialect-specific silent-commit risk is exactly why understanding your specific database's behavior matters here.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "coding_problems": [],
+  "coding_not_applicable": "The topic requires connection and transaction-ownership histories, not a single query result. Two solved savepoint/implicit-boundary exercises are included; framework and provider behavior remain independently verifiable.",
+  "review": {
+    "reviewer": "/root",
+    "independent_review": "passed",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Independent manual content review passed within independent_review_scope; engine/browser/release gates separate.",
+    "editorial_record": "Original scenario-led prose and assessments. External originality and AdSense review unperformed.",
+    "canonical_answer_indices_preserved": true,
+    "independent_reviewer": "/root/finish_e_transactions",
+    "independent_review_scope": "Full notes,20MCQs/options/explanations,diagram and solved helper-ownership labs. MySQL implicit commit,savepoint lifetime,framework distinctions and cleanup sound. Manual reasoning only;engine,provider,browser,originality and AdSense evidence remain separate."
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-22-nested-transaction-concepts",
+    "original_note_sha256": "b9a60e99dc19b9d58a5a9f2b80c9256c4516f9775fe4efa1fd22324855953ec2",
+    "status": "drafted; not included in prepared paired migrations"
+  },
+  "notes": "## Decide who owns the final transaction outcome\n\nA nested-transaction API often appears when one business operation calls a reusable helper that also wants transactional protection. The caller may already have begun a transaction, while the helper would like to roll back its own unsuccessful optional work. The central question is who owns the final commit or rollback decision. A method named begin or nested does not by itself establish a portable database guarantee.\n\nConsider a workshop registration that reserves a seat and calls a helper to create an optional badge. The caller must retain control of the registration's overall outcome. If the helper silently commits the connection, the reservation can become committed before the caller finishes its required checks. If the helper rolls back the entire connection, it can discard unrelated earlier work the caller expected to preserve. Both mistakes come from an unclear ownership contract.\n\n## Distinguish savepoints from independent inner transactions\n\nA savepoint marks a position within one active transaction. Rolling back to it can discard later supported changes while retaining the earlier pending prefix. Releasing it removes the name without committing that prefix or its later surviving changes. A full outer rollback can still undo the supported pending work. This is a useful partial-recovery mechanism, but it is not an independently durable inner commit.\n\nTrue nested-transaction theories and autonomous transactions have different semantics, and those terms should not be treated as interchangeable. An independently committed operation can survive the caller's rollback, which may be exactly what the business operation must avoid. Define the actual intended failure behavior before choosing an engine feature or framework abstraction. The common portable need in this lesson is scoped optional recovery inside one caller-owned transaction.\n\n## Understand MySQL START TRANSACTION boundaries\n\nMySQL does not create a general nested transaction when START TRANSACTION is issued inside an already active transaction. The statement can implicitly commit the existing transaction before starting another. Repeating it is therefore not a harmless way for a helper to declare that its work should be transactional. Earlier caller changes can cross a boundary the caller never intended to close.\n\n```sql\nSTART TRANSACTION;\nUPDATE nesting_lab SET quantity=quantity-1 WHERE bin_id=1;\n-- Do not use another START TRANSACTION here as a nested wrapper.\nSAVEPOINT before_optional_badge;\nINSERT INTO badge_lab(registration_id,label) VALUES(31,'Welcome');\nROLLBACK TO SAVEPOINT before_optional_badge;\nRELEASE SAVEPOINT before_optional_badge;\nCOMMIT;\n```\n\nThis example deliberately discards the badge while committing the earlier quantity decrement. It assumes transactional fixtures built before the transaction and a business rule making the badge genuinely optional. The comments identify the unsafe second transaction start without executing it. A real workflow still needs authorized identity, sufficient quantity, required-row checks and complete failure handling.\n\n## Make the helper's preconditions explicit\n\nOne helper contract can require an already active transaction and promise never to commit it. The helper may create a uniquely owned savepoint for its optional attempt, return a structured result and leave the final decision to the caller. Another helper can own the complete transaction only when no caller-owned transaction is active. Mixing these contracts without checking state invites accidental commits or cleanup of somebody else's work.\n\nDo not infer transaction state only from the autocommit setting. An explicit transaction can be active while MySQL's session autocommit variable remains enabled. Drivers and frameworks may also maintain bookkeeping about nested scopes. Inspect the actual connection state and documented API contract rather than checking one global setting and assuming every layer agrees about ownership.\n\nA helper invoked by several applications should document which exception paths leave the connection usable and which require the caller to abandon the attempt. Silently catching an error and reporting success can let the outer transaction commit incomplete mandatory work. A recoverable optional failure should be distinguishable from an unknown commit outcome or a connection that cannot safely continue.\n\n## Manage savepoint names and lifetime\n\nIn MySQL, reusing an existing savepoint name replaces its earlier position. A helper using a generic name can therefore overwrite the caller's recovery target. Assign savepoint ownership and choose names that cannot collide within the intended call structure. Do not let an untrusted input supply an arbitrary identifier concatenated into transaction-control SQL; use a trusted identifier strategy supported by the implementation.\n\nRolling back to an earlier savepoint removes savepoints created after it. Releasing a savepoint does not release every associated row lock or make changes durable. Ending the transaction removes its savepoint context. These lifecycle rules mean a framework cannot safely model nested scopes as independent timeless objects without coordinating them with the actual connection history.\n\n| Action | Earlier pending caller work | Later helper work | Transaction ended? |\n|---|---|---|---|\n| SAVEPOINT | Preserved and pending | Can follow the marker | No |\n| ROLLBACK TO marker | Preserved and pending | Supported later changes undone | No |\n| RELEASE marker | Still pending | Surviving changes still pending | No |\n| Full ROLLBACK | Supported pending changes undone | Supported pending changes undone | Yes |\n\n## Inspect framework behavior rather than guessing from the name\n\nFrameworks can implement nesting through savepoints, reference counts or rules that mark the outer transaction rollback-only. Some reject nested entry entirely. An inner scope reporting success might merely release a savepoint or decrement bookkeeping, with no durable commit yet. Read the installed framework's documented behavior and nearest tests before combining it with manual transaction-control SQL.\n\nMixing manual COMMIT with a framework-managed scope can leave its bookkeeping inconsistent with the server. A later framework rollback may no longer target the work the programmer thinks is pending. Conversely, an implicit-commit statement inside a helper can end the server transaction while application state still labels it open. Avoid parallel competing ownership layers and test the actual statement sequence in a disposable environment.\n\n## Recognize when partial recovery is not permitted\n\nSuppose the badge is optional but the audit entry authorizing the seat reservation is mandatory. A helper cannot discard the audit error with a savepoint and commit the reservation just to produce a friendly success response. The transaction boundary must follow the complete business contract. Optionality is a requirement decision, not a property created by writing ROLLBACK TO in the handler.\n\nAn external payment call, email or file write does not join the savepoint's rollback domain automatically. Sending a notification inside the helper and then rolling back its request row does not recall delivery. A reviewed outbox or other explicit coordination design can help align external work with the database outcome, while requiring its own retry, duplicate handling and operational evidence.\n\n## Test statement errors and transaction-ending failures separately\n\nAn ordinary statement error can leave an InnoDB transaction and earlier savepoints available. A deadlock victim can have the whole transaction rolled back, so its old savepoint cannot restore an earlier pending prefix. A connection failure can also leave outcome uncertainty. The helper must identify which contract applies before attempting partial recovery or returning a supposedly usable transaction to the caller.\n\nA good test matrix includes an optional duplicate badge, a mandatory validation failure, an unavailable savepoint and a transaction-ending error. Inspect final base rows and connection state, not only the helper's returned boolean. Keep the transaction short and resolve it before returning a pooled connection. A successful partial rollback is not equivalent to a clean idle connection ready for another borrower.\n\nAlso test cancellation before the helper returns. The caller must know whether cleanup completed and whether it still owns an active usable transaction. A cancelled request must not return a connection containing pending changes to an unrelated later borrower merely because the optional scope had a savepoint.\n\n## Solve two ownership exercises\n\nFirst exercise: reserve one seat from a starting quantity of ten, establish a savepoint, insert a badge, roll back the badge and commit. The solution is quantity nine with no badge. Replace the final COMMIT with full ROLLBACK; the quantity returns to ten. These outcomes show that savepoint recovery did not independently commit the earlier reservation.\n\nSecond exercise: a helper calls START TRANSACTION while its caller has a pending decrement. Explain why a later outer rollback cannot be assumed to undo that decrement on MySQL. The second start can have committed the earlier transaction. Redesign the helper to require a caller-owned transaction and use a savepoint only for an authorized optional attempt. Continue with [savepoints](/learning/dbms-sql-tutorial/savepoint), [autocommit](/learning/dbms-sql-tutorial/autocommit) and [transaction boundaries](/learning/dbms-sql-tutorial/transaction-boundaries) to make every completion decision explicit.\n",
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "A helper savepoint preserves caller ownership of the final outcome",
+      "description": "The caller reserves capacity, the helper marks an optional attempt, and partial rollback discards the badge. The remaining decrement is still pending until the caller commits or rolls back.",
+      "columns": [
+        "Scope",
+        "Operation",
+        "Durability meaning"
+      ],
+      "rows": [
+        [
+          "Caller",
+          "Reserve one seat",
+          "Pending"
+        ],
+        [
+          "Helper",
+          "SAVEPOINT; attempt badge",
+          "Still one outer transaction"
+        ],
+        [
+          "Helper",
+          "ROLLBACK TO; RELEASE",
+          "Badge undone; reservation pending"
+        ],
+        [
+          "Caller",
+          "COMMIT or full ROLLBACK",
+          "Final decision applies to surviving supported work"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "technical_review": "author self-review only",
+    "server_rendering": "pending",
+    "browser_rendering": "unverified",
+    "independent_review": "pending"
+  },
+  "sql_verification": {
+    "scope": "not executed; concurrency/recovery/provider verification separate",
+    "all_passed": false,
+    "cases": []
+  }
+}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import { Badge, Button, Field, Input, Textarea, toast, type BadgeTone } from "@/components/ui";
@@ -33,15 +33,19 @@ function AddonForm({
 }) {
   const [title, setTitle] = useState(initial?.title ?? "");
   const [description, setDescription] = useState(initial?.description ?? "");
-  const [pending, start] = useTransition();
+  const [pending, setPending] = useState(false);
   return (
     <form
       className="space-y-3 rounded-xl border border-line bg-surface p-4"
-      onSubmit={(e) => {
+      onSubmit={async (e) => {
         e.preventDefault();
-        start(async () => {
+        if (pending) return;
+        setPending(true);
+        try {
           if (await onSubmit({ title, description })) onCancel();
-        });
+        } finally {
+          setPending(false);
+        }
       }}
     >
       <Field label="Feature" htmlFor="addon-title" required>
@@ -81,14 +85,19 @@ export default function AddonsPanel({
   const [busyId, setBusyId] = useState<string | null>(null);
 
   async function run(result: Promise<{ ok: true } | { error: string }>, success: string): Promise<boolean> {
-    const res = await result;
-    if ("error" in res) {
-      toast({ title: "Something went wrong", description: res.error, tone: "error" });
+    try {
+      const res = await result;
+      if ("error" in res) {
+        toast({ title: "Something went wrong", description: res.error, tone: "error" });
+        return false;
+      }
+      toast({ title: success, tone: "success" });
+      router.refresh();
+      return true;
+    } catch (err) {
+      toast({ title: "Something went wrong", description: err instanceof Error ? err.message : undefined, tone: "error" });
       return false;
     }
-    toast({ title: success, tone: "success" });
-    router.refresh();
-    return true;
   }
 
   async function act(id: string, fn: () => Promise<boolean>) {

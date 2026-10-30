@@ -1,0 +1,621 @@
+{
+  "source_ref": "chapter-6-er-and-eer-modeling/participation",
+  "slug": "participation",
+  "title": "Participation",
+  "description": "Define minimum relationship participation per side, distinguish it from maximum multiplicity and weak identification, and audit required assignments without confusing nullability with full enforcement.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Participation asks whether a link is required\n\nParticipation constraints state whether an entity occurrence must take part in a particular relationship. Total participation requires every relevant occurrence to participate. Partial participation permits some occurrences to have no link. The rule belongs to one side of one defined relationship, not permanently to an entity type regardless of its other roles.\n\nFor a campus example, every Course may require a Department through OfferedBy. Course then has total participation in that relationship. Department can still have partial participation if a new department may be recorded before offering any courses. These statements are compatible. Requiring a parent for each course does not automatically require a child course for every department.\n\n## Minimum and maximum work together\n\nMaximum multiplicity describes how many associations an occurrence may have. Minimum participation describes whether at least one is required. A Course can have exactly one department when the maximum is one and the minimum is one. An optional advisor association can have zero or one advisor. A Department can have zero or many offered courses under the example's policy.\n\nMin-max notation can express these combinations explicitly. Under the convention used here, a bound next to an entity role states the number of relationship instances that one occurrence in that role may participate in. State the reading convention because notations can place labels differently. A diagram is useful only if readers can tell whose participation each number limits.\n\n## Total does not mean many\n\nA total-participation rule requires participation, but it does not by itself say whether the maximum is one or many. Every student may need at least one enrollment while still being allowed several. Another relationship can require exactly one programme assignment. Both involve mandatory participation, but their upper bounds differ.\n\nLikewise, partial does not mean no occurrence currently participates. Every student in a sample could happen to have a phone while the model still permits students without one. An empty-participation example can demonstrate a permitted case, but the requirement and actual constraints establish the allowed states. Current data alone does not define the minimum rule for every future occurrence.\n\n## Requirements apply per relationship and side\n\nStudent can require a programme while optionally participating in a club. Course can require an owning department while having no current enrollment. The same entity category can therefore have different participation rules in different relationships. A course with no students is not necessarily invalid merely because it must have a department.\n\nThe roles also matter in recursive relationships. An employee may have zero or one manager while being allowed zero or many subordinates. Those are distinct participation bounds for two roles of the same entity category. Do not collapse them into one universal Employee participation label. Direction and role names keep the requirement interpretable.\n\n## Weak identification explains one mandatory link\n\nA weak Room occurrence identified by building_id and room_number needs its owner Building to complete its identity in the stated model. Room has total participation in its identifying relationship. Building can have partial participation when it is allowed to own no recorded rooms. The diagram and relational mapping should show those two sides consistently.\n\nA strong entity can also have total participation in another relationship without becoming weak. Student may require a programme while student_id independently identifies it. The mandatory programme link concerns accepted states, while the weak-entity distinction concerns identification dependence. These are related concepts with different questions and should not be treated as interchangeable terminology.\n\n## Common notation distinguishes required participation\n\nIn common Chen-style diagrams, a double line connects an entity type to a relationship when participation is total, while a single line represents partial participation. A weak entity and its identifying relationship have additional shape conventions. The double connection is not the same symbol as a double rectangle or double diamond, even though all can appear together in a weak-entity diagram.\n\nOther ER notations use optionality markers or min-max labels. Always connect the visual symbol to a statement about actual occurrences, such as every room has exactly one owner. Merely labeling a line mandatory does not create an executable SQL guarantee. The implementation and verification must still match the intended relationship and all relevant legal states.\n\n## Child-side assignment needs presence and existence\n\nFor a simple many-to-one Course-Department mapping, a department_id column on Course can hold the assigned parent. NOT NULL requires a value. An appropriate supported foreign key requires that accepted nonmissing reference to identify an allowed department. Neither ingredient alone establishes the complete intended assignment policy in a table that can otherwise accept invalid values.\n\n```sql\nCREATE TABLE courses (\n  course_id INT PRIMARY KEY,\n  department_id INT NOT NULL,\n  FOREIGN KEY (department_id) REFERENCES departments(department_id)\n);\n```\n\nThe scalar reference also gives each course at most one stored assignment in this mapping. It does not require each department to be referenced. The example illustrates one supported implementation pattern, not a universal recipe for total participation in every relationship degree, optional composite reference, or temporal association.\n\n## Parent-side minimums need a different analysis\n\nA rule that every department must offer at least one course is a minimum over its related population. A foreign key from Course to Department cannot establish that requirement by itself. It checks existing child references and allows an unreferenced parent unless some additional supported enforcement design governs the parent-side minimum.\n\nA diagnostic query can find departments with no courses at a particular observed state. It does not prevent a later deletion of the last course or automatically coordinate the creation of a new department and its first course. The trusted transition design must handle the relevant operations and concurrency. Do not describe a read-only audit as a complete always-enforced minimum guarantee.\n\n## Stage-dependent participation must be explicit\n\nAn applicant may be allowed no institutional programme assignment until admission, while an active student must have one. That is a conditional domain policy over a defined lifecycle, not a contradiction in the participation concept. State which population the minimum applies to and what valid transition introduces the required relationship.\n\nHistorical requirements need similar precision. Every course offering may need an assigned instructor for the teaching period, while a draft offering can be unassigned. A current optional column alone may not express the whole lifecycle. The application should preserve the intended state conditions through its authoritative boundary instead of silently relaxing a declared minimum whenever a particular screen finds it inconvenient.\n\n## Audit missing assignments separately from missing parents\n\nIn an unconstrained staging table, department_id NULL means no assignment value was supplied. A nonmissing department_id with no matching department is an invalid asserted reference. Both can be unacceptable for a mandatory assignment, but they are different diagnostics. Report them clearly rather than treating every unmatched join row as one unexplained blank.\n\nUse a parent identity guaranteed nonmissing on matched rows for the existence test. An optional parent name can be NULL while the parent actually exists. An audit should not flag that case as missing participation or missing identity. The query must follow the relationship's exact components and population rather than a descriptive field that only happens to be present in the original fixture.\n\n## Test transitions as well as snapshots\n\nA mandatory-link design should consider a valid assigned child, an unassigned proposal, an invalid parent reference, and relevant parent or child changes. A parent-side minimum also needs last-child deletion and owner-creation cases. A current dataset satisfying the rule does not prove that every permitted mutation preserves it.\n\nNative synthetic MariaDB reference checks can demonstrate selected NOT NULL and foreign-key operations, but they remain distinct from exact MySQL/provider verification and a complete participation-enforcement strategy. Temporary audit exercises deliberately allow invalid proposals for diagnosis. Record which boundary each test exercises, preserving the difference between current-state meaning and trusted accepted transitions.\n\n## Review participation with concrete minimums\n\nState the entity role, relationship, relevant lifecycle population, lower bound, and upper bound. Then identify how presence, parent existence, uniqueness, and any aggregate minimum are represented and enforced. A fixture with only one valid link can hide missing parent-side enforcement or a mistaken total-participation assumption on the other side.\n\nThe exercises here report missing or invalid course assignments and departments with no course facts. They verify query semantics on synthetic snapshots rather than claiming all future transitions are constrained. Participation is useful when it makes mandatory and optional relationships precise, allowing diagrams, mappings, and verification records to agree about which occurrences must be linked and where the evidence stops.\n",
+  "references": [],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-6-participation",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-6-participation-1",
+          "test_id": "pt-dbms-sql-6-participation",
+          "question_text": "What does 'participation' describe in the ER model?",
+          "options": [
+            "The number of entity sets in a relationship",
+            "Whether every instance of an entity set is required (total) or not required (partial) to take part in a relationship",
+            "The maximum number of instances that can be linked",
+            "Whether an attribute is derived"
+          ],
+          "correct_index": 1,
+          "explanation": "Participation is about mandatory (total) vs. optional (partial) involvement of an entity's instances in a relationship.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-6-participation-2",
+          "test_id": "pt-dbms-sql-6-participation",
+          "question_text": "In the common Chen-style convention, how is total participation shown?",
+          "options": [
+            "A single line from entity to relationship",
+            "A double line from entity to relationship",
+            "A dashed line",
+            "A double-line rectangle around the entity"
+          ],
+          "correct_index": 1,
+          "explanation": "A double line denotes total (mandatory) participation, contrasted with a single line for partial participation.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-6-participation-3",
+          "test_id": "pt-dbms-sql-6-participation",
+          "question_text": "Every Course must be Offered_By some Department; no course can exist without one. This is an example of:",
+          "options": [
+            "Partial participation of Course in Offers",
+            "Total participation of Course in Offers",
+            "M:N cardinality",
+            "A weak entity"
+          ],
+          "correct_index": 1,
+          "explanation": "Mandatory involvement for every instance of Course is the definition of total participation.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-6-participation-4",
+          "test_id": "pt-dbms-sql-6-participation",
+          "question_text": "Which best distinguishes participation from cardinality?",
+          "options": [
+            "They are the same concept",
+            "Cardinality sets a maximum on how many instances can be linked (1, N, M); participation sets a minimum — whether at least one link is required (total) or not (partial)",
+            "Participation only applies to weak entities",
+            "Cardinality applies only to unary relationships"
+          ],
+          "correct_index": 1,
+          "explanation": "Cardinality = upper bound on links; participation = whether a link is mandatory at all — separate, combinable constraints.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-6-participation-5",
+          "test_id": "pt-dbms-sql-6-participation",
+          "question_text": "Why does a weak entity set always have total participation in its identifying relationship?",
+          "options": [
+            "Because weak entities always have many attributes",
+            "Because a weak entity has no independent existence/identity and can only exist through its link to the owner entity",
+            "Because total participation is required by SQL syntax",
+            "It is a coincidence with no structural reason"
+          ],
+          "correct_index": 1,
+          "explanation": "The weak occurrence needs an owner link to complete its identity in the stated model; owner participation can still be partial.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-6-participation-6",
+          "test_id": "pt-dbms-sql-6-participation",
+          "question_text": "Can the same entity set have total participation in one relationship and partial participation in a different relationship?",
+          "options": [
+            "No, participation is a fixed global property of the entity set",
+            "Yes — participation is defined per relationship (and per side), so it can vary across different relationships that the entity set is involved in",
+            "Only weak entities can have varying participation",
+            "Only if the cardinalities are also identical"
+          ],
+          "correct_index": 1,
+          "explanation": "Participation is evaluated relationship-by-relationship (and side-by-side), not as one fixed trait of the entity set.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-6-participation-7",
+          "test_id": "pt-dbms-sql-6-participation",
+          "question_text": "Under a min-max convention stating how many relationship instances one occurrence in the labeled role may join, what does (0,N) mean?",
+          "options": [
+            "Total participation with at most one link",
+            "Partial participation (minimum 0) with up to many (N) links allowed",
+            "Mandatory participation with exactly one link",
+            "The entity set is weak"
+          ],
+          "correct_index": 1,
+          "explanation": "The min of 0 signals optional (partial) participation, while max N allows multiple links.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-6-participation-8",
+          "test_id": "pt-dbms-sql-6-participation",
+          "question_text": "In a scalar Course-to-Department mapping already protected by a supported foreign key, what additional declaration prevents an absent department assignment?",
+          "options": [
+            "A UNIQUE constraint only",
+            "A NOT NULL constraint on the foreign key column",
+            "Deleting the table entirely",
+            "A multi-valued attribute"
+          ],
+          "correct_index": 1,
+          "explanation": "NOT NULL supplies required presence; the existing supported foreign key separately supplies parent existence. Neither establishes a course for every department.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-6-participation-new-9",
+          "test_id": "pt-dbms-sql-6-participation",
+          "question_text": "Does every Course requiring a Department imply every Department has a Course?",
+          "options": [
+            "Yes; every foreign key creates a child",
+            "No; the two sides have separate minimums",
+            "Only if ids are integers",
+            "Only if courses have names"
+          ],
+          "correct_index": 1,
+          "explanation": "Child total assignment does not enforce parent total participation.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-6-participation-new-10",
+          "test_id": "pt-dbms-sql-6-participation",
+          "question_text": "Can a strong Student have mandatory Programme participation?",
+          "options": [
+            "No; every mandatory link makes it weak",
+            "Only if names are unique",
+            "Yes; identification and participation are different dimensions",
+            "Only if the programme is absent"
+          ],
+          "correct_index": 2,
+          "explanation": "A student can remain independently identified.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-6-participation-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-6-participation-application-new-1",
+          "test_id": "pt-dbms-sql-6-participation-application",
+          "question_text": "What does total participation alone establish about maximum count?",
+          "options": [
+            "Exactly one always",
+            "Exactly two always",
+            "Nothing beyond the stated minimum requirement",
+            "Unlimited repeated identical facts"
+          ],
+          "correct_index": 2,
+          "explanation": "The maximum needs its own rule.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-6-participation-application-new-2",
+          "test_id": "pt-dbms-sql-6-participation-application",
+          "question_text": "Can a partial-participation sample currently have every entity linked?",
+          "options": [
+            "No; one absence must always be stored",
+            "Only if no keys exist",
+            "Only if sorted",
+            "Yes; the model can permit absence even if none occurs now"
+          ],
+          "correct_index": 3,
+          "explanation": "Permitted minimum and current population differ.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-6-participation-application-new-3",
+          "test_id": "pt-dbms-sql-6-participation-application",
+          "question_text": "Why is NOT NULL alone insufficient for a mandatory valid parent assignment?",
+          "options": [
+            "A supplied value can still name no existing parent",
+            "It always creates a parent",
+            "It means globally unique",
+            "It only affects display order"
+          ],
+          "correct_index": 0,
+          "explanation": "Existence needs an appropriate additional reference rule.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-6-participation-application-new-4",
+          "test_id": "pt-dbms-sql-6-participation-application",
+          "question_text": "What can a course-to-department foreign key not require by itself?",
+          "options": [
+            "That a matched parent exists under the rule",
+            "At least one course for every department",
+            "The defined reference comparison",
+            "The declared parent relationship"
+          ],
+          "correct_index": 1,
+          "explanation": "An unreferenced parent can remain valid under that constraint.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-6-participation-application-new-5",
+          "test_id": "pt-dbms-sql-6-participation-application",
+          "question_text": "What does a double participation line mean in the selected notation?",
+          "options": [
+            "The entity has two primary keys",
+            "Every value is multivalued",
+            "Required relationship participation for that side",
+            "The SQL table was executed"
+          ],
+          "correct_index": 2,
+          "explanation": "It is distinct from weak-entity and identifying-relationship shapes.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-6-participation-application-new-6",
+          "test_id": "pt-dbms-sql-6-participation-application",
+          "question_text": "Why distinguish a NULL child assignment from a nonmissing orphan?",
+          "options": [
+            "Both always identify parent zero",
+            "Only NULL can be invalid",
+            "Only names define participation",
+            "Absence and an invalid asserted reference are different failures"
+          ],
+          "correct_index": 3,
+          "explanation": "Mandatory validity can reject both for different reasons.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-6-participation-application-new-7",
+          "test_id": "pt-dbms-sql-6-participation-application",
+          "question_text": "What current-state query finds a parent-side participation gap?",
+          "options": [
+            "Find parents with no matching child facts",
+            "Count only child columns",
+            "List every nonmissing parent name",
+            "Select only one arbitrary row"
+          ],
+          "correct_index": 0,
+          "explanation": "The audit evaluates the parent’s related population.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-6-participation-application-new-8",
+          "test_id": "pt-dbms-sql-6-participation-application",
+          "question_text": "Why must a parent minimum consider deletion of the last child?",
+          "options": [
+            "Every deletion changes degree",
+            "That transition can violate an otherwise satisfied minimum",
+            "Only inserts affect participation",
+            "A SELECT automatically prevents it"
+          ],
+          "correct_index": 1,
+          "explanation": "Snapshot validity does not prove mutation preservation.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-6-participation-application-new-9",
+          "test_id": "pt-dbms-sql-6-participation-application",
+          "question_text": "What should a stage-dependent rule specify?",
+          "options": [
+            "Only a display caption",
+            "Only the longest id",
+            "The lifecycle population and transition where participation becomes required",
+            "Only a global optional flag"
+          ],
+          "correct_index": 2,
+          "explanation": "The minimum can depend on explicit domain state.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-6-participation-application-new-10",
+          "test_id": "pt-dbms-sql-6-participation-application",
+          "question_text": "What does an audit passing on temporary fixtures establish?",
+          "options": [
+            "Always-enforced total participation",
+            "Exact hosted-provider transitions",
+            "Production authorization",
+            "The implemented snapshot checks on those cases"
+          ],
+          "correct_index": 3,
+          "explanation": "Its claim must match its actual scope.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cx-participation-assignments",
+      "slug": "participation-assignments",
+      "title": "Diagnose absent and invalid mandatory course assignments",
+      "difficulty": "Easy",
+      "task": "Return course_id and assignment_issue for proposals with NULL department_id (missing) or a nonmissing reference with no parent (invalid). Matched parents are valid even if department_name is NULL.",
+      "schema_sql": "CREATE TABLE departments (department_id INT PRIMARY KEY, department_name VARCHAR(80) NULL);\nCREATE TABLE course_proposals (course_id INT PRIMARY KEY, department_id INT NULL);",
+      "seed_sql": "INSERT INTO departments VALUES (1,NULL),(2,'Computing'); INSERT INTO course_proposals VALUES (10,1),(20,NULL),(30,99),(40,2);",
+      "expected": "course_id\tassignment_issue\n20\tmissing\n30\tinvalid",
+      "ordering": "Ascending course_id.",
+      "constraints": [
+        "This staging mirror intentionally permits invalid proposals.",
+        "The task audits a required assignment; it does not install enforcement."
+      ],
+      "edge_cases": [
+        "A parent can exist with an absent descriptive name.",
+        "Missing assignment and orphan reference need different labels."
+      ],
+      "hints": [
+        "Preserve course proposals when joining parent identities.",
+        "Classify the child absence before testing a missing parent match."
+      ],
+      "solution_sql": "SELECT c.course_id, CASE WHEN c.department_id IS NULL THEN 'missing' ELSE 'invalid' END AS assignment_issue FROM course_proposals c LEFT JOIN departments d ON d.department_id = c.department_id WHERE c.department_id IS NULL OR d.department_id IS NULL ORDER BY c.course_id;",
+      "explanation": "The query distinguishes two failures of the required assignment policy without treating a missing parent label as a missing parent identity.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO departments VALUES (1,NULL); INSERT INTO course_proposals VALUES (10,1);",
+          "expected": ""
+        },
+        {
+          "seed_sql": "INSERT INTO course_proposals VALUES (20,NULL),(10,99);",
+          "expected": "course_id\tassignment_issue\n10\tinvalid\n20\tmissing"
+        }
+      ]
+    },
+    {
+      "id": "cx-participation-parent-gap",
+      "slug": "participation-parent-gap",
+      "title": "Audit the separate parent-side minimum",
+      "difficulty": "Medium",
+      "task": "Under a proposed policy that every department should have at least one course proposal referring to it, return department_id for departments with no matching proposal. This is a snapshot audit, not an enforcement mechanism. Ignore unassigned and invalid-reference proposals.",
+      "schema_sql": "CREATE TABLE departments (department_id INT PRIMARY KEY, department_name VARCHAR(80) NULL);\nCREATE TABLE course_proposals (course_id INT PRIMARY KEY, department_id INT NULL);",
+      "seed_sql": "INSERT INTO departments VALUES (1,'Art'),(2,'Computing'),(3,NULL); INSERT INTO course_proposals VALUES (10,1),(20,1),(30,NULL),(40,99);",
+      "expected": "department_id\n2\n3",
+      "ordering": "Ascending department_id.",
+      "constraints": [
+        "The parent-side minimum is a separate proposed policy from requiring a department for each course."
+      ],
+      "edge_cases": [
+        "Several courses in one department do not satisfy another department’s minimum.",
+        "No courses means every recorded department is a gap."
+      ],
+      "hints": [
+        "Start from departments and look for absence of matching course identities.",
+        "A foreign key alone would not enforce this parent-side minimum."
+      ],
+      "solution_sql": "SELECT d.department_id FROM departments d LEFT JOIN course_proposals c ON c.department_id = d.department_id WHERE c.course_id IS NULL ORDER BY d.department_id;",
+      "explanation": "The anti-join measures the parent’s minimum-participation gap at the observed state without claiming last-child deletion or concurrent transitions are protected.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO departments VALUES (2,'B'),(1,'A');",
+          "expected": "department_id\n1\n2"
+        },
+        {
+          "seed_sql": "INSERT INTO departments VALUES (1,NULL); INSERT INTO course_proposals VALUES (10,1);",
+          "expected": ""
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-6-participation-1",
+      "test_id": "pt-dbms-sql-6-participation",
+      "question_text": "What does 'participation' describe in the ER model?",
+      "options": [
+        "The number of entity sets in a relationship",
+        "Whether every instance of an entity set is required (total) or not required (partial) to take part in a relationship",
+        "The maximum number of instances that can be linked",
+        "Whether an attribute is derived"
+      ],
+      "correct_index": 1,
+      "explanation": "Participation is about mandatory (total) vs. optional (partial) involvement of an entity's instances in a relationship.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-6-participation-2",
+      "test_id": "pt-dbms-sql-6-participation",
+      "question_text": "How is total participation shown in an ER diagram?",
+      "options": [
+        "A single line from entity to relationship",
+        "A double line from entity to relationship",
+        "A dashed line",
+        "A double-line rectangle around the entity"
+      ],
+      "correct_index": 1,
+      "explanation": "A double line denotes total (mandatory) participation, contrasted with a single line for partial participation.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-6-participation-3",
+      "test_id": "pt-dbms-sql-6-participation",
+      "question_text": "Every Course must be Offered_By some Department; no course can exist without one. This is an example of:",
+      "options": [
+        "Partial participation of Course in Offers",
+        "Total participation of Course in Offers",
+        "M:N cardinality",
+        "A weak entity"
+      ],
+      "correct_index": 1,
+      "explanation": "Mandatory involvement for every instance of Course is the definition of total participation.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-6-participation-4",
+      "test_id": "pt-dbms-sql-6-participation",
+      "question_text": "Which best distinguishes participation from cardinality?",
+      "options": [
+        "They are the same concept",
+        "Cardinality sets a maximum on how many instances can be linked (1, N, M); participation sets a minimum — whether at least one link is required (total) or not (partial)",
+        "Participation only applies to weak entities",
+        "Cardinality applies only to unary relationships"
+      ],
+      "correct_index": 1,
+      "explanation": "Cardinality = upper bound on links; participation = whether a link is mandatory at all — separate, combinable constraints.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-6-participation-5",
+      "test_id": "pt-dbms-sql-6-participation",
+      "question_text": "Why does a weak entity set always have total participation in its identifying relationship?",
+      "options": [
+        "Because weak entities always have many attributes",
+        "Because a weak entity has no independent existence/identity and can only exist through its link to the owner entity",
+        "Because total participation is required by SQL syntax",
+        "It is a coincidence with no structural reason"
+      ],
+      "correct_index": 1,
+      "explanation": "A weak entity structurally cannot exist without its owner, so its participation in the identifying relationship must be total, by definition.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-6-participation-6",
+      "test_id": "pt-dbms-sql-6-participation",
+      "question_text": "Can the same entity set have total participation in one relationship and partial participation in a different relationship?",
+      "options": [
+        "No, participation is a fixed global property of the entity set",
+        "Yes — participation is defined per relationship (and per side), so it can vary across different relationships that the entity set is involved in",
+        "Only weak entities can have varying participation",
+        "Only if the cardinalities are also identical"
+      ],
+      "correct_index": 1,
+      "explanation": "Participation is evaluated relationship-by-relationship (and side-by-side), not as one fixed trait of the entity set.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-6-participation-7",
+      "test_id": "pt-dbms-sql-6-participation",
+      "question_text": "In (min, max) notation, what does a (0, N) participation/cardinality pair on an entity set's side mean?",
+      "options": [
+        "Total participation with at most one link",
+        "Partial participation (minimum 0) with up to many (N) links allowed",
+        "Mandatory participation with exactly one link",
+        "The entity set is weak"
+      ],
+      "correct_index": 1,
+      "explanation": "The min of 0 signals optional (partial) participation, while max N allows multiple links.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-6-participation-8",
+      "test_id": "pt-dbms-sql-6-participation",
+      "question_text": "In ER-to-relational mapping, total participation on the 'many' side of a 1:N relationship is often enforced in SQL using:",
+      "options": [
+        "A UNIQUE constraint only",
+        "A NOT NULL constraint on the foreign key column",
+        "Deleting the table entirely",
+        "A multi-valued attribute"
+      ],
+      "correct_index": 1,
+      "explanation": "Requiring every row to reference the related entity (mandatory participation) is commonly enforced with NOT NULL on the foreign key.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "coordinator",
+    "independent_review": "unavailable; no agent tools",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Definitions and examples checked against questions; no plagiarism certification.",
+    "existing_question_corrections": [
+      "tq-dbms-sql-6-participation-2",
+      "tq-dbms-sql-6-participation-5",
+      "tq-dbms-sql-6-participation-7",
+      "tq-dbms-sql-6-participation-8"
+    ],
+    "canonical_answer_indices_preserved": true
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-6-participation",
+    "original_note_sha256": "1ee74347e8815771e79b2477f51e7369252ee3ea0839a5c3e20375549ac0988d",
+    "status": "paired migration prepared; not applied"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Participation minimums are defined separately on each relationship side",
+      "description": "The course-side required assignment can coexist with an optional department-side population. Other relationships and lifecycle stages can have different bounds.",
+      "columns": [
+        "Role under the stated policy",
+        "Minimum",
+        "Maximum",
+        "Interpretation"
+      ],
+      "rows": [
+        [
+          "Course in OfferedBy",
+          "1",
+          "1",
+          "Every course has exactly one department"
+        ],
+        [
+          "Department in Offers",
+          "0",
+          "Many",
+          "A department can have no courses"
+        ],
+        [
+          "Room in identifying Contains",
+          "1",
+          "1",
+          "A weak room requires its owner"
+        ],
+        [
+          "Student in optional ClubMembership",
+          "0",
+          "Many",
+          "This separate relationship need not be mandatory"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "coordinator checked min/max reading, separate parent/child requirements and presence versus existence diagnostics",
+    "server_rendering": "passed",
+    "browser_rendering": "unverified",
+    "independent_review": "unavailable; no agent tools",
+    "server_rendering_evidence": "2026-10-29: actual LessonBlock rendering passed in focused suite including the authored window package."
+  },
+  "sql_verification": {
+    "engine": "11.8.6-MariaDB-0+deb13u1 from Debian",
+    "scope": "MariaDB compatibility execution; exact MySQL 8.4/provider execution unverified",
+    "fingerprint": "4f17e0ed444af3294d202ef83e8518a68563c0b17c10e4f49c2e5b47755e0892",
+    "cases": [
+      {
+        "problem": "participation-assignments",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "participation-assignments",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "participation-assignments",
+        "case": 2,
+        "passed": true
+      },
+      {
+        "problem": "participation-parent-gap",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "participation-parent-gap",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "participation-parent-gap",
+        "case": 2,
+        "passed": true
+      }
+    ],
+    "all_passed": true
+  }
+}

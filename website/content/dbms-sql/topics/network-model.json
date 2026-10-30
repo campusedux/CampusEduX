@@ -1,0 +1,626 @@
+{
+  "source_ref": "chapter-3-data-models/network-model",
+  "slug": "network-model",
+  "title": "Network Model",
+  "description": "Explain CODASYL owner/member sets, navigational access, multiple relationship roles, and association records, with SQL mirrors that distinguish shared links from ownership violations.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Linking records through named relationships\n\nThe network data model associated with CODASYL organizes records through explicitly defined relationship sets. A set type relates an owner record type to a member record type. A set occurrence contains a particular owner and its related member occurrences under the supported membership rules. The word set here names a database relationship construct rather than simply any unordered mathematical collection.\n\nUnlike a basic hierarchical tree, a record can participate in several named relationship roles. It might be a member in one set and an owner in another, or a member in several different set types. That gives the model more relationship flexibility than a single-parent containment tree. The exact membership, insertion, and removal rules still belong to the particular schema and product.\n\nIDMS is a well-known implementation associated with network database concepts. This topic explains the classical owner/member model rather than claiming to implement its full native interface in MySQL. The SQL exercises represent relationship facts in ordinary tables so the structural ideas can be tested without executing an IDMS program or changing a real network schema.\n\n## Distinguishing a set type from an occurrence\n\nA SupplierParts set type describes a relationship between supplier and part-related records. One occurrence concerns a particular supplier and its members. Another occurrence can concern a different supplier. The definition describes permitted structure, while actual occurrences identify which records participate. A diagram of two types does not mean only two records exist.\n\nA member's participation must be interpreted for the particular set type. In the simplified conventional ownership model used here, a member belongs to at most one owner occurrence for a given set type. The same member can participate through a different set type with a different owner role. Multiple named relationships are not the same as arbitrary multiple owners within one relationship.\n\nOptionality also matters. A supported schema can define whether membership is required or optional and how a record becomes connected. Do not assume every record must immediately appear in every possible set merely because it has the corresponding type. The actual implementation must enforce the intended membership and lifecycle rules.\n\n## Following navigational access\n\nClassical network access is often navigational. A program locates a record and follows a supported set relationship, using operations appropriate to its database interface. Product documentation includes operations such as finding an owner within a set. The application needs an understanding of the schema and current navigation context to request the intended related records.\n\nThis can fit repetitive relationship traversals well. A task beginning with one warehouse and visiting its related stock records follows a known path. The same application may need different navigation or access support for a new report across all suppliers. The trade-off is between explicit path control and the flexibility of describing a desired result independently of a predefined traversal.\n\nDo not infer that every operation requires a linear pointer walk or that indexes and direct access are impossible. Actual products can offer several access mechanisms and additional query interfaces. The model's navigational tradition explains a common application dependency, not an exhaustive restriction on every implementation bearing the network label.\n\n## Interpreting several owner roles carefully\n\nSuppose a Part occurrence participates in a SupplierHome set and a WarehouseHome set. It can have an owner playing the supplier role and another playing the warehouse role. This is a useful contrast with a simple containment tree because the record participates in two independently named relationships.\n\nThat illustration does not by itself establish unrestricted many-to-many supply and stocking. If the business says a part can have many suppliers and each supplier can supply many parts, one direct single-owner membership cannot express all those associations. Likewise, many warehouses stocking the same part require a representation that preserves several distinct stocking facts.\n\nA model should not claim to solve a many-to-many requirement merely because a record has two differently typed owners. The two relationships might each still be one-to-many. State the actual cardinality of each requirement and identify whether the representation can express every allowed combination without duplicating the part's identity.\n\n## Using association records for repeated relationships\n\nAn association record can represent a supply fact linking a supplier and a part. It can participate as a member in a supplier-owned set and a part-owned set, letting the same association be reached through either relationship. Several association occurrences can then represent several suppliers for one part and several parts for one supplier.\n\nAttributes such as quoted price or delivery lead time belong to the association when they describe a particular supplier-part relationship. Putting one price directly on Part would lose the distinction between suppliers if their offers differ. This is a modeling issue about which fact owns the attribute, not just a matter of choosing a pointer direction.\n\nThe association needs its own identity and duplicate policy. If only one current supply fact is allowed per supplier-part pair, duplicate occurrences should be rejected or consolidated under an explicit rule. If historical offers are required, time or another occurrence identifier may distinguish them. The relationship structure does not automatically invent the missing temporal semantics.\n\n## Managing change and lifecycle\n\nConnecting, disconnecting, inserting, or deleting records can affect set membership. A product's schema rules determine whether a member may exist independently and what happens when an owner is removed. Do not assume that every owner deletion automatically destroys all related entities. A shared part's identity can differ from the lifecycle of one supplier's supply association.\n\nApplication code may depend on particular set names and traversal sequences. Renaming or reorganizing those paths can require caller changes even when the visible business labels stay similar. Inspect the actual record definitions, access programs, and supported migration procedure before making a structural change in a real network database.\n\nThis is the navigational coupling often contrasted with relational declarative access. It is a useful design consideration, not a claim that all network databases are obsolete or that every relational query is automatically independent of physical and logical choices. Both approaches need accurate contracts and verified compatibility during change.\n\n## Comparing with modern graph terminology\n\nNetwork databases and graph databases both discuss connected records, but the similarity does not make their models interchangeable. Classical CODASYL sets have defined owner/member roles and membership rules. Modern graph products can use property graphs, other graph models, and query languages with different relationship semantics. Their constraint and schema capabilities vary by product.\n\nAvoid the oversimplification that every graph database is schema-free and every network database has only one access style. Compare the actual identity, cardinality, navigation, query, and integrity requirements. A drawing containing circles and arrows cannot establish compatibility between two engines with very different object and operation contracts.\n\nFor a supplier question, ask whether the model can represent all required associations and attributes, how the query reaches them, and which rules protect shared identity. Those concrete questions reveal more than choosing a model because the word network sounds similar to graph.\n\n## Auditing a relational mirror of membership\n\nA teaching table can record set_name, owner_id, and member_id. Under the stated simplified rule, a member may have one owner per set name while appearing in another named role. A query listing the relationships of one member demonstrates that distinction without requiring a native database traversal API.\n\nA raw import ledger can deliberately allow several candidate rows so a second query finds ownership conflicts. Count distinct owners per set and member. Repeated copies of the same owner relation should not be mistaken for two different owners, while one member linked to two owners within the same constrained set should be flagged. Membership in two different sets is not that violation.\n\nThis audit tests the declared fixture policy, not actual IDMS enforcement. A row in an ordinary MySQL table does not create a CODASYL set occurrence in another engine. Native membership operations, transaction behavior, and access performance remain separate verification questions. Naming that scope keeps practical SQL practice honest.\n\nThe network model is useful for understanding explicit relationships beyond basic tree containment. Keep set types, occurrences, owner roles, and association facts distinct. Define cardinality and lifecycle rules before choosing paths, and verify the real implementation separately from a teaching mirror. Those distinctions make the model a precise account of relationships rather than an unsupported promise that every connected diagram expresses the same facts.\n",
+  "references": [
+    {
+      "title": "IDMS owner retrieval within a set",
+      "url": "https://ftpdocs.broadcom.com/cadocs/0/CA%20IDMS%2018%205%20User%20Bookshelf-ENU/Bookshelf_Files/HTML/IDMS_OLQ_Ref_ENU/1026674.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-3-network-model",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-3-network-model-1",
+          "test_id": "pt-dbms-sql-3-network-model",
+          "question_text": "What CODASYL-defined construct represents a relationship between an owner record type and member record types in the network model?",
+          "options": [
+            "A join table",
+            "A set",
+            "A collection",
+            "An index"
+          ],
+          "correct_index": 1,
+          "explanation": "The CODASYL network model organizes relationships into named 'sets', each with one owner record type and one or more member record types.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-3-network-model-2",
+          "test_id": "pt-dbms-sql-3-network-model",
+          "question_text": "What flexibility does the classical network model add beyond a basic single-parent tree?",
+          "options": [
+            "It eliminates the need for pointers",
+            "A record can participate in several named set types and owner/member roles",
+            "It uses SQL for querying",
+            "It requires no schema design at all"
+          ],
+          "correct_index": 1,
+          "explanation": "This does not imply arbitrary multiple owners within one constrained set type.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-3-network-model-3",
+          "test_id": "pt-dbms-sql-3-network-model",
+          "question_text": "Which system is a well-known industrial implementation of the CODASYL network model?",
+          "options": [
+            "IDMS",
+            "MongoDB",
+            "Neo4j",
+            "Cassandra"
+          ],
+          "correct_index": 0,
+          "explanation": "IDMS (Integrated Database Management System) was a widely deployed CODASYL network-model database used in enterprise mainframe systems.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-3-network-model-4",
+          "test_id": "pt-dbms-sql-3-network-model",
+          "question_text": "How does an application typically retrieve data from a CODASYL network database?",
+          "options": [
+            "Declarative SQL SELECT statements",
+            "Procedural navigation using DML calls like FIND and FIND NEXT WITHIN a named set",
+            "Automatic schema-free document queries",
+            "REST API calls"
+          ],
+          "correct_index": 1,
+          "explanation": "CODASYL databases use navigational DML where the program explicitly finds owner records and walks member chains within named sets.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-3-network-model-5",
+          "test_id": "pt-dbms-sql-3-network-model",
+          "question_text": "Part participates in a supplier-owned set and a warehouse-owned set. What does that establish?",
+          "options": [
+            "Parts cannot be shared between sets",
+            "Participation in two differently named relationships, not automatically unrestricted many-to-many cardinality",
+            "This is only possible in relational databases",
+            "Sets can only have one member record type"
+          ],
+          "correct_index": 1,
+          "explanation": "Many-to-many facts may need association records.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-3-network-model-6",
+          "test_id": "pt-dbms-sql-3-network-model",
+          "question_text": "What dependency can make changes to a navigational network schema costly?",
+          "options": [
+            "It could not represent one-to-many relationships",
+            "Programs can depend on defined set paths and navigation context",
+            "It could not run on mainframes",
+            "It required a graph query language that didn't exist yet"
+          ],
+          "correct_index": 1,
+          "explanation": "Actual products may also offer indexes and other query interfaces.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-3-network-model-7",
+          "test_id": "pt-dbms-sql-3-network-model",
+          "question_text": "How should classical CODASYL sets be compared with modern graph products?",
+          "options": [
+            "They are actually identical in every respect",
+            "Compare actual relationship, constraint, and query semantics rather than assuming connected diagrams are interchangeable",
+            "Modern graph databases cannot represent many-to-many relationships",
+            "The network model uses SQL while graph databases do not"
+          ],
+          "correct_index": 1,
+          "explanation": "Modern graph models and schema support vary by product.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-3-network-model-8",
+          "test_id": "pt-dbms-sql-3-network-model",
+          "question_text": "Which standards tradition is associated with the classical network database model?",
+          "options": [
+            "ANSI",
+            "ISO",
+            "CODASYL",
+            "W3C"
+          ],
+          "correct_index": 2,
+          "explanation": "The question identifies the tradition without relying on an unverified precise historical date.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-3-network-model-new-9",
+          "test_id": "pt-dbms-sql-3-network-model",
+          "question_text": "What does a set occurrence concern?",
+          "options": [
+            "Every database record worldwide",
+            "A particular owner and its related members under the set rules",
+            "Only a type name with no records",
+            "A result sort order"
+          ],
+          "correct_index": 1,
+          "explanation": "A type defines structure; an occurrence supplies actual participants.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-3-network-model-new-10",
+          "test_id": "pt-dbms-sql-3-network-model",
+          "question_text": "Where does a supplier-specific quoted price naturally belong in a many-to-many supply design?",
+          "options": [
+            "On an unrelated warehouse label",
+            "On the database connection",
+            "On the supplier-part association fact",
+            "On the part alone regardless of supplier"
+          ],
+          "correct_index": 2,
+          "explanation": "The measurement concerns a particular relationship.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-3-network-model-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-3-network-model-application-new-1",
+          "test_id": "pt-dbms-sql-3-network-model-application",
+          "question_text": "Member 10 has one owner in set A and another owner in set B. Is that automatically a one-owner-per-set violation?",
+          "options": [
+            "Yes; a member can never have two relationships",
+            "Only if both owner numbers are positive",
+            "No; the roles are different set types",
+            "Only if the names are lowercase"
+          ],
+          "correct_index": 2,
+          "explanation": "The simplified ownership rule is scoped by set type.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-3-network-model-application-new-2",
+          "test_id": "pt-dbms-sql-3-network-model-application",
+          "question_text": "Member 10 has owners 7 and 8 in the same constrained set A. What should the import audit flag?",
+          "options": [
+            "Two valid unrelated set names",
+            "A necessarily duplicated part name",
+            "A missing timestamp only",
+            "An ownership conflict for set A and member 10"
+          ],
+          "correct_index": 3,
+          "explanation": "Two distinct owners violate the stated one-owner-per-set policy.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-3-network-model-application-new-3",
+          "test_id": "pt-dbms-sql-3-network-model-application",
+          "question_text": "Two raw ledger rows repeat the same owner relation. Why count DISTINCT owner_id for the ownership conflict?",
+          "options": [
+            "Duplicate copies do not imply different owners",
+            "Every duplicate is a different physical entity",
+            "COUNT(*) always means distinct owners",
+            "Grouping removes all duplicates automatically"
+          ],
+          "correct_index": 0,
+          "explanation": "The audit is about owner cardinality, not raw row copies.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-3-network-model-application-new-4",
+          "test_id": "pt-dbms-sql-3-network-model-application",
+          "question_text": "A part has many suppliers and each supplier has many parts. What representation can preserve the individual supply facts?",
+          "options": [
+            "One unrestricted name field",
+            "Association records connected through supplier and part roles",
+            "One supplier pointer with no other facts",
+            "Copy every part without identity review"
+          ],
+          "correct_index": 1,
+          "explanation": "Association occurrences represent repeated relationships explicitly.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-3-network-model-application-new-5",
+          "test_id": "pt-dbms-sql-3-network-model-application",
+          "question_text": "An owner is deleted. Which behavior cannot be assumed from the model label alone?",
+          "options": [
+            "That a relationship definition matters",
+            "That the operation has an owner",
+            "That every related shared entity is automatically deleted",
+            "That lifecycle rules need review"
+          ],
+          "correct_index": 2,
+          "explanation": "The actual schema and operation define the lifecycle.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-3-network-model-application-new-6",
+          "test_id": "pt-dbms-sql-3-network-model-application",
+          "question_text": "A native navigation program depends on a named set path. What might a path reorganization require?",
+          "options": [
+            "Only a different diagram color",
+            "No change under every implementation",
+            "Automatic migration of all programs",
+            "Caller and compatibility review"
+          ],
+          "correct_index": 3,
+          "explanation": "Navigation dependencies can be observable application contracts.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-3-network-model-application-new-7",
+          "test_id": "pt-dbms-sql-3-network-model-application",
+          "question_text": "A MySQL query audits set_name rows successfully. What remains unverified?",
+          "options": [
+            "Native IDMS membership enforcement and performance",
+            "The fixture query result",
+            "That synthetic rows were evaluated",
+            "That the SQL executed on its recorded engine"
+          ],
+          "correct_index": 0,
+          "explanation": "A relational mirror does not run another engine's native operations.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-3-network-model-application-new-8",
+          "test_id": "pt-dbms-sql-3-network-model-application",
+          "question_text": "A graph product supports schema constraints. Does that contradict an accurate comparison with CODASYL?",
+          "options": [
+            "Yes; every graph must be schema-free",
+            "No; graph products have varied model and constraint capabilities",
+            "Only if it has no edges",
+            "Only if it lacks SQL"
+          ],
+          "correct_index": 1,
+          "explanation": "Avoid treating all modern graph products as one unconstrained model.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-3-network-model-application-new-9",
+          "test_id": "pt-dbms-sql-3-network-model-application",
+          "question_text": "A warehouse query repeatedly follows a known set path. What determines whether it is efficient?",
+          "options": [
+            "The word network alone",
+            "The count of arrows in a picture",
+            "The actual access mechanism, data, and workload",
+            "The absence of relational tables everywhere"
+          ],
+          "correct_index": 2,
+          "explanation": "Model vocabulary is not a performance measurement.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-3-network-model-application-new-10",
+          "test_id": "pt-dbms-sql-3-network-model-application",
+          "question_text": "Supply offers need historical prices. What must identity design distinguish?",
+          "options": [
+            "Only the current part name",
+            "Only the number of owners in another set",
+            "Only the server port",
+            "Different offer occurrences or times for the supplier-part pair"
+          ],
+          "correct_index": 3,
+          "explanation": "Repeated relationship facts may need temporal identity rather than accidental duplicates.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "dsa-dbms-sql-network-member-roles",
+      "slug": "network-member-roles",
+      "title": "List a member across named relationship roles",
+      "difficulty": "Easy",
+      "task": "In the relational network mirror, return set_name and owner_id for member_id 10, ordered by set_name. The unique key permits one owner per set/member pair. Different set names represent different roles. This does not execute native network-database operations.",
+      "schema_sql": "CREATE TABLE memberships (set_name VARCHAR(30) NOT NULL, owner_id INT NOT NULL, member_id INT NOT NULL, PRIMARY KEY(set_name,member_id));",
+      "seed_sql": "INSERT INTO memberships VALUES ('supplier_home',7,10),('warehouse_home',3,10),('supplier_home',8,11);",
+      "expected": "set_name\towner_id\nsupplier_home\t7\nwarehouse_home\t3",
+      "ordering": "set_name ascending",
+      "constraints": [
+        "One owner per named set/member pair",
+        "IDs are synthetic identities",
+        "The mirror omits native navigation and lifecycle rules"
+      ],
+      "edge_cases": [
+        "One member can participate in different sets",
+        "Ignore other members",
+        "An absent member returns no rows"
+      ],
+      "hints": [
+        "Filter member_id",
+        "Do not merge different set names"
+      ],
+      "solution_sql": "SELECT set_name,owner_id FROM memberships WHERE member_id=10 ORDER BY set_name;",
+      "explanation": "The output preserves distinct relationship roles for the same member under the stated fixture policy.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO memberships VALUES ('a',1,11);",
+          "expected": ""
+        },
+        {
+          "seed_sql": "INSERT INTO memberships VALUES ('a',2,10);",
+          "expected": "set_name\towner_id\na\t2"
+        }
+      ]
+    },
+    {
+      "id": "dsa-dbms-sql-network-ownership-audit",
+      "slug": "network-ownership-audit",
+      "title": "Find conflicting owner assignments in an import",
+      "difficulty": "Medium",
+      "task": "Audit raw_links for violations of the fixture rule: at most one distinct owner per set_name and member_id. Return set_name, member_id, owner_count for groups with more than one distinct owner, ordered by set_name then member_id. Duplicate copies of one owner relation are not ownership conflicts.",
+      "schema_sql": "CREATE TABLE raw_links (link_id INT PRIMARY KEY, set_name VARCHAR(30) NOT NULL, owner_id INT NOT NULL, member_id INT NOT NULL);",
+      "seed_sql": "INSERT INTO raw_links VALUES (1,'a',7,10),(2,'a',8,10),(3,'a',7,10),(4,'b',3,10),(5,'a',9,11),(6,'a',9,11);",
+      "expected": "set_name\tmember_id\towner_count\na\t10\t2",
+      "ordering": "set_name ascending, member_id ascending",
+      "constraints": [
+        "Raw rows intentionally allow conflicting candidates",
+        "Owner identifiers are non-null",
+        "This is an import audit, not an actual grant or native set mutation"
+      ],
+      "edge_cases": [
+        "Repeated same-owner rows are not conflicts",
+        "Different set roles are independent",
+        "More than two owners must all be counted"
+      ],
+      "hints": [
+        "Group by the full relationship scope",
+        "Use COUNT(DISTINCT owner_id) in both output and HAVING"
+      ],
+      "solution_sql": "SELECT set_name,member_id,COUNT(DISTINCT owner_id) AS owner_count FROM raw_links GROUP BY set_name,member_id HAVING COUNT(DISTINCT owner_id)>1 ORDER BY set_name,member_id;",
+      "explanation": "The grouping scopes ownership to a named set and member. Distinct counting separates different owners from duplicate import copies.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO raw_links VALUES (1,'a',1,10),(2,'a',1,10),(3,'b',2,10);",
+          "expected": ""
+        },
+        {
+          "seed_sql": "INSERT INTO raw_links VALUES (1,'z',1,2),(2,'z',2,2),(3,'z',3,2);",
+          "expected": "set_name\tmember_id\towner_count\nz\t2\t3"
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-3-network-model-1",
+      "test_id": "pt-dbms-sql-3-network-model",
+      "question_text": "What CODASYL-defined construct represents a relationship between an owner record type and member record types in the network model?",
+      "options": [
+        "A join table",
+        "A set",
+        "A collection",
+        "An index"
+      ],
+      "correct_index": 1,
+      "explanation": "The CODASYL network model organizes relationships into named 'sets', each with one owner record type and one or more member record types.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-3-network-model-2",
+      "test_id": "pt-dbms-sql-3-network-model",
+      "question_text": "What is the key structural improvement the network model offers over the hierarchical model?",
+      "options": [
+        "It eliminates the need for pointers",
+        "A member record can belong to multiple sets, i.e., have more than one owner",
+        "It uses SQL for querying",
+        "It requires no schema design at all"
+      ],
+      "correct_index": 1,
+      "explanation": "Unlike hierarchical trees where each record has exactly one parent, network model records can be members of multiple sets, natively supporting many-to-many relationships.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-3-network-model-3",
+      "test_id": "pt-dbms-sql-3-network-model",
+      "question_text": "Which system is a well-known industrial implementation of the CODASYL network model?",
+      "options": [
+        "IDMS",
+        "MongoDB",
+        "Neo4j",
+        "Cassandra"
+      ],
+      "correct_index": 0,
+      "explanation": "IDMS (Integrated Database Management System) was a widely deployed CODASYL network-model database used in enterprise mainframe systems.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-3-network-model-4",
+      "test_id": "pt-dbms-sql-3-network-model",
+      "question_text": "How does an application typically retrieve data from a CODASYL network database?",
+      "options": [
+        "Declarative SQL SELECT statements",
+        "Procedural navigation using DML calls like FIND and FIND NEXT WITHIN a named set",
+        "Automatic schema-free document queries",
+        "REST API calls"
+      ],
+      "correct_index": 1,
+      "explanation": "CODASYL databases use navigational DML where the program explicitly finds owner records and walks member chains within named sets.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-3-network-model-5",
+      "test_id": "pt-dbms-sql-3-network-model",
+      "question_text": "In a network model schema where Part is a member of both a 'supplies' set (owned by Supplier) and a 'stocks' set (owned by Warehouse), what does this demonstrate?",
+      "options": [
+        "Parts cannot be shared between sets",
+        "A record can have multiple owners, solving the many-to-many limitation of hierarchical trees",
+        "This is only possible in relational databases",
+        "Sets can only have one member record type"
+      ],
+      "correct_index": 1,
+      "explanation": "Part participating in two sets shows the network model's core advantage: a member record can be linked to multiple distinct owners.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-3-network-model-6",
+      "test_id": "pt-dbms-sql-3-network-model",
+      "question_text": "What is a major drawback of the network model that ultimately motivated the shift to the relational model?",
+      "options": [
+        "It could not represent one-to-many relationships",
+        "All access paths (sets) must be predefined in the schema, and application code is tightly coupled to that pointer structure",
+        "It could not run on mainframes",
+        "It required a graph query language that didn't exist yet"
+      ],
+      "correct_index": 1,
+      "explanation": "Because traversal paths are hard-coded as sets and navigated procedurally, unanticipated queries or schema changes required redesigning both schema and application code.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-3-network-model-7",
+      "test_id": "pt-dbms-sql-3-network-model",
+      "question_text": "How does the CODASYL network model fundamentally differ from a modern graph database like Neo4j, despite both using 'nodes and connections'?",
+      "options": [
+        "They are actually identical in every respect",
+        "The network model uses rigid, schema-predefined sets navigated procedurally, while modern graph databases use a flexible property graph with declarative query languages",
+        "Modern graph databases cannot represent many-to-many relationships",
+        "The network model uses SQL while graph databases do not"
+      ],
+      "correct_index": 1,
+      "explanation": "Network model sets are fixed at schema design time and walked with procedural code, whereas graph databases allow new relationship types at runtime and support declarative traversal languages like Cypher.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-3-network-model-8",
+      "test_id": "pt-dbms-sql-3-network-model",
+      "question_text": "Which organization standardized the network data model in the late 1960s?",
+      "options": [
+        "ANSI",
+        "ISO",
+        "CODASYL",
+        "W3C"
+      ],
+      "correct_index": 2,
+      "explanation": "CODASYL (Conference on Data Systems Languages) produced the specification that defined the network data model, hence it is often called the CODASYL model.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "coordinator",
+    "independent_review": "unavailable; no agent tools",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Definitions and examples checked against questions; no plagiarism certification.",
+    "existing_question_corrections": [
+      "tq-dbms-sql-3-network-model-2",
+      "tq-dbms-sql-3-network-model-5",
+      "tq-dbms-sql-3-network-model-6",
+      "tq-dbms-sql-3-network-model-7",
+      "tq-dbms-sql-3-network-model-8"
+    ],
+    "canonical_answer_indices_preserved": true
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-3-network-model",
+    "original_note_sha256": "194ea02f907edcf60255090c33728a850de64b41e2f61a2c44507b5f8120207b",
+    "status": "paired migration prepared; not applied"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Two owner roles versus an ownership conflict",
+      "description": "The simplified rule allows one owner per set type and member. Two different set names are separate roles, while two distinct owners in the same constrained set/member scope conflict.",
+      "columns": [
+        "Set type",
+        "Member",
+        "Owner",
+        "Interpretation"
+      ],
+      "rows": [
+        [
+          "SupplierHome",
+          "Part 10",
+          "Supplier 7",
+          "One supplier-role relationship"
+        ],
+        [
+          "WarehouseHome",
+          "Part 10",
+          "Warehouse 3",
+          "A different role, not a conflict"
+        ],
+        [
+          "SupplierHome",
+          "Part 10",
+          "Supplier 8",
+          "Conflicts if that set permits only one owner"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "coordinator review",
+    "server_rendering": "passed",
+    "browser_rendering": "unverified",
+    "independent_review": "unavailable; no agent tools",
+    "rendering_check": "2026-10-29: actual LessonBlock/TopicDiagrams rendering; 49 authored-package checks passed. Browser rendering unverified."
+  },
+  "sql_verification": {
+    "engine": "11.8.6-MariaDB-0+deb13u1 from Debian",
+    "scope": "MariaDB compatibility execution; exact MySQL 8.4/provider execution unverified",
+    "fingerprint": "c50e9aa6a0f31cd625948650a203dc8f046a1c1bed8e163c46ca93d43b9efb3c",
+    "cases": [
+      {
+        "problem": "network-member-roles",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "network-member-roles",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "network-member-roles",
+        "case": 2,
+        "passed": true
+      },
+      {
+        "problem": "network-ownership-audit",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "network-ownership-audit",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "network-ownership-audit",
+        "case": 2,
+        "passed": true
+      }
+    ],
+    "all_passed": true
+  }
+}

@@ -1,0 +1,515 @@
+{
+  "source_ref": "chapter-20-indexes-and-access-paths/index-maintenance",
+  "slug": "index-maintenance",
+  "title": "Index Maintenance",
+  "description": "Maintain database indexes through verified workload evidence, statistics and dependency review, with realistic write costs, locking, integrity and rollback considerations.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Maintain indexes as workload infrastructure\n\nAn index is a persistent access structure whose usefulness depends on the queries and writes it serves. Maintenance includes understanding its purpose, observing usage and cost, keeping optimizer information appropriate and planning any structural operation safely. It does not mean rebuilding every index on a fixed calendar or deleting every index that appears unused in a short observation window.\n\nRead [why indexes exist](/learning/dbms-sql-tutorial/why-indexes-exist), [covering index](/learning/dbms-sql-tutorial/covering-index) and [when not to index](/learning/dbms-sql-tutorial/when-not-to-index). This topic uses MySQL 8.4 with InnoDB examples. Commands and physical effects differ across engines; a maintenance recipe copied from another database may have different locking, logging and space implications.\n\n## Record what each index protects or accelerates\n\nBegin with the verified index definitions and their callers. An index may enforce uniqueness, support a foreign-key requirement, accelerate a frequently used filter or supply a reporting order. Two indexes with similar column lists can still have different constraints, prefix lengths, sort directions or visibility. Compare definitions rather than judging redundancy by names.\n\n```sql\nSHOW INDEX FROM registrations;\n```\n\nThis inspection helps establish existing structures, but it does not explain every application dependency by itself. Trace queries and constraints alongside the metadata. A monthly finance report may not run during an afternoon measurement, while a unique index may be essential even if no observed SELECT chooses it as an access path.\n\n## Account for write amplification\n\nRelevant inserts, updates and deletes maintain index entries as well as table data. A value update may change one index, several indexes or no user-defined secondary key, depending on which columns participate. Wider and more numerous indexes can increase page writes, logging and cache pressure. This is an ongoing workload cost rather than a one-time creation expense.\n\nUpdating a column included only for coverage can still require index maintenance. A frequently changing status or long label is not free simply because it is not the leading search key. Keep the read benefit and write frequency together when reviewing an index. Optimizing one report can degrade a high-volume ingestion path that the report never exposes.\n\n## Distinguish optimizer statistics from stored structure\n\nStatistics summarize aspects of data distribution so the optimizer can estimate plan costs. Updating statistics is not the same operation as rebuilding an index or compacting a table. A poor plan can come from inaccurate estimates, an unsuitable query, skewed parameters or missing structure. Diagnose which problem is supported by evidence before choosing a command.\n\nANALYZE TABLE is relevant to MySQL statistics management. Its operational impact and details depend on engine and settings, so inspect the documented behavior before running it. A change in statistics can change plans for multiple callers. Treat that as an observable behavior requiring representative checks rather than assuming an analysis operation can never affect application performance.\n\n## Compare estimates with representative observations\n\nEXPLAIN helps show the optimizer's chosen access strategy and estimated cardinality. Execution-based diagnostics can reveal actual row counts and timing, but they execute work and need a suitable environment. Keep parameters, data volume and relevant settings with the evidence. The same query can behave differently for a common event and a rare event.\n\nDo not repeatedly force a favored index to hide an unexplained estimate problem. Hints can be appropriate in a justified case, but can also preserve a plan that becomes poor as data changes. First verify the predicate, result contract and available structures. A shorter runtime from one tiny sample does not establish that a maintenance action improves the wider workload.\n\n## Treat fragmentation as a measured hypothesis\n\nDeletions and page splits can change occupancy and layout, but a large data file does not alone prove a harmful fragmentation problem. Storage allocation, free space available for reuse and active data volume are different measures. Reclaiming disk space can require a substantial operation with temporary space and locking consequences.\n\nAvoid universal statements such as rebuild after every bulk delete or rebuild when a table reaches a particular age. Establish the actual symptom: excessive reads, insufficient available disk, poor locality or another measured issue. Then evaluate the engine's supported remedy and its trade-offs. A file that does not shrink immediately may still have reusable space and acceptable performance.\n\n## Plan structural operations before execution\n\nCreating, rebuilding or removing an index can consume CPU, I/O and temporary storage. Online DDL support does not mean every operation is lock-free or instantaneous. Metadata-lock waits and brief blocking phases can still matter, and allowed algorithms depend on the exact statement and engine version. Verify those details for the specific operation.\n\nDefine a rollback or recovery approach before changing production structure. Removing a candidate index may be easy syntactically but recreating a large index can take substantial time. A safe plan includes the affected query family, expected resource use, observation window and conditions for reversal. Do not execute speculative maintenance merely because a command appears in an educational example.\n\n## Review overlap without erasing useful differences\n\nAn index on event_id,state may overlap the leading prefix of an index on event_id,state,booked_at. That does not automatically prove that the shorter index is useless. The narrower structure can have different size and cache behavior, while uniqueness or other requirements may distinguish them. Conversely, several nearly identical indexes may impose unnecessary write work.\n\nCompare the complete definitions and representative plans, then inspect constraints and callers. Document the exact benefit claimed for retaining or removing a structure. Names such as old_index or temp_index are historical labels, not evidence of current redundancy. Preserve compatibility until the dependency review supports a concrete authorized change.\n\n## Interpret usage windows carefully\n\nA usage counter describes the observed period and instrumentation context. A zero can mean the index was not used, the relevant workload did not occur, counters reset or instrumentation did not capture the operation. Seasonal reports, incident-response queries and constraint enforcement all complicate a simple unused label.\n\nUse an observation period that includes the workload's meaningful cycles. Where supported and appropriate, an invisible index can help evaluate optimizer dependence, but it still exists and can retain maintenance or constraint responsibilities. Making an index invisible is an operational change with its own limits, not a risk-free simulation of deleting every dependency.\n\n## Keep maintenance from weakening integrity\n\nNever remove a unique or supporting structure without understanding which invariant depends on it. Performance trouble is not justification for allowing duplicate identities or invalid references. Likewise, disabling foreign-key checks, weakening access policy or dropping protected data is not an index-maintenance shortcut. Correctness constraints and visibility rules remain requirements through every experiment.\n\nA planned load or refresh can justify a separately reviewed strategy, but the strategy must define how integrity is preserved and verified. The fact that a local sample runs faster with fewer checks does not establish that production should use that configuration. Separate educational comparison from authorized operational change.\n\n## Build an evidence-based maintenance decision\n\nConsider a registration service with frequent inserts and one monthly report. A wide covering index may benefit the report while increasing daily write cost. Gather representative report timing, ingestion behavior, index size and relevant plan evidence. Compare alternatives such as a narrower projection or a different query before deciding the index itself must be rebuilt or removed.\n\nA useful maintenance record names the symptom, affected objects, supporting evidence, proposed action and validation criteria. After an approved action, check correctness and workload impact, including failure and rollback behavior. This disciplined loop turns index maintenance into a response to an observed need rather than a ritual whose costs and benefits nobody can explain. Include the measurement period and relevant business cycle in that record. Future maintainers need to know whether the evidence covered ordinary days, peak registration traffic and the reporting windows that originally justified the index.\n",
+  "references": [
+    {
+      "title": "Primary reference",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/optimization-indexes.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-20-index-maintenance",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-20-index-maintenance-1",
+          "test_id": "pt-dbms-sql-20-index-maintenance",
+          "question_text": "What should drive index maintenance?",
+          "options": [
+            "A universal daily rebuild rule",
+            "Only index age",
+            "Observed workload needs",
+            "Only its name"
+          ],
+          "correct_index": 2,
+          "explanation": "Maintenance should address a measured symptom and verified dependencies.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-20-index-maintenance-2",
+          "test_id": "pt-dbms-sql-20-index-maintenance",
+          "question_text": "What can an index do besides speed SELECT?",
+          "options": [
+            "Authenticate every user",
+            "Enforce uniqueness",
+            "Replace all table constraints",
+            "Guarantee no locking"
+          ],
+          "correct_index": 1,
+          "explanation": "Constraint responsibility can remain important even without observed read usage.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-20-index-maintenance-3",
+          "test_id": "pt-dbms-sql-20-index-maintenance",
+          "question_text": "What does SHOW INDEX provide?",
+          "options": [
+            "Complete caller behavior",
+            "Existing index metadata",
+            "A production benchmark",
+            "Every future query"
+          ],
+          "correct_index": 1,
+          "explanation": "Definitions are useful evidence but must be combined with workload and constraint tracing.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-20-index-maintenance-4",
+          "test_id": "pt-dbms-sql-20-index-maintenance",
+          "question_text": "What increases ongoing write work?",
+          "options": [
+            "Only renaming aliases",
+            "Maintaining relevant index entries",
+            "Only reading comments",
+            "Only changing page titles"
+          ],
+          "correct_index": 1,
+          "explanation": "Writes must update indexed representations affected by the changed values.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-20-index-maintenance-5",
+          "test_id": "pt-dbms-sql-20-index-maintenance",
+          "question_text": "Can an included coverage field add update cost?",
+          "options": [
+            "No",
+            "Yes",
+            "Only if it leads the key",
+            "Only if numeric"
+          ],
+          "correct_index": 1,
+          "explanation": "Changing indexed payload can require maintenance regardless of search-key position.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-20-index-maintenance-6",
+          "test_id": "pt-dbms-sql-20-index-maintenance",
+          "question_text": "Is statistics refresh identical to index rebuild?",
+          "options": [
+            "Yes",
+            "No",
+            "Only in InnoDB",
+            "Only for unique keys"
+          ],
+          "correct_index": 1,
+          "explanation": "Optimizer estimates and physical structure are different concerns.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-20-index-maintenance-7",
+          "test_id": "pt-dbms-sql-20-index-maintenance",
+          "question_text": "What can stale or inaccurate estimates affect?",
+          "options": [
+            "Only UI color",
+            "Plan selection",
+            "Only query comments",
+            "Only identity spelling"
+          ],
+          "correct_index": 1,
+          "explanation": "The optimizer compares candidate costs using distribution estimates.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-20-index-maintenance-8",
+          "test_id": "pt-dbms-sql-20-index-maintenance",
+          "question_text": "Why preserve benchmark parameters?",
+          "options": [
+            "They grant permissions",
+            "Distribution can change plan behavior",
+            "They eliminate row versions",
+            "They compact pages"
+          ],
+          "correct_index": 1,
+          "explanation": "Common and rare predicate values can have different selectivity.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-20-index-maintenance-new-9",
+          "test_id": "pt-dbms-sql-20-index-maintenance",
+          "question_text": "Does a large file alone prove harmful fragmentation?",
+          "options": [
+            "No",
+            "Yes",
+            "Only after deletes",
+            "Only on weekends"
+          ],
+          "correct_index": 0,
+          "explanation": "Allocated size, reusable space and access cost are distinct measures.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-20-index-maintenance-new-10",
+          "test_id": "pt-dbms-sql-20-index-maintenance",
+          "question_text": "Does online DDL imply no blocking ever?",
+          "options": [
+            "Yes",
+            "No",
+            "Only for indexes",
+            "Only for text keys"
+          ],
+          "correct_index": 1,
+          "explanation": "Metadata locking and operation-specific phases can still affect callers.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-20-index-maintenance-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-20-index-maintenance-application-new-1",
+          "test_id": "pt-dbms-sql-20-index-maintenance-application",
+          "question_text": "Why plan rollback before dropping a large index?",
+          "options": [
+            "DROP always deletes the table",
+            "Rollback is always instant",
+            "Recreation may be costly",
+            "Plans never change"
+          ],
+          "correct_index": 2,
+          "explanation": "Recovering the former structure can require substantial time and resources.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-20-index-maintenance-application-new-2",
+          "test_id": "pt-dbms-sql-20-index-maintenance-application",
+          "question_text": "Are similar column lists proof of redundant indexes?",
+          "options": [
+            "Yes",
+            "Only if names differ",
+            "Only for ascending keys",
+            "No"
+          ],
+          "correct_index": 3,
+          "explanation": "Uniqueness, width, prefix details and other dependencies can distinguish them.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-20-index-maintenance-application-new-3",
+          "test_id": "pt-dbms-sql-20-index-maintenance-application",
+          "question_text": "What can a zero usage counter mean?",
+          "options": [
+            "An incomplete or reset observation window",
+            "Guaranteed safe deletion",
+            "No integrity responsibility",
+            "No future workload"
+          ],
+          "correct_index": 0,
+          "explanation": "Instrumentation scope and workload cycles limit the conclusion.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-20-index-maintenance-application-new-4",
+          "test_id": "pt-dbms-sql-20-index-maintenance-application",
+          "question_text": "What workload might a short window miss?",
+          "options": [
+            "Only current SELECT1",
+            "Monthly or seasonal reports",
+            "Only index metadata",
+            "Only constant expressions"
+          ],
+          "correct_index": 1,
+          "explanation": "Some important callers run outside a brief measurement period.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-20-index-maintenance-application-new-5",
+          "test_id": "pt-dbms-sql-20-index-maintenance-application",
+          "question_text": "Does an invisible index cease to exist?",
+          "options": [
+            "Yes",
+            "Only if unique",
+            "No",
+            "Only after EXPLAIN"
+          ],
+          "correct_index": 2,
+          "explanation": "Visibility affects optimizer consideration but not every storage or constraint responsibility.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-20-index-maintenance-application-new-6",
+          "test_id": "pt-dbms-sql-20-index-maintenance-application",
+          "question_text": "Should integrity be weakened to reduce maintenance cost?",
+          "options": [
+            "Yes whenever a sample is faster",
+            "Only during reports",
+            "Only if the UI hides data",
+            "No"
+          ],
+          "correct_index": 3,
+          "explanation": "Correctness and authorization remain requirements during performance work.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-20-index-maintenance-application-new-7",
+          "test_id": "pt-dbms-sql-20-index-maintenance-application",
+          "question_text": "What should be checked after an approved action?",
+          "options": [
+            "Correctness and representative workload impact",
+            "Only command exit code",
+            "Only new index name",
+            "Only output captions"
+          ],
+          "correct_index": 0,
+          "explanation": "Operational success includes the behavior of affected consumers.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-20-index-maintenance-application-new-8",
+          "test_id": "pt-dbms-sql-20-index-maintenance-application",
+          "question_text": "Why avoid blindly forcing a favored index?",
+          "options": [
+            "Hints always delete data",
+            "The workload and distribution can change",
+            "All indexes are identical",
+            "Statistics never matter"
+          ],
+          "correct_index": 1,
+          "explanation": "A fixed preferred path can become a poor choice without explaining the original cause.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-20-index-maintenance-application-new-9",
+          "test_id": "pt-dbms-sql-20-index-maintenance-application",
+          "question_text": "What belongs in a maintenance record?",
+          "options": [
+            "Only the SQL command",
+            "Only an age threshold",
+            "Symptom evidence action and validation criteria",
+            "Only a screenshot"
+          ],
+          "correct_index": 2,
+          "explanation": "A concrete hypothesis and check make the outcome assessable.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-20-index-maintenance-application-new-10",
+          "test_id": "pt-dbms-sql-20-index-maintenance-application",
+          "question_text": "What must be traced before removing an index?",
+          "options": [
+            "Only its spelling",
+            "Only table age",
+            "Only current row order",
+            "Constraints and direct consumers"
+          ],
+          "correct_index": 3,
+          "explanation": "A structure may serve correctness and less frequent callers as well as observed reads.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [],
+  "coding_not_applicable": "This operational topic assesses diagnosis, resource impact and safe index lifecycle decisions. Meaningful executable checks require approved structural changes and representative workload instrumentation; row-result SQL alone cannot validate maintenance benefit or locking safety.",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-20-index-maintenance-1",
+      "test_id": "pt-dbms-sql-20-index-maintenance",
+      "question_text": "When a row is inserted into a table with 3 non-clustered indexes plus a clustered index, how many structures typically need updating?",
+      "options": [
+        "Just the table itself, no indexes",
+        "Only 1 structure, whichever is queried most",
+        "All 4 structures — the clustered index/table plus each of the 3 non-clustered indexes",
+        "Exactly 2, chosen at random"
+      ],
+      "correct_index": 2,
+      "explanation": "Every relevant index (plus the clustered index/table itself) must reflect the new row, so all 4 structures need updating.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-20-index-maintenance-2",
+      "test_id": "pt-dbms-sql-20-index-maintenance",
+      "question_text": "Why does adding more indexes to a table increase the cost of writes?",
+      "options": [
+        "It doesn't; indexes have zero write cost",
+        "Because each additional index is a separate structure that must also be updated on every relevant INSERT/UPDATE/DELETE",
+        "Because more indexes reduce the table's storage capacity to zero",
+        "Because indexes convert all writes into reads"
+      ],
+      "correct_index": 1,
+      "explanation": "Every index the write touches must be kept in sync, so more indexes directly means more work per write.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-20-index-maintenance-3",
+      "test_id": "pt-dbms-sql-20-index-maintenance",
+      "question_text": "What is index fragmentation?",
+      "options": [
+        "A security vulnerability unique to hash indexes",
+        "The gradual degradation of an index's physical layout efficiency due to ongoing inserts, updates, and deletes",
+        "A type of index that only covers half the columns",
+        "An error that occurs when a query has no WHERE clause"
+      ],
+      "correct_index": 1,
+      "explanation": "Fragmentation refers to the index's physical storage becoming less optimally organized over time as data changes accumulate.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-20-index-maintenance-4",
+      "test_id": "pt-dbms-sql-20-index-maintenance",
+      "question_text": "What operation do database administrators run to fix a fragmented index?",
+      "options": [
+        "DROP TABLE",
+        "A rebuild/reorganize operation (e.g., REINDEX or ALTER INDEX REBUILD)",
+        "SELECT * FROM the table",
+        "Disabling all foreign keys"
+      ],
+      "correct_index": 1,
+      "explanation": "Rebuild/reorganize commands restore an index's efficient physical layout after it has become fragmented.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-20-index-maintenance-5",
+      "test_id": "pt-dbms-sql-20-index-maintenance",
+      "question_text": "Why might it be faster to temporarily drop indexes before a large bulk data load, then rebuild them afterward?",
+      "options": [
+        "Because dropping indexes deletes the table's data",
+        "Because it avoids paying the per-row index-update cost repeatedly during the load, instead rebuilding once in a single efficient pass",
+        "Because indexes are required to be dropped before any INSERT statement",
+        "Because bulk loads always fail if any index exists"
+      ],
+      "correct_index": 1,
+      "explanation": "Rebuilding an index once after bulk loading is typically far more efficient than maintaining it incrementally on every single inserted row.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-20-index-maintenance-6",
+      "test_id": "pt-dbms-sql-20-index-maintenance",
+      "question_text": "Which type of table generally needs to be MORE conservative about how many indexes it carries?",
+      "options": [
+        "A read-heavy, rarely-written reporting table",
+        "A write-heavy table like a high-volume transaction log",
+        "Tables with fewer than 10 rows",
+        "Tables that use only a clustered index"
+      ],
+      "correct_index": 1,
+      "explanation": "Write-heavy tables pay the index-maintenance cost far more often, so they benefit from carrying fewer indexes than read-heavy tables.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-20-index-maintenance-7",
+      "test_id": "pt-dbms-sql-20-index-maintenance",
+      "question_text": "What is a real downside of indexing a column that is updated on nearly every write but rarely used in WHERE clauses (e.g., a 'last modified' timestamp)?",
+      "options": [
+        "No downside; such columns should always be indexed",
+        "The index pays constant maintenance cost on every write while providing little read benefit, since it's rarely queried",
+        "It automatically becomes the table's clustered index",
+        "It prevents the column from ever being updated again"
+      ],
+      "correct_index": 1,
+      "explanation": "An index on a frequently-written, rarely-queried column accrues ongoing maintenance cost without a matching read payoff.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-20-index-maintenance-8",
+      "test_id": "pt-dbms-sql-20-index-maintenance",
+      "question_text": "Which of the following best summarizes the fundamental trade-off illustrated by index maintenance?",
+      "options": [
+        "Indexes are a one-time setup cost with no ongoing cost afterward",
+        "Every index represents a recurring cost paid on every relevant write, in exchange for faster reads",
+        "Index maintenance only matters for hash indexes, not B+ Trees",
+        "Maintenance cost decreases as more indexes are added"
+      ],
+      "correct_index": 1,
+      "explanation": "This topic reinforces that indexes are an ongoing, per-write cost — not a one-time cost — which is the mechanical basis of the classic read/write trade-off.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "/root/worker_2",
+    "independent_review": "passed",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "authored; independent review pending",
+    "canonical_answer_indices_preserved": true,
+    "editorial_record": "Original prose and assessments. Seed snapshots and canonical answer indices retained; external originality clearance pending.",
+    "independent_reviewer": "/root",
+    "independent_review_scope": "Full notes,20 MCQs/options/reasoning,diagnostic diagram and operational exercise rationale reviewed. Statistics versus rebuild, metadata locking, fragmentation hypothesis, overlapping indexes, observation-window limits, invisible-index caveats and integrity requirements appropriately scoped. Clarified monthly-report diagram to avoid implying rebuild is the automatic remedy; no structural commands executed. Exact MySQL/provider, browser and release validation remain separate."
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-20-index-maintenance",
+    "original_note_sha256": "21f1bb5e0f7ebf39a6193581c9382657ce83c33a879b1133d6123b2765dfa095",
+    "status": "drafted; not included in prepared paired migrations"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Match maintenance actions to observed problems",
+      "description": "Different symptoms call for different investigations rather than a universal rebuild.",
+      "columns": [
+        "Observation",
+        "Investigate first",
+        "Do not assume"
+      ],
+      "rows": [
+        [
+          "Poor estimated cardinality",
+          "Statistics and data skew",
+          "Every index is fragmented"
+        ],
+        [
+          "Slow monthly report",
+          "Query population and plan",
+          "A rebuild is automatically the remedy"
+        ],
+        [
+          "Zero observed usage",
+          "Window instrumentation constraints",
+          "Safe deletion"
+        ],
+        [
+          "Large allocated file",
+          "Reuse and measured storage need",
+          "Immediate harmful fragmentation"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "technical_review": "coordinator independent manual review passed",
+    "browser_rendering": "unverified",
+    "independent_review": "passed",
+    "server_rendering": "passed",
+    "server_rendering_evidence": "2026-10-29 full Vitest:1310 passed/12 skipped; actual LessonBlock/TopicDiagrams render over230 packages. Browser visual QA remains unverified."
+  },
+  "authoring_status": "drafted; verification pending",
+  "sql_verification": {
+    "scope": "not executed; exact MySQL/provider execution pending",
+    "all_passed": false,
+    "cases": []
+  }
+}

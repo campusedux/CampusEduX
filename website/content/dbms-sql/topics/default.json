@@ -1,0 +1,653 @@
+{
+  "source_ref": "chapter-10-sql-constraints/default",
+  "slug": "default",
+  "title": "DEFAULT",
+  "description": "Distinguish omitted values, explicit DEFAULT and explicit NULL, change future insertion policy without rewriting historical rows, and separate initialization from generated recalculation.",
+  "dialect": "MySQL 8.4",
+  "notes": "## A default supplies an initialization policy\n\nA column DEFAULT defines a value or supported expression used when a statement requests that default under the product's rules. A campus request can begin with status pending when the caller does not supply a status. That is an initialization policy for a new record, not proof that the request has been reviewed or that the same status should apply forever.\n\nThe central question is what the application intends an omitted property to mean. For a workflow state, a default can be a valid accepted starting state. For an observed inspection date or externally verified fact, inventing a value merely to avoid absence can misrepresent the record. Choose the default from domain meaning rather than from a preference for filled cells.\n\n## Omitted values and explicit DEFAULT can request the policy\n\nIn the illustrated MySQL syntax, omitting a column from an appropriate INSERT can use its default. An explicit DEFAULT keyword in a supported assignment can also request the default. It is therefore inaccurate to teach that defaults apply only when the column is entirely absent from the INSERT column list. The actual statement form matters.\n\nUse an explicit target column list so the intended input roles are visible. An insert that supplies only request_id is easier to review than one depending on an unexplained positional list of every current column. Positional assumptions can break when definitions evolve, while a clear list states which values the application actually supplies and which rules the database should apply.\n\n```sql\nCREATE TABLE requests (\n  request_id INT PRIMARY KEY,\n  status VARCHAR(20) NOT NULL DEFAULT 'pending'\n);\nINSERT INTO requests (request_id) VALUES (1);\nINSERT INTO requests (request_id, status) VALUES (2, DEFAULT);\n```\n\n## Explicit NULL is a different input\n\nFor an ordinary nullable integer column with a literal default, an explicit NULL means the caller supplied a missing marker rather than requested the default. A quantity declared INT NULL DEFAULT 10 can therefore receive NULL when that is explicitly inserted. It does not silently become ten merely because the definition contains a default clause.\n\nWhen the column is required, the configured enforcement and statement rules determine how invalid missing input is handled. The strict ordinary-column fixture rejects explicit NULL for its NOT NULL status. Do not generalize away product modes, special temporal behaviour or warning-producing statement variants. A clear exercise fixes the relevant settings instead of promising every environment performs identical coercion.\n\n## Defaults do not replace domain constraints\n\nA default value can be valid while other supplied values remain invalid. DEFAULT 0 does not reject a later negative quantity, and DEFAULT pending does not by itself restrict status to a known workflow vocabulary. Presence, domain, uniqueness and reference rules still need their own appropriate definitions when the model requires them.\n\nConversely, a CHECK can reject an explicit value without deciding which default should have been used. Combining features deliberately makes the accepted table state clear. Do not treat a default as a shortcut around a failing constraint or use an arbitrary replacement to conceal bad input. A caller's explicit value and the system's initialization policy need distinct handling.\n\n## Changing a default changes a future policy\n\nAn ALTER operation that changes status's default from pending to active does not automatically rewrite every already stored status. Existing rows retain their accepted values unless another statement deliberately changes them. This distinction is essential when old states represent historical workflow decisions rather than missing configuration that should be retroactively corrected.\n\nThe second exercise preserves existing pending and held rows while new omitted-status inserts receive active. That output makes the temporal policy boundary visible. A migration that updates old rows as well would implement another requirement and could change historical meaning. State whether a change concerns future initialization, a backfill, or both; do not infer the answer from the presence of ALTER alone.\n\n## Expression defaults are version and engine specific\n\nModern MySQL supports expression defaults under documented restrictions, including certain references to other table columns. Some dependency forms have column-order requirements, and subqueries or unsupported functions are not universally available. A blanket statement that a default can never refer to another column is therefore inaccurate for the MySQL 8.4 target.\n\nOther products have different expression rules. Verify the exact feature before copying a formula between engines, especially when generated columns, auto-increment values or expression-default dependencies are involved. A permitted expression in an ordinary SELECT does not automatically become a valid default. The literal-default fixtures here do not claim to execute every supported expression form described in the documentation.\n\n## Initialization is not continuing derivation\n\nAn expression default can initialize a property when requested, while a generated column derives its value through a maintained row-expression contract. If a default uses an initial source price, a later price change does not automatically mean that previously stored defaulted amount recalculates. The application must decide whether the property is a snapshot or a continuously derived value.\n\nThis distinction matters for a campus shop's accepted order price. The historical charged amount may need to stay fixed even when the catalog changes. A current calculated estimate can have another lifecycle. Neither a default nor a generated expression can decide that policy automatically. Name the property and explain its meaning before choosing the feature that supplies it.\n\n## Time defaults need precise time semantics\n\nCURRENT_TIMESTAMP can serve a supported temporal initialization role, but it should not be described as a fresh independent wall-clock observation for every row in every product. MySQL current-time functions can be consistent within a statement, while PostgreSQL time functions have their own transaction and statement semantics. A multi-row insert can therefore share values without indicating an error.\n\nTime zones, precision and clock policy also affect interpretation. A defaulted timestamp is not automatically the externally observed event time or the exact order of concurrent commits. Choose the relevant event contract explicitly. The exercises avoid clock-dependent expected output so their correctness does not rely on which second the verifier happened to execute a statement.\n\n## Automatic update is a separate temporal feature\n\nMySQL supports ON UPDATE CURRENT_TIMESTAMP under applicable temporal-column rules. That is distinct from initializing a value on insert. A created_at property and an updated_at property answer different questions, and copying an automatic-update clause onto a historical creation time would alter its meaning. Read both initialization and update rules in the actual definition.\n\nA default also differs from an identity mechanism such as AUTO_INCREMENT. Automatic identifier allocation has its own state, gap and explicit-value behaviour. These features can appear together in one table, but they should not be presented as one universal default facility with identical rules. The source and purpose of the supplied value determine which contract is relevant.\n\n## Match the application input contract to the SQL\n\nAn application might represent an omitted property, an explicit missing value and a supplied number differently. If it serializes every missing field as NULL, it can bypass the intended omission-based default for nullable columns or cause a required-value error. The trusted data layer should preserve the intended distinction rather than assume a database default will repair every input encoding.\n\nThe first exercise makes that distinction explicit with a use_default flag in synthetic input. Rows requesting the default are inserted without quantity, while rows supplying a value retain that exact value, including permitted NULL. This flag is a teaching input contract, not a recommendation that every production API must expose the same field or trust arbitrary client-selected workflow states.\n\n## Validate the initialization boundary with useful cases\n\nInclude a default-requesting row, an explicit NULL row and an ordinary supplied value. Their outputs should differ according to the stated rule. For the changed-default task, include old rows with different existing statuses and a set of new request identities. Empty new input must leave every old status unchanged rather than invent a row to demonstrate the default.\n\nA separate rejected explicit NULL under strict mode verifies required presence in the second table. It does not prove the status vocabulary is complete or the caller was authorized to choose a state. Each fixture should establish one meaningful boundary without inflating test counts through repeated ordinary examples that exercise the same path.\n\n## Keep documented possibilities separate from executed cases\n\nA useful illustration contrasts omission, DEFAULT and NULL, then shows the effect of changing only the future policy. The notes, correct answers and reference code must agree on those cases. This lets students explain a stored value from its insertion contract rather than assume every absent-looking field had the same database input.\n\nRecorded MariaDB compatibility execution covers the supplied literal-default and policy-change fixtures. Exact MySQL/provider execution, expression-default edge cases, temporal evaluation and production application migration behaviour remain separately unverified. The prepared content package is complete without claiming the examples changed live defaults or that a default clause validates every value a caller might supply.\n",
+  "references": [
+    {
+      "title": "MySQL 8.4 Data type default values",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/data-type-defaults.html"
+    },
+    {
+      "title": "MySQL 8.4 Automatic timestamp initialization",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/timestamp-initialization.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-10-default",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-10-default-1",
+          "test_id": "pt-dbms-sql-10-default",
+          "question_text": "How can the illustrated MySQL INSERT request a column default?",
+          "options": [
+            "Whenever the column's value is NULL, whether explicit or omitted",
+            "By omitting the column or using DEFAULT in a supported assignment",
+            "Only during UPDATE statements",
+            "Only if the table has no PRIMARY KEY"
+          ],
+          "correct_index": 1,
+          "explanation": "Omission is not the only supported request form.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-10-default-2",
+          "test_id": "pt-dbms-sql-10-default",
+          "question_text": "A column is declared `quantity INT DEFAULT 0` (nullable, no NOT NULL). What is the result of INSERT INTO products (product_id, quantity) VALUES (2, NULL)?",
+          "options": [
+            "quantity is set to 0 via the DEFAULT",
+            "quantity is stored as NULL, since explicit NULL overrides DEFAULT",
+            "The insert fails",
+            "quantity is set to an empty string"
+          ],
+          "correct_index": 1,
+          "explanation": "Explicitly passing NULL always wins over DEFAULT; DEFAULT only fills in when the column is omitted from the statement, not when NULL is explicitly given.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-10-default-3",
+          "test_id": "pt-dbms-sql-10-default",
+          "question_text": "Why should CURRENT_TIMESTAMP not be taught as a different wall-clock sample for every inserted row?",
+          "options": [
+            "Once, at the moment the table is created",
+            "Evaluation semantics depend on the product and statement or transaction context",
+            "Once per session, cached for all inserts in that session",
+            "Never automatically; it must be set manually per insert"
+          ],
+          "correct_index": 1,
+          "explanation": "MySQL current-time evaluation can be consistent within a statement.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-10-default-4",
+          "test_id": "pt-dbms-sql-10-default",
+          "question_text": "If you run ALTER TABLE products ALTER COLUMN status SET DEFAULT 'active'; on a table with existing rows, what happens to those existing rows' status values?",
+          "options": [
+            "They are all immediately updated to 'active'",
+            "They remain unchanged; only future inserts that omit the column get the new default",
+            "They become NULL until manually updated",
+            "The ALTER TABLE fails if rows already exist"
+          ],
+          "correct_index": 1,
+          "explanation": "Changing a DEFAULT clause only affects future inserts; it is not retroactively applied to rows already stored in the table.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-10-default-5",
+          "test_id": "pt-dbms-sql-10-default",
+          "question_text": "Which MySQL-specific extension allows a TIMESTAMP column to automatically refresh its value whenever the row is updated?",
+          "options": [
+            "DEFAULT CURRENT_TIMESTAMP alone",
+            "ON UPDATE CURRENT_TIMESTAMP",
+            "AUTO REFRESH TIMESTAMP",
+            "TRIGGER BEFORE UPDATE"
+          ],
+          "correct_index": 1,
+          "explanation": "MySQL supports an ON UPDATE CURRENT_TIMESTAMP clause on a column, a non-standard extension not part of ANSI SQL, that auto-updates the value on every row update.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-10-default-6",
+          "test_id": "pt-dbms-sql-10-default",
+          "question_text": "Can MySQL 8.4 expression defaults reference other table columns?",
+          "options": [
+            "Yes, in all standard SQL engines",
+            "Yes in supported cases, subject to documented expression and dependency restrictions",
+            "Yes, but only in PostgreSQL",
+            "Yes, but only for numeric columns"
+          ],
+          "correct_index": 1,
+          "explanation": "The blanket prohibition is incorrect for this target; initialization still differs from ongoing generation.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-10-default-7",
+          "test_id": "pt-dbms-sql-10-default",
+          "question_text": "Is a table's auto-increment mechanism (AUTO_INCREMENT / SERIAL / IDENTITY) the same feature as the DEFAULT clause?",
+          "options": [
+            "Yes, they are exactly the same keyword",
+            "No, auto-increment is conceptually similar but is usually a distinct feature/keyword, not the DEFAULT clause itself",
+            "Yes, but only in Oracle",
+            "No, auto-increment is a type of CHECK constraint"
+          ],
+          "correct_index": 1,
+          "explanation": "While auto-increment behaves like an automatically-supplied value, it is implemented via its own dedicated syntax (AUTO_INCREMENT, SERIAL, GENERATED ... AS IDENTITY) rather than the generic DEFAULT clause.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-10-default-8",
+          "test_id": "pt-dbms-sql-10-default",
+          "question_text": "Under the stated strict ordinary-column fixture, what happens to explicit NULL in NOT NULL status?",
+          "options": [
+            "status becomes 'pending' via DEFAULT",
+            "It is rejected rather than treated as an omission requesting the default",
+            "status becomes an empty string",
+            "The insert succeeds with status left as NULL"
+          ],
+          "correct_index": 1,
+          "explanation": "SQL modes and special column rules must be scoped instead of generalized universally.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-10-default-new-9",
+          "test_id": "pt-dbms-sql-10-default",
+          "question_text": "Does changing a default rewrite every existing row?",
+          "options": [
+            "Yes",
+            "No",
+            "Only if the column is text",
+            "Only when sorted"
+          ],
+          "correct_index": 1,
+          "explanation": "Future initialization and backfill are different operations.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-10-default-new-10",
+          "test_id": "pt-dbms-sql-10-default",
+          "question_text": "What does explicit NULL mean for the stated ordinary nullable quantity?",
+          "options": [
+            "Always store ten",
+            "Delete the row",
+            "Store the missing marker rather than request the literal default",
+            "Allocate a sequence token"
+          ],
+          "correct_index": 2,
+          "explanation": "The input is different from omission.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-10-default-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-10-default-application-new-1",
+          "test_id": "pt-dbms-sql-10-default-application",
+          "question_text": "Does DEFAULT pending restrict every supplied status to pending?",
+          "options": [
+            "Yes",
+            "Only for VARCHAR",
+            "No",
+            "Only if named"
+          ],
+          "correct_index": 2,
+          "explanation": "Initialization is not a vocabulary constraint.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-10-default-application-new-2",
+          "test_id": "pt-dbms-sql-10-default-application",
+          "question_text": "Can a defaulted historical amount be assumed to recalculate after every source change?",
+          "options": [
+            "Yes",
+            "Only when indexed",
+            "Only if aliases match",
+            "No"
+          ],
+          "correct_index": 3,
+          "explanation": "Continuing derivation is a different contract.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-10-default-application-new-3",
+          "test_id": "pt-dbms-sql-10-default-application",
+          "question_text": "Why use explicit INSERT column lists?",
+          "options": [
+            "To state supplied roles and avoid unexplained positional assumptions",
+            "To bypass required constraints",
+            "To grant privileges",
+            "To make all defaults execute"
+          ],
+          "correct_index": 0,
+          "explanation": "The writer’s intent becomes visible.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-10-default-application-new-4",
+          "test_id": "pt-dbms-sql-10-default-application",
+          "question_text": "What can converting every omitted API property to NULL change?",
+          "options": [
+            "Nothing under every schema",
+            "Whether the database receives a default request or an explicit missing value",
+            "Every key automatically resets",
+            "All constraints disappear"
+          ],
+          "correct_index": 1,
+          "explanation": "Input encoding must match the database contract.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-10-default-application-new-5",
+          "test_id": "pt-dbms-sql-10-default-application",
+          "question_text": "What does ON UPDATE CURRENT_TIMESTAMP add?",
+          "options": [
+            "Only a primary key",
+            "Every historical event time",
+            "A supported automatic-update policy distinct from insert initialization",
+            "A global unique sequence"
+          ],
+          "correct_index": 2,
+          "explanation": "Creation and modification events differ.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-10-default-application-new-6",
+          "test_id": "pt-dbms-sql-10-default-application",
+          "question_text": "Does one valid default make every explicit supplied value valid?",
+          "options": [
+            "Yes",
+            "Only if literal",
+            "Only if the column is short",
+            "No"
+          ],
+          "correct_index": 3,
+          "explanation": "Domain rules need their own enforcement.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-10-default-application-new-7",
+          "test_id": "pt-dbms-sql-10-default-application",
+          "question_text": "Why avoid wall-clock literals in these expected fixtures?",
+          "options": [
+            "The tasks test stable default semantics without timing-dependent output",
+            "Time defaults are universally invalid",
+            "All timestamps are NULL",
+            "The database has no clock"
+          ],
+          "correct_index": 0,
+          "explanation": "Deterministic tests should match the intended observable boundary.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-10-default-application-new-8",
+          "test_id": "pt-dbms-sql-10-default-application",
+          "question_text": "Does a valid SELECT expression guarantee a legal expression default?",
+          "options": [
+            "Yes",
+            "No",
+            "Only with an alias",
+            "Only if sorted"
+          ],
+          "correct_index": 1,
+          "explanation": "The declaration has product-specific restrictions.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-10-default-application-new-9",
+          "test_id": "pt-dbms-sql-10-default-application",
+          "question_text": "What must the changed-default task preserve?",
+          "options": [
+            "Only new active values everywhere",
+            "Only the first row",
+            "Already stored statuses unless an explicit backfill is requested",
+            "No old identities"
+          ],
+          "correct_index": 2,
+          "explanation": "Historical state is not automatically rewritten.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-10-default-application-new-10",
+          "test_id": "pt-dbms-sql-10-default-application",
+          "question_text": "Which evidence remains separate?",
+          "options": [
+            "The recorded literal-default outputs",
+            "The supplied policy transition result",
+            "The strict NULL rejection case",
+            "Exact provider, temporal and untested expression-default behaviour"
+          ],
+          "correct_index": 3,
+          "explanation": "Documented support is not the same as execution evidence.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cx-default-omission-null",
+      "slug": "default-omission-null",
+      "title": "Preserve the distinction between default requests and explicit NULL",
+      "difficulty": "Easy",
+      "task": "Create TEMPORARY quantities(request_id INT PRIMARY KEY,quantity INT NULL DEFAULT 10). For input rows with use_default=1 insert request_id only. For use_default=0 insert request_id and the exact supplied quantity, including NULL. Return request_id,quantity. Every flag is 0 or 1 and each input identity is distinct.",
+      "schema_sql": "CREATE TABLE quantity_input (request_id INT PRIMARY KEY,quantity INT NULL,use_default INT NOT NULL);",
+      "seed_sql": "INSERT INTO quantity_input VALUES (1,NULL,1),(2,NULL,0),(3,7,0);",
+      "expected": "request_id\tquantity\n1\t10\n2\tNULL\n3\t7",
+      "ordering": "Ascending request_id.",
+      "constraints": [
+        "Explicit NULL remains allowed in the target.",
+        "Only flagged rows request the default."
+      ],
+      "edge_cases": [
+        "A supplied zero is different from default ten.",
+        "Empty input yields no invented row."
+      ],
+      "hints": [
+        "Use separate inserts for the two input contracts.",
+        "Omit quantity only for the default-requesting rows."
+      ],
+      "solution_sql": "CREATE TEMPORARY TABLE quantities (request_id INT PRIMARY KEY,quantity INT NULL DEFAULT 10); INSERT INTO quantities (request_id) SELECT request_id FROM quantity_input WHERE use_default=1; INSERT INTO quantities (request_id,quantity) SELECT request_id,quantity FROM quantity_input WHERE use_default=0; SELECT request_id,quantity FROM quantities ORDER BY request_id;",
+      "explanation": "The SQL preserves the input distinction rather than assuming a nullable explicit marker requests the default.",
+      "validation_cases": [
+        {
+          "seed_sql": "",
+          "expected": ""
+        },
+        {
+          "seed_sql": "INSERT INTO quantity_input VALUES (8,0,0),(7,99,1);",
+          "expected": "request_id\tquantity\n7\t10\n8\t0"
+        }
+      ]
+    },
+    {
+      "id": "cx-default-future-policy",
+      "slug": "default-future-policy",
+      "title": "Change future initialization without rewriting stored statuses",
+      "difficulty": "Medium",
+      "task": "Change requests.status default from pending to active. Preserve all existing request identities and statuses. Insert new_input request ids without supplying status, then return request_id,status. Existing and new ids do not overlap. Use the strict ordinary-column fixture, and do not backfill old statuses.",
+      "schema_sql": "SET SESSION sql_mode='STRICT_ALL_TABLES'; CREATE TABLE requests (request_id INT PRIMARY KEY,status VARCHAR(20) NOT NULL DEFAULT 'pending'); CREATE TABLE new_input (request_id INT PRIMARY KEY);",
+      "seed_sql": "INSERT INTO requests VALUES (1,'pending'),(2,'held'); INSERT INTO new_input VALUES (3),(4);",
+      "expected": "request_id\tstatus\n1\tpending\n2\theld\n3\tactive\n4\tactive",
+      "ordering": "Ascending request_id.",
+      "constraints": [
+        "Only future omitted-status inserts use the changed policy.",
+        "The status presence requirement remains enforced."
+      ],
+      "edge_cases": [
+        "Empty new input preserves old states.",
+        "No old rows still permits new active rows."
+      ],
+      "hints": [
+        "ALTER the default rather than UPDATE every stored status.",
+        "Omit status when inserting the new identities."
+      ],
+      "solution_sql": "ALTER TABLE requests ALTER COLUMN status SET DEFAULT 'active'; INSERT INTO requests (request_id) SELECT request_id FROM new_input; SELECT request_id,status FROM requests ORDER BY request_id;",
+      "explanation": "Definition-level initialization changes future values while old accepted statuses remain intact.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO requests VALUES (8,'held');",
+          "expected": "request_id\tstatus\n8\theld"
+        },
+        {
+          "seed_sql": "INSERT INTO new_input VALUES (7);",
+          "expected": "request_id\tstatus\n7\tactive"
+        }
+      ],
+      "negative_validation_cases": [
+        {
+          "sql": "INSERT INTO requests VALUES (99,NULL);",
+          "error_codes": [
+            1048
+          ]
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-10-default-1",
+      "test_id": "pt-dbms-sql-10-default",
+      "question_text": "When does a column's DEFAULT value actually get applied during an INSERT?",
+      "options": [
+        "Whenever the column's value is NULL, whether explicit or omitted",
+        "Only when the column is omitted entirely from the INSERT column list",
+        "Only during UPDATE statements",
+        "Only if the table has no PRIMARY KEY"
+      ],
+      "correct_index": 1,
+      "explanation": "DEFAULT fires specifically when a column is left out of the INSERT; explicitly supplying NULL bypasses DEFAULT entirely.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-10-default-2",
+      "test_id": "pt-dbms-sql-10-default",
+      "question_text": "A column is declared `quantity INT DEFAULT 0` (nullable, no NOT NULL). What is the result of INSERT INTO products (product_id, quantity) VALUES (2, NULL)?",
+      "options": [
+        "quantity is set to 0 via the DEFAULT",
+        "quantity is stored as NULL, since explicit NULL overrides DEFAULT",
+        "The insert fails",
+        "quantity is set to an empty string"
+      ],
+      "correct_index": 1,
+      "explanation": "Explicitly passing NULL always wins over DEFAULT; DEFAULT only fills in when the column is omitted from the statement, not when NULL is explicitly given.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-10-default-3",
+      "test_id": "pt-dbms-sql-10-default",
+      "question_text": "When is CURRENT_TIMESTAMP as a column DEFAULT evaluated?",
+      "options": [
+        "Once, at the moment the table is created",
+        "Fresh, at the moment each individual row is inserted",
+        "Once per session, cached for all inserts in that session",
+        "Never automatically; it must be set manually per insert"
+      ],
+      "correct_index": 1,
+      "explanation": "DEFAULT CURRENT_TIMESTAMP is evaluated per row at insert time, giving each row its own accurate insertion timestamp.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-10-default-4",
+      "test_id": "pt-dbms-sql-10-default",
+      "question_text": "If you run ALTER TABLE products ALTER COLUMN status SET DEFAULT 'active'; on a table with existing rows, what happens to those existing rows' status values?",
+      "options": [
+        "They are all immediately updated to 'active'",
+        "They remain unchanged; only future inserts that omit the column get the new default",
+        "They become NULL until manually updated",
+        "The ALTER TABLE fails if rows already exist"
+      ],
+      "correct_index": 1,
+      "explanation": "Changing a DEFAULT clause only affects future inserts; it is not retroactively applied to rows already stored in the table.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-10-default-5",
+      "test_id": "pt-dbms-sql-10-default",
+      "question_text": "Which MySQL-specific extension allows a TIMESTAMP column to automatically refresh its value whenever the row is updated?",
+      "options": [
+        "DEFAULT CURRENT_TIMESTAMP alone",
+        "ON UPDATE CURRENT_TIMESTAMP",
+        "AUTO REFRESH TIMESTAMP",
+        "TRIGGER BEFORE UPDATE"
+      ],
+      "correct_index": 1,
+      "explanation": "MySQL supports an ON UPDATE CURRENT_TIMESTAMP clause on a column, a non-standard extension not part of ANSI SQL, that auto-updates the value on every row update.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-10-default-6",
+      "test_id": "pt-dbms-sql-10-default",
+      "question_text": "Can a column's DEFAULT expression reference another column in the same row, e.g. DEFAULT (price * 1.1)?",
+      "options": [
+        "Yes, in all standard SQL engines",
+        "No, standard DEFAULT cannot reference sibling columns; a generated/computed column feature is needed for that",
+        "Yes, but only in PostgreSQL",
+        "Yes, but only for numeric columns"
+      ],
+      "correct_index": 1,
+      "explanation": "A DEFAULT clause is a static or function-based expression independent of other columns; referencing another column's value requires a generated/computed column instead.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-10-default-7",
+      "test_id": "pt-dbms-sql-10-default",
+      "question_text": "Is a table's auto-increment mechanism (AUTO_INCREMENT / SERIAL / IDENTITY) the same feature as the DEFAULT clause?",
+      "options": [
+        "Yes, they are exactly the same keyword",
+        "No, auto-increment is conceptually similar but is usually a distinct feature/keyword, not the DEFAULT clause itself",
+        "Yes, but only in Oracle",
+        "No, auto-increment is a type of CHECK constraint"
+      ],
+      "correct_index": 1,
+      "explanation": "While auto-increment behaves like an automatically-supplied value, it is implemented via its own dedicated syntax (AUTO_INCREMENT, SERIAL, GENERATED ... AS IDENTITY) rather than the generic DEFAULT clause.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-10-default-8",
+      "test_id": "pt-dbms-sql-10-default",
+      "question_text": "A column is `status VARCHAR(20) NOT NULL DEFAULT 'pending'`. What happens with INSERT INTO t (id, status) VALUES (1, NULL)?",
+      "options": [
+        "status becomes 'pending' via DEFAULT",
+        "The insert fails with a NOT NULL violation, because explicit NULL bypasses DEFAULT",
+        "status becomes an empty string",
+        "The insert succeeds with status left as NULL"
+      ],
+      "correct_index": 1,
+      "explanation": "Because NULL is explicitly supplied, DEFAULT does not intervene, and the NOT NULL constraint then rejects the explicit NULL value, causing the statement to fail.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "coordinator",
+    "independent_review": "unavailable; no agent tools",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Definitions and examples checked against questions; no plagiarism certification.",
+    "existing_question_corrections": [
+      "tq-dbms-sql-10-default-1",
+      "tq-dbms-sql-10-default-3",
+      "tq-dbms-sql-10-default-6",
+      "tq-dbms-sql-10-default-8"
+    ],
+    "canonical_answer_indices_preserved": true,
+    "batch_review": {
+      "reviewer": "coordinator",
+      "independent": false,
+      "scope": "This new package: explained definitions and boundaries, retained source question identities/canonical indices, new correct answers and explanations, exercise solutions and recorded fixtures, diagram trace and prepared integration.",
+      "execution_evidence": "Focused MariaDB reference cases and selected actual LessonBlock rendering passed; no browser QA or exact MySQL/provider execution.",
+      "source_preservation": "Original snapshots retained; eight retained exercises across this continuation matched source identity, difficulty, schema, seed and trailing checker.",
+      "limits": "No independent worker available. Output fixtures do not prove arbitrary student submissions used a requested technique. Native PostgreSQL/other-engine concepts remain documented or explicitly mirrored, not verified by MariaDB."
+    }
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-10-default",
+    "original_note_sha256": "fcd817b0721f91d481f52d2a0024614a28b4647858d48bdf4053927db46d8b42",
+    "status": "paired migration prepared; not applied"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Omission, explicit DEFAULT and explicit NULL are different inputs",
+      "description": "The example uses an ordinary nullable integer with default ten; required-column errors and temporal special cases have their own stated rules.",
+      "columns": [
+        "Input contract",
+        "Stored quantity",
+        "Why"
+      ],
+      "rows": [
+        [
+          "Omit quantity",
+          "10",
+          "Requests the declared initialization policy"
+        ],
+        [
+          "Explicit DEFAULT in supported form",
+          "10",
+          "Explicitly requests the default"
+        ],
+        [
+          "Explicit NULL",
+          "NULL",
+          "Supplies a missing marker to the nullable column"
+        ],
+        [
+          "Explicit 0",
+          "0",
+          "Supplies an ordinary value"
+        ],
+        [
+          "Change default later",
+          "Existing values unchanged",
+          "Future initialization is not a backfill"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "coordinator checked omission/default/NULL distinctions, future-only policy transition and corrected MySQL expression-default support",
+    "server_rendering": "passed",
+    "browser_rendering": "unverified",
+    "independent_review": "unavailable; no agent tools",
+    "server_rendering_evidence": "Selected actual LessonBlock Vitest rendering passed for this batch; no browser QA."
+  },
+  "sql_verification": {
+    "engine": "11.8.6-MariaDB-0+deb13u1 from Debian",
+    "scope": "MariaDB compatibility execution; exact MySQL 8.4/provider execution unverified",
+    "fingerprint": "a86ff242d7b172a42413490b9f9b19ca62b96457c0a9b42ecaf50019940b9971",
+    "cases": [
+      {
+        "problem": "default-omission-null",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "default-omission-null",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "default-omission-null",
+        "case": 2,
+        "passed": true
+      },
+      {
+        "problem": "default-future-policy",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "default-future-policy",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "default-future-policy",
+        "case": 2,
+        "passed": true
+      },
+      {
+        "problem": "default-future-policy",
+        "negative_case": 0,
+        "error_code": 1048,
+        "passed": true
+      }
+    ],
+    "all_passed": true
+  }
+}

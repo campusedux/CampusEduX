@@ -1,0 +1,621 @@
+{
+  "source_ref": "chapter-6-er-and-eer-modeling/recursive-relationship",
+  "slug": "recursive-relationship",
+  "title": "Recursive Relationship",
+  "description": "Model one entity type in distinct relationship roles, map supervisor and prerequisite facts correctly, and distinguish direct relationship queries from recursive traversal and cycle enforcement.",
+  "dialect": "MySQL 8.4",
+  "notes": "## One entity type participates in distinct roles\n\nA recursive relationship connects occurrences of the same entity type in different roles. Employee supervises Employee is an example: one occurrence plays supervisor and another subordinate. Course requires Course is another: one course is the dependent course and another is its prerequisite. The relationship is about the roles and intended association, not a requirement that both identifiers must name the same occurrence.\n\nIn the introductory terminology used here, a self-association is also called unary because one entity category participates. The instance can still contain two role positions. Other formalisms can count role-based arity differently, so state the convention. Calling the association unary should not erase the distinction between the two employees or reverse the direction of a prerequisite.\n\n## Role names make the direction clear\n\nA row containing employee identifiers seven and nine is ambiguous without role meaning. Does seven supervise nine or does nine supervise seven? Names such as supervisor_id and employee_id communicate which side is which. The relationship can use attributes of the same SQL type while those values remain semantically different participant positions.\n\nExplicit roles are important for human interpretation and mapping, though the exact written labels depend on notation and schema conventions. It is too strong to claim every tool requires particular role-name syntax for a recursive relationship to exist. The requirement is that the roles and their meanings are defined clearly enough for diagrams, queries, and constraints to express the intended fact consistently.\n\n## Identification and recursion are independent\n\nAn Employee can have an independent employee_id while participating in supervisor and subordinate roles. Recursion does not automatically make either occurrence a weak entity. A weak-entity classification concerns dependence on an owner for complete identification, while a recursive relationship concerns participation of the same category in several roles.\n\nLikewise, a Course can have its own course_id and still participate in a prerequisite network. A course referenced by several other courses does not acquire a new identity each time it plays a prerequisite role. A joined result can repeat its descriptive label across several relationship facts, but those repetitions do not create duplicate conceptual Course occurrences.\n\n## Choose multiplicity per role\n\nA supervision policy can permit each employee at most one current supervisor while a supervisor can have many subordinates. The top-level employee may have no supervisor if the policy allows that root state. These are different bounds for the two roles. The fact that both roles use Employee does not force their minimum and maximum participation to be identical.\n\nA prerequisite relationship can be many-to-many: a course can require several prerequisite courses and be required by several others. A single prerequisite_id column on Course would incorrectly limit one side if the actual policy permits several. The relational mapping needs the collection of ordered participant pairs rather than assuming every self-association is a simple one-parent hierarchy.\n\n## A scalar self-reference can map supervision\n\nFor a single-current-supervisor model, Employee can store employee_id, employee_name, and an optional supervisor_id. An appropriate supported self-referencing foreign key can protect supervisor existence. NOT NULL would forbid the root absence if chosen, which may be inappropriate when one top-level employee needs no supervisor. The domain's root and optionality policies must be explicit.\n\n```sql\nSELECT e.employee_id, e.employee_name,\n       m.employee_name AS supervisor_name\nFROM employees e\nLEFT JOIN employees m ON m.employee_id = e.supervisor_id\nORDER BY e.employee_id;\n```\n\nThe aliases distinguish the subordinate occurrence from the supervisor occurrence while reading one underlying relation. A preserving join keeps employees with no supervisor. Repeated employee names remain distinct through employee_id. This direct lookup does not recursively traverse the reporting chain; it returns at most the immediate supervisor under the supplied unique-identity definition.\n\n## Many-to-many self-associations need ordered pairs\n\nA conventional prerequisite relation can store course_id and prerequisite_id, both referring to Course under supported constraints. A combined key can prevent repeated identical pairs while allowing several prerequisites per course. The ordered pair (10, 20) means course ten requires course twenty; reversing it normally states a different fact rather than a duplicate representation of the same directed edge.\n\nIf the model instead describes an undirected association such as a symmetric collaboration, it needs a different pair-normalization or symmetry policy. Do not apply the prerequisite direction rule to every recursive relationship. State whether orientation matters, whether both directions can coexist, and whether duplicate facts need a canonical representation. The meaning of the association determines the appropriate checks.\n\n## Existence alone does not prevent cycles\n\nA self-referencing foreign key can require referenced employees or courses to exist without preventing self-links or longer cycles. Employee seven supervising itself can satisfy identity existence while violating a separate hierarchy policy. Courses ten and twenty requiring each other can likewise form a two-node cycle with valid individual identifiers.\n\nA local CHECK comparing two nonmissing identifiers can reject a direct self-edge where supported. It cannot by itself prove the absence of every longer path returning to its start. Detecting and safely preventing cycles can need graph traversal and a trusted transaction design. A query reporting current cycles is useful diagnosis, but it does not automatically preserve acyclicity under later concurrent writes.\n\n## Traversal is different from the relationship definition\n\nA recursive relationship can be stored and queried without a recursive CTE. A self-join finds immediate connections. A bounded recursive CTE can follow several levels when the task asks for descendants or reachability. The model describes the association; the query mechanism determines which part of the stored network is explored and returned.\n\nA traversal needs an anchor, direction, termination policy, and result grain. A node can be reached through several paths, and a depth limit can intentionally exclude distant nodes. Reuse the dedicated recursive CTE coverage for those details instead of pretending that one supervisor-name lookup proves a complete hierarchy traversal. Ordinary relationship existence and native recursion semantics require different verification evidence.\n\n## Short cycle diagnostics have limited scope\n\nA self-join over prerequisite pairs can find reciprocal edges: course ten requires twenty and twenty requires ten. An ordering condition can report each two-node cycle once. This is a specific diagnostic, not a complete graph-cycle detector. A three-course loop can exist without any reciprocal edge, and a self-edge is another separate case.\n\nA task should name that limitation in its contract. If it asks for every cycle, a two-edge diagnostic is insufficient even when all supplied examples happen to contain only pairs. Good fixtures include a reciprocal pair, an unrelated directed edge, a three-node cycle that should remain outside the explicitly narrow report, and any permitted or excluded self-links. The expected result must match the stated scope.\n\n## Missing relationships are not missing entities\n\nAn employee with supervisor_id NULL can remain a valid independently identified employee under the root policy. That differs from a nonmissing supervisor_id naming no existing employee. A preserving query can produce NULL supervisor output in either case if the fixture intentionally allows invalid references, so a diagnostic may need to inspect both child absence and parent match separately.\n\nA missing supervisor name also does not necessarily establish missing supervisor identity if the name itself is optional. Use a guaranteed nonmissing identity when testing whether a related occurrence matched. This is the same careful distinction needed for other reference audits, now applied to roles of the same type rather than to two different entity categories.\n\n## Verify direction and population explicitly\n\nUse several employees sharing a name, a root employee, and a supervisor with multiple subordinates. Check that reversing the join would change the meaning and that the root remains in a complete employee listing. For prerequisites, use multiple outgoing and incoming edges so a mistaken one-value mapping or wrong grouping becomes visible.\n\nThe exercises use temporary SQL mirrors to verify immediate-supervisor reporting and a deliberately narrow reciprocal-prerequisite audit on the recorded engine. They do not establish native self-reference enforcement, complete acyclicity, transaction safety, exact MySQL/provider behaviour, or production authority. A clear recursive-relationship explanation keeps roles, direction, multiplicity, identity, and traversal separate while preserving one consistent meaning for each stored association.\n",
+  "references": [],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-6-recursive-relationship",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-6-recursive-relationship-1",
+          "test_id": "pt-dbms-sql-6-recursive-relationship",
+          "question_text": "What is a recursive relationship?",
+          "options": [
+            "A relationship connecting three or more distinct entity sets",
+            "A relationship in which an entity set is related to itself",
+            "A relationship that has no cardinality",
+            "A relationship involving only weak entities"
+          ],
+          "correct_index": 1,
+          "explanation": "In a recursive relationship, the same entity set participates on both sides, often in different roles.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-6-recursive-relationship-2",
+          "test_id": "pt-dbms-sql-6-recursive-relationship",
+          "question_text": "In the Manages relationship on Employee, what are the two role names typically used?",
+          "options": [
+            "Owner and Dependent",
+            "Manager and Subordinate",
+            "Parent and Child entity",
+            "Strong and Weak"
+          ],
+          "correct_index": 1,
+          "explanation": "Manager and Subordinate distinguish the two participations of the same Employee entity set.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-6-recursive-relationship-3",
+          "test_id": "pt-dbms-sql-6-recursive-relationship",
+          "question_text": "Why should the role meanings be explicit in a recursive relationship?",
+          "options": [
+            "Because SQL requires them for foreign keys",
+            "They distinguish participant positions of the same type, such as supervisor versus subordinate, so the association direction is clear",
+            "Because recursive relationships cannot have attributes otherwise",
+            "They are actually optional and rarely used"
+          ],
+          "correct_index": 1,
+          "explanation": "Semantic roles must be understood; the exact naming syntax and rendering convention depend on the notation and implementation.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-6-recursive-relationship-4",
+          "test_id": "pt-dbms-sql-6-recursive-relationship",
+          "question_text": "Under this lesson’s introductory one-participating-category convention, how is a self-association classified?",
+          "options": [
+            "Degree 1 (unary)",
+            "Degree 2 (binary)",
+            "Degree 3 (ternary)",
+            "Degree 0"
+          ],
+          "correct_index": 0,
+          "explanation": "It is called unary or recursive here, while its distinct role positions remain explicit.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-6-recursive-relationship-5",
+          "test_id": "pt-dbms-sql-6-recursive-relationship",
+          "question_text": "How is a 1:N recursive relationship like Manages typically implemented in a relational table?",
+          "options": [
+            "As a separate junction table with two foreign keys, always",
+            "As a self-referencing foreign key column within the same Employee table (e.g., Manager_ID referencing Employee_ID)",
+            "It cannot be represented in a relational schema",
+            "As a multi-valued attribute on Employee"
+          ],
+          "correct_index": 1,
+          "explanation": "A scalar self-reference fits an at-most-one-current-supervisor policy; native reference enforcement and hierarchy restrictions need their own definitions.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-6-recursive-relationship-6",
+          "test_id": "pt-dbms-sql-6-recursive-relationship",
+          "question_text": "Can a recursive relationship have M:N cardinality?",
+          "options": [
+            "No, recursive relationships are always 1:1",
+            "Yes — e.g., Prerequisite_Of on Course can be M:N since a course can have multiple prerequisites and be a prerequisite for multiple courses",
+            "No, recursive relationships have no cardinality concept",
+            "Only if the entity set is weak"
+          ],
+          "correct_index": 1,
+          "explanation": "Recursive relationships can carry any cardinality just like ordinary binary relationships; degree and cardinality are independent.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-6-recursive-relationship-7",
+          "test_id": "pt-dbms-sql-6-recursive-relationship",
+          "question_text": "Does being a recursive relationship imply that either participating entity is a weak entity?",
+          "options": [
+            "Yes, recursion always implies weakness",
+            "No — recursion is purely about the same entity set appearing on both sides; it has no bearing on whether an entity is strong or weak",
+            "Yes, but only for M:N recursive relationships",
+            "It depends on the participation constraint"
+          ],
+          "correct_index": 1,
+          "explanation": "Recursive relationships and weak entities are independent concepts; an entity set in a recursive relationship (like Employee) is commonly strong.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-6-recursive-relationship-8",
+          "test_id": "pt-dbms-sql-6-recursive-relationship",
+          "question_text": "Which of the following is a valid recursive relationship example in the college database?",
+          "options": [
+            "Enrolls_In, between Student and Course",
+            "Offers, between Department and Course",
+            "Prerequisite_Of, between Course and itself",
+            "Headed_By, between Department and Faculty"
+          ],
+          "correct_index": 2,
+          "explanation": "Prerequisite_Of relates Course to Course, making it recursive; the others connect two distinct entity sets.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-6-recursive-relationship-new-9",
+          "test_id": "pt-dbms-sql-6-recursive-relationship",
+          "question_text": "Does a recursive relationship require both roles to name the same occurrence?",
+          "options": [
+            "Yes; every edge must be a self-edge",
+            "No; distinct employees can play the two roles",
+            "Only if names match",
+            "Only if the type is weak"
+          ],
+          "correct_index": 1,
+          "explanation": "The same entity category can supply different participant occurrences.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-6-recursive-relationship-new-10",
+          "test_id": "pt-dbms-sql-6-recursive-relationship",
+          "question_text": "What does reversing a directed prerequisite pair usually do?",
+          "options": [
+            "Always leave the fact unchanged",
+            "Delete a primary key",
+            "State a different fact",
+            "Make the relation unary in SQL"
+          ],
+          "correct_index": 2,
+          "explanation": "Direction is part of the relationship meaning.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-6-recursive-relationship-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-6-recursive-relationship-application-new-1",
+          "test_id": "pt-dbms-sql-6-recursive-relationship-application",
+          "question_text": "Does a self-referencing foreign key alone prove a supervision graph has no cycle?",
+          "options": [
+            "Yes; all foreign keys are trees",
+            "Only if ids are text",
+            "No; existence and acyclicity are separate",
+            "Only if a root is present"
+          ],
+          "correct_index": 2,
+          "explanation": "Longer path restrictions need additional enforcement.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-6-recursive-relationship-application-new-2",
+          "test_id": "pt-dbms-sql-6-recursive-relationship-application",
+          "question_text": "What does a single self-join for supervisor_name normally retrieve?",
+          "options": [
+            "Every descendant automatically",
+            "A complete shortest-path tree",
+            "A new employee identity",
+            "The immediate supervisor, not every ancestor"
+          ],
+          "correct_index": 3,
+          "explanation": "Direct association lookup differs from recursive traversal.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-6-recursive-relationship-application-new-3",
+          "test_id": "pt-dbms-sql-6-recursive-relationship-application",
+          "question_text": "Why might supervisor_id be nullable under the stated model?",
+          "options": [
+            "A top-level employee can have no supervisor",
+            "All employees must be unidentified",
+            "NULL means supervisor zero",
+            "It creates a cycle detector"
+          ],
+          "correct_index": 0,
+          "explanation": "The root policy permits optional participation in that role.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-6-recursive-relationship-application-new-4",
+          "test_id": "pt-dbms-sql-6-recursive-relationship-application",
+          "question_text": "Can Course prerequisites be many-to-many?",
+          "options": [
+            "No; self-associations are always one-to-one",
+            "Yes; several prerequisites and several dependent courses can be allowed",
+            "Only if every course is weak",
+            "Only if names repeat"
+          ],
+          "correct_index": 1,
+          "explanation": "Recursion does not determine multiplicity.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-6-recursive-relationship-application-new-5",
+          "test_id": "pt-dbms-sql-6-recursive-relationship-application",
+          "question_text": "What does a combined course-prerequisite key protect?",
+          "options": [
+            "One prerequisite globally per course",
+            "Global uniqueness of every course label",
+            "Unique directed membership pairs under the stated policy",
+            "All graph cycles"
+          ],
+          "correct_index": 2,
+          "explanation": "Pair identity differs from wider graph constraints.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-6-recursive-relationship-application-new-6",
+          "test_id": "pt-dbms-sql-6-recursive-relationship-application",
+          "question_text": "What does a reciprocal-edge audit detect?",
+          "options": [
+            "Every possible graph cycle",
+            "Only missing parent entities",
+            "All descendant paths",
+            "Two-node cycles represented by both directed pairs"
+          ],
+          "correct_index": 3,
+          "explanation": "Its scope is narrower than complete cycle detection.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-6-recursive-relationship-application-new-7",
+          "test_id": "pt-dbms-sql-6-recursive-relationship-application",
+          "question_text": "Why use an ordering condition on the two nodes in that audit?",
+          "options": [
+            "To report each reciprocal pair once",
+            "To create the reverse edge",
+            "To change stored course identities",
+            "To prove acyclicity"
+          ],
+          "correct_index": 0,
+          "explanation": "Both join orientations otherwise represent the same detected pair.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-6-recursive-relationship-application-new-8",
+          "test_id": "pt-dbms-sql-6-recursive-relationship-application",
+          "question_text": "Can a three-node cycle exist without any reciprocal edge?",
+          "options": [
+            "No; every cycle includes an immediate reverse pair",
+            "Yes",
+            "Only if every value is NULL",
+            "Only if courses have no keys"
+          ],
+          "correct_index": 1,
+          "explanation": "A narrow reciprocal check does not cover all cycle lengths.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-6-recursive-relationship-application-new-9",
+          "test_id": "pt-dbms-sql-6-recursive-relationship-application",
+          "question_text": "Does recursion imply either participant is weak?",
+          "options": [
+            "Yes; repeated types have no keys",
+            "Only if one role is mandatory",
+            "No; identification dependence is a separate concept",
+            "Only if there are many rows"
+          ],
+          "correct_index": 2,
+          "explanation": "An independently identified type can participate in a self-association.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-6-recursive-relationship-application-new-10",
+          "test_id": "pt-dbms-sql-6-recursive-relationship-application",
+          "question_text": "What must a traversal contract define beyond the stored relationship?",
+          "options": [
+            "Only the relationship’s font",
+            "Only table width",
+            "Only a displayed employee label",
+            "Anchor, direction, termination and result grain"
+          ],
+          "correct_index": 3,
+          "explanation": "Query exploration semantics need their own explicit decisions.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cx-recursive-relationship-supervisor",
+      "slug": "recursive-relationship-supervisor",
+      "title": "Show immediate supervisors while preserving root employees",
+      "difficulty": "Easy",
+      "task": "Return employee_id, employee_name and supervisor_name for every employee. A NULL supervisor_id represents a root; return SQL NULL supervisor_name for that row. This is an immediate lookup, not a full traversal.",
+      "schema_sql": "CREATE TABLE employees (employee_id INT PRIMARY KEY, employee_name VARCHAR(80) NOT NULL, supervisor_id INT NULL);",
+      "seed_sql": "INSERT INTO employees VALUES (1,'Asha',NULL),(2,'Mira',1),(3,'Mira',1),(4,'Dev',2);",
+      "expected": "employee_id\temployee_name\tsupervisor_name\n1\tAsha\tNULL\n2\tMira\tAsha\n3\tMira\tAsha\n4\tDev\tMira",
+      "ordering": "Ascending employee_id.",
+      "constraints": [
+        "All supplied nonmissing supervisor references exist.",
+        "This temporary MariaDB query mirror verifies results; actual MySQL/provider temporary-table behaviour and native self-reference enforcement remain unverified."
+      ],
+      "edge_cases": [
+        "Several subordinates can share a supervisor.",
+        "Repeated names are distinct employee identities."
+      ],
+      "hints": [
+        "Use two aliases with clear participant roles.",
+        "Preserve employees who have no supervisor."
+      ],
+      "solution_sql": "SELECT e.employee_id, e.employee_name, m.employee_name AS supervisor_name FROM employees e LEFT JOIN employees m ON m.employee_id = e.supervisor_id ORDER BY e.employee_id;",
+      "explanation": "The role-qualified self-join follows the directed immediate association and keeps the root without claiming complete hierarchy traversal.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO employees VALUES (9,'Root',NULL);",
+          "expected": "employee_id\temployee_name\tsupervisor_name\n9\tRoot\tNULL"
+        },
+        {
+          "seed_sql": "",
+          "expected": ""
+        }
+      ]
+    },
+    {
+      "id": "cx-recursive-relationship-reciprocal",
+      "slug": "recursive-relationship-reciprocal",
+      "title": "Report reciprocal prerequisite pairs exactly once",
+      "difficulty": "Medium",
+      "task": "Return course_a and course_b for distinct courses with both prerequisite directions recorded. Output the smaller id first and report each pair once. Exclude self-edges. This finds two-node cycles only, not every cycle length.",
+      "schema_sql": "CREATE TABLE prerequisites (course_id INT NOT NULL, prerequisite_id INT NOT NULL, PRIMARY KEY(course_id,prerequisite_id));",
+      "seed_sql": "INSERT INTO prerequisites VALUES (10,20),(20,10),(20,30),(30,40),(40,50),(50,30),(60,60);",
+      "expected": "course_a\tcourse_b\n10\t20",
+      "ordering": "Ascending course_a, course_b.",
+      "constraints": [
+        "Pairs are directed and unique; identifiers are positive integers.",
+        "The three-node cycle and self-edge deliberately remain outside the narrow task scope."
+      ],
+      "edge_cases": [
+        "Each detected pair has two possible join orientations.",
+        "Longer cycles can exist without a reciprocal pair."
+      ],
+      "hints": [
+        "Match each directed pair with its reverse.",
+        "Use a strict id ordering to exclude self-links and duplicate orientations."
+      ],
+      "solution_sql": "SELECT a.course_id AS course_a, a.prerequisite_id AS course_b FROM prerequisites a JOIN prerequisites b ON b.course_id = a.prerequisite_id AND b.prerequisite_id = a.course_id WHERE a.course_id < a.prerequisite_id ORDER BY course_a, course_b;",
+      "explanation": "The self-join detects exactly the documented reciprocal pair pattern. It neither traverses all paths nor enforces global acyclicity.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO prerequisites VALUES (1,2),(2,3),(3,1),(4,4);",
+          "expected": ""
+        },
+        {
+          "seed_sql": "INSERT INTO prerequisites VALUES (4,9),(9,4),(1,2),(2,1);",
+          "expected": "course_a\tcourse_b\n1\t2\n4\t9"
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-6-recursive-relationship-1",
+      "test_id": "pt-dbms-sql-6-recursive-relationship",
+      "question_text": "What is a recursive relationship?",
+      "options": [
+        "A relationship connecting three or more distinct entity sets",
+        "A relationship in which an entity set is related to itself",
+        "A relationship that has no cardinality",
+        "A relationship involving only weak entities"
+      ],
+      "correct_index": 1,
+      "explanation": "In a recursive relationship, the same entity set participates on both sides, often in different roles.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-6-recursive-relationship-2",
+      "test_id": "pt-dbms-sql-6-recursive-relationship",
+      "question_text": "In the Manages relationship on Employee, what are the two role names typically used?",
+      "options": [
+        "Owner and Dependent",
+        "Manager and Subordinate",
+        "Parent and Child entity",
+        "Strong and Weak"
+      ],
+      "correct_index": 1,
+      "explanation": "Manager and Subordinate distinguish the two participations of the same Employee entity set.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-6-recursive-relationship-3",
+      "test_id": "pt-dbms-sql-6-recursive-relationship",
+      "question_text": "Why are role names mandatory (not just helpful) in a recursive relationship?",
+      "options": [
+        "Because SQL requires them for foreign keys",
+        "Because both connecting lines come from the same entity set, so without labels there is no way to distinguish the two participations",
+        "Because recursive relationships cannot have attributes otherwise",
+        "They are actually optional and rarely used"
+      ],
+      "correct_index": 1,
+      "explanation": "Without role names, a diagram reader cannot tell which line represents which role when both sides are the same entity set.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-6-recursive-relationship-4",
+      "test_id": "pt-dbms-sql-6-recursive-relationship",
+      "question_text": "What relationship degree (from the Relationship Degree topic) does a recursive relationship correspond to?",
+      "options": [
+        "Degree 1 (unary)",
+        "Degree 2 (binary)",
+        "Degree 3 (ternary)",
+        "Degree 0"
+      ],
+      "correct_index": 0,
+      "explanation": "A recursive relationship is exactly the unary (degree 1) case: only one entity set participates, related to itself.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-6-recursive-relationship-5",
+      "test_id": "pt-dbms-sql-6-recursive-relationship",
+      "question_text": "How is a 1:N recursive relationship like Manages typically implemented in a relational table?",
+      "options": [
+        "As a separate junction table with two foreign keys, always",
+        "As a self-referencing foreign key column within the same Employee table (e.g., Manager_ID referencing Employee_ID)",
+        "It cannot be represented in a relational schema",
+        "As a multi-valued attribute on Employee"
+      ],
+      "correct_index": 1,
+      "explanation": "A self-referencing foreign key is the standard way to implement a 1:N recursive relationship.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-6-recursive-relationship-6",
+      "test_id": "pt-dbms-sql-6-recursive-relationship",
+      "question_text": "Can a recursive relationship have M:N cardinality?",
+      "options": [
+        "No, recursive relationships are always 1:1",
+        "Yes — e.g., Prerequisite_Of on Course can be M:N since a course can have multiple prerequisites and be a prerequisite for multiple courses",
+        "No, recursive relationships have no cardinality concept",
+        "Only if the entity set is weak"
+      ],
+      "correct_index": 1,
+      "explanation": "Recursive relationships can carry any cardinality just like ordinary binary relationships; degree and cardinality are independent.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-6-recursive-relationship-7",
+      "test_id": "pt-dbms-sql-6-recursive-relationship",
+      "question_text": "Does being a recursive relationship imply that either participating entity is a weak entity?",
+      "options": [
+        "Yes, recursion always implies weakness",
+        "No — recursion is purely about the same entity set appearing on both sides; it has no bearing on whether an entity is strong or weak",
+        "Yes, but only for M:N recursive relationships",
+        "It depends on the participation constraint"
+      ],
+      "correct_index": 1,
+      "explanation": "Recursive relationships and weak entities are independent concepts; an entity set in a recursive relationship (like Employee) is commonly strong.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-6-recursive-relationship-8",
+      "test_id": "pt-dbms-sql-6-recursive-relationship",
+      "question_text": "Which of the following is a valid recursive relationship example in the college database?",
+      "options": [
+        "Enrolls_In, between Student and Course",
+        "Offers, between Department and Course",
+        "Prerequisite_Of, between Course and itself",
+        "Headed_By, between Department and Faculty"
+      ],
+      "correct_index": 2,
+      "explanation": "Prerequisite_Of relates Course to Course, making it recursive; the others connect two distinct entity sets.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "coordinator",
+    "independent_review": "unavailable; no agent tools",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Definitions and examples checked against questions; no plagiarism certification.",
+    "existing_question_corrections": [
+      "tq-dbms-sql-6-recursive-relationship-3",
+      "tq-dbms-sql-6-recursive-relationship-4",
+      "tq-dbms-sql-6-recursive-relationship-5"
+    ],
+    "canonical_answer_indices_preserved": true
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-6-recursive-relationship",
+    "original_note_sha256": "f8ad265335e2cb1ca9ff2c4a8aa982c276f8dab51c5b168fcf1ddfc779afaaef",
+    "status": "paired migration prepared; not applied"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "The same entity category can fill different directed roles",
+      "description": "Role names preserve relationship meaning. A reciprocal pair differs from a longer cycle, and neither fact is implied merely by the existence of valid participant identifiers.",
+      "columns": [
+        "Relationship",
+        "First role",
+        "Second role",
+        "Meaning"
+      ],
+      "rows": [
+        [
+          "Supervises",
+          "Employee 1 as supervisor",
+          "Employee 2 as subordinate",
+          "1 directly supervises 2"
+        ],
+        [
+          "Requires",
+          "Course 10 as dependent",
+          "Course 20 as prerequisite",
+          "10 requires 20"
+        ],
+        [
+          "Reverse Requires",
+          "Course 20 as dependent",
+          "Course 10 as prerequisite",
+          "A distinct edge; together they form a two-node cycle"
+        ],
+        [
+          "Three-node cycle",
+          "30 → 40 → 50",
+          "50 → 30 closes the route",
+          "Not detected by a reciprocal-pair-only audit"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "coordinator checked directed roles, root preservation and explicit limitation to two-node cycle diagnostics",
+    "server_rendering": "passed",
+    "browser_rendering": "unverified",
+    "independent_review": "unavailable; no agent tools",
+    "server_rendering_evidence": "2026-10-29: actual LessonBlock rendering passed in focused suite including the authored window package."
+  },
+  "sql_verification": {
+    "engine": "11.8.6-MariaDB-0+deb13u1 from Debian",
+    "scope": "MariaDB compatibility execution; exact MySQL 8.4/provider execution unverified",
+    "fingerprint": "d3f7bd68344714d956f25c08016f3f737bc01aedc829acb1507cc47fc3a5ca96",
+    "cases": [
+      {
+        "problem": "recursive-relationship-supervisor",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "recursive-relationship-supervisor",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "recursive-relationship-supervisor",
+        "case": 2,
+        "passed": true
+      },
+      {
+        "problem": "recursive-relationship-reciprocal",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "recursive-relationship-reciprocal",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "recursive-relationship-reciprocal",
+        "case": 2,
+        "passed": true
+      }
+    ],
+    "all_passed": true
+  }
+}

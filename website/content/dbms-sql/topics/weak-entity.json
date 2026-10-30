@@ -1,0 +1,675 @@
+{
+  "source_ref": "chapter-6-er-and-eer-modeling/weak-entity",
+  "slug": "weak-entity",
+  "title": "Weak Entity",
+  "description": "Model rooms identified within buildings, read owner-dependent ER notation, and map the identifying relationship to complete relational keys and mandatory references.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Identification depends on an owner\n\nA weak entity type relies on an owner entity's identity together with its own local discriminator for complete identification. In our campus example, Building has an independent building_id. Room numbers are unique within a building but can repeat across buildings. Room 101 in Building 7 and Room 101 in Building 9 are distinct rooms. The local number alone cannot identify which room a fact concerns.\n\nThis is an explicit modeling policy, not a universal claim about all buildings. Another institution could issue globally unique room identifiers and choose another conceptual design. Here, the intended identity is building_id together with room_number. Capacity describes the room but is not part of its identity. A capacity change does not create a different room or resolve two records claiming the same room identity.\n\n## Use the same example throughout the model\n\nBuilding 7 is North Hall and Building 9 is South Hall. North Hall contains Room 101 with capacity thirty and Room 102 with capacity twenty. South Hall contains Room 101 with capacity forty. Building 12 is a newly registered building that currently has no rooms recorded. These facts will be used consistently in the diagram, table mapping, and query examples.\n\nThe Room type is weak because its full identity requires the identifying Building. Building is the owner, room_number is the partial key, and Contains is the identifying relationship. The partial key distinguishes rooms within one owner's population. It does not have to be unique across all rooms, and Building's descriptive name is not substituted for the owner's stable identifying key.\n\n## Read the identifying ER diagram\n\nThe diagram uses common Chen-style notation. Building is a single rectangle because it has its own identity. Room is a double rectangle marking the weak entity type. Contains is a double diamond marking the identifying relationship. The owner's building_id is solid-underlined, while the room_number discriminator has a dashed underline. The notation describes the stated conceptual design rather than enforcing SQL by itself.\n\nThe relationship has one owner building for each room and potentially many rooms for one building. The one-to-many labels show that maximum multiplicity. The participation lines add the minimum requirements: Room has a double connection to Contains because every recorded room must participate. Building has a single connection because the example allows an owner with no recorded rooms. These are separate pieces of information, so the diagram also states the minimum and maximum in words.\n\n## Total participation is necessary but not sufficient\n\nEvery Room occurrence in this example has exactly one owner. A room without a building would lack the owner component needed for identification. That explains the dependent's total participation in the identifying relationship. Building 12 illustrates the owner's partial participation: it can be recorded before any rooms are entered. Other domains can require owners to have dependents, but that is not the policy shown here.\n\nA strong entity can also have mandatory participation in some relationship. For example, Student might require a programme while student_id independently identifies the student. That does not make Student weak. Weakness concerns how identification is completed; total participation concerns whether a relationship must occur. Keeping those questions separate prevents the common mistake that every mandatory foreign reference proves conceptual weakness.\n\n## Map the owner to a relation\n\nThe simple Building relation stores building_id and building_name, with building_id as primary key. The independent identity distinguishes buildings even if descriptive names repeat. The Room relation stores building_id, room_number, and capacity. Its conventional primary key combines the owner key with the partial key. Both identifying components are required, and the owner component also references Building.\n\n```sql\nCREATE TABLE buildings (\n  building_id INT PRIMARY KEY,\n  building_name VARCHAR(80) NOT NULL\n);\nCREATE TABLE rooms (\n  building_id INT NOT NULL,\n  room_number INT NOT NULL,\n  capacity INT NOT NULL,\n  PRIMARY KEY (building_id, room_number),\n  FOREIGN KEY (building_id) REFERENCES buildings(building_id)\n    ON DELETE RESTRICT ON UPDATE RESTRICT\n);\n```\n\nThe combined key prevents two Room records from claiming the same owner and local number. The foreign key requires an existing owner for an accepted complete reference. Required building_id prevents an ownerless room through NULL. A capacity-range constraint can be added if the domain specifies one, but it is a separate validity rule and is intentionally not used to define identity here.\n\n## Distinguish repeated numbers from repeated identities\n\nThe mapped rows are (7, 101, 30), (7, 102, 20), and (9, 101, 40). The two 101 values are legitimate because the building identifiers differ. Another row (7, 101, 35) conflicts with the existing primary identity even though capacity differs. Adding capacity to the key would wrongly treat a contradictory capacity record as another identified room.\n\nA lookup for a particular room must supply the complete intended identity. WHERE room_number = 101 can return rooms in both buildings. WHERE building_id = 7 AND room_number = 101 selects North Hall's room under this model. A report grouping only by room_number likewise combines different rooms unless that is deliberately the measurement being requested. Carry both identifying values through diagnostic output.\n\n## Owner removal is a lifecycle decision\n\nThe conceptual dependency does not automatically force every implementation to use cascading deletion. The shown mapping uses RESTRICT: removing Building 7 is rejected while its rooms still reference it. A different authorized design can select a supported cascade when removing the owned room facts is the intended lifecycle. It must consider retained bookings, history, and other dependencies as well.\n\nThe invariant is that accepted room facts do not remain as ownerless weak occurrences under this model. Rejecting owner deletion preserves it just as a deliberate permitted dependent-removal workflow can. Do not teach an attempted parent deletion as guaranteed success followed by automatic cascades merely because the entity is weak. The configured action, complete constraint graph, engine, and authorized operation determine the transition.\n\n## Keep owner creation and dependent changes consistent\n\nRecord an owner before accepting its first dependent when the enforced mapping requires that parent to exist. A room proposal naming Building 99 is not accepted merely because its number is unique within the proposed owner value. Combined uniqueness and parent existence answer different questions. A test of one cannot stand in for a test of the other.\n\nChanging a room's building_id changes part of its stated identity. It can also collide with a room already using that number at the destination. The example does not define an automatic room-transfer workflow. A real correction needs the intended identity policy, related booking references, and an authorized transition that preserves relevant history. Descriptive capacity updates and identity changes should therefore remain visibly different operations.\n\n## Other mappings must preserve the identifying rule\n\nA physical design can introduce room_id for convenience while retaining a required unique building_id and room_number combination and the owner relationship. That choice does not make duplicate owner-number pairs correct. Whether the conceptual model is then described differently depends on the intended identity semantics, rather than on the existence of an artificial column alone.\n\nThe conventional owner-plus-partial-key mapping is the one implemented in this lesson's examples. Be explicit about that scope when answering a mapping question. A weak entity relation can have a complete primary key; weak does not mean it is an unidentifiable table. It means the conceptual identification draws on the owner, and the relational mapping must preserve that dependence correctly.\n\n## Test participation and identity separately\n\nUse two buildings sharing room number 101, one building with several rooms, and Building 12 with no rooms. Check that legitimate number reuse remains accepted and complete owner-number collisions are rejected. Also test an absent owner, a missing owner component, and the chosen parent-deletion policy on a supported isolated engine. Each test addresses a different ingredient of the mapping.\n\nThe SQL exercises can demonstrate complete lookups and identity preservation on temporary query fixtures. Those mirrors do not themselves execute native foreign keys or referential actions. Native checks, when available, must be recorded separately with their actual engine. MariaDB execution remains distinct from exact MySQL or hosted-provider verification. The ER diagram and table mapping explain one coherent model; the verification record must state which parts were actually exercised.\n",
+  "references": [
+    {
+      "title": "Database System Concepts author slides: weak entity identification",
+      "url": "https://db-book.com/Previous-editions/db5/slide-dir/ch6.pdf"
+    },
+    {
+      "title": "MySQL 8.4 foreign-key constraints",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/create-table-foreign-keys.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-6-weak-entity",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-6-weak-entity-1",
+          "test_id": "pt-dbms-sql-6-weak-entity",
+          "question_text": "What defines a weak entity?",
+          "options": [
+            "An entity with no attributes at all",
+            "An entity that lacks enough attributes to form a full primary key on its own and needs an owner entity's key for identification",
+            "Any entity involved in a many-to-many relationship",
+            "An entity that is rarely queried"
+          ],
+          "correct_index": 1,
+          "explanation": "A weak entity has only a partial key and relies on the owner entity's primary key to be fully identified.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-6-weak-entity-2",
+          "test_id": "pt-dbms-sql-6-weak-entity",
+          "question_text": "Under a policy that Employee_ID and a locally unique dependent discriminator identify each dependent, what supplies the full identity?",
+          "options": [
+            "Dependent_Name alone",
+            "The owner Employee's key combined with the Dependent's documented locally unique partial key",
+            "The Dependent's date of birth alone",
+            "Nothing; dependents cannot be uniquely identified"
+          ],
+          "correct_index": 1,
+          "explanation": "A dependent name is suitable only if the model genuinely guarantees local uniqueness; the partial discriminator need not be a name.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-6-weak-entity-3",
+          "test_id": "pt-dbms-sql-6-weak-entity",
+          "question_text": "In the Chen-style convention used here, how is a weak entity partial key marked?",
+          "options": [
+            "Underlined with a solid line, same as a primary key",
+            "Underlined with a dashed line",
+            "Circled in red",
+            "Not shown at all"
+          ],
+          "correct_index": 1,
+          "explanation": "A dashed underline distinguishes a partial key from a full primary key's solid underline.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-6-weak-entity-4",
+          "test_id": "pt-dbms-sql-6-weak-entity",
+          "question_text": "What is the key structural difference between a weak entity and a strong entity that simply has total (mandatory) participation in a relationship?",
+          "options": [
+            "There is no difference; they are the same thing",
+            "A strong entity with total participation still has its own independent primary key; a weak entity cannot be identified at all without the owner's key",
+            "Weak entities never have total participation",
+            "Strong entities can never have total participation"
+          ],
+          "correct_index": 1,
+          "explanation": "Total participation is about a mandatory relationship instance; being weak is about identification requiring the owner's key — two different concepts.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-6-weak-entity-5",
+          "test_id": "pt-dbms-sql-6-weak-entity",
+          "question_text": "Under an owner-dependent room model, what must a supported owner-removal policy preserve?",
+          "options": [
+            "They remain untouched permanently",
+            "It must avoid accepted ownerless room facts, for example by restricting deletion or deliberately handling dependents under the configured policy",
+            "They automatically become strong entities",
+            "They are archived, never deleted"
+          ],
+          "correct_index": 1,
+          "explanation": "Weakness does not automatically select ON DELETE CASCADE. The lesson uses RESTRICT while rooms remain.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-6-weak-entity-6",
+          "test_id": "pt-dbms-sql-6-weak-entity",
+          "question_text": "In the conventional owner-plus-discriminator relational mapping used here, what forms the weak entity’s primary key?",
+          "options": [
+            "Only the weak entity's own partial key",
+            "The owner entity's primary key combined with the weak entity's partial key",
+            "A randomly generated surrogate key only",
+            "No primary key is needed for weak entity tables"
+          ],
+          "correct_index": 1,
+          "explanation": "The weak entity's table primary key is composite: owner's key + partial key.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-6-weak-entity-7",
+          "test_id": "pt-dbms-sql-6-weak-entity",
+          "question_text": "In the Chen-style convention used here, how is a weak entity set drawn?",
+          "options": [
+            "Single-line rectangle",
+            "Double-line rectangle",
+            "Diamond",
+            "Dashed oval"
+          ],
+          "correct_index": 1,
+          "explanation": "Weak entity sets use a double-line rectangle, paired with a double-line diamond for the identifying relationship.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-6-weak-entity-8",
+          "test_id": "pt-dbms-sql-6-weak-entity",
+          "question_text": "Which of the following is NOT a valid example of a weak entity?",
+          "options": [
+            "Room, identified only uniquely within a specific Building",
+            "Dependent, identified only uniquely within a specific Employee",
+            "Student, identified independently across the whole college by Roll_No",
+            "Order_Item, identified only uniquely within a specific Order"
+          ],
+          "correct_index": 2,
+          "explanation": "Student has its own independent key (Roll_No) and needs no owner entity, making it a strong entity, not weak.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-6-weak-entity-new-9",
+          "test_id": "pt-dbms-sql-6-weak-entity",
+          "question_text": "Room 101 exists in Buildings 7 and 9. Is that necessarily a collision?",
+          "options": [
+            "Yes; every room number is global",
+            "No; the complete identifying pairs differ",
+            "Only capacity decides",
+            "Only the display order decides"
+          ],
+          "correct_index": 1,
+          "explanation": "The partial key is unique within one owner rather than globally.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-6-weak-entity-new-10",
+          "test_id": "pt-dbms-sql-6-weak-entity",
+          "question_text": "What does the double Room-to-Contains line mean in this diagram?",
+          "options": [
+            "Every building must contain two rooms",
+            "Capacity is a primary key",
+            "Every room must participate in its identifying owner relationship",
+            "The query is sorted"
+          ],
+          "correct_index": 2,
+          "explanation": "It expresses total dependent participation.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-6-weak-entity-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-6-weak-entity-application-new-1",
+          "test_id": "pt-dbms-sql-6-weak-entity-application",
+          "question_text": "Why does Building have a single participation line in this example?",
+          "options": [
+            "Every building must be ownerless",
+            "Buildings lack an identity",
+            "A building can have no recorded rooms",
+            "Every room can have two owners"
+          ],
+          "correct_index": 2,
+          "explanation": "Owner participation is optional under the stated policy.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-6-weak-entity-application-new-2",
+          "test_id": "pt-dbms-sql-6-weak-entity-application",
+          "question_text": "Which shape marks Contains as identifying in the selected notation?",
+          "options": [
+            "A single table header",
+            "A dashed rectangle only",
+            "A red circle",
+            "A double diamond"
+          ],
+          "correct_index": 3,
+          "explanation": "The relationship notation is distinct from the weak entity’s double rectangle.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-6-weak-entity-application-new-3",
+          "test_id": "pt-dbms-sql-6-weak-entity-application",
+          "question_text": "Which complete Room key fits the mapping?",
+          "options": [
+            "building_id and room_number",
+            "room_number alone",
+            "capacity alone",
+            "building_name and capacity"
+          ],
+          "correct_index": 0,
+          "explanation": "The owner identity completes the local discriminator.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-6-weak-entity-application-new-4",
+          "test_id": "pt-dbms-sql-6-weak-entity-application",
+          "question_text": "What is wrong with making capacity part of the key to admit a conflicting room row?",
+          "options": [
+            "Every capacity must be unique",
+            "A capacity change does not define a different room occurrence",
+            "Integers cannot form keys",
+            "Capacity always identifies the building"
+          ],
+          "correct_index": 1,
+          "explanation": "The key must preserve intended identity rather than hide contradictory copies.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-6-weak-entity-application-new-5",
+          "test_id": "pt-dbms-sql-6-weak-entity-application",
+          "question_text": "Does a mandatory programme reference automatically make Student weak?",
+          "options": [
+            "Yes; every mandatory relationship is identifying",
+            "Only if programme is text",
+            "No; student_id can still identify it independently",
+            "Only if Student has few rows"
+          ],
+          "correct_index": 2,
+          "explanation": "Identification dependence and participation requirements differ.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-6-weak-entity-application-new-6",
+          "test_id": "pt-dbms-sql-6-weak-entity-application",
+          "question_text": "What does WHERE room_number = 101 request under the example?",
+          "options": [
+            "Exactly one room guaranteed",
+            "Only Building 7 automatically",
+            "Only rooms with missing capacity",
+            "All matching local-number rooms, potentially in several buildings"
+          ],
+          "correct_index": 3,
+          "explanation": "The lookup omits the owner component.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-6-weak-entity-application-new-7",
+          "test_id": "pt-dbms-sql-6-weak-entity-application",
+          "question_text": "Which building exemplifies allowed zero-room ownership participation?",
+          "options": [
+            "Building 12",
+            "Room 101",
+            "Capacity 30",
+            "Every unknown identifier"
+          ],
+          "correct_index": 0,
+          "explanation": "The example explicitly includes a newly recorded owner with no rooms.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-6-weak-entity-application-new-8",
+          "test_id": "pt-dbms-sql-6-weak-entity-application",
+          "question_text": "Does weak identification force native cascading deletion on every engine?",
+          "options": [
+            "Yes; ER notation executes CASCADE",
+            "No; the configured permitted lifecycle can restrict or handle dependents",
+            "Only if a partial key is numeric",
+            "Only if owners have names"
+          ],
+          "correct_index": 1,
+          "explanation": "The implemented action requires separate design and verification.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-6-weak-entity-application-new-9",
+          "test_id": "pt-dbms-sql-6-weak-entity-application",
+          "question_text": "Can a mapped weak entity table have a complete primary key?",
+          "options": [
+            "No; weak tables must be unidentifiable",
+            "Only if it has no attributes",
+            "Yes; owner identity plus partial key supplies it",
+            "Only if every room number is global"
+          ],
+          "correct_index": 2,
+          "explanation": "Conceptual weakness is not absence of implemented identity.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-6-weak-entity-application-new-10",
+          "test_id": "pt-dbms-sql-6-weak-entity-application",
+          "question_text": "What does a temporary query mirror without foreign keys fail to establish?",
+          "options": [
+            "The returned fixture lookup values",
+            "The selected output labels",
+            "The explicit query ordering",
+            "Native owner-existence and parent-action enforcement"
+          ],
+          "correct_index": 3,
+          "explanation": "Reference enforcement needs an actual supported constraint boundary.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cx-weak-entity-lookup",
+      "slug": "weak-entity-lookup",
+      "title": "Find the room identified within its owner",
+      "difficulty": "Easy",
+      "task": "Return building_id, room_number and capacity only for Room 101 in Building 7. Do not select the same local number in another building.",
+      "schema_sql": "CREATE TABLE buildings (building_id INT PRIMARY KEY, building_name VARCHAR(80) NOT NULL);\nCREATE TABLE rooms (building_id INT NOT NULL, room_number INT NOT NULL, capacity INT NOT NULL, PRIMARY KEY (building_id, room_number));",
+      "seed_sql": "INSERT INTO buildings VALUES (7,'North Hall'),(9,'South Hall'),(12,'New Hall'); INSERT INTO rooms VALUES (7,101,30),(7,102,20),(9,101,40);",
+      "expected": "building_id\troom_number\tcapacity\n7\t101\t30",
+      "ordering": "Ascending building_id, room_number for listings; a complete identity lookup returns at most one row.",
+      "constraints": [
+        "Room numbers are unique within a building, not across buildings.",
+        "Temporary query mirrors omit foreign keys; native reference enforcement is verified separately when supported."
+      ],
+      "edge_cases": [
+        "Different owners can both have Room 101.",
+        "A building can have no rooms."
+      ],
+      "hints": [
+        "Carry the owner identity alongside the partial key.",
+        "Join through building_id rather than a descriptive label."
+      ],
+      "solution_sql": "SELECT building_id, room_number, capacity FROM rooms WHERE building_id = 7 AND room_number = 101;",
+      "explanation": "The query preserves owner-dependent room identity. The fixture’s composite key is real, while foreign-key and parent-action behaviour need separate native checks.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO buildings VALUES (9,'South Hall'); INSERT INTO rooms VALUES (9,101,40);",
+          "expected": ""
+        },
+        {
+          "seed_sql": "INSERT INTO buildings VALUES (7,'North Hall'); INSERT INTO rooms VALUES (7,101,0);",
+          "expected": "building_id\troom_number\tcapacity\n7\t101\t0"
+        }
+      ]
+    },
+    {
+      "id": "cx-weak-entity-owner-summary",
+      "slug": "weak-entity-owner-summary",
+      "title": "Summarize rooms without losing empty owners",
+      "difficulty": "Medium",
+      "task": "For every building return building_id, room_count and total_capacity. Preserve buildings with no rooms with both values zero. Room numbers can repeat across buildings.",
+      "schema_sql": "CREATE TABLE buildings (building_id INT PRIMARY KEY, building_name VARCHAR(80) NOT NULL);\nCREATE TABLE rooms (building_id INT NOT NULL, room_number INT NOT NULL, capacity INT NOT NULL, PRIMARY KEY (building_id, room_number));",
+      "seed_sql": "INSERT INTO buildings VALUES (7,'North Hall'),(9,'South Hall'),(12,'New Hall'); INSERT INTO rooms VALUES (7,101,30),(7,102,20),(9,101,40);",
+      "expected": "building_id\troom_count\ttotal_capacity\n7\t2\t50\n9\t1\t40\n12\t0\t0",
+      "ordering": "Ascending building_id, room_number for listings; a complete identity lookup returns at most one row.",
+      "constraints": [
+        "Room numbers are unique within a building, not across buildings.",
+        "Temporary query mirrors omit foreign keys; native reference enforcement is verified separately when supported."
+      ],
+      "edge_cases": [
+        "Different owners can both have Room 101.",
+        "A building can have no rooms."
+      ],
+      "hints": [
+        "Carry the owner identity alongside the partial key.",
+        "Join through building_id rather than a descriptive label."
+      ],
+      "solution_sql": "SELECT b.building_id, COUNT(r.room_number) AS room_count, COALESCE(SUM(r.capacity), 0) AS total_capacity FROM buildings b LEFT JOIN rooms r ON r.building_id = b.building_id GROUP BY b.building_id ORDER BY b.building_id;",
+      "explanation": "The query preserves owner-dependent room identity. The fixture’s composite key is real, while foreign-key and parent-action behaviour need separate native checks.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO buildings VALUES (7,'North Hall'),(9,'South Hall'); INSERT INTO rooms VALUES (7,101,10),(9,101,20);",
+          "expected": "building_id\troom_count\ttotal_capacity\n7\t1\t10\n9\t1\t20"
+        },
+        {
+          "seed_sql": "INSERT INTO buildings VALUES (12,'New Hall');",
+          "expected": "building_id\troom_count\ttotal_capacity\n12\t0\t0"
+        }
+      ],
+      "negative_validation_cases": [
+        {
+          "sql": "INSERT INTO rooms VALUES (7,101,35);",
+          "error_codes": [
+            1062
+          ]
+        },
+        {
+          "sql": "INSERT INTO rooms VALUES (NULL,103,20);",
+          "error_codes": [
+            1048
+          ]
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-6-weak-entity-1",
+      "test_id": "pt-dbms-sql-6-weak-entity",
+      "question_text": "What defines a weak entity?",
+      "options": [
+        "An entity with no attributes at all",
+        "An entity that lacks enough attributes to form a full primary key on its own and needs an owner entity's key for identification",
+        "Any entity involved in a many-to-many relationship",
+        "An entity that is rarely queried"
+      ],
+      "correct_index": 1,
+      "explanation": "A weak entity has only a partial key and relies on the owner entity's primary key to be fully identified.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-6-weak-entity-2",
+      "test_id": "pt-dbms-sql-6-weak-entity",
+      "question_text": "In the Employee/Dependent example, what uniquely identifies a specific Dependent record?",
+      "options": [
+        "Dependent_Name alone",
+        "The combination of the owner Employee's key and the Dependent's partial key (e.g., Employee_ID + Dependent_Name)",
+        "The Dependent's date of birth alone",
+        "Nothing; dependents cannot be uniquely identified"
+      ],
+      "correct_index": 1,
+      "explanation": "The partial key alone isn't unique company-wide; combined with the owner's key, it becomes unique.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-6-weak-entity-3",
+      "test_id": "pt-dbms-sql-6-weak-entity",
+      "question_text": "How is a weak entity's partial key (discriminator) shown in an ER diagram?",
+      "options": [
+        "Underlined with a solid line, same as a primary key",
+        "Underlined with a dashed line",
+        "Circled in red",
+        "Not shown at all"
+      ],
+      "correct_index": 1,
+      "explanation": "A dashed underline distinguishes a partial key from a full primary key's solid underline.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-6-weak-entity-4",
+      "test_id": "pt-dbms-sql-6-weak-entity",
+      "question_text": "What is the key structural difference between a weak entity and a strong entity that simply has total (mandatory) participation in a relationship?",
+      "options": [
+        "There is no difference; they are the same thing",
+        "A strong entity with total participation still has its own independent primary key; a weak entity cannot be identified at all without the owner's key",
+        "Weak entities never have total participation",
+        "Strong entities can never have total participation"
+      ],
+      "correct_index": 1,
+      "explanation": "Total participation is about a mandatory relationship instance; being weak is about identification requiring the owner's key — two different concepts.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-6-weak-entity-5",
+      "test_id": "pt-dbms-sql-6-weak-entity",
+      "question_text": "What happens to a weak entity's records when its owner entity record is deleted?",
+      "options": [
+        "They remain untouched permanently",
+        "They must also be deleted, since a weak entity cannot exist without its owner",
+        "They automatically become strong entities",
+        "They are archived, never deleted"
+      ],
+      "correct_index": 1,
+      "explanation": "Weak entities are existence-dependent on their owner; deleting the owner cascades to its weak entities.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-6-weak-entity-6",
+      "test_id": "pt-dbms-sql-6-weak-entity",
+      "question_text": "When mapping a weak entity to a relational table, what must be included in its primary key?",
+      "options": [
+        "Only the weak entity's own partial key",
+        "The owner entity's primary key combined with the weak entity's partial key",
+        "A randomly generated surrogate key only",
+        "No primary key is needed for weak entity tables"
+      ],
+      "correct_index": 1,
+      "explanation": "The weak entity's table primary key is composite: owner's key + partial key.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-6-weak-entity-7",
+      "test_id": "pt-dbms-sql-6-weak-entity",
+      "question_text": "How is a weak entity set represented in an ER diagram?",
+      "options": [
+        "Single-line rectangle",
+        "Double-line rectangle",
+        "Diamond",
+        "Dashed oval"
+      ],
+      "correct_index": 1,
+      "explanation": "Weak entity sets use a double-line rectangle, paired with a double-line diamond for the identifying relationship.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-6-weak-entity-8",
+      "test_id": "pt-dbms-sql-6-weak-entity",
+      "question_text": "Which of the following is NOT a valid example of a weak entity?",
+      "options": [
+        "Room, identified only uniquely within a specific Building",
+        "Dependent, identified only uniquely within a specific Employee",
+        "Student, identified independently across the whole college by Roll_No",
+        "Order_Item, identified only uniquely within a specific Order"
+      ],
+      "correct_index": 2,
+      "explanation": "Student has its own independent key (Roll_No) and needs no owner entity, making it a strong entity, not weak.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "coordinator",
+    "independent_review": "unavailable; no agent tools",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Definitions and examples checked against questions; no plagiarism certification.",
+    "existing_question_corrections": [
+      "tq-dbms-sql-6-weak-entity-2",
+      "tq-dbms-sql-6-weak-entity-3",
+      "tq-dbms-sql-6-weak-entity-5",
+      "tq-dbms-sql-6-weak-entity-6",
+      "tq-dbms-sql-6-weak-entity-7"
+    ],
+    "canonical_answer_indices_preserved": true,
+    "native_reference_review": {
+      "date": "2026-10-29",
+      "engine": "11.8.6-MariaDB-0+deb13u1 from Debian",
+      "result": "13 synthetic native InnoDB checks passed; see progress.native_reference_verification for cases and verifier fingerprint.",
+      "scope": "Native InnoDB referential-action checks on synthetic persistent tables in isolated MariaDB scratch database; exact MySQL/provider, application authorization, rollback and concurrency unverified"
+    }
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-6-weak-entity",
+    "original_note_sha256": "1987237bea93975e0ff0a77f4fd4311de436836bd5916660f3d68c748acbbf39",
+    "status": "paired migration prepared; not applied"
+  },
+  "diagrams": [
+    {
+      "kind": "weak-entity-er",
+      "caption": "Building owns Room through the identifying Contains relationship",
+      "description": "Chen-style ER diagram: Building is the owner with solid-underlined building_id; Room is a double rectangle with dashed-underlined room_number partial key. Contains is a double diamond. One building owns zero or many rooms; every room has exactly one building. The owner line is single for partial participation and the dependent line is double for total participation. Complete Room identity is (building_id, room_number).",
+      "owner": "Building",
+      "ownerKey": "building_id",
+      "relationship": "Contains",
+      "dependent": "Room",
+      "partialKey": "room_number"
+    },
+    {
+      "kind": "table",
+      "caption": "The same owner-dependent identities in relational rows",
+      "description": "The double-use of local room number 101 is valid because the owner identifiers differ. Building 12 has no dependent rows and remains valid.",
+      "columns": [
+        "Building owner",
+        "Room partial key",
+        "Capacity",
+        "Complete identity"
+      ],
+      "rows": [
+        [
+          "7: North Hall",
+          "101",
+          "30",
+          "(7, 101)"
+        ],
+        [
+          "7: North Hall",
+          "102",
+          "20",
+          "(7, 102)"
+        ],
+        [
+          "9: South Hall",
+          "101",
+          "40",
+          "(9, 101)"
+        ],
+        [
+          "12: New Hall",
+          "No room",
+          "Not a Room tuple",
+          "Owner has zero dependents"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "coordinator checked Chen-style owner/weak rectangles, identifying double diamond, dashed partial key, 1:N maximums and zero-to-many owner versus exactly-one dependent participation against the mapping",
+    "server_rendering": "passed",
+    "browser_rendering": "unverified",
+    "independent_review": "unavailable; no agent tools",
+    "server_rendering_evidence": "2026-10-29: 98 focused Vitest checks passed; all 89 packages rendered through actual LessonBlock, including the SVG ER diagram.",
+    "static_visual_review": "passed: actual TopicDiagrams SVG rendered with installed sharp and visually inspected at /tmp/cx-weak-entity-rendered.png; correct shapes, solid/dashed underlines, line connections and readable participation labels. Static inspection is not interactive browser QA."
+  },
+  "sql_verification": {
+    "engine": "11.8.6-MariaDB-0+deb13u1 from Debian",
+    "scope": "MariaDB compatibility execution; exact MySQL 8.4/provider execution unverified",
+    "fingerprint": "0f2b2509f1f7781b450400538134fcb98ca5ee9f917739287d1a3556e6b24157",
+    "cases": [
+      {
+        "problem": "weak-entity-lookup",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "weak-entity-lookup",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "weak-entity-lookup",
+        "case": 2,
+        "passed": true
+      },
+      {
+        "problem": "weak-entity-owner-summary",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "weak-entity-owner-summary",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "weak-entity-owner-summary",
+        "case": 2,
+        "passed": true
+      },
+      {
+        "problem": "weak-entity-owner-summary",
+        "negative_case": 0,
+        "error_code": 1062,
+        "passed": true
+      },
+      {
+        "problem": "weak-entity-owner-summary",
+        "negative_case": 1,
+        "error_code": 1048,
+        "passed": true
+      }
+    ],
+    "all_passed": true
+  }
+}

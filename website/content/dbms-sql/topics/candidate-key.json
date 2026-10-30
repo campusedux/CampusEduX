@@ -1,0 +1,644 @@
+{
+  "source_ref": "chapter-5-keys-and-integrity/candidate-key",
+  "slug": "candidate-key",
+  "title": "Candidate Key",
+  "description": "Find minimal identifying sets from explicit guarantees, distinguish minimal from minimum, and implement a composite student identity without rejecting valid reuse.",
+  "dialect": "MySQL 8.4",
+  "notes": "## A candidate key is a minimal superkey\n\nA candidate key is an attribute set that identifies tuples uniquely and has no unnecessary attribute. It must first be a superkey: agreement on its values identifies the complete fact under the relation's rules. It must then be minimal: removing any component loses that guarantee. Both conditions matter. A set can be small without identifying anything, or identify tuples while containing redundant attributes.\n\nFor Student(student_id, student_name, programme), assume student_id is a guaranteed identifier. The singleton student_id is a candidate key under that rule. Adding student_name gives a superkey but not another candidate key, because the name can be removed. Student_name alone is not automatically a candidate key; two students can share a name under the intended campus model.\n\n## Minimal does not mean globally smallest\n\nMinimality concerns proper subsets of the particular proposed set. It does not require every candidate key to have the same number of attributes. A relation can have one candidate key containing one attribute and another containing two, provided neither attribute in the pair can be removed while retaining its own identifying guarantee. Calling only the shortest key a candidate would be incorrect.\n\nFor R(A, B, C), suppose A determines B and C, while the pair B and C determines A. Assume neither B alone nor C alone identifies the relation. Then A is one candidate key and the pair B, C is another. The pair is minimal even though A is shorter, because A is not a subset of that pair. This example separates minimal from minimum clearly.\n\n## Guarantees matter beyond the observed data\n\nA fixture containing unique student names does not prove names identify every allowed Student state. Another valid student may share a name later. Candidate keys follow intended uniqueness constraints and functional dependencies, not an accidental arrangement of a few example values. An audit can find a counterexample to uniqueness in current data, but finding none is insufficient to establish a universal guarantee.\n\nLikewise, a field called email may be optional or shared. It can serve as a required alternate identity only if the model deliberately provides the necessary uniqueness and nonmissing guarantees. A natural-looking label is not an automatic key declaration. State assumptions before enumerating candidate keys so that the answer can be assessed against the same legal states the problem intends.\n\n## Composite keys identify combinations\n\nSuppose student registration numbers are unique within a campus rather than globally. The pair campus_code and registration_number can identify a student. NORTH, 17 and SOUTH, 17 are different identities; NORTH, 17 and NORTH, 24 are different identities too. Neither campus_code alone nor registration_number alone needs to be unique, yet the pair can be guaranteed unique.\n\nTo establish minimality, show why each single component is insufficient under the stated model. Multiple students can attend one campus, and different campuses can reuse a registration number. To establish identification, state the combined uniqueness guarantee. Merely proving the single components are not keys does not prove the pair is a key: the pair could also repeat unless the model forbids it.\n\n## Dependency closure checks identification\n\nFunctional dependencies provide a formal way to reason about which values determine which attributes. Start with the proposed identifying set and repeatedly add every attribute determined by the attributes already known. The result is its closure under the stated dependencies. If that closure contains the entire relation heading, the starting set is a superkey under those assumptions.\n\nFor R(A, B, C, D), assume A determines B, B determines A, and C determines D. Starting from A and C reaches B through A and D through C, so the pair determines all four attributes. Starting from B and C works similarly. Starting from A alone does not reach C or D, and starting from C alone does not reach A or B.\n\n## Check minimality after identification\n\nThe pairs A, C and B, C in that example are minimal because removing either component loses access to needed attributes. A larger set A, B, C also determines everything, but it is not minimal: either A or B is redundant given the other. Verify this removal test explicitly rather than assuming every set whose closure is complete must be a candidate key.\n\nA systematic search can prune supersets once a candidate key is found, because those supersets cannot be minimal. It must still examine unrelated combinations that do not contain the discovered key. Finding A, C does not permit skipping B, C, since neither pair contains the other. This distinction helps avoid returning one candidate when the task asks for every candidate key.\n\n## Primary selection preserves other candidates\n\nAfter identifying the candidate keys, a design can choose one as primary. The others remain candidate keys and are commonly called alternate keys. They do not become foreign keys merely because they were not chosen as primary. Their business uniqueness can remain necessary and should be represented by appropriate enforcement in the SQL implementation.\n\nA surrogate internal identifier can be useful when natural identifiers are unstable, inconvenient for references, or unavailable for separate occurrences. It does not make existing alternate identity rules irrelevant. If campus and registration_number must still be unique together, keep that business rule even when a separate student_id becomes primary. Otherwise two internal rows can claim the same institutional identity without violating the surrogate key.\n\n## SQL must implement the intended policy\n\nA composite PRIMARY KEY can enforce a required pair identity. A UNIQUE declaration with appropriate NOT NULL columns can enforce a different required identifying combination. Nullability needs separate attention: a nullable unique SQL column does not automatically provide the definite nonmissing identity used in classical candidate-key reasoning. The implementation must match the guarantee being claimed.\n\n```sql\nCREATE TABLE students (\n  campus_code VARCHAR(20) NOT NULL,\n  registration_number INT NOT NULL,\n  student_name VARCHAR(80) NOT NULL,\n  PRIMARY KEY (campus_code, registration_number)\n);\n```\n\nThis definition permits registration-number reuse across campuses and many students per campus. It rejects a repeated complete identifying pair. It does not impose uniqueness on student_name, and it does not establish that a campus code belongs to a separate campus catalogue without an appropriate reference rule.\n\n## Natural facts and repeated occurrences differ\n\nIn the strict set model, the complete heading distinguishes tuples. It is therefore misleading to claim a finite-heading mathematical relation has no possible candidate key simply because no convenient natural singleton identifies its facts. Some minimal identifying subset exists under the relevant guarantees, though it may involve many attributes and may not be a useful business identity for the intended design.\n\nPractical systems may need to record separate events with identical descriptive values. Two submissions can occur with the same person, score, and timestamp at the available precision. If they are distinct occurrences, those descriptive attributes do not reliably identify them. An explicit occurrence identifier can preserve the distinction. Explain this modeling need instead of confusing duplicate-permitting SQL records with the strict duplicate-free relation abstraction.\n\n## Validate the identity and its limitations\n\nFixtures should include multiple students at one campus, the same registration number at different campuses, repeated student names, and an attempted duplicate pair. Accepted reuse proves the rule is not accidentally too restrictive; rejection of the duplicate challenges the actual combined identity. A successful local test does not prove external registration issuance, factual correctness, or provider-specific behaviour beyond the executed cases.\n\nCandidate-key analysis becomes reliable when identification and minimality are checked separately against explicit assumptions. Read the fact grain, derive what the proposed set determines, remove redundant attributes, and retain all independent candidates. Then translate the required guarantees into supported SQL constraints and test both legitimate repetitions and invalid collisions. This keeps the concept useful in design rather than reducing it to a guess based on column names or sample appearance.\n",
+  "references": [],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-5-candidate-key",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-5-candidate-key-1",
+          "test_id": "pt-dbms-sql-5-candidate-key",
+          "question_text": "What distinguishes a candidate key from a general super key?",
+          "options": [
+            "A candidate key must be exactly one column",
+            "A candidate key is a MINIMAL super key — no attribute can be removed without losing uniqueness",
+            "A candidate key can never be chosen as the primary key",
+            "There is no difference"
+          ],
+          "correct_index": 1,
+          "explanation": "Candidate key adds the minimality requirement on top of the super key's basic uniqueness requirement.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-5-candidate-key-2",
+          "test_id": "pt-dbms-sql-5-candidate-key",
+          "question_text": "If {id} and {email} are the only guaranteed nonmissing minimal identifying sets, how many candidate keys are established?",
+          "options": [
+            "Zero",
+            "Exactly one — you must pick just one",
+            "Two — {id} and {email} are both separate candidate keys",
+            "It depends on which one is declared PRIMARY KEY"
+          ],
+          "correct_index": 2,
+          "explanation": "Both {id} and {email} are independently minimal and unique, so both qualify as candidate keys, regardless of which is later chosen as primary.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-5-candidate-key-3",
+          "test_id": "pt-dbms-sql-5-candidate-key",
+          "question_text": "What happens to candidate keys that are NOT chosen as the primary key?",
+          "options": [
+            "They cease to exist",
+            "They remain valid candidate keys, often called alternate keys",
+            "They automatically become foreign keys",
+            "The database deletes those columns"
+          ],
+          "correct_index": 1,
+          "explanation": "An unchosen candidate key doesn't disappear — it's simply referred to as an alternate key (topic 5.4).",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-5-candidate-key-4",
+          "test_id": "pt-dbms-sql-5-candidate-key",
+          "question_text": "Assuming {student_id, course_id} is guaranteed unique, what additional condition makes it a minimal candidate key?",
+          "options": [
+            "Both student_id and course_id must be unique on their own",
+            "Neither student_id alone nor course_id alone can already be unique by itself",
+            "The table must have no other columns",
+            "Enrollments must have exactly two rows"
+          ],
+          "correct_index": 1,
+          "explanation": "Minimality requires that no proper subset of the key (here, neither single column) is already sufficient for uniqueness.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-5-candidate-key-5",
+          "test_id": "pt-dbms-sql-5-candidate-key",
+          "question_text": "Which situation can motivate introducing a surrogate identifier for distinct records?",
+          "options": [
+            "A legal requirement",
+            "The natural descriptive attributes do not reliably identify separate occurrences under the intended model",
+            "A performance optimization with no relation to uniqueness",
+            "A requirement that every table have exactly two candidate keys"
+          ],
+          "correct_index": 1,
+          "explanation": "Surrogates can supply occurrence identity; stability and reference convenience can also motivate them.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-5-candidate-key-6",
+          "test_id": "pt-dbms-sql-5-candidate-key",
+          "question_text": "Is having multiple candidate keys in one table considered a design flaw?",
+          "options": [
+            "Yes, always",
+            "No — it's common and often desirable, e.g. an internal id plus a natural identifier like email or ISBN",
+            "Only if there are more than 3",
+            "Only for tables representing people"
+          ],
+          "correct_index": 1,
+          "explanation": "Multiple legitimate ways to uniquely identify a row is normal and frequently useful, not a design problem.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-5-candidate-key-7",
+          "test_id": "pt-dbms-sql-5-candidate-key",
+          "question_text": "Which statement correctly relates candidate keys and super keys?",
+          "options": [
+            "All super keys are candidate keys",
+            "All candidate keys are super keys, but only the minimal ones qualify as candidate keys",
+            "Candidate keys and super keys are unrelated categories",
+            "A table can have super keys but never candidate keys"
+          ],
+          "correct_index": 1,
+          "explanation": "A candidate key is a minimal superkey: uniqueness alone does not establish minimality.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-5-candidate-key-8",
+          "test_id": "pt-dbms-sql-5-candidate-key",
+          "question_text": "Why might distinct event occurrences need an explicit identifier beyond their natural descriptive fields?",
+          "options": [
+            "This is mathematically impossible for any table",
+            "Different occurrences can share all recorded descriptive values, so those values do not reliably identify an occurrence",
+            "Because SQL forbids more than one candidate key",
+            "Because the table has too few rows"
+          ],
+          "correct_index": 1,
+          "explanation": "This is an occurrence-modeling issue. A strict duplicate-free relation still has its full heading as a superkey.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-5-candidate-key-new-9",
+          "test_id": "pt-dbms-sql-5-candidate-key",
+          "question_text": "Can a one-attribute candidate key coexist with a two-attribute candidate key?",
+          "options": [
+            "No; all candidate keys have equal size",
+            "Yes; minimality is relative to subsets of each set",
+            "Only if both contain the same identifier",
+            "Only if the table has two rows"
+          ],
+          "correct_index": 1,
+          "explanation": "Minimal does not mean globally minimum cardinality.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-5-candidate-key-new-10",
+          "test_id": "pt-dbms-sql-5-candidate-key",
+          "question_text": "Why is proving neither component is a key insufficient to prove the pair is a candidate key?",
+          "options": [
+            "Every pair is unique automatically",
+            "Minimality replaces identification",
+            "The pair must also be guaranteed to identify tuples",
+            "Only SQL aliases can identify pairs"
+          ],
+          "correct_index": 2,
+          "explanation": "Identification and minimality are separate requirements.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-5-candidate-key-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-5-candidate-key-application-new-1",
+          "test_id": "pt-dbms-sql-5-candidate-key-application",
+          "question_text": "Under A determines B, B determines A and C determines D in R(A,B,C,D), which pair has full closure?",
+          "options": [
+            "{A, B}",
+            "{C, D}",
+            "{A, C}",
+            "{A, D}"
+          ],
+          "correct_index": 2,
+          "explanation": "A reaches B and C reaches D, giving the full heading.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-5-candidate-key-application-new-2",
+          "test_id": "pt-dbms-sql-5-candidate-key-application",
+          "question_text": "Why is {A, B, C} nonminimal under those dependencies?",
+          "options": [
+            "C can always be removed",
+            "It cannot determine D",
+            "Three attributes can never identify",
+            "Either A or B can be removed while retaining full closure"
+          ],
+          "correct_index": 3,
+          "explanation": "A and B determine each other, making one redundant.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-5-candidate-key-application-new-3",
+          "test_id": "pt-dbms-sql-5-candidate-key-application",
+          "question_text": "Does finding candidate {A,C} justify skipping {B,C}?",
+          "options": [
+            "No; unrelated minimal identifying alternatives may exist",
+            "Yes; only one candidate is allowed",
+            "Only if names are short",
+            "Yes; every key contains A"
+          ],
+          "correct_index": 0,
+          "explanation": "One found candidate only prunes its own supersets.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-5-candidate-key-application-new-4",
+          "test_id": "pt-dbms-sql-5-candidate-key-application",
+          "question_text": "What does selecting a primary key do to other candidate keys?",
+          "options": [
+            "It deletes their attributes",
+            "They remain alternate candidate keys",
+            "It makes them nonunique",
+            "It automatically makes them references"
+          ],
+          "correct_index": 1,
+          "explanation": "Primary choice does not erase other guarantees.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-5-candidate-key-application-new-5",
+          "test_id": "pt-dbms-sql-5-candidate-key-application",
+          "question_text": "Which accepted fixture tests local-number reuse across campuses?",
+          "options": [
+            "NORTH,17 twice",
+            "One row alone",
+            "NORTH,17 and SOUTH,17",
+            "Two identical full tuples"
+          ],
+          "correct_index": 2,
+          "explanation": "The composite identity permits reuse of one component.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-5-candidate-key-application-new-6",
+          "test_id": "pt-dbms-sql-5-candidate-key-application",
+          "question_text": "What should challenge the pair constraint directly?",
+          "options": [
+            "A student with a shared name",
+            "A different number at the same campus",
+            "An unrelated result alias",
+            "A second row with the same campus and registration number"
+          ],
+          "correct_index": 3,
+          "explanation": "The complete pair is the declared identity.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-5-candidate-key-application-new-7",
+          "test_id": "pt-dbms-sql-5-candidate-key-application",
+          "question_text": "Does a surrogate primary key remove a required institutional uniqueness rule?",
+          "options": [
+            "No; that rule needs its own enforcement",
+            "Yes; every generated id verifies all business labels",
+            "Only if SQL is declarative",
+            "Only if the table is empty"
+          ],
+          "correct_index": 0,
+          "explanation": "Internal identity and alternate business identity differ.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-5-candidate-key-application-new-8",
+          "test_id": "pt-dbms-sql-5-candidate-key-application",
+          "question_text": "Why not infer candidate keys solely from current unique names?",
+          "options": [
+            "Names are never strings",
+            "Other allowed states may repeat the names",
+            "SQL forbids name constraints",
+            "Sample data always defines every dependency"
+          ],
+          "correct_index": 1,
+          "explanation": "A schema-level key is an allowed-state guarantee.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-5-candidate-key-application-new-9",
+          "test_id": "pt-dbms-sql-5-candidate-key-application",
+          "question_text": "What does a nullable UNIQUE declaration need before claiming a required classical identifier?",
+          "options": [
+            "Only a shorter column name",
+            "Only ORDER BY",
+            "A compatible nonmissing policy as well as uniqueness",
+            "Only a generated display row number"
+          ],
+          "correct_index": 2,
+          "explanation": "SQL optionality must match the identity contract.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-5-candidate-key-application-new-10",
+          "test_id": "pt-dbms-sql-5-candidate-key-application",
+          "question_text": "Which two properties should be checked separately for a candidate key?",
+          "options": [
+            "Font and row colour",
+            "Only type and display order",
+            "Only physical page and index name",
+            "Identification and minimality"
+          ],
+          "correct_index": 3,
+          "explanation": "It must identify and contain no redundant attribute.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cx-candidate-key-reuse",
+      "slug": "candidate-key-reuse",
+      "title": "Find local numbers reused across campuses",
+      "difficulty": "Easy",
+      "task": "Return registration_number and campus_count for local registration numbers occurring in more than one distinct campus. This shows why the number alone need not identify a student.",
+      "schema_sql": "CREATE TABLE proposals (proposal_id INT PRIMARY KEY, campus_code VARCHAR(20) NOT NULL, registration_number INT NOT NULL);",
+      "seed_sql": "INSERT INTO proposals VALUES (1,'NORTH',17),(2,'SOUTH',17),(3,'NORTH',24),(4,'NORTH',24);",
+      "expected": "registration_number\tcampus_count\n17\t2",
+      "ordering": "Ascending registration_number.",
+      "constraints": [
+        "Codes use canonical uppercase strings; all identity components are non-NULL."
+      ],
+      "edge_cases": [
+        "Repeated proposals in only one campus do not prove cross-campus reuse.",
+        "The same local number can appear at several campuses."
+      ],
+      "hints": [
+        "Group by registration_number.",
+        "Count distinct campus values, not proposal rows."
+      ],
+      "solution_sql": "SELECT registration_number, COUNT(DISTINCT campus_code) AS campus_count FROM proposals GROUP BY registration_number HAVING COUNT(DISTINCT campus_code) > 1 ORDER BY registration_number;",
+      "explanation": "The audit finds current evidence that the local number alone is insufficient. It does not prove the pair is universally a key.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO proposals VALUES (1,'NORTH',17),(2,'NORTH',17);",
+          "expected": ""
+        },
+        {
+          "seed_sql": "INSERT INTO proposals VALUES (1,'EAST',9),(2,'WEST',9),(3,'NORTH',9);",
+          "expected": "registration_number\tcampus_count\n9\t3"
+        }
+      ]
+    },
+    {
+      "id": "cx-candidate-key-pair",
+      "slug": "candidate-key-pair",
+      "title": "Implement the campus registration identity",
+      "difficulty": "Medium",
+      "task": "Add PRIMARY KEY(campus_code, registration_number) to students and return campus_code, registration_number, student_name. Permit repeated campus codes, repeated numbers across campuses and repeated names, while rejecting a duplicate identity pair.",
+      "starter_sql": "-- Add the composite primary key, then return the student facts.",
+      "schema_sql": "CREATE TABLE students (campus_code VARCHAR(20) NOT NULL, registration_number INT NOT NULL, student_name VARCHAR(80) NOT NULL);",
+      "seed_sql": "INSERT INTO students VALUES ('NORTH',17,'Asha'),('SOUTH',17,'Asha'),('NORTH',24,'Mira');",
+      "expected": "campus_code\tregistration_number\tstudent_name\nNORTH\t17\tAsha\nNORTH\t24\tMira\nSOUTH\t17\tAsha",
+      "ordering": "Ascending campus_code, registration_number.",
+      "constraints": [
+        "Initial pairs are unique.",
+        "The campus catalogue and external issuance process are outside these local fixtures."
+      ],
+      "edge_cases": [
+        "Neither component is required to be unique alone.",
+        "All identity components remain required."
+      ],
+      "hints": [
+        "Declare one combined key, not two independent keys.",
+        "A descriptive name is not part of the identity."
+      ],
+      "solution_sql": "ALTER TABLE students ADD PRIMARY KEY (campus_code, registration_number);\nSELECT campus_code, registration_number, student_name FROM students ORDER BY campus_code, registration_number;",
+      "explanation": "The composite constraint matches the documented student identity and permits legitimate reuse of its individual components.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO students VALUES ('WEST',9,'Dev'),('EAST',9,'Dev');",
+          "expected": "campus_code\tregistration_number\tstudent_name\nEAST\t9\tDev\nWEST\t9\tDev"
+        },
+        {
+          "seed_sql": "",
+          "expected": ""
+        }
+      ],
+      "negative_validation_cases": [
+        {
+          "sql": "INSERT INTO students VALUES ('NORTH',17,'Other');",
+          "error_codes": [
+            1062
+          ]
+        },
+        {
+          "sql": "INSERT INTO students VALUES ('WEST',NULL,'Other');",
+          "error_codes": [
+            1048
+          ]
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-5-candidate-key-1",
+      "test_id": "pt-dbms-sql-5-candidate-key",
+      "question_text": "What distinguishes a candidate key from a general super key?",
+      "options": [
+        "A candidate key must be exactly one column",
+        "A candidate key is a MINIMAL super key — no attribute can be removed without losing uniqueness",
+        "A candidate key can never be chosen as the primary key",
+        "There is no difference"
+      ],
+      "correct_index": 1,
+      "explanation": "Candidate key adds the minimality requirement on top of the super key's basic uniqueness requirement.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-5-candidate-key-2",
+      "test_id": "pt-dbms-sql-5-candidate-key",
+      "question_text": "If both {id} and {email} independently and uniquely identify rows in students, how many candidate keys does the table have?",
+      "options": [
+        "Zero",
+        "Exactly one — you must pick just one",
+        "Two — {id} and {email} are both separate candidate keys",
+        "It depends on which one is declared PRIMARY KEY"
+      ],
+      "correct_index": 2,
+      "explanation": "Both {id} and {email} are independently minimal and unique, so both qualify as candidate keys, regardless of which is later chosen as primary.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-5-candidate-key-3",
+      "test_id": "pt-dbms-sql-5-candidate-key",
+      "question_text": "What happens to candidate keys that are NOT chosen as the primary key?",
+      "options": [
+        "They cease to exist",
+        "They remain valid candidate keys, often called alternate keys",
+        "They automatically become foreign keys",
+        "The database deletes those columns"
+      ],
+      "correct_index": 1,
+      "explanation": "An unchosen candidate key doesn't disappear — it's simply referred to as an alternate key (topic 5.4).",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-5-candidate-key-4",
+      "test_id": "pt-dbms-sql-5-candidate-key",
+      "question_text": "For {student_id, course_id} to be a minimal candidate key in an enrollments table, what must be true?",
+      "options": [
+        "Both student_id and course_id must be unique on their own",
+        "Neither student_id alone nor course_id alone can already be unique by itself",
+        "The table must have no other columns",
+        "Enrollments must have exactly two rows"
+      ],
+      "correct_index": 1,
+      "explanation": "Minimality requires that no proper subset of the key (here, neither single column) is already sufficient for uniqueness.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-5-candidate-key-5",
+      "test_id": "pt-dbms-sql-5-candidate-key",
+      "question_text": "What is a 'surrogate key' most directly motivated by?",
+      "options": [
+        "A legal requirement",
+        "A situation where no natural attribute or combination is guaranteed to be a candidate key",
+        "A performance optimization with no relation to uniqueness",
+        "A requirement that every table have exactly two candidate keys"
+      ],
+      "correct_index": 1,
+      "explanation": "When real-world data offers no reliable natural candidate key, an artificial surrogate key (like an auto-increment id) fills that role.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-5-candidate-key-6",
+      "test_id": "pt-dbms-sql-5-candidate-key",
+      "question_text": "Is having multiple candidate keys in one table considered a design flaw?",
+      "options": [
+        "Yes, always",
+        "No — it's common and often desirable, e.g. an internal id plus a natural identifier like email or ISBN",
+        "Only if there are more than 3",
+        "Only for tables representing people"
+      ],
+      "correct_index": 1,
+      "explanation": "Multiple legitimate ways to uniquely identify a row is normal and frequently useful, not a design problem.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-5-candidate-key-7",
+      "test_id": "pt-dbms-sql-5-candidate-key",
+      "question_text": "Which statement correctly relates candidate keys and super keys?",
+      "options": [
+        "All super keys are candidate keys",
+        "All candidate keys are super keys, but only the minimal ones qualify as candidate keys",
+        "Candidate keys and super keys are unrelated categories",
+        "A table can have super keys but never candidate keys"
+      ],
+      "correct_index": 1,
+      "explanation": "Candidate key is a strict, minimal subset of the broader super key category.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-5-candidate-key-8",
+      "test_id": "pt-dbms-sql-5-candidate-key",
+      "question_text": "Why might a table end up with ZERO natural candidate keys?",
+      "options": [
+        "This is mathematically impossible for any table",
+        "Because no single attribute or combination of the real-world data happens to be guaranteed unique",
+        "Because SQL forbids more than one candidate key",
+        "Because the table has too few rows"
+      ],
+      "correct_index": 1,
+      "explanation": "If the actual business data has no attribute combination that's inherently guaranteed unique, no natural candidate key exists — motivating a surrogate key instead.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "coordinator",
+    "independent_review": "unavailable; no agent tools",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Definitions and examples checked against questions; no plagiarism certification.",
+    "existing_question_corrections": [
+      "tq-dbms-sql-5-candidate-key-2",
+      "tq-dbms-sql-5-candidate-key-4",
+      "tq-dbms-sql-5-candidate-key-5",
+      "tq-dbms-sql-5-candidate-key-7",
+      "tq-dbms-sql-5-candidate-key-8"
+    ],
+    "canonical_answer_indices_preserved": true
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-5-candidate-key",
+    "original_note_sha256": "4843278cdab4579fc8037c1610b9a2ad3c53ce1e40d8856dbcd0e68ad8816d9b",
+    "status": "paired migration prepared; not applied"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Identification and minimality are separate tests",
+      "description": "Assume campus and local number jointly identify students, neither alone does, and student_id is an independent identifier.",
+      "columns": [
+        "Proposed set",
+        "Identifies?",
+        "Minimal?"
+      ],
+      "rows": [
+        [
+          "{student_id}",
+          "Yes, by stated rule",
+          "Yes"
+        ],
+        [
+          "{campus_code, registration_number}",
+          "Yes, by combined rule",
+          "Yes; each component is needed"
+        ],
+        [
+          "{student_id, student_name}",
+          "Yes",
+          "No; remove the name"
+        ],
+        [
+          "{registration_number}",
+          "No guarantee across campuses",
+          "Not a candidate key"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "coordinator checked minimal versus minimum, dependency examples and natural-occurrence distinction",
+    "server_rendering": "passed",
+    "browser_rendering": "unverified",
+    "independent_review": "unavailable; no agent tools",
+    "server_rendering_evidence": "2026-10-29: every authored package rendered through LessonBlock; focused Vitest suite passed."
+  },
+  "sql_verification": {
+    "engine": "11.8.6-MariaDB-0+deb13u1 from Debian",
+    "scope": "MariaDB compatibility execution; exact MySQL 8.4/provider execution unverified",
+    "fingerprint": "6dd6df80bad132a5ebcefb5fe281f06324c33afab0cbf44e4db4b437c8b9782d",
+    "cases": [
+      {
+        "problem": "candidate-key-reuse",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "candidate-key-reuse",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "candidate-key-reuse",
+        "case": 2,
+        "passed": true
+      },
+      {
+        "problem": "candidate-key-pair",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "candidate-key-pair",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "candidate-key-pair",
+        "case": 2,
+        "passed": true
+      },
+      {
+        "problem": "candidate-key-pair",
+        "negative_case": 0,
+        "error_code": 1062,
+        "passed": true
+      },
+      {
+        "problem": "candidate-key-pair",
+        "negative_case": 1,
+        "error_code": 1048,
+        "passed": true
+      }
+    ],
+    "all_passed": true
+  }
+}

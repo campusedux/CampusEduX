@@ -1,0 +1,598 @@
+{
+  "source_ref": "chapter-11-dml-and-data-modification/safe-updates",
+  "slug": "safe-updates",
+  "title": "Safe Updates",
+  "description": "Write safer MySQL UPDATE and DELETE statements using precise predicates, revision checks, sql_safe_updates, and explicit rollback limits.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Safety starts with the intended change\n\nA safe update begins with a precise statement of which rows may change and what their new values should be. Consider correcting the status of one equipment request. The request identity, current status and permitted transition matter. A syntactically valid statement can still change the wrong request, overwrite another person's work or match every row because the predicate was accidentally omitted.\n\nThe same discipline applies to [DELETE](/learning/dbms-sql-tutorial/delete). Removing a row changes its existence and can affect related facts through constraints or triggers. Before writing either statement, describe the expected affected identities and the state that must remain intact. A small affected-row count is useful evidence, but it cannot establish that the chosen rows were the correct ones.\n\n## MySQL provides a session guard\n\nMySQL's sql_safe_updates variable can reject UPDATE and DELETE statements that lack an acceptable key-based restriction or a LIMIT. It is a helpful accident guard, especially when typing SQL interactively. It does not understand the business meaning of a request. A statement that targets the wrong indexed identifier can satisfy the guard and still perform the wrong change.\n\nDistinguish the session variable from the mysql client's safe-updates startup option. That option sets additional session limits for result sizes and joins. Other connections can have different settings, and reconnecting creates a new session. Never describe one client's protection as a database-wide promise that every application and administrative tool is prevented from issuing broad writes.\n\n## An index name in a predicate is not enough\n\nActual access decisions matter. Safe-update rejection can occur even when the predicate mentions a key if the optimizer does not use that key. An implicit type conversion on an indexed text value is one possible cause. An execution plan and diagnostic warnings help explain the rejection; repeatedly changing syntax until the guard accepts something is not a reliable correction strategy.\n\nFor an integer request identifier, compare a correctly typed integer parameter. For a text code, bind text with the intended comparison semantics. Indexing supports access, while the predicate determines meaning. Adding an arbitrary indexed condition merely to satisfy a tool can widen or distort the selected population and conceal the original mistake rather than resolve it.\n\n## Preview the same predicate\n\nA SELECT with the intended predicate makes the candidate identities and values visible before a write. Include the columns needed to evaluate the transition, not only a total count. If a request must currently be pending, preview both its identifier and status. Seeing a completed request should prompt a requirement check before any attempt to overwrite it.\n\nThe preview does not freeze the table. Another transaction can change rows after the read, and an unprotected later write may see a different population. Treat the preview as a diagnostic observation. When correctness depends on the previously observed value, carry that value into an optimistic predicate or use an appropriate transaction and locking design for the actual operation.\n\n```sql\nSELECT request_id, status, revision\nFROM equipment_requests\nWHERE request_id = 12 AND status = 'pending' AND revision = 4;\n\nUPDATE equipment_requests\nSET status = 'ready', revision = revision + 1\nWHERE request_id = 12 AND status = 'pending' AND revision = 4;\n```\n\n## Expected state protects against stale decisions\n\nThe revision condition above expresses an expectation: the writer is acting on revision four. If another accepted change increments the revision, this update no longer matches. The application must examine the result and handle the conflict. Blindly resubmitting with a newer revision would discard the protection because it would approve a state the original decision never considered.\n\nA zero match can mean the identity is missing, the status has changed or the revision is stale. It should not automatically be reported as a successful transition. The trusted application can classify the outcome using permitted reads and its contract. Avoid exposing private row details merely to explain an error to a caller who lacks access to those details.\n\n## Transactions help but rehearsals still have effects\n\nFor transactional InnoDB DML, an explicit transaction lets a controlled workflow inspect its own changes before choosing COMMIT or ROLLBACK. It can also group related operations so partial success is not intentionally committed. This is useful for synthetic exercises and reviewed maintenance procedures. It is not a way to make arbitrary experimentation on production data risk free.\n\nEven a transaction later rolled back can hold locks and block other users. Certain operations have nontransactional effects, and MySQL DDL can cause implicit commits. External messages are not undone by rolling back a table change. Use isolated representative data for rehearsal, understand the statement boundaries, and obtain the operational authorization appropriate to any real maintenance action.\n\n## Batches require a stable selection rule\n\nA bounded batch can limit the amount of work in one transaction. For supported single-table MySQL updates, ORDER BY and LIMIT can choose a deterministic first group when the ordering has a unique tie breaker. For example, order eligible requests by request_id. LIMIT alone bounds a count without explaining which qualifying identities are chosen.\n\nBatching is not automatically a correctness policy. Changing eligibility while traversing rows can skip or revisit work if the continuation rule is poorly designed. An offset into a changing population is especially easy to misuse. Track a reviewed key boundary or durable batch identity, and reconcile the identities actually changed rather than assume that several successful batches cover the intended population exactly once.\n\n## Preserve unrelated rows and properties\n\nA targeted update should name only properties that the requirement permits changing. Rewriting every column from an old application object can overwrite newer values unrelated to the requested status transition. A focused SET list reduces that risk. Database [constraints](/learning/dbms-sql-tutorial/relational-integrity) and authorization still enforce their own boundaries; safe-update mode does not replace them or grant permission to perform a write.\n\nTest the preserved state directly. Keep another pending request, a completed request and an unrelated revision value in the fixture. After the write, assert that each remains intact. Testing only the intended new status could miss a statement that changed every pending row or reset every revision. Negative examples should include missing identities and stale expectations as well as malformed input.\n\n## Generated SQL deserves the same scrutiny\n\nAn ORM or query builder can produce an UPDATE with an unexpectedly empty filter when optional inputs are missing. Inspect the trusted mutation boundary: required identifiers must be validated, and an absent filter should not silently mean all rows. Parameter binding protects value representation; it does not prove that the application supplied the right predicate or that the caller has authority.\n\nLog operation metadata and safe outcome categories rather than private values or credentials. A useful result can distinguish accepted change, state conflict and rejected input. For maintenance, a reviewed identity list and a reconciliation query provide stronger evidence than the statement text alone. Keep evidence proportional to the scope while ensuring that an unexpected count stops further dependent work.\n\n## Verify deletion relationships before removal\n\nFor a deletion, inspect the declared relationship policy as well as the selected parent row. A cascading relationship may remove related rows that the immediate predicate never names, while a restrictive relationship may reject the operation. A preview of the parent alone does not describe that broader effect. Use representative linked fixtures to confirm the intended boundary and do not disable referential checks to make a rejected deletion succeed. An approved deletion should explain what happens to dependent facts and how unexpected outcomes are detected before subsequent work proceeds.\n\n## Evaluate the whole transition\n\nThe first exercise changes one pending request while preserving other rows. The second uses an expected revision and status to prevent overwriting stale state. Their alternative fixtures include a nonexistent target and an already changed revision, so students can see why matching zero rows can be the correct protective outcome rather than a SQL syntax failure.\n\nA careful explanation connects the original requirement, the candidate read, the write predicate and the final ordered state. Ask which concurrent changes would invalidate the decision and which properties must survive. Safe-update settings support that reasoning, but they cannot perform it. Correct targeting, explicit transaction handling and trusted access enforcement remain necessary wherever the same operation is offered through an application.\n",
+  "references": [
+    {
+      "title": "MySQL 8.4 client safe-updates behaviour",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/mysql-tips.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-11-safe-updates",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-11-safe-updates-1",
+          "test_id": "pt-dbms-sql-11-safe-updates",
+          "question_text": "What accident does safe-update mode help detect?",
+          "options": [
+            "A misspelled article heading",
+            "An unbounded or insufficiently restricted UPDATE or DELETE",
+            "Every incorrect business decision",
+            "Any slow SELECT in any client"
+          ],
+          "correct_index": 1,
+          "explanation": "It is an accident guard for write selection, not a business-rule engine.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-11-safe-updates-2",
+          "test_id": "pt-dbms-sql-11-safe-updates",
+          "question_text": "What can satisfy MySQL sql_safe_updates selection requirements?",
+          "options": [
+            "Any WHERE text regardless of its plan",
+            "An acceptable key-based restriction or a LIMIT",
+            "A SQL comment containing a key name",
+            "A required password change"
+          ],
+          "correct_index": 1,
+          "explanation": "Actual key usage can matter; mentioning a key alone is insufficient.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-11-safe-updates-3",
+          "test_id": "pt-dbms-sql-11-safe-updates",
+          "question_text": "Does one connection enabling sql_safe_updates protect every connection?",
+          "options": [
+            "Yes, it changes all application roles",
+            "No, other sessions can have different settings",
+            "Yes, until the database restarts",
+            "Only for tables with text keys"
+          ],
+          "correct_index": 1,
+          "explanation": "Session state is not a database-wide authorization boundary.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-11-safe-updates-4",
+          "test_id": "pt-dbms-sql-11-safe-updates",
+          "question_text": "Does UPDATE followed by ROLLBACK make a production rehearsal risk free?",
+          "options": [
+            "Yes, all possible effects are reversed",
+            "No, locking and nontransactional or external effects can still matter",
+            "Yes, even for implicitly committing DDL",
+            "Only if no WHERE clause is used"
+          ],
+          "correct_index": 1,
+          "explanation": "Transactional rollback does not erase every operational effect.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-11-safe-updates-5",
+          "test_id": "pt-dbms-sql-11-safe-updates",
+          "question_text": "Why inspect ORM mutation filters?",
+          "options": [
+            "ORMs cannot generate UPDATE",
+            "Missing inputs can produce an unexpectedly broad write",
+            "Generated SQL automatically has authorization",
+            "Parameter binding invents the right business predicate"
+          ],
+          "correct_index": 1,
+          "explanation": "Generated statements need valid scope just like handwritten SQL.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-11-safe-updates-6",
+          "test_id": "pt-dbms-sql-11-safe-updates",
+          "question_text": "What does a preview SELECT establish?",
+          "options": [
+            "Which rows are permanently reserved",
+            "Which rows matched at that read, subject to its visibility rules",
+            "That every later write sees identical state",
+            "That the mutation is authorized"
+          ],
+          "correct_index": 1,
+          "explanation": "A later concurrent change can invalidate the observation.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-11-safe-updates-7",
+          "test_id": "pt-dbms-sql-11-safe-updates",
+          "question_text": "What does ORDER BY request_id LIMIT 2 provide for a supported single-table update?",
+          "options": [
+            "A guarantee that only correct requests qualify",
+            "A bounded selection with deterministic identity ordering",
+            "An automatic rollback",
+            "A cross-engine syntax guarantee"
+          ],
+          "correct_index": 1,
+          "explanation": "The predicate must still express the intended population.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-11-safe-updates-8",
+          "test_id": "pt-dbms-sql-11-safe-updates",
+          "question_text": "Can safe-update mode replace code review?",
+          "options": [
+            "Yes, for indexed tables",
+            "No, an accepted key-based write can still target the wrong row",
+            "Yes, for all administrative scripts",
+            "Only when used with defaults"
+          ],
+          "correct_index": 1,
+          "explanation": "The guard does not know the business requirement.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-11-safe-updates-new-9",
+          "test_id": "pt-dbms-sql-11-safe-updates",
+          "question_text": "Why include status in a revision-checked update predicate?",
+          "options": [
+            "To enforce the permitted starting state",
+            "To speed every query automatically",
+            "To disable uniqueness",
+            "To change all statuses at once"
+          ],
+          "correct_index": 0,
+          "explanation": "Identity, state and revision express separate expectations.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-11-safe-updates-new-10",
+          "test_id": "pt-dbms-sql-11-safe-updates",
+          "question_text": "A stale revision matches zero rows. What should a caller avoid?",
+          "options": [
+            "Recognizing a state conflict",
+            "Reporting the requested transition as definitely committed",
+            "Reading permitted current state",
+            "Requesting a refreshed user decision"
+          ],
+          "correct_index": 1,
+          "explanation": "No matching transition is not evidence of success.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-11-safe-updates-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-11-safe-updates-application-new-1",
+          "test_id": "pt-dbms-sql-11-safe-updates-application",
+          "question_text": "Why can a predicate mentioning an indexed text key still trigger safe-update rejection?",
+          "options": [
+            "Text keys are never indexed",
+            "Type conversion or plan selection may prevent key use",
+            "Every quoted value disables indexes",
+            "Safe-update mode forbids WHERE"
+          ],
+          "correct_index": 1,
+          "explanation": "Use a correctly typed predicate and inspect diagnostics.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-11-safe-updates-application-new-2",
+          "test_id": "pt-dbms-sql-11-safe-updates-application",
+          "question_text": "Which statement best preserves unrelated properties?",
+          "options": [
+            "Rewrite every property from a stale object",
+            "Reset all columns to defaults",
+            "SET only the properties the transition authorizes",
+            "Delete and reinsert every candidate"
+          ],
+          "correct_index": 2,
+          "explanation": "A narrow SET list avoids overwriting unrelated newer values.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-11-safe-updates-application-new-3",
+          "test_id": "pt-dbms-sql-11-safe-updates-application",
+          "question_text": "Why does a count of one not prove a safe change?",
+          "options": [
+            "A database cannot count rows",
+            "One always means rollback",
+            "Every update must affect two rows",
+            "The one changed row can be the wrong identity"
+          ],
+          "correct_index": 3,
+          "explanation": "Correctness depends on identity and state, not just size.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-11-safe-updates-application-new-4",
+          "test_id": "pt-dbms-sql-11-safe-updates-application",
+          "question_text": "What should happen if a required mutation identifier is absent?",
+          "options": [
+            "Reject the invalid request at the trusted boundary",
+            "Treat absence as every row",
+            "Replace the identifier with zero silently",
+            "Remove the WHERE clause"
+          ],
+          "correct_index": 0,
+          "explanation": "Missing scope should not broaden a write.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-11-safe-updates-application-new-5",
+          "test_id": "pt-dbms-sql-11-safe-updates-application",
+          "question_text": "What does a revision comparison protect?",
+          "options": [
+            "All external side effects",
+            "A decision based on an expected earlier state",
+            "Every permission rule",
+            "Every statement from deadlocks"
+          ],
+          "correct_index": 1,
+          "explanation": "An optimistic predicate prevents the stale transition from matching.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-11-safe-updates-application-new-6",
+          "test_id": "pt-dbms-sql-11-safe-updates-application",
+          "question_text": "Why is LIMIT without ORDER BY insufficient for a deterministic batch?",
+          "options": [
+            "LIMIT is invalid for every MySQL update",
+            "It sorts by primary key implicitly in every plan",
+            "It bounds how many qualify without specifying which identities",
+            "It freezes all eligibility"
+          ],
+          "correct_index": 2,
+          "explanation": "A unique ordering rule identifies the intended first group.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-11-safe-updates-application-new-7",
+          "test_id": "pt-dbms-sql-11-safe-updates-application",
+          "question_text": "Which fixture helps expose accidental broad updates?",
+          "options": [
+            "Only the target row",
+            "An empty table for every case",
+            "A fixture without identifiers",
+            "A different pending request that must stay unchanged"
+          ],
+          "correct_index": 3,
+          "explanation": "Preserved rows make collateral changes observable.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-11-safe-updates-application-new-8",
+          "test_id": "pt-dbms-sql-11-safe-updates-application",
+          "question_text": "Does binding SQL parameters prove authorization?",
+          "options": [
+            "No, trusted access checks remain necessary",
+            "Yes, for integer values",
+            "Yes, for every ORM write",
+            "Only if placeholders are positional"
+          ],
+          "correct_index": 0,
+          "explanation": "Value representation and authority are different responsibilities.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-11-safe-updates-application-new-9",
+          "test_id": "pt-dbms-sql-11-safe-updates-application",
+          "question_text": "What should a batch continuation rule account for?",
+          "options": [
+            "Every population remaining fixed forever",
+            "Eligibility and row positions may change after each batch",
+            "Offsets always identifying the same rows",
+            "Unrelated column headings"
+          ],
+          "correct_index": 1,
+          "explanation": "A reviewed key boundary or durable identity can avoid skips and repeats.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-11-safe-updates-application-new-10",
+          "test_id": "pt-dbms-sql-11-safe-updates-application",
+          "question_text": "What is a useful failure outcome for an expected-state conflict?",
+          "options": [
+            "Unconditional retry with the latest revision",
+            "Silent success",
+            "A clear conflict result requiring a refreshed decision",
+            "Disabling the guard for all sessions"
+          ],
+          "correct_index": 2,
+          "explanation": "Automatically accepting a new revision discards the original expectation.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cx-safe-targeted-request",
+      "slug": "safe-targeted-request",
+      "title": "Change only the named pending request",
+      "difficulty": "Easy",
+      "task": "Set request 12 to ready only if its status is pending. Leave revision and every other row unchanged. Return request_id,status,revision ordered by request_id.",
+      "schema_sql": "CREATE TABLE equipment_requests(request_id INT PRIMARY KEY,status VARCHAR(16) NOT NULL,revision INT NOT NULL);",
+      "seed_sql": "INSERT INTO equipment_requests VALUES (12,'pending',4),(15,'pending',2),(18,'closed',6);",
+      "expected": "request_id\tstatus\trevision\n12\tready\t4\n15\tpending\t2\n18\tclosed\t6",
+      "ordering": "As explicitly ordered in the result query.",
+      "constraints": [
+        "Use only the supplied synthetic tables and requested transition.",
+        "Preserve unrelated rows."
+      ],
+      "edge_cases": [
+        "Missing target causes no change.",
+        "A closed target must remain closed."
+      ],
+      "hints": [
+        "Combine the identity and status predicates.",
+        "Do not assign revision in this task."
+      ],
+      "solution_sql": "UPDATE equipment_requests SET status='ready' WHERE request_id=12 AND status='pending'; SELECT request_id,status,revision FROM equipment_requests ORDER BY request_id;",
+      "explanation": "Both identity and starting status restrict the transition. Revision is outside the requested change and is preserved.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO equipment_requests VALUES (15,'pending',2);",
+          "expected": "request_id\tstatus\trevision\n15\tpending\t2"
+        },
+        {
+          "seed_sql": "INSERT INTO equipment_requests VALUES (12,'closed',7);",
+          "expected": "request_id\tstatus\trevision\n12\tclosed\t7"
+        }
+      ]
+    },
+    {
+      "id": "cx-safe-request-revision",
+      "slug": "safe-request-revision",
+      "title": "Reject a stale equipment decision",
+      "difficulty": "Medium",
+      "task": "Change request 12 from pending to ready only at revision 4, and increment its revision once if matched. Other states must remain unchanged. Return request_id,status,revision ordered by request_id.",
+      "schema_sql": "CREATE TABLE equipment_requests(request_id INT PRIMARY KEY,status VARCHAR(16) NOT NULL,revision INT NOT NULL);",
+      "seed_sql": "INSERT INTO equipment_requests VALUES (12,'pending',4),(15,'pending',4);",
+      "expected": "request_id\tstatus\trevision\n12\tready\t5\n15\tpending\t4",
+      "ordering": "As explicitly ordered in the result query.",
+      "constraints": [
+        "Use only the supplied synthetic tables and requested transition.",
+        "Preserve unrelated rows."
+      ],
+      "edge_cases": [
+        "A stale revision cannot match.",
+        "Correct revision with incorrect status still cannot match."
+      ],
+      "hints": [
+        "Match all three expectations.",
+        "Advance the stored revision in the same update."
+      ],
+      "solution_sql": "UPDATE equipment_requests SET status='ready',revision=revision+1 WHERE request_id=12 AND status='pending' AND revision=4; SELECT request_id,status,revision FROM equipment_requests ORDER BY request_id;",
+      "explanation": "The conjunction rejects stale or invalid starting state in the write itself. Only a matched transition advances the revision.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO equipment_requests VALUES (12,'pending',5),(15,'pending',4);",
+          "expected": "request_id\tstatus\trevision\n12\tpending\t5\n15\tpending\t4"
+        },
+        {
+          "seed_sql": "INSERT INTO equipment_requests VALUES (12,'closed',4);",
+          "expected": "request_id\tstatus\trevision\n12\tclosed\t4"
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-11-safe-updates-1",
+      "test_id": "pt-dbms-sql-11-safe-updates",
+      "question_text": "What is the 'Safe Updates' concept primarily protecting against?",
+      "options": [
+        "Slow query performance",
+        "Accidentally running an UPDATE or DELETE with no WHERE clause, or one that doesn't use a key",
+        "Running out of disk space",
+        "Forgetting to create an index"
+      ],
+      "correct_index": 1,
+      "explanation": "Safe Updates specifically targets the unfiltered-UPDATE/DELETE mistake class.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-11-safe-updates-2",
+      "test_id": "pt-dbms-sql-11-safe-updates",
+      "question_text": "What does MySQL's SQL_SAFE_UPDATES setting do?",
+      "options": [
+        "Automatically backs up the database before every query",
+        "Refuses to run an UPDATE/DELETE unless the WHERE clause references a key column or a LIMIT is present",
+        "Encrypts all UPDATE statements",
+        "Makes UPDATE statements run faster"
+      ],
+      "correct_index": 1,
+      "explanation": "It's a tool-level guard specifically against unfiltered or non-key-based UPDATE/DELETE statements.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-11-safe-updates-3",
+      "test_id": "pt-dbms-sql-11-safe-updates",
+      "question_text": "Is Safe Updates mode a database-wide guarantee, or a client/session-level setting?",
+      "options": [
+        "A database-wide guarantee protecting every connection",
+        "A client-tool/session-level setting — other connections without it enabled have no such protection",
+        "A guarantee enforced by the SQL standard itself",
+        "A setting that only affects SELECT statements"
+      ],
+      "correct_index": 1,
+      "explanation": "Since it's session/tool-specific, it must be treated as a personal habit, not a systemic safeguard.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-11-safe-updates-4",
+      "test_id": "pt-dbms-sql-11-safe-updates",
+      "question_text": "What is a reliable technique for testing a risky UPDATE/DELETE against production data with zero risk?",
+      "options": [
+        "Running it directly with no safeguards",
+        "Running it inside an explicit transaction, inspecting the result, then ROLLBACK instead of COMMIT if anything looks wrong",
+        "Running it twice to double-check",
+        "Disabling all constraints first"
+      ],
+      "correct_index": 1,
+      "explanation": "A transaction that you inspect and then roll back lets you verify effects with no permanent risk.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-11-safe-updates-5",
+      "test_id": "pt-dbms-sql-11-safe-updates",
+      "question_text": "Why might an ORM-generated UPDATE/DELETE bypass manual safe-update discipline?",
+      "options": [
+        "ORMs never generate UPDATE/DELETE statements",
+        "A bug in application logic could produce an unintentionally unfiltered statement, which wouldn't be caught by discipline applied only to hand-written SQL",
+        "ORMs always add a WHERE clause automatically with no possible bugs",
+        "This scenario cannot happen with modern frameworks"
+      ],
+      "correct_index": 1,
+      "explanation": "Generated SQL needs the same scrutiny as hand-written SQL, since application-level bugs can still produce dangerous statements.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-11-safe-updates-6",
+      "test_id": "pt-dbms-sql-11-safe-updates",
+      "question_text": "What is the value of running an equivalent SELECT before a risky UPDATE/DELETE?",
+      "options": [
+        "It has no real value",
+        "It shows exactly which rows would be affected, before any data is actually changed",
+        "It automatically fixes any WHERE clause mistakes",
+        "It permanently locks the affected rows"
+      ],
+      "correct_index": 1,
+      "explanation": "Previewing affected rows is one of the most effective, low-cost safety checks available.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-11-safe-updates-7",
+      "test_id": "pt-dbms-sql-11-safe-updates",
+      "question_text": "What role does LIMIT + ORDER BY play in a safe-update testing strategy?",
+      "options": [
+        "It has no role in safety testing",
+        "Running a first small, ordered test batch before the full-scale change limits the blast radius while validating the approach",
+        "LIMIT prevents any rows from being affected at all",
+        "ORDER BY is required syntax for every UPDATE"
+      ],
+      "correct_index": 1,
+      "explanation": "Testing on a small, controlled batch first is a practical risk-reduction technique for large or critical changes.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-11-safe-updates-8",
+      "test_id": "pt-dbms-sql-11-safe-updates",
+      "question_text": "Is enabling a tool's safe-update setting a substitute for careful WHERE clauses and code review?",
+      "options": [
+        "Yes, it fully replaces the need for careful review",
+        "No — it's a helpful safety net, but careful WHERE clauses and review remain necessary, especially since the setting is session-specific",
+        "It replaces the need for transactions",
+        "It automatically writes correct WHERE clauses for you"
+      ],
+      "correct_index": 1,
+      "explanation": "Tool settings are a backstop, not a replacement for the underlying discipline of careful, reviewed SQL.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "coordinator",
+    "independent_review": "passed",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Independent manual review passed; native MySQL fixture evidence recorded separately; provider/browser/Supabase release gates remain separate.",
+    "existing_question_corrections": [
+      "tq-dbms-sql-11-safe-updates-1",
+      "tq-dbms-sql-11-safe-updates-2",
+      "tq-dbms-sql-11-safe-updates-3",
+      "tq-dbms-sql-11-safe-updates-4",
+      "tq-dbms-sql-11-safe-updates-5",
+      "tq-dbms-sql-11-safe-updates-6",
+      "tq-dbms-sql-11-safe-updates-7",
+      "tq-dbms-sql-11-safe-updates-8"
+    ],
+    "canonical_answer_indices_preserved": true,
+    "editorial_record": "Original snapshots retained. Questions rewritten for precise dialect and topic coverage while preserving identities and canonical answer positions; technical and independent review pending.",
+    "independent_reviewer": "Codex reviewer, current 2026-10-30 session",
+    "independent_review_scope": "Read full notes, all 640 MCQ stems/options/canonical answers/explanations, 64 exercise contracts/solutions/fixtures, and all 32 diagrams. Verified retained identities/answers through source-continuity tests; SQL execution evidence is recorded separately. No external originality, provider, live application or Supabase authorization clearance.",
+    "independent_review_record": "reports/independent-review-2026-10-30.json",
+    "content_sha256": "e3c18717690814a91cfc676068927c3f849a475b28942fc4559aeeec9a3832a5"
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-11-safe-updates",
+    "original_note_sha256": "5ec8b2839bf700cf1aacfc084e44597afbd2c86b10ae0196520b07a346429d73",
+    "status": "drafted; not yet included in prepared paired migrations"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "A preview and an expected-state write provide different evidence",
+      "description": "The write repeats the protected state expectations rather than relying on an earlier observation.",
+      "columns": [
+        "Stage",
+        "Observed or required state",
+        "Consequence"
+      ],
+      "rows": [
+        [
+          "Preview",
+          "Request 12 pending at revision 4",
+          "Observation only"
+        ],
+        [
+          "Concurrent edit",
+          "Request 12 advances to revision 5",
+          "Earlier expectation becomes stale"
+        ],
+        [
+          "Conditional write",
+          "Requires pending and revision 4",
+          "No match after the concurrent edit"
+        ],
+        [
+          "Caller handling",
+          "No accepted transition",
+          "Refresh and resolve the conflict"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "drafted — verification pending",
+    "server_rendering": "pending",
+    "browser_rendering": "unverified",
+    "independent_review": "pending"
+  },
+  "authoring_status": "drafted — verification pending",
+  "sql_verification": {
+    "scope": "not executed; exact MySQL/provider verification pending",
+    "all_passed": false,
+    "cases": []
+  }
+}

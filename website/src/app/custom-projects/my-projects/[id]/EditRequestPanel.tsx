@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useTransition } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Paperclip, Pencil, Plus, Trash2, X } from "lucide-react";
 import { Button, Field, Input, Textarea, toast } from "@/components/ui";
@@ -53,7 +53,7 @@ export default function EditRequestPanel({
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<EditableRequest>(initial);
-  const [pending, start] = useTransition();
+  const [pending, setPending] = useState(false);
   const [fileBusy, setFileBusy] = useState(false);
   const fileInput = useRef<HTMLInputElement | null>(null);
 
@@ -66,13 +66,15 @@ export default function EditRequestPanel({
     return out;
   }
 
-  function save() {
+  async function save() {
+    if (pending) return;
     const changes = changedFields();
     if (Object.keys(changes).length === 0) {
       setOpen(false);
       return;
     }
-    start(async () => {
+    setPending(true);
+    try {
       const res = await updateCustomProjectRequestAction({ requestId, changes });
       if ("error" in res) {
         toast({ title: "Could not save", description: res.error, tone: "error" });
@@ -81,7 +83,11 @@ export default function EditRequestPanel({
       toast({ title: "Request updated", description: "The team has been notified.", tone: "success" });
       setOpen(false);
       router.refresh();
-    });
+    } catch (err) {
+      toast({ title: "Could not save", description: err instanceof Error ? err.message : undefined, tone: "error" });
+    } finally {
+      setPending(false);
+    }
   }
 
   async function addFiles(list: FileList | null) {
@@ -118,6 +124,8 @@ export default function EditRequestPanel({
         }
       }
       router.refresh();
+    } catch (err) {
+      toast({ title: "Something went wrong", description: err instanceof Error ? err.message : undefined, tone: "error" });
     } finally {
       setFileBusy(false);
       if (fileInput.current) fileInput.current.value = "";
@@ -127,10 +135,16 @@ export default function EditRequestPanel({
   async function removeFile(id: string, name: string) {
     if (!window.confirm(`Remove "${name}"?`)) return;
     setFileBusy(true);
-    const res = await removeCustomProjectAttachmentAction({ fileId: id });
-    setFileBusy(false);
-    if ("error" in res) toast({ title: "Could not remove", description: res.error, tone: "error" });
-    else router.refresh();
+    try {
+      const res = await removeCustomProjectAttachmentAction({ fileId: id });
+      setFileBusy(false);
+      if ("error" in res) toast({ title: "Could not remove", description: res.error, tone: "error" });
+      else router.refresh();
+    } catch (err) {
+      toast({ title: "Could not remove", description: err instanceof Error ? err.message : undefined, tone: "error" });
+    } finally {
+      setFileBusy(false);
+    }
   }
 
   if (!open) {

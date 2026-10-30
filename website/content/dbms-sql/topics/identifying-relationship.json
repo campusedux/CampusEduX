@@ -1,0 +1,626 @@
+{
+  "source_ref": "chapter-6-er-and-eer-modeling/identifying-relationship",
+  "slug": "identifying-relationship",
+  "title": "Identifying Relationship",
+  "description": "Connect owner identity to a weak entity discriminator, distinguish identifying dependence from ordinary references, and preserve complete room identity in related booking facts.",
+  "dialect": "MySQL 8.4",
+  "notes": "## The association completes a dependent identity\n\nAn identifying relationship connects a weak entity occurrence to the owner whose identity contributes to its complete identification. In the campus example, Building owns Room through Contains. A room_number distinguishes rooms within one building, while building_id identifies the owner. Together they identify one room. Contains is therefore more than an optional descriptive association: it supplies the owner context in which the discriminator is meaningful.\n\nBuilding 7 can contain Room 101, and Building 9 can also contain Room 101. Those are different room occurrences because their complete identities differ. A query, reference, or booking that names only Room 101 is incomplete under this model. The identifying relationship explains which owner context must accompany that local value to select the intended fact.\n\n## Separate the relationship from the weak entity\n\nRoom is the weak entity type. Contains is the identifying relationship type. The room has properties such as capacity, while the association establishes the owner context required for identification. They are closely connected modeling constructs, but they are not interchangeable names for one object. A diagram needs to show both the dependent entity and its identifying connection.\n\nThe partial key is another distinct ingredient. room_number is not itself the identifying relationship, and building_id alone does not distinguish every room owned by a building. The local discriminator and owner identity work together. A capacity value can change without identifying a new room, so adding capacity to conceal conflicting copies would change the intended identity rather than repair the model.\n\n## Read the conventional diagram consistently\n\nIn the Chen-style convention used here, the owner Building has a single rectangle and Room a double rectangle. The Contains identifying relationship uses a double diamond. The owner's key is solid-underlined, and the Room partial key is dashed-underlined. These marks communicate the different roles of independent key, local discriminator, weak entity, and identifying association.\n\nThe Room side has a double participation connection because every recorded room requires an owner in this model. The Building side is single because a newly recorded building can have no rooms yet. The maximum labels show one owner per room and many rooms per building. Minimum participation and maximum multiplicity should both be stated explicitly rather than inferred from one unlabeled line.\n\n## The single-owner example has a clear boundary\n\nThis lesson uses the conventional binary owner-dependent case: each room has exactly one identifying building. It does not assert that every conceivable identification dependency must fit one binary pattern or that combined identifying contexts are mathematically impossible. More elaborate models can need several roles or dependencies, with their complete identity stated and analyzed deliberately.\n\nWithin the current model, changing a room to have several interchangeable owners would change its meaning and identifying rule. A building-room pair represents one specific occurrence context. If a real facility spans buildings, determine whether that is one independently identified space, several owned rooms, or another explicitly modeled object. Do not force a changed requirement into the original key by retaining an incompatible slogan.\n\n## Mandatory association alone is not identifying\n\nStudent can be required to belong to a programme while student_id independently identifies the student. That programme relationship has mandatory participation but need not supply any missing part of Student identity. Calling it identifying merely because a foreign-key column is NOT NULL confuses existence or assignment policy with identification dependence.\n\nLikewise, an order can require a customer while using its own complete order identity in a particular conceptual model. The meaning of the key and fact grain decides the identification account. A physical foreign key is evidence of a reference rule, not sufficient evidence by itself that the referenced parent must contribute to the child's conceptual identity in every notation.\n\n## Map the owner key into the dependent relation\n\nThe conventional mapping uses Building(building_id, building_name) and Room(building_id, room_number, capacity). The Room primary key combines building_id and room_number. Its building_id also references the owner through a supported foreign key, and required components prevent incomplete identities. The identifying relationship does not usually need a separate Contains table in this simple one-owner mapping.\n\n```sql\nCREATE TABLE rooms (\n  building_id INT NOT NULL,\n  room_number INT NOT NULL,\n  capacity INT NOT NULL,\n  PRIMARY KEY (building_id, room_number),\n  FOREIGN KEY (building_id) REFERENCES buildings(building_id)\n    ON DELETE RESTRICT\n);\n```\n\nThe declaration protects pair uniqueness, required identity components, and owner existence through separate mechanisms. The example deliberately uses a restricted parent removal policy. Conceptual weakness does not automatically choose CASCADE. Any permitted owner transition must preserve the intended dependency and other history or relationships under the actual supported definition.\n\n## Other relationships can refer to the weak occurrence\n\nA room can participate in ordinary relationships beyond Contains. A booking can refer to the fully identified room, using building_id and room_number under a compatible mapping. That does not make Booking the owner of Room or replace the identifying Building relationship. The weak occurrence can still have meaningful participation and properties outside its identification source.\n\nA booking join must match both room components. If it joins only room_number, a booking for Building 7 Room 101 can also match Building 9 Room 101. The result can show the wrong capacity or duplicate the booking. This is a practical reason to carry the complete dependent identity through callers and queries instead of relying on a label that is unique only inside one owner.\n\n## A surrogate does not erase owner-local uniqueness\n\nAn implementation can add room_id to make references convenient, while retaining required owner and discriminator attributes with an appropriate combined uniqueness rule. The business identity still forbids two current room records claiming Building 7 Room 101 under this policy. Different generated room_id values do not make the repeated owner-local combination acceptable.\n\nThe conceptual interpretation should be explained rather than inferred mechanically from the presence of a surrogate column. The conventional mapping in this lesson exposes owner-plus-discriminator identity directly. Another mapping needs to preserve the same intended facts and dependencies or explicitly state how the model changed. Convenience in physical references is not permission to discard a genuine identifying rule.\n\n## Owner changes have identity consequences\n\nChanging building_id changes part of the room's stated complete identity. That can collide with a room already using the local number at the destination and affect booking references. A real correction or relocation workflow needs an authorized policy for the occurrence identity, related facts, and history. It is different from updating capacity while keeping the identifying pair unchanged.\n\nDeleting an owner can be rejected while dependents remain, or a deliberately supported removal action can handle them under the chosen lifecycle. Synthetic native MariaDB checks can demonstrate selected restrictions and actions, but they do not establish every production transition, concurrent operation, rollback, or exact MySQL/provider behavior. Keep that execution evidence separate from the conceptual explanation.\n\n## Audit complete references without inventing corrections\n\nA staging booking can name a building-room pair not present in the Room relation. An audit can identify that unsupported reference while preserving the proposal identifier. A valid room with the same local number in another building must not satisfy it. Missing components can also be invalid under the required booking-reference contract, though the exercise uses nonmissing proposals to focus on complete-pair matching.\n\nFinding an invalid proposal does not establish whether the building identifier is mistyped, the room is missing from the catalogue, or the booking is unauthorized. Those are different correction and authority questions. A diagnostic query should report its observed mismatch without automatically creating owners, inventing rooms, or reassigning the proposal to whichever local number happens to exist.\n\n## Validate identity inheritance with counterexamples\n\nUse two buildings sharing local number 101, a building with several rooms, a building with no rooms, and bookings that name valid and absent complete pairs. Check that the valid local-number reuse remains distinct and that incomplete joins do not multiply one booking. Also challenge pair collisions and required owner existence through appropriate native checks when supported.\n\nAn identifying relationship is useful because it makes the source of dependent identity explicit. Keep owner key, partial key, participation bounds, mapping, and related references consistent. The SQL exercises verify complete-pair joins and unsupported-reference detection on isolated data; native MariaDB evidence is recorded separately and exact MySQL/provider verification remains open. Those boundaries let the model explain real identity dependence without turning every mandatory reference into the same concept.\n",
+  "references": [
+    {
+      "title": "Database System Concepts author slides: identifying weak entities",
+      "url": "https://db-book.com/Previous-editions/db5/slide-dir/ch6.pdf"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-6-identifying-relationship",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-6-identifying-relationship-1",
+          "test_id": "pt-dbms-sql-6-identifying-relationship",
+          "question_text": "What is an identifying relationship?",
+          "options": [
+            "Any relationship between two strong entities",
+            "The special relationship connecting a weak entity set to its owner entity set, providing the identification the weak entity lacks on its own",
+            "A relationship that has no cardinality",
+            "A synonym for a recursive relationship"
+          ],
+          "correct_index": 1,
+          "explanation": "The identifying relationship supplies the owner's key that, combined with the partial key, uniquely identifies the weak entity.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-6-identifying-relationship-2",
+          "test_id": "pt-dbms-sql-6-identifying-relationship",
+          "question_text": "In the Chen-style convention used here, how is the identifying relationship shown?",
+          "options": [
+            "As a single-line diamond",
+            "As a double-line diamond",
+            "As a dashed oval",
+            "As a rectangle"
+          ],
+          "correct_index": 1,
+          "explanation": "A double-line diamond pairs with the double-line rectangle of the weak entity to visually flag the identifying relationship.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-6-identifying-relationship-3",
+          "test_id": "pt-dbms-sql-6-identifying-relationship",
+          "question_text": "What is the participation of the weak entity's side in its identifying relationship?",
+          "options": [
+            "Always partial",
+            "Always total, because the weak entity cannot exist or be identified without this link",
+            "It varies case by case with no structural rule",
+            "It depends on the cardinality only"
+          ],
+          "correct_index": 1,
+          "explanation": "Total participation on the weak entity's side is a structural requirement, not a case-by-case design choice.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-6-identifying-relationship-4",
+          "test_id": "pt-dbms-sql-6-identifying-relationship",
+          "question_text": "In this lesson’s conventional single-owner Building-Room model, can one room have several interchangeable identifying buildings without changing the model?",
+          "options": [
+            "Yes, this is the most common case",
+            "No; the model specifies exactly one identifying owner per room, and changing that requirement requires a new explicit identification account",
+            "Yes, but only for recursive weak entities",
+            "M:N does not apply to identifying relationships at all"
+          ],
+          "correct_index": 1,
+          "explanation": "This is the stated single-owner pattern, not a proof that every more elaborate combined identification context is impossible.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-6-identifying-relationship-5",
+          "test_id": "pt-dbms-sql-6-identifying-relationship",
+          "question_text": "Can a weak entity participate in relationships other than its identifying relationship?",
+          "options": [
+            "No, a weak entity may only ever appear in its identifying relationship",
+            "Yes; a weak room can have booking or other ordinary relationships in addition to the identifying owner relationship in this model",
+            "Only if it becomes a strong entity first",
+            "Only in EER diagrams, never in plain ER diagrams"
+          ],
+          "correct_index": 1,
+          "explanation": "The identifying association supplies owner context; other relationships do not automatically replace it or become identifying.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-6-identifying-relationship-6",
+          "test_id": "pt-dbms-sql-6-identifying-relationship",
+          "question_text": "How does the identifying relationship relate to the concept of a weak entity's key?",
+          "options": [
+            "It has no relation to the key at all",
+            "It supplies the owner entity's primary key, which combines with the weak entity's partial key to form its full composite key",
+            "It replaces the need for a partial key entirely",
+            "It only matters for recursive relationships"
+          ],
+          "correct_index": 1,
+          "explanation": "This relationship is precisely what lets the weak entity's composite key (owner key + partial key) be formed.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-6-identifying-relationship-7",
+          "test_id": "pt-dbms-sql-6-identifying-relationship",
+          "question_text": "In the Employee/Dependent example, what is the identifying relationship most likely called, and what is its degree?",
+          "options": [
+            "Manages; degree 1 (recursive)",
+            "Belongs_To (or similar), connecting Dependent to Employee; degree 2 (binary)",
+            "Offers; degree 3 (ternary)",
+            "Enrolls_In; degree 2 (binary)"
+          ],
+          "correct_index": 1,
+          "explanation": "The identifying relationship links the weak entity (Dependent) to its owner (Employee) — a binary, degree-2 relationship.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-6-identifying-relationship-8",
+          "test_id": "pt-dbms-sql-6-identifying-relationship",
+          "question_text": "Which statement correctly separates 'weak entity' from 'identifying relationship'?",
+          "options": [
+            "They are exactly the same construct with two names",
+            "A weak entity is the entity set lacking its own full key; the identifying relationship is the specific association that links it to its owner and supplies that missing key information",
+            "An identifying relationship is a type of attribute",
+            "A weak entity can exist without any identifying relationship at all"
+          ],
+          "correct_index": 1,
+          "explanation": "Weak entity (6.4) and identifying relationship (6.16) are two distinct but tightly linked concepts: one is the entity set, the other is the connecting relationship that makes its identification possible.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-6-identifying-relationship-new-9",
+          "test_id": "pt-dbms-sql-6-identifying-relationship",
+          "question_text": "Which ingredient distinguishes Room 101 in Building 7 from Room 101 in Building 9?",
+          "options": [
+            "Capacity alone",
+            "The owner identity combined with the local discriminator",
+            "The insertion position",
+            "The displayed font"
+          ],
+          "correct_index": 1,
+          "explanation": "The identifying context is part of complete room identity.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-6-identifying-relationship-new-10",
+          "test_id": "pt-dbms-sql-6-identifying-relationship",
+          "question_text": "Does a required programme reference necessarily supply Student identity?",
+          "options": [
+            "Yes; every NOT NULL reference is identifying",
+            "Only if the programme is numeric",
+            "No; student_id can already identify the occurrence independently",
+            "Only if names repeat"
+          ],
+          "correct_index": 2,
+          "explanation": "Mandatory participation and identifying dependence differ.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-6-identifying-relationship-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-6-identifying-relationship-application-new-1",
+          "test_id": "pt-dbms-sql-6-identifying-relationship-application",
+          "question_text": "Why does the conventional Room mapping not need a separate Contains table?",
+          "options": [
+            "Relationships can never map to tables",
+            "The room has no key",
+            "The owner reference and combined dependent identity can represent this simple one-owner association",
+            "The owner name is global identity"
+          ],
+          "correct_index": 2,
+          "explanation": "The chosen mapping preserves the required owner context directly.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-6-identifying-relationship-application-new-2",
+          "test_id": "pt-dbms-sql-6-identifying-relationship-application",
+          "question_text": "What must a booking use to refer to the room in this mapping?",
+          "options": [
+            "Only room_number globally",
+            "Only capacity",
+            "Only building_name",
+            "Both building_id and room_number"
+          ],
+          "correct_index": 3,
+          "explanation": "The partial key alone is not globally identifying.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-6-identifying-relationship-application-new-3",
+          "test_id": "pt-dbms-sql-6-identifying-relationship-application",
+          "question_text": "What can a room-number-only booking join do?",
+          "options": [
+            "Match rooms under the wrong owner and multiply output",
+            "Always return exactly the right room",
+            "Create a valid foreign key automatically",
+            "Prove the booking is authorized"
+          ],
+          "correct_index": 0,
+          "explanation": "The join omits part of the intended identity.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-6-identifying-relationship-application-new-4",
+          "test_id": "pt-dbms-sql-6-identifying-relationship-application",
+          "question_text": "Can a weak room participate in ordinary booking relationships?",
+          "options": [
+            "No; it can only ever have one association of any kind",
+            "Yes",
+            "Only if it becomes a different building",
+            "Only if capacity is its key"
+          ],
+          "correct_index": 1,
+          "explanation": "Identification dependence does not forbid other participation.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-6-identifying-relationship-application-new-5",
+          "test_id": "pt-dbms-sql-6-identifying-relationship-application",
+          "question_text": "Does adding room_id remove required owner-number uniqueness?",
+          "options": [
+            "Yes; every generated id validates duplicates",
+            "Only for empty tables",
+            "No; the business identifying rule still needs preservation",
+            "Only if room numbers are long"
+          ],
+          "correct_index": 2,
+          "explanation": "Physical reference convenience does not erase the domain rule.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-6-identifying-relationship-application-new-6",
+          "test_id": "pt-dbms-sql-6-identifying-relationship-application",
+          "question_text": "Why distinguish a capacity update from an owner change?",
+          "options": [
+            "Every capacity change creates a new room",
+            "Owners never participate in keys",
+            "Both operations are always identical",
+            "Only the owner change affects part of the stated identifying pair"
+          ],
+          "correct_index": 3,
+          "explanation": "Descriptive and identifying roles have different consequences.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-6-identifying-relationship-application-new-7",
+          "test_id": "pt-dbms-sql-6-identifying-relationship-application",
+          "question_text": "Does weakness automatically select ON DELETE CASCADE?",
+          "options": [
+            "No; the lifecycle can use restriction or another deliberate supported policy",
+            "Yes; diagram shapes execute deletion",
+            "Only if the key is numeric",
+            "Only if every room has bookings"
+          ],
+          "correct_index": 0,
+          "explanation": "The actual declaration and domain retention policy matter.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-6-identifying-relationship-application-new-8",
+          "test_id": "pt-dbms-sql-6-identifying-relationship-application",
+          "question_text": "What does an invalid booking-pair audit authorize by itself?",
+          "options": [
+            "Creation of every missing building",
+            "No automatic correction or creation action",
+            "Reassignment to any matching room number",
+            "Deletion of all proposals"
+          ],
+          "correct_index": 1,
+          "explanation": "Diagnosis and authority are separate.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-6-identifying-relationship-application-new-9",
+          "test_id": "pt-dbms-sql-6-identifying-relationship-application",
+          "question_text": "What does the double Room participation connection express?",
+          "options": [
+            "Every owner needs two rooms",
+            "Every capacity is unique",
+            "Every room needs its identifying owner link",
+            "All bookings must be deleted"
+          ],
+          "correct_index": 2,
+          "explanation": "The dependent minimum is mandatory in this model.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-6-identifying-relationship-application-new-10",
+          "test_id": "pt-dbms-sql-6-identifying-relationship-application",
+          "question_text": "Which test exposes an incomplete dependent-reference join?",
+          "options": [
+            "Only one room in the whole database",
+            "Only one empty owner",
+            "An unrelated description change",
+            "The same room_number under two different building identities"
+          ],
+          "correct_index": 3,
+          "explanation": "The counterexample forces the query to respect owner context.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cx-identifying-booking-match",
+      "slug": "identifying-booking-match",
+      "title": "Read booking proposals against the complete room identity",
+      "difficulty": "Easy",
+      "task": "Return proposal_id, building_id, room_number and capacity only for proposals matching a complete room identity. Preserve separate proposals.",
+      "schema_sql": "CREATE TABLE rooms (building_id INT NOT NULL, room_number INT NOT NULL, capacity INT NOT NULL, PRIMARY KEY(building_id,room_number));\nCREATE TABLE booking_proposals (proposal_id INT PRIMARY KEY, building_id INT NOT NULL, room_number INT NOT NULL);",
+      "seed_sql": "INSERT INTO rooms VALUES (7,101,30),(9,101,40),(7,102,20); INSERT INTO booking_proposals VALUES (1,7,101),(2,9,101),(3,12,101);",
+      "expected": "proposal_id\tbuilding_id\troom_number\tcapacity\n1\t7\t101\t30\n2\t9\t101\t40",
+      "ordering": "Ascending proposal_id.",
+      "constraints": [
+        "A room is identified by the complete building-room pair.",
+        "These temporary query mirrors do not themselves execute owner or booking foreign-key declarations; native MariaDB checks are recorded separately."
+      ],
+      "edge_cases": [
+        "The same partial room number can occur under different owners.",
+        "A booking can name an absent complete pair even if the local number exists elsewhere."
+      ],
+      "hints": [
+        "Match both owner and discriminator roles.",
+        "Use a guaranteed nonmissing room identity component to distinguish a matched row."
+      ],
+      "solution_sql": "SELECT p.proposal_id, r.building_id, r.room_number, r.capacity FROM booking_proposals p JOIN rooms r ON r.building_id = p.building_id AND r.room_number = p.room_number ORDER BY p.proposal_id;",
+      "explanation": "The query follows the complete dependent identity instead of treating the partial discriminator as global.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO rooms VALUES (9,101,40); INSERT INTO booking_proposals VALUES (1,7,101);",
+          "expected": ""
+        },
+        {
+          "seed_sql": "INSERT INTO rooms VALUES (7,101,30); INSERT INTO booking_proposals VALUES (2,7,101),(1,7,101);",
+          "expected": "proposal_id\tbuilding_id\troom_number\tcapacity\n1\t7\t101\t30\n2\t7\t101\t30"
+        }
+      ]
+    },
+    {
+      "id": "cx-identifying-booking-audit",
+      "slug": "identifying-booking-audit",
+      "title": "Find unsupported owner-dependent booking references",
+      "difficulty": "Medium",
+      "task": "Return proposal_id, building_id and room_number for proposals with no matching complete Room identity. A room with the same local number in another building is not a match.",
+      "schema_sql": "CREATE TABLE rooms (building_id INT NOT NULL, room_number INT NOT NULL, capacity INT NOT NULL, PRIMARY KEY(building_id,room_number));\nCREATE TABLE booking_proposals (proposal_id INT PRIMARY KEY, building_id INT NOT NULL, room_number INT NOT NULL);",
+      "seed_sql": "INSERT INTO rooms VALUES (7,101,30),(9,101,40); INSERT INTO booking_proposals VALUES (1,7,101),(2,7,102),(3,12,101),(4,9,101);",
+      "expected": "proposal_id\tbuilding_id\troom_number\n2\t7\t102\n3\t12\t101",
+      "ordering": "Ascending proposal_id.",
+      "constraints": [
+        "A room is identified by the complete building-room pair.",
+        "These temporary query mirrors do not themselves execute owner or booking foreign-key declarations; native MariaDB checks are recorded separately."
+      ],
+      "edge_cases": [
+        "The same partial room number can occur under different owners.",
+        "A booking can name an absent complete pair even if the local number exists elsewhere."
+      ],
+      "hints": [
+        "Match both owner and discriminator roles.",
+        "Use a guaranteed nonmissing room identity component to distinguish a matched row."
+      ],
+      "solution_sql": "SELECT p.proposal_id, p.building_id, p.room_number FROM booking_proposals p LEFT JOIN rooms r ON r.building_id = p.building_id AND r.room_number = p.room_number WHERE r.building_id IS NULL ORDER BY p.proposal_id;",
+      "explanation": "The query follows the complete dependent identity instead of treating the partial discriminator as global.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO rooms VALUES (9,101,40); INSERT INTO booking_proposals VALUES (1,7,101);",
+          "expected": "proposal_id\tbuilding_id\troom_number\n1\t7\t101"
+        },
+        {
+          "seed_sql": "INSERT INTO rooms VALUES (7,101,30); INSERT INTO booking_proposals VALUES (1,7,101);",
+          "expected": ""
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-6-identifying-relationship-1",
+      "test_id": "pt-dbms-sql-6-identifying-relationship",
+      "question_text": "What is an identifying relationship?",
+      "options": [
+        "Any relationship between two strong entities",
+        "The special relationship connecting a weak entity set to its owner entity set, providing the identification the weak entity lacks on its own",
+        "A relationship that has no cardinality",
+        "A synonym for a recursive relationship"
+      ],
+      "correct_index": 1,
+      "explanation": "The identifying relationship supplies the owner's key that, combined with the partial key, uniquely identifies the weak entity.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-6-identifying-relationship-2",
+      "test_id": "pt-dbms-sql-6-identifying-relationship",
+      "question_text": "How is an identifying relationship drawn in an ER diagram?",
+      "options": [
+        "As a single-line diamond",
+        "As a double-line diamond",
+        "As a dashed oval",
+        "As a rectangle"
+      ],
+      "correct_index": 1,
+      "explanation": "A double-line diamond pairs with the double-line rectangle of the weak entity to visually flag the identifying relationship.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-6-identifying-relationship-3",
+      "test_id": "pt-dbms-sql-6-identifying-relationship",
+      "question_text": "What is the participation of the weak entity's side in its identifying relationship?",
+      "options": [
+        "Always partial",
+        "Always total, because the weak entity cannot exist or be identified without this link",
+        "It varies case by case with no structural rule",
+        "It depends on the cardinality only"
+      ],
+      "correct_index": 1,
+      "explanation": "Total participation on the weak entity's side is a structural requirement, not a case-by-case design choice.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-6-identifying-relationship-4",
+      "test_id": "pt-dbms-sql-6-identifying-relationship",
+      "question_text": "Can the identifying relationship between a weak entity and its owner be many-to-many (M:N)?",
+      "options": [
+        "Yes, this is the most common case",
+        "No — it must not be M:N, since a weak entity needing multiple owners for identity would produce an ambiguous composite key",
+        "Yes, but only for recursive weak entities",
+        "M:N does not apply to identifying relationships at all"
+      ],
+      "correct_index": 1,
+      "explanation": "An M:N identifying relationship would break the composite key logic (owner key + partial key), so it is always structured as (typically) 1:N from owner to weak entity.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-6-identifying-relationship-5",
+      "test_id": "pt-dbms-sql-6-identifying-relationship",
+      "question_text": "Can a weak entity participate in relationships other than its identifying relationship?",
+      "options": [
+        "No, a weak entity may only ever appear in its identifying relationship",
+        "Yes — it can have other ordinary relationships to other entity sets, in addition to exactly one identifying relationship with its owner",
+        "Only if it becomes a strong entity first",
+        "Only in EER diagrams, never in plain ER diagrams"
+      ],
+      "correct_index": 1,
+      "explanation": "The identifying relationship is specifically the one supplying the owner's key; a weak entity can still have additional unrelated relationships.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-6-identifying-relationship-6",
+      "test_id": "pt-dbms-sql-6-identifying-relationship",
+      "question_text": "How does the identifying relationship relate to the concept of a weak entity's key?",
+      "options": [
+        "It has no relation to the key at all",
+        "It supplies the owner entity's primary key, which combines with the weak entity's partial key to form its full composite key",
+        "It replaces the need for a partial key entirely",
+        "It only matters for recursive relationships"
+      ],
+      "correct_index": 1,
+      "explanation": "This relationship is precisely what lets the weak entity's composite key (owner key + partial key) be formed.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-6-identifying-relationship-7",
+      "test_id": "pt-dbms-sql-6-identifying-relationship",
+      "question_text": "In the Employee/Dependent example, what is the identifying relationship most likely called, and what is its degree?",
+      "options": [
+        "Manages; degree 1 (recursive)",
+        "Belongs_To (or similar), connecting Dependent to Employee; degree 2 (binary)",
+        "Offers; degree 3 (ternary)",
+        "Enrolls_In; degree 2 (binary)"
+      ],
+      "correct_index": 1,
+      "explanation": "The identifying relationship links the weak entity (Dependent) to its owner (Employee) — a binary, degree-2 relationship.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-6-identifying-relationship-8",
+      "test_id": "pt-dbms-sql-6-identifying-relationship",
+      "question_text": "Which statement correctly separates 'weak entity' from 'identifying relationship'?",
+      "options": [
+        "They are exactly the same construct with two names",
+        "A weak entity is the entity set lacking its own full key; the identifying relationship is the specific association that links it to its owner and supplies that missing key information",
+        "An identifying relationship is a type of attribute",
+        "A weak entity can exist without any identifying relationship at all"
+      ],
+      "correct_index": 1,
+      "explanation": "Weak entity (6.4) and identifying relationship (6.16) are two distinct but tightly linked concepts: one is the entity set, the other is the connecting relationship that makes its identification possible.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "coordinator",
+    "independent_review": "unavailable; no agent tools",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Definitions and examples checked against questions; no plagiarism certification.",
+    "existing_question_corrections": [
+      "tq-dbms-sql-6-identifying-relationship-2",
+      "tq-dbms-sql-6-identifying-relationship-4",
+      "tq-dbms-sql-6-identifying-relationship-5"
+    ],
+    "canonical_answer_indices_preserved": true
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-6-identifying-relationship",
+    "original_note_sha256": "e24c3e1bef8555b674f4c4495ff26e964023f5fc6c0038fb6eade06169e00ac8",
+    "status": "paired migration prepared; not applied"
+  },
+  "diagrams": [
+    {
+      "kind": "weak-entity-er",
+      "caption": "Contains supplies the owner context for Room identification",
+      "description": "In this single-owner Chen-style example, Building has independent building_id, Room has local room_number, and identifying Contains completes the Room identity. Room participates totally and has exactly one owner; Building can own zero or many rooms.",
+      "owner": "Building",
+      "ownerKey": "building_id",
+      "relationship": "Contains",
+      "dependent": "Room",
+      "partialKey": "room_number"
+    },
+    {
+      "kind": "table",
+      "caption": "Ordinary bookings must retain the complete dependent identity",
+      "description": "Matching on room_number alone would confuse the first two rooms. The proposed Building 12 room is absent even though room number 101 exists elsewhere.",
+      "columns": [
+        "Proposal",
+        "Complete room reference",
+        "Outcome"
+      ],
+      "rows": [
+        [
+          "1",
+          "(7, 101)",
+          "Match capacity 30"
+        ],
+        [
+          "2",
+          "(9, 101)",
+          "Match capacity 40"
+        ],
+        [
+          "3",
+          "(12, 101)",
+          "No matching room; report unsupported reference"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "coordinator checked owner-context inheritance, total dependent participation and complete-pair booking references",
+    "server_rendering": "passed",
+    "browser_rendering": "unverified",
+    "independent_review": "unavailable; no agent tools",
+    "server_rendering_evidence": "2026-10-29: comprehensive website suite passed 1173 tests with 12 skips; actual LessonBlock covered all 100 authored packages."
+  },
+  "sql_verification": {
+    "engine": "11.8.6-MariaDB-0+deb13u1 from Debian",
+    "scope": "MariaDB compatibility execution; exact MySQL 8.4/provider execution unverified",
+    "fingerprint": "2a8f3d60e23ea7b95fb50d537527459be95f639731fa635f93de48c52f6cff6d",
+    "cases": [
+      {
+        "problem": "identifying-booking-match",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "identifying-booking-match",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "identifying-booking-match",
+        "case": 2,
+        "passed": true
+      },
+      {
+        "problem": "identifying-booking-audit",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "identifying-booking-audit",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "identifying-booking-audit",
+        "case": 2,
+        "passed": true
+      }
+    ],
+    "all_passed": true
+  }
+}

@@ -1,0 +1,606 @@
+{
+  "source_ref": "chapter-12-select-and-filtering/between",
+  "slug": "between",
+  "title": "BETWEEN",
+  "description": "Use SQL BETWEEN and NOT BETWEEN with inclusive endpoints, NULL and reversed bounds; compare closed ranges with half-open date and time windows.",
+  "dialect": "MySQL 8.4",
+  "notes": "## A closed interval includes both boundaries\n\nBETWEEN tests whether a value falls within an inclusive interval. If an equipment budget admits prices from two hundred through six hundred, a price of exactly two hundred qualifies and a price of exactly six hundred also qualifies. The operator is a concise way to express those two inclusive comparisons when the operands have a suitable shared comparison domain.\n\nTranslate the requirement before choosing the syntax. Everyday language can use between loosely, sometimes implying that endpoints are excluded. SQL does not infer that intention. If a rule requires strictly more than two hundred and strictly less than six hundred, write the corresponding strict comparisons instead. The convenient keyword should follow the business interval rather than redefine it.\n\n## Read the three operands deliberately\n\nThe tested value comes first, then the lower bound, then the upper bound. For correctly typed numeric values, the condition means the value is at least the lower bound and at most the upper bound. The AND inside BETWEEN connects its two bounds; it does not introduce an unrelated independent eligibility condition. A later AND can combine the whole interval predicate with another requirement.\n\nFor example, quantity between two and six can be combined with a known equipment category. Both interval endpoints remain included. Parentheses around the interval are optional in many simple forms but can improve readability in compound logic. When a condition contains several ranges and alternatives, group the policy explicitly so a category exception does not accidentally bypass the quantity restriction.\n\n```sql\nSELECT request_id, quantity\nFROM equipment_requests\nWHERE quantity BETWEEN 2 AND 6\nORDER BY request_id;\n```\n\n## Equal bounds describe one value\n\nAn interval whose lower and upper bounds are both four is valid. For ordinary known comparable values, it admits exactly four. It is an unusual way to express equality but demonstrates that inclusiveness is meaningful even when an interval has zero width. Do not reject equal bounds merely because an interface label suggests the minimum and maximum must always differ.\n\nReversed bounds have different semantics. For known numeric values, a lower bound of six and an upper bound of two produces no qualifying value under ordinary BETWEEN. MySQL does not automatically swap the supplied bounds. An interface may choose to reject a reversed request or normalize it under an explicit contract, but that is an application decision before SQL is constructed.\n\n## Unknown operands need three-valued reasoning\n\nA [NULL](/learning/dbms-sql-tutorial/null-values) tested value does not satisfy an ordinary known numeric range in WHERE. With known non-NULL bounds, its comparisons are unknown and the combined result is UNKNOWN. WHERE excludes it. If missing quantities belong in an investigation report, add a deliberate IS NULL branch instead of assume BETWEEN treats absence as zero or an unbounded value.\n\nNULL bounds need additional care. A compound interval can be FALSE when one comparison is definitely false even if the other is unknown. Do not memorize the blanket claim that any NULL anywhere always forces every BETWEEN expression to UNKNOWN. Analyze the logical comparisons under the actual type rules. The exercises keep bounds known so their missing-value policy remains straightforward and testable.\n\n## Negating the interval keeps endpoints out\n\nNOT BETWEEN describes values outside the closed interval when the operands are known and comparably typed. For two through six, quantities below two or above six qualify. Quantities exactly two and six are inside the original interval and therefore excluded by the negated predicate. A NULL quantity still does not become a known outside value simply because the predicate is negated.\n\nIf an exception report needs both outside values and missing measurements, combine NOT BETWEEN with IS NULL. Keep that choice explicit in the report description. Confirmed out-of-range data and absent data can require different correction actions, so returning a classification alongside the identity may be more useful than collapsing them into one unexplained invalid category.\n\n## Calendar dates and instants have different boundaries\n\nA [DATE](/learning/dbms-sql-tutorial/data-types) interval can express a closed range of calendar dates. When the stored value includes a time, a date-only literal used as an upper bound can represent midnight at the beginning of that date. An inclusive comparison then admits that instant but may exclude the rest of the same calendar day. The SQL is following its operands, even if the English requirement intended the entire day.\n\nThis is a frequent source of missing end-of-month records. A range from the first day through the thirty-first, written using date-only endpoints against DATETIME, does not necessarily include an event at noon on the thirty-first. Test midnight, midday and a fractional time on the final date. Those cases reveal a boundary problem that examples using only the first day never expose.\n\n## Half-open time windows avoid invented end instants\n\nFor a whole calendar month of timestamp-like values, an inclusive start and exclusive next-month start often communicates the intent more robustly. The comparison admits every representable time before the next boundary without selecting an artificial final second. It also remains understandable if the column's fractional precision changes. BETWEEN is not required merely because the requirement describes a time range.\n\n```sql\nSELECT event_id, occurred_at\nFROM inventory_events\nWHERE occurred_at >= '2026-01-01 00:00:00'\n  AND occurred_at < '2026-02-01 00:00:00'\nORDER BY event_id;\n```\n\nState which time zone defines the month. TIMESTAMP interpretation can depend on session time-zone settings, while DATETIME has different storage semantics. A campus-local reporting month and a UTC month can select different instants. A fixed synthetic DATETIME exercise can isolate interval reasoning, but it does not establish a production time-zone conversion policy for every event source.\n\n## Comparable text still follows collation\n\nBETWEEN can compare text, but the range follows text comparison semantics rather than a human category list. Labels between Camera and Tripod do not mean only those two categories. Other strings may fall within the interval according to their collation. Use IN for an explicit list of permitted categories; use a text range only when that ordering actually defines the requirement.\n\nCollation can affect case, accent and padding comparisons. Numeric-looking text can also order differently from numeric quantities, and mixing operand types may trigger conversion. Align the tested value and bounds with the intended domain. Avoid claiming that every string range behaves identically across schemas or that quoting numeric bounds always preserves the intended numeric comparison.\n\n## Bound parameters still require a contract\n\nA search endpoint should validate the supplied minimum and maximum, choose the intended types and decide what missing bounds mean. One-sided filtering may be supported, but it needs explicit construction such as a lower-bound comparison without an upper bound. Passing NULL to BETWEEN is not an automatic way to express an open-ended interval.\n\nBind accepted values using the client's supported parameter mechanism. Do not concatenate untrusted bounds into SQL text. Binding protects representation but does not resolve a reversed interval, select the time zone or authorize access to the underlying rows. Those responsibilities stay at their trusted boundaries, and the query applies the requested range only within the permitted data scope.\n\n## Test adjacent intervals and exact boundaries\n\nClosed intervals that share an endpoint both include that endpoint. Two adjacent time reports using inclusive January-end and inclusive February-start bounds can overlap if the endpoint is the same instant. Half-open intervals with a shared boundary admit that instant only in the later interval. Choose interval shapes that match whether overlap is allowed and whether every event must belong to exactly one reporting period.\n\nThe first exercise preserves the existing Mid-Range Prices identity, schema and sample, adding fixtures at both price endpoints. The second selects a full month of DATETIME events using an explicit half-open window. Both include near-boundary alternatives and missing values. Explain each included and excluded event in terms of its exact value, then confirm that the final ordering is deterministic and independent of how the database physically retrieves the matching rows.\n\n\nThe retained price band uses two hundred and one thousand, while the earlier quantity example uses two and six. The numeric values differ, but both are closed intervals. Follow each task’s stated operands rather than copy bounds from a nearby illustration. A correct reference solution preserves the original product properties and ordered output while testing the requested price domain.\n",
+  "references": [
+    {
+      "title": "MySQL 8.4 BETWEEN and comparison semantics",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/comparison-operators.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-12-between",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-12-between-1",
+          "test_id": "pt-dbms-sql-12-between",
+          "question_text": "Does ordinary numeric BETWEEN include its endpoints?",
+          "options": [
+            "Neither endpoint",
+            "Yes, both lower and upper endpoints",
+            "Only the lower endpoint",
+            "Only the upper endpoint"
+          ],
+          "correct_index": 1,
+          "explanation": "It describes a closed interval.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-12-between-2",
+          "test_id": "pt-dbms-sql-12-between",
+          "question_text": "Which explicit numeric condition matches quantity BETWEEN 2 AND 6?",
+          "options": [
+            "quantity>2 AND quantity<6",
+            "quantity>=2 AND quantity<=6",
+            "quantity>=2 OR quantity<=6",
+            "quantity=2 OR quantity=6"
+          ],
+          "correct_index": 1,
+          "explanation": "Both inclusive comparisons must hold.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-12-between-3",
+          "test_id": "pt-dbms-sql-12-between",
+          "question_text": "Can BETWEEN be used with suitably typed dates?",
+          "options": [
+            "No, only integers are permitted",
+            "Yes, the values use their comparison semantics",
+            "Only with a separate RANGE keyword",
+            "Only when both dates match"
+          ],
+          "correct_index": 1,
+          "explanation": "Temporal boundaries still need precise interpretation.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-12-between-4",
+          "test_id": "pt-dbms-sql-12-between",
+          "question_text": "For known numeric bounds, what does BETWEEN 6 AND 2 do?",
+          "options": [
+            "Automatically swaps the bounds",
+            "No known numeric value can satisfy the reversed interval",
+            "Always raises a syntax error",
+            "Matches every row"
+          ],
+          "correct_index": 1,
+          "explanation": "MySQL ordinary BETWEEN does not normalize reversed input.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-12-between-5",
+          "test_id": "pt-dbms-sql-12-between",
+          "question_text": "Why can a date-only final-day bound miss DATETIME events?",
+          "options": [
+            "BETWEEN forbids all temporal columns",
+            "It can represent midnight at the beginning of that day",
+            "It always becomes the next month",
+            "Every date literal means noon"
+          ],
+          "correct_index": 1,
+          "explanation": "Later times on the same calendar date can exceed the bound.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-12-between-6",
+          "test_id": "pt-dbms-sql-12-between",
+          "question_text": "For known quantity, what does NOT BETWEEN 2 AND 6 admit?",
+          "options": [
+            "Values below 2 or above 6",
+            "Only 2 and 6",
+            "Every value including NULL",
+            "Only values strictly inside the interval"
+          ],
+          "correct_index": 0,
+          "explanation": "The original endpoints remain inside and are excluded by negation.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-12-between-7",
+          "test_id": "pt-dbms-sql-12-between",
+          "question_text": "What does BETWEEN 4 AND 4 admit for known numeric values?",
+          "options": [
+            "No values",
+            "Exactly 4",
+            "Every value",
+            "Only NULL"
+          ],
+          "correct_index": 1,
+          "explanation": "Equal inclusive bounds define a valid singleton interval.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-12-between-8",
+          "test_id": "pt-dbms-sql-12-between",
+          "question_text": "Why translate everyday uses of between carefully?",
+          "options": [
+            "SQL always guesses the intended endpoints",
+            "The intended endpoint policy may differ from SQL inclusiveness",
+            "All English intervals mean exclusive",
+            "BETWEEN ignores its bounds"
+          ],
+          "correct_index": 1,
+          "explanation": "The requirement must specify endpoint meaning.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-12-between-new-9",
+          "test_id": "pt-dbms-sql-12-between",
+          "question_text": "Does a NULL quantity qualify for a known numeric BETWEEN range in WHERE?",
+          "options": [
+            "No, the predicate is UNKNOWN",
+            "Yes, it becomes zero",
+            "Yes, it becomes the lower bound",
+            "It always raises an exception"
+          ],
+          "correct_index": 0,
+          "explanation": "WHERE retains only TRUE.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-12-between-new-10",
+          "test_id": "pt-dbms-sql-12-between",
+          "question_text": "Does NOT BETWEEN automatically include NULL quantities?",
+          "options": [
+            "Yes, every missing value is outside",
+            "No, negation does not make an unknown range result true",
+            "Only with ORDER BY",
+            "Only when bounds differ"
+          ],
+          "correct_index": 1,
+          "explanation": "Add an explicit missingness branch when the contract requires it.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-12-between-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-12-between-application-new-1",
+          "test_id": "pt-dbms-sql-12-between-application",
+          "question_text": "What expresses January as a full DATETIME month?",
+          "options": [
+            "Between January 1 and January 31 midnight only",
+            "At or after January 1 and strictly before February 1",
+            "Equal to January 31",
+            "After February 1 only"
+          ],
+          "correct_index": 1,
+          "explanation": "The half-open interval includes all final-day times.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-12-between-application-new-2",
+          "test_id": "pt-dbms-sql-12-between-application",
+          "question_text": "Why avoid an invented last fractional instant of a day?",
+          "options": [
+            "SQL cannot store fractional times",
+            "Every last second is always identical",
+            "The next exclusive boundary avoids dependence on column precision",
+            "A time range needs only one bound"
+          ],
+          "correct_index": 2,
+          "explanation": "Use a robust interval shape for timestamp-like values.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-12-between-application-new-3",
+          "test_id": "pt-dbms-sql-12-between-application",
+          "question_text": "What should an API do with reversed numeric bounds?",
+          "options": [
+            "Assume MySQL silently sorts them",
+            "Silently remove every filter",
+            "Always convert them to NULL",
+            "Apply its explicit reject-or-normalize contract"
+          ],
+          "correct_index": 3,
+          "explanation": "Normalization is an application decision.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-12-between-application-new-4",
+          "test_id": "pt-dbms-sql-12-between-application",
+          "question_text": "How should a missing maximum be represented in an open-ended search?",
+          "options": [
+            "Build the supported one-sided condition deliberately",
+            "Pass NULL as an unlimited upper bound",
+            "Use a random large number without a contract",
+            "Reverse the bounds"
+          ],
+          "correct_index": 0,
+          "explanation": "NULL is not automatically positive infinity.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-12-between-application-new-5",
+          "test_id": "pt-dbms-sql-12-between-application",
+          "question_text": "Why is text BETWEEN not a substitute for two named allowed categories?",
+          "options": [
+            "It always means exactly the two endpoints",
+            "It admits an ordering interval, potentially including other strings",
+            "Text has no comparison rules",
+            "It always converts labels to dates"
+          ],
+          "correct_index": 1,
+          "explanation": "Use explicit membership for a category list.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-12-between-application-new-6",
+          "test_id": "pt-dbms-sql-12-between-application",
+          "question_text": "What can affect text interval membership?",
+          "options": [
+            "Only the query line breaks",
+            "Only the number of indexes",
+            "Types and collation",
+            "Only the file encoding of the SQL comment"
+          ],
+          "correct_index": 2,
+          "explanation": "Comparison semantics determine ordering.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-12-between-application-new-7",
+          "test_id": "pt-dbms-sql-12-between-application",
+          "question_text": "Two closed intervals share the same endpoint. What can happen?",
+          "options": [
+            "It belongs to neither",
+            "The database raises an overlap error",
+            "BETWEEN silently changes one interval",
+            "That endpoint belongs to both intervals"
+          ],
+          "correct_index": 3,
+          "explanation": "Use half-open periods if exclusive membership is required.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-12-between-application-new-8",
+          "test_id": "pt-dbms-sql-12-between-application",
+          "question_text": "What should define a reporting month for TIMESTAMP data?",
+          "options": [
+            "The intended time zone and interval boundaries",
+            "Only the displayed month name",
+            "Only the table name",
+            "An unspecified connection default forever"
+          ],
+          "correct_index": 0,
+          "explanation": "Different zones can describe different instants.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-12-between-application-new-9",
+          "test_id": "pt-dbms-sql-12-between-application",
+          "question_text": "Does any NULL operand force every BETWEEN expression to UNKNOWN in all cases?",
+          "options": [
+            "Yes, without exception",
+            "No, a definite false comparison can determine the conjunction",
+            "No, NULL is always zero",
+            "No, NULL is always greater than everything"
+          ],
+          "correct_index": 1,
+          "explanation": "Analyze the underlying logic rather than use a blanket rule.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-12-between-application-new-10",
+          "test_id": "pt-dbms-sql-12-between-application",
+          "question_text": "Which fixture exposes a mistaken exclusive endpoint?",
+          "options": [
+            "Only midpoint quantities",
+            "Only unrelated text",
+            "A quantity exactly equal to the lower or upper bound",
+            "No source rows"
+          ],
+          "correct_index": 2,
+          "explanation": "Boundary rows distinguish inclusive from strict comparisons.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cp-dbms-sql-mid-range-prices",
+      "slug": "mid-range-prices",
+      "title": "Mid-Range Prices",
+      "difficulty": "Easy",
+      "task": "Return id,name,price for products priced from 200 through 1000 inclusive, ordered by id. Preserve the original required-price schema and do not add category or stock conditions.",
+      "schema_sql": "CREATE TABLE products (\n  id INTEGER PRIMARY KEY,\n  name TEXT NOT NULL,\n  category TEXT NOT NULL,\n  price INTEGER NOT NULL,\n  stock INTEGER\n);",
+      "seed_sql": "INSERT INTO products (id, name, category, price, stock) VALUES\n(1, 'ProLaptop', 'Electronics', 85000, 12),\n(2, 'Notebook', 'Stationery', 40, NULL),\n(3, 'Python Basics', 'Books', 350, 5),\n(4, 'ProPhone', 'Electronics', 45000, 0),\n(5, 'Novel', 'Books', 220, NULL),\n(6, 'Desk Lamp', 'Home', 900, 8);",
+      "expected": "id\tname\tprice\n3\tPython Basics\t350\n5\tNovel\t220\n6\tDesk Lamp\t900",
+      "ordering": "As explicitly ordered in the result query.",
+      "constraints": [
+        "Use only the supplied synthetic tables and requested transition.",
+        "Preserve unrelated rows."
+      ],
+      "edge_cases": [
+        "Exactly 200 and 1000 qualify.",
+        "Prices 199 and 1001 do not qualify."
+      ],
+      "hints": [
+        "Use both inclusive price endpoints.",
+        "Keep all original output roles and id ordering."
+      ],
+      "solution_sql": "SELECT id,name,price FROM products WHERE price BETWEEN 200 AND 1000 ORDER BY id;",
+      "explanation": "The closed interval includes exactly 200 and 1000. Category and stock do not restrict this retained requirement.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO products (id, name, category, price, stock) VALUES\n(1, 'ProTablet', 'Electronics', 32000, 4),\n(2, 'Pencil Set', 'Stationery', 60, NULL),\n(3, 'SQL Guide', 'Books', 500, 10),\n(4, 'ProSpeaker', 'Electronics', 6000, 0);",
+          "expected": "id\tname\tprice\n3\tSQL Guide\t500"
+        },
+        {
+          "seed_sql": "INSERT INTO products VALUES (1,'Low','Books',200,0),(2,'High','Books',1000,0),(3,'Below','Books',199,0),(4,'Above','Books',1001,0);",
+          "expected": "id\tname\tprice\n1\tLow\t200\n2\tHigh\t1000"
+        },
+        {
+          "seed_sql": "INSERT INTO products VALUES (1,'Outside','Books',1001,0);",
+          "expected": ""
+        }
+      ],
+      "existing_problem": true,
+      "original_description_md5": "3df514e7353b7a1075dd32fe63c961e8",
+      "original_check_sql": "",
+      "check_sql": ""
+    },
+    {
+      "id": "cx-between-full-month-window",
+      "slug": "between-full-month-window",
+      "title": "Capture a full DATETIME month",
+      "difficulty": "Medium",
+      "task": "Return event_id for every non-NULL occurred_at in January 2026. Use an inclusive January 1 boundary and an exclusive February 1 boundary. occurred_at is a synthetic DATETIME(6), with no time-zone conversion in this task. Order by event_id.",
+      "schema_sql": "CREATE TABLE inventory_events(event_id INT PRIMARY KEY,occurred_at DATETIME(6));",
+      "seed_sql": "INSERT INTO inventory_events VALUES (1,'2025-12-31 23:59:59.999999'),(2,'2026-01-01 00:00:00'),(3,'2026-01-31 12:00:00'),(4,'2026-01-31 23:59:59.999999'),(5,'2026-02-01 00:00:00'),(6,NULL);",
+      "expected": "event_id\n2\n3\n4",
+      "ordering": "As explicitly ordered in the result query.",
+      "constraints": [
+        "Use only the supplied synthetic tables and requested transition.",
+        "Preserve unrelated rows."
+      ],
+      "edge_cases": [
+        "A fractional instant on the final day qualifies.",
+        "The first February instant does not qualify."
+      ],
+      "hints": [
+        "Do not use January 31 midnight as the final-day ceiling.",
+        "Filter before February 1 rather than guess the last second."
+      ],
+      "solution_sql": "SELECT event_id FROM inventory_events WHERE occurred_at>='2026-01-01 00:00:00' AND occurred_at<'2026-02-01 00:00:00' ORDER BY event_id;",
+      "explanation": "The next-month exclusive bound includes every representable January time and excludes February midnight without an artificial final fractional instant.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO inventory_events VALUES (8,'2026-01-31 00:00:00'),(9,'2026-02-01 00:00:00.000001');",
+          "expected": "event_id\n8"
+        },
+        {
+          "seed_sql": "INSERT INTO inventory_events VALUES (1,NULL),(2,'2026-02-01 00:00:00');",
+          "expected": ""
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-12-between-1",
+      "test_id": "pt-dbms-sql-12-between",
+      "question_text": "Is BETWEEN inclusive or exclusive of its endpoints?",
+      "options": [
+        "Exclusive of both endpoints",
+        "Inclusive of both endpoints",
+        "Inclusive of the lower bound only",
+        "Inclusive of the upper bound only"
+      ],
+      "correct_index": 1,
+      "explanation": "BETWEEN low AND high includes both low and high themselves.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-12-between-2",
+      "test_id": "pt-dbms-sql-12-between",
+      "question_text": "Which expression is exactly equivalent to `price BETWEEN 200 AND 1000`?",
+      "options": [
+        "price > 200 AND price < 1000",
+        "price >= 200 AND price <= 1000",
+        "price >= 200 OR price <= 1000",
+        "price = 200 OR price = 1000"
+      ],
+      "correct_index": 1,
+      "explanation": "BETWEEN is shorthand for the inclusive >= and <= combination.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-12-between-3",
+      "test_id": "pt-dbms-sql-12-between",
+      "question_text": "Can BETWEEN be used with date or string values, not just numbers?",
+      "options": [
+        "No, only numeric types are supported",
+        "Yes — BETWEEN works on any comparable type, including dates and strings",
+        "Only with the DATE type specifically",
+        "BETWEEN requires exactly two numeric arguments"
+      ],
+      "correct_index": 1,
+      "explanation": "BETWEEN applies to any type that supports ordering comparisons.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-12-between-4",
+      "test_id": "pt-dbms-sql-12-between",
+      "question_text": "What happens if the low value in BETWEEN is greater than the high value?",
+      "options": [
+        "An error is raised",
+        "It silently matches zero rows, since no value can satisfy both conditions",
+        "It automatically swaps the two values",
+        "It matches every row instead"
+      ],
+      "correct_index": 1,
+      "explanation": "A reversed range simply can never be satisfied, so the result is empty rather than an error.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-12-between-5",
+      "test_id": "pt-dbms-sql-12-between",
+      "question_text": "What is a subtle risk of using `order_date BETWEEN '2026-01-01' AND '2026-01-31'` on a TIMESTAMP column?",
+      "options": [
+        "No risk — this always captures the entire month correctly",
+        "'2026-01-31' implies midnight at the start of that day, so timestamps later on the 31st could be excluded",
+        "BETWEEN cannot be used with TIMESTAMP columns at all",
+        "This syntax causes a guaranteed error"
+      ],
+      "correct_index": 1,
+      "explanation": "The implicit midnight boundary on the upper date can silently exclude part of the intended day.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-12-between-6",
+      "test_id": "pt-dbms-sql-12-between",
+      "question_text": "What does NOT BETWEEN 200 AND 1000 match?",
+      "options": [
+        "Values strictly less than 200 or strictly greater than 1000 (200 and 1000 themselves are excluded from the match)",
+        "Values exactly equal to 200 or 1000",
+        "Every value with no exceptions",
+        "Only values between 200 and 1000"
+      ],
+      "correct_index": 0,
+      "explanation": "NOT BETWEEN inverts the inclusive range, excluding the boundary values themselves from the negated match.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-12-between-7",
+      "test_id": "pt-dbms-sql-12-between",
+      "question_text": "Is `age BETWEEN 18 AND 18` a valid, meaningful condition?",
+      "options": [
+        "No, this is invalid syntax",
+        "Yes — it is equivalent to age = 18, just an unusual way to write it",
+        "It always matches zero rows",
+        "BETWEEN requires the two bounds to differ"
+      ],
+      "correct_index": 1,
+      "explanation": "Using the same value for both bounds is valid and equivalent to an equality check.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-12-between-8",
+      "test_id": "pt-dbms-sql-12-between",
+      "question_text": "How is 'between' in everyday English different from SQL's BETWEEN, that's worth being careful about?",
+      "options": [
+        "There is no difference at all",
+        "Everyday English sometimes implies an exclusive range, while SQL's BETWEEN is always inclusive of both endpoints",
+        "SQL's BETWEEN is exclusive, unlike everyday English",
+        "Everyday English BETWEEN only applies to numbers"
+      ],
+      "correct_index": 1,
+      "explanation": "This mismatch in intuition is exactly why BETWEEN's inclusive-both-ends behavior is worth stating explicitly.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "coordinator",
+    "independent_review": "passed",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Independent manual review passed; native MySQL fixture evidence recorded separately; provider/browser/Supabase release gates remain separate.",
+    "existing_question_corrections": [
+      "tq-dbms-sql-12-between-1",
+      "tq-dbms-sql-12-between-2",
+      "tq-dbms-sql-12-between-3",
+      "tq-dbms-sql-12-between-4",
+      "tq-dbms-sql-12-between-5",
+      "tq-dbms-sql-12-between-6",
+      "tq-dbms-sql-12-between-7",
+      "tq-dbms-sql-12-between-8"
+    ],
+    "canonical_answer_indices_preserved": true,
+    "editorial_record": "Original snapshots retained. Questions rewritten for precise dialect and topic coverage while preserving identities and canonical answer positions; technical and independent review pending.",
+    "retained_exercise_contract": "Original id,slug,title,difficulty,schema,seed and checker preserved, with original hidden fixture plus exact boundaries.",
+    "independent_reviewer": "Codex reviewer, current 2026-10-30 session",
+    "independent_review_scope": "Read full notes, all 640 MCQ stems/options/canonical answers/explanations, 64 exercise contracts/solutions/fixtures, and all 32 diagrams. Verified retained identities/answers through source-continuity tests; SQL execution evidence is recorded separately. No external originality, provider, live application or Supabase authorization clearance.",
+    "independent_review_record": "reports/independent-review-2026-10-30.json",
+    "content_sha256": "54964bd187cb72666bac078c6462a8244734dad3f3f91f042b676ea2f45400a3"
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-12-between",
+    "original_note_sha256": "25fafe55ae97c07b0f73b1370fbbb377cf7a3ce29df0b92092a5695074678dce",
+    "status": "drafted; not yet included in prepared paired migrations"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Closed and half-open ranges have different endpoint membership",
+      "description": "The numeric band includes both ends; the month window excludes its next-period boundary.",
+      "columns": [
+        "Range",
+        "Lower boundary",
+        "Upper boundary",
+        "Shape"
+      ],
+      "rows": [
+        [
+          "Quantity 2 through 6",
+          "2 included",
+          "6 included",
+          "Closed"
+        ],
+        [
+          "January DATETIME",
+          "January 1 midnight included",
+          "February 1 midnight excluded",
+          "Half open"
+        ],
+        [
+          "NOT quantity 2 through 6",
+          "2 excluded",
+          "6 excluded",
+          "Outside the closed band"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "drafted — verification pending",
+    "server_rendering": "pending",
+    "browser_rendering": "unverified",
+    "independent_review": "pending"
+  },
+  "authoring_status": "drafted — verification pending",
+  "sql_verification": {
+    "scope": "not executed; exact MySQL/provider verification pending",
+    "all_passed": false,
+    "cases": []
+  }
+}

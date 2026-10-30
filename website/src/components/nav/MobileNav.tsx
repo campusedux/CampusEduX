@@ -35,12 +35,14 @@ export function MobileNav() {
         type="button"
         onClick={() => setOpen(true)}
         aria-label="Open menu"
+        aria-haspopup="dialog"
+        aria-expanded={open}
         className="inline-flex h-11 w-11 items-center justify-center rounded-lg text-ink transition hover:bg-surface sm:h-9 sm:w-9 lg:hidden"
       >
         <Menu className="h-5 w-5" />
       </button>
 
-      <Drawer open={open} onClose={() => setOpen(false)} side="left">
+      <Drawer open={open} onClose={() => setOpen(false)} side="left" ariaLabel="Menu">
         {/* Gradient profile header */}
         <div className="relative overflow-hidden bg-gradient-to-br from-primary via-primary to-accent-violet px-5 pb-6 pt-12 text-white">
           <span aria-hidden className="pointer-events-none absolute -right-10 -top-10 h-40 w-40 rounded-full bg-white/10" />
@@ -70,7 +72,7 @@ export function MobileNav() {
         </div>
 
         {/* Menu */}
-        <nav className="px-3 py-3">
+        <nav aria-label="Main menu" className="px-3 py-3">
           {items.map((item) => {
             const active = isActive(item.href);
             const Icon = item.icon;
@@ -78,6 +80,9 @@ export function MobileNav() {
               <Link
                 key={item.label}
                 href={item.href}
+                prefetch={item.href === "/compiler" ? false : undefined}
+                aria-current={active ? "page" : undefined}
+                onClick={() => setOpen(false)}
                 className={cn(
                   "mb-0.5 flex items-center justify-between rounded-xl px-3 py-2.5",
                   active ? "bg-primary-50" : "hover:bg-surface",

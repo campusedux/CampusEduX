@@ -1,0 +1,512 @@
+{
+  "source_ref": "chapter-23-concurrency-control/dirty-read",
+  "slug": "dirty-read",
+  "title": "Dirty Read",
+  "description": "Identify dirty reads precisely, distinguish later commit from abort, and trace InnoDB isolation, MVCC, recovery and two-session failure experiments.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Identify an observation made before its writer commits\n\nA dirty read occurs when one transaction reads a value written by another transaction that has not committed. The read is dirty at that moment regardless of whether the writer eventually commits or aborts. A later abort makes the danger especially visible: a decision was based on a value that never became part of the committed history. Do not define dirty reads only as reads from transactions already known to abort.\n\nImagine an equipment-credit balance beginning at one thousand. Transaction one subtracts one hundred while checking a request, but has not approved or committed that request. Transaction two observes nine hundred and uses it in an eligibility decision. If transaction one rolls back, the committed balance returns to one thousand while the second workflow may already have acted on the temporary reduction.\n\n## Write the operation order and the observed value\n\nUse r1(A) for transaction one's read of item A, w1(A=900) for its write and c1 or a1 for commit or abort. The history r1(A=1000), w1(A=900), r2(A=900), a1 contains a dirty read by transaction two. The defining relationship is that r2 observed the version produced by w1 before c1. Wall-clock overlap alone does not establish that read-from relationship.\n\n| Step | Owner | Operation | Committed balance |\n|---|---|---|---|\n| 1 | T1 | Write provisional900 | Still1000 |\n| 2 | T2 | Read provisional900 | Still1000 |\n| 3 | T1 | Abort |1000 |\n\nA read that happens after a physical write can still observe an older committed version under multiversion concurrency control. Record the actual value and version source before naming the anomaly. A simplified chronological list that omits what the reader saw can misclassify a normal committed-snapshot read as a dirty read.\n\n## Keep the writer outcome separate from the definition\n\nIf transaction one commits after the dirty read, that later outcome does not change the fact that transaction two read uncommitted data earlier. The exposure occurred before the outcome was known. The same early decision might appear harmless in one run and become wrong in another run where the writer aborts.\n\nConversely, if transaction one aborts before transaction two reads, and transaction two sees the restored committed value, the displayed history has no dirty read. A reader can wait or use a committed version rather than consume the provisional write. Explain the observed behavior instead of assuming that any overlap between an aborting transaction and a reader is automatically dirty.\n\n## Relate the anomaly to SQL isolation\n\nMySQL InnoDB READ UNCOMMITTED can permit dirty reads. READ COMMITTED and stronger isolation levels prevent this particular anomaly under their documented semantics, but they do not all provide identical guarantees against nonrepeatable reads, phantoms or application races. Choosing a level that prevents dirty reads does not by itself prove that a complete business workflow is serializable.\n\nThe default InnoDB level is REPEATABLE READ, but an application or driver can change session behavior. Verify the actual connection and transaction settings for an experiment. Do not change deployment isolation merely to make a classroom trace appear. A correct lesson names the engine and the configured read contract rather than claiming every database permits the same history at the same named level.\n\n## Set up a controlled two-session learning trace\n\n```sql\n-- Session A, using a disposable InnoDB fixture:\nSTART TRANSACTION;\nUPDATE equipment_credit SET balance=900 WHERE account_id=1;\n-- Keep this transaction open while session B reaches its read barrier.\nROLLBACK;\n```\n\n```sql\n-- Session B, before its next transaction starts:\nSET SESSION TRANSACTION ISOLATION LEVEL READ UNCOMMITTED;\nSTART TRANSACTION;\nSELECT balance FROM equipment_credit WHERE account_id=1;\nROLLBACK;\n```\n\nThe intended dirty-read observation requires B's SELECT to occur after A's update and before A's rollback. If B runs after rollback, the experiment tests a different history. Use explicit barriers or deliberate interactive sequencing in a disposable environment. Record both sessions' outputs and transaction outcomes. This text describes a lab protocol; it is not evidence that the protocol has been executed on any provider.\n\n## Compare committed-version and blocking strategies\n\nA system can prevent a dirty read by waiting until the writer resolves or by giving the reader a suitable committed version. Those mechanisms have different latency and freshness implications. A reader need not physically block on every competing write for dirty-read prevention to hold; multiversion systems can satisfy the requirement through version selection.\n\nStrict two-phase locking retains exclusive write locks until completion and prevents other transactions from reading those uncommitted writes through conflicting lock requests. InnoDB combines locks and multiversion behavior, so describing it only as every read waits for every writer is inaccurate. Inspect whether the statement is an ordinary consistent read or a locking read before predicting its behavior.\n\n## Analyze cascading consequences and recovery\n\nA cascadeless history requires a reader to wait for the transaction whose value it reads to commit. That rules out dirty reads in the classical model. A recoverable history has a weaker requirement: if T2 reads T1's write and later commits, T1 must commit before T2. A recoverable history can still contain an earlier dirty read.\n\nIf T1 aborts after T2 has used its uncommitted value, T2 may need to abort too. If T2 has already committed, ordinary rollback cannot cleanly retract that committed dependency. External actions are harder again: rolling back a database transaction does not unsend a message or reverse a remote physical action. Preventing the unsafe observation can matter more than trying to repair every downstream consequence afterward.\n\n## Distinguish other concurrency anomalies\n\nA nonrepeatable read concerns observing different committed values for a row across reads under a permitted interleaving. A lost update concerns one intended concurrent effect being overwritten or otherwise erased. A phantom concerns a changed qualifying population. These concepts are not synonyms for dirty reads, and their relative severity depends on the application and the particular effects involved.\n\nFor example, two transactions can both read a committed quantity ten and each overwrite it with nine after separate reservations. That can lose one intended decrement without either reading an uncommitted value. Conversely, a report can read a provisional nine that is later rolled back without writing anything itself. State the precise observation and effect rather than judging all concurrent problems from whether the final row looks plausible.\n\n## Solve a read-from classification exercise\n\nFor a beginner exercise, compare three histories. First, T1 writes nine hundred, T2 reads nine hundred and T1 commits. Second, the same read occurs but T1 aborts. Third, T1 aborts before T2 reads one thousand. The first two contain dirty reads because the observations precede the writer outcome; the third does not under the stated read-from relationship.\n\nFor an intermediate exercise, place c1 before c2 in a history where T2 already read T1 before c1. The commit ordering can make the history recoverable, but it does not erase the dirty read or make the history cascadeless. Now move r2 after c1 and describe how the relevant property changes. Keep the operation order and every outcome marker visible in the solution.\n\n## Keep diagnostic observations within their limits\n\nAn aggregate report can also observe uncommitted information. Reading several provisional rows can produce a total that never existed as a committed business state, even when every displayed row looks individually plausible. The anomaly is not restricted to selecting one account balance. Trace which versions contributed to the result before claiming a report is suitable for a binding decision.\n\nThe opposite mistake is treating every stale report as a dirty read. A replica or snapshot can return an older committed value without exposing uncommitted data. Freshness, replication lag and dirty-read prevention name different guarantees. Diagnose the actual source and lifetime of the observed value; increasing isolation indiscriminately does not explain a lagging replica or a deliberately retained snapshot.\n\n## Test the decision boundary as well as the SELECT\n\nA useful integration test controls the writer barrier, the reader barrier and the cleanup path. It checks what the reader observed, whether downstream changes occurred and what remains after the writer aborts. Merely launching two scripts together and seeing a final balance is insufficient to establish the intended dependency.\n\nContinue with [nonrepeatable reads](/learning/dbms-sql-tutorial/non-repeatable-read), [lost updates](/learning/dbms-sql-tutorial/lost-update), [recoverable schedules](/learning/dbms-sql-tutorial/recoverable-schedule) and [cascadeless schedules](/learning/dbms-sql-tutorial/cascadeless-schedule). A complete dirty-read explanation identifies the writer, reader, observed version, commit ordering and any effect that escaped the rollback boundary.",
+  "references": [
+    {
+      "title": "MySQL InnoDB isolation levels",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/innodb-transaction-isolation-levels.html"
+    },
+    {
+      "title": "MySQL consistent nonlocking reads",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/innodb-consistent-read.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-23-dirty-read",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-23-dirty-read-1",
+          "test_id": "pt-dbms-sql-23-dirty-read",
+          "question_text": "What is the defining condition of a dirty read?",
+          "options": [
+            "A transaction reads a value that was written by another transaction which has not yet committed",
+            "A transaction reads the same value twice and gets different results",
+            "A transaction reads a row that doesn't exist yet",
+            "A transaction fails to read any data at all"
+          ],
+          "correct_index": 0,
+          "explanation": "A dirty read is specifically about reading uncommitted (possibly-to-be-rolled-back) data from another in-progress transaction.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-23-dirty-read-2",
+          "test_id": "pt-dbms-sql-23-dirty-read",
+          "question_text": "In W1(A=900), R2(A=900), A1, why is T2 reading900 problematic?",
+          "options": [
+            "Because 900 is a negative number",
+            "Because T1 had not yet committed its write of 900 at that point, and T1 later aborts, meaning A never actually settled at 900 in the database's committed history",
+            "Because T2 read the value twice",
+            "Because T2's transaction ID is higher than T1's"
+          ],
+          "correct_index": 1,
+          "explanation": "T1's write was still uncommitted when T2 read it; T1's subsequent abort means the value T2 based its logic on never became a real, permanent database fact.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-23-dirty-read-3",
+          "test_id": "pt-dbms-sql-23-dirty-read",
+          "question_text": "What business risk can a dirty read introduce?",
+          "options": [
+            "It always causes the database server to crash",
+            "A workflow may make an external decision from a value whose writer later aborts.",
+            "It is impossible to prevent",
+            "It only affects read-only transactions"
+          ],
+          "correct_index": 1,
+          "explanation": "Anomaly severity depends on the application; there is no universal ranking against lost updates.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-23-dirty-read-4",
+          "test_id": "pt-dbms-sql-23-dirty-read",
+          "question_text": "Which schedule property, if enforced, directly rules out dirty reads?",
+          "options": [
+            "Recoverability alone",
+            "Cascadelessness — requiring a transaction to only read data after its writer has already committed",
+            "View serializability",
+            "Conflict serializability alone, with no other property needed"
+          ],
+          "correct_index": 1,
+          "explanation": "Cascadelessness (23.8) is defined precisely to forbid reading data from an uncommitted writer, which is exactly what prevents dirty reads.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-23-dirty-read-5",
+          "test_id": "pt-dbms-sql-23-dirty-read",
+          "question_text": "If T1 aborts BEFORE T2 ever attempts to read A, does a dirty read occur?",
+          "options": [
+            "Yes, aborts always cause dirty reads",
+            "No — T2 would simply see the restored pre-T1 value (or block, depending on locking); there is no dirty read since T2 never read the uncommitted value",
+            "Only if T2 also aborts",
+            "Only under READ UNCOMMITTED isolation"
+          ],
+          "correct_index": 1,
+          "explanation": "A dirty read requires the reader to actually observe an uncommitted value; if the writer aborts before that read occurs, there's nothing dirty for the reader to see.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-23-dirty-read-6",
+          "test_id": "pt-dbms-sql-23-dirty-read",
+          "question_text": "How does a dirty read differ from a lost update?",
+          "options": [
+            "They are identical phenomena",
+            "A dirty read observes another transaction before its outcome is committed; a lost update erases an intended concurrent effect.",
+            "A dirty read only happens with DELETE statements",
+            "A lost update always involves three or more transactions"
+          ],
+          "correct_index": 1,
+          "explanation": "A dirty read is already dirty before the writer outcome is known; the writer may later commit or abort.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-23-dirty-read-7",
+          "test_id": "pt-dbms-sql-23-dirty-read",
+          "question_text": "How is strict two-phase locking able to prevent dirty reads automatically?",
+          "options": [
+            "It disallows all read operations",
+            "T1 holds its exclusive write lock on A until it commits or aborts, so T2's read request on A is blocked until that lock is released, ensuring T2 never sees the uncommitted value",
+            "It uses timestamps instead of locks",
+            "It only applies to write operations, not reads"
+          ],
+          "correct_index": 1,
+          "explanation": "Because the writer's exclusive lock isn't released until commit/abort, any reader requesting access to that same item is forced to wait, so it can never observe the dirty (uncommitted) value.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-23-dirty-read-8",
+          "test_id": "pt-dbms-sql-23-dirty-read",
+          "question_text": "Which standard InnoDB isolation level can permit dirty reads?",
+          "options": [
+            "SERIALIZABLE",
+            "READ UNCOMMITTED",
+            "REPEATABLE READ",
+            "READ COMMITTED"
+          ],
+          "correct_index": 1,
+          "explanation": "READ UNCOMMITTED permits the anomaly; its performance trade-offs depend on workload and do not define the anomaly.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-23-dirty-read-c-new-1",
+          "test_id": "pt-dbms-sql-23-dirty-read",
+          "question_text": "T2 reads T1 before T1 commits, then T1 later commits. Was the earlier read dirty?",
+          "options": [
+            "Yes",
+            "No, later commit retroactively makes it committed",
+            "Only if T2 writes",
+            "Only if the value is negative"
+          ],
+          "correct_index": 0,
+          "explanation": "The classification depends on the writer state when the read occurred.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-23-dirty-read-c-new-2",
+          "test_id": "pt-dbms-sql-23-dirty-read",
+          "question_text": "A read follows a physical write but sees an older committed version. Is dirty-read status established?",
+          "options": [
+            "Yes, chronology alone proves it",
+            "No",
+            "Only if aliases match",
+            "Only if there is an index"
+          ],
+          "correct_index": 1,
+          "explanation": "The observed version and read-from relationship matter.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-23-dirty-read-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-23-dirty-read-c-new-3",
+          "test_id": "pt-dbms-sql-23-dirty-read-application",
+          "question_text": "Which InnoDB isolation level can permit dirty reads?",
+          "options": [
+            "READ COMMITTED",
+            "REPEATABLE READ",
+            "READ UNCOMMITTED",
+            "SERIALIZABLE"
+          ],
+          "correct_index": 2,
+          "explanation": "The weaker level permits observations of another unresolved transaction.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-23-dirty-read-c-new-4",
+          "test_id": "pt-dbms-sql-23-dirty-read-application",
+          "question_text": "Does preventing dirty reads prove every workflow is serializable?",
+          "options": [
+            "Yes",
+            "Only for stock tables",
+            "Only with two users",
+            "No"
+          ],
+          "correct_index": 3,
+          "explanation": "Other anomalies and application races need their own analysis.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-23-dirty-read-c-new-5",
+          "test_id": "pt-dbms-sql-23-dirty-read-application",
+          "question_text": "Which experiment ordering is necessary for the illustrated dirty read?",
+          "options": [
+            "A writes, B reads that write, then A resolves",
+            "A rolls back before B begins",
+            "B reads only before A writes",
+            "Both scripts finish before inspection"
+          ],
+          "correct_index": 0,
+          "explanation": "The read must occur while the writer remains uncommitted.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-23-dirty-read-c-new-6",
+          "test_id": "pt-dbms-sql-23-dirty-read-application",
+          "question_text": "Can committed-version reads prevent dirty reads without blocking on every write?",
+          "options": [
+            "No",
+            "Yes",
+            "Only for empty tables",
+            "Only with disabled transactions"
+          ],
+          "correct_index": 1,
+          "explanation": "MVCC can return an appropriate committed version.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-23-dirty-read-c-new-7",
+          "test_id": "pt-dbms-sql-23-dirty-read-application",
+          "question_text": "Does recoverability alone rule out dirty reads?",
+          "options": [
+            "Yes, always",
+            "Only for text data",
+            "No",
+            "Only after ORDER BY"
+          ],
+          "correct_index": 2,
+          "explanation": "It constrains dependent commit ordering rather than forbidding every early read.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-23-dirty-read-c-new-8",
+          "test_id": "pt-dbms-sql-23-dirty-read-application",
+          "question_text": "Which property directly forbids reading a writer before it commits in the classical model?",
+          "options": [
+            "Acyclic naming",
+            "Wide primary keys",
+            "Ascending sorting",
+            "Cascadelessness"
+          ],
+          "correct_index": 3,
+          "explanation": "Readers consume only committed predecessor values.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-23-dirty-read-c-new-9",
+          "test_id": "pt-dbms-sql-23-dirty-read-application",
+          "question_text": "Can a lost update occur without any dirty read?",
+          "options": [
+            "Yes",
+            "No, the terms are synonyms",
+            "Only if a rollback occurs",
+            "Only without primary keys"
+          ],
+          "correct_index": 0,
+          "explanation": "Two readers can start from the same committed value and later erase an intended effect.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-23-dirty-read-c-new-10",
+          "test_id": "pt-dbms-sql-23-dirty-read-application",
+          "question_text": "Does database rollback undo an already sent external message?",
+          "options": [
+            "Yes, automatically",
+            "No",
+            "Only when the message is short",
+            "Only with autocommit disabled"
+          ],
+          "correct_index": 1,
+          "explanation": "External effects do not automatically share the SQL transaction boundary.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-23-dirty-read-c-new-11",
+          "test_id": "pt-dbms-sql-23-dirty-read-application",
+          "question_text": "What should a concurrency test record besides final rows?",
+          "options": [
+            "Only query line count",
+            "Only a diagram caption",
+            "Read values, barriers and transaction outcomes",
+            "Only the browser width"
+          ],
+          "correct_index": 2,
+          "explanation": "These details establish the actual dependency and interleaving.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-23-dirty-read-c-new-12",
+          "test_id": "pt-dbms-sql-23-dirty-read-application",
+          "question_text": "Is a dirty read universally more severe than every lost update?",
+          "options": [
+            "Yes, by definition",
+            "Only in MySQL",
+            "Only for zero values",
+            "No; impact depends on the application"
+          ],
+          "correct_index": 3,
+          "explanation": "Anomaly classification does not impose a universal business-risk ranking.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [],
+  "coding_not_applicable": "Dirty reads require controlled multi-session version observations and transaction outcomes. A single-session result-only judge cannot verify the anomaly. Two solved read-from/recovery exercises and a sequenced two-session lab are included instead.",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-23-dirty-read-1",
+      "test_id": "pt-dbms-sql-23-dirty-read",
+      "question_text": "What is the defining condition of a dirty read?",
+      "options": [
+        "A transaction reads a value that was written by another transaction which has not yet committed",
+        "A transaction reads the same value twice and gets different results",
+        "A transaction reads a row that doesn't exist yet",
+        "A transaction fails to read any data at all"
+      ],
+      "correct_index": 0,
+      "explanation": "A dirty read is specifically about reading uncommitted (possibly-to-be-rolled-back) data from another in-progress transaction.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-23-dirty-read-2",
+      "test_id": "pt-dbms-sql-23-dirty-read",
+      "question_text": "In the worked example, why is T2's read of A=900 at step 4 problematic?",
+      "options": [
+        "Because 900 is a negative number",
+        "Because T1 had not yet committed its write of 900 at that point, and T1 later aborts, meaning A never actually settled at 900 in the database's committed history",
+        "Because T2 read the value twice",
+        "Because T2's transaction ID is higher than T1's"
+      ],
+      "correct_index": 1,
+      "explanation": "T1's write was still uncommitted when T2 read it; T1's subsequent abort means the value T2 based its logic on never became a real, permanent database fact.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-23-dirty-read-3",
+      "test_id": "pt-dbms-sql-23-dirty-read",
+      "question_text": "What makes a dirty read potentially more dangerous than a lost update?",
+      "options": [
+        "It always causes the database server to crash",
+        "A dirty read can corrupt a transaction's DECISION-MAKING (e.g., an irreversible side effect like approving a loan) based on data that turns out to have never been committed, whereas a lost update at least leaves self-consistent (if wrong) committed values",
+        "It is impossible to prevent",
+        "It only affects read-only transactions"
+      ],
+      "correct_index": 1,
+      "explanation": "In a lost update both writes are committed (just one overwrites the other); in a dirty read, the reading transaction may act irreversibly on data that is later proven to have never existed in the database's history.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-23-dirty-read-4",
+      "test_id": "pt-dbms-sql-23-dirty-read",
+      "question_text": "Which schedule property, if enforced, directly rules out dirty reads?",
+      "options": [
+        "Seriality",
+        "Cascadelessness — requiring a transaction to only read data after its writer has already committed",
+        "View serializability",
+        "Conflict serializability alone, with no other property needed"
+      ],
+      "correct_index": 1,
+      "explanation": "Cascadelessness (23.8) is defined precisely to forbid reading data from an uncommitted writer, which is exactly what prevents dirty reads.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-23-dirty-read-5",
+      "test_id": "pt-dbms-sql-23-dirty-read",
+      "question_text": "If T1 aborts BEFORE T2 ever attempts to read A, does a dirty read occur?",
+      "options": [
+        "Yes, aborts always cause dirty reads",
+        "No — T2 would simply see the restored pre-T1 value (or block, depending on locking); there is no dirty read since T2 never read the uncommitted value",
+        "Only if T2 also aborts",
+        "Only under READ UNCOMMITTED isolation"
+      ],
+      "correct_index": 1,
+      "explanation": "A dirty read requires the reader to actually observe an uncommitted value; if the writer aborts before that read occurs, there's nothing dirty for the reader to see.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-23-dirty-read-6",
+      "test_id": "pt-dbms-sql-23-dirty-read",
+      "question_text": "How does a dirty read differ from a lost update?",
+      "options": [
+        "They are identical phenomena",
+        "In a dirty read, the value read comes from a transaction that never actually commits (it aborts); in a lost update, both transactions' writes ARE committed, but the second overwrites/erases the first's effect",
+        "A dirty read only happens with DELETE statements",
+        "A lost update always involves three or more transactions"
+      ],
+      "correct_index": 1,
+      "explanation": "The mechanisms are distinct: dirty read = observing data from an eventually-aborted write; lost update = a committed write being silently clobbered by another committed write.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-23-dirty-read-7",
+      "test_id": "pt-dbms-sql-23-dirty-read",
+      "question_text": "How is strict two-phase locking able to prevent dirty reads automatically?",
+      "options": [
+        "It disallows all read operations",
+        "T1 holds its exclusive write lock on A until it commits or aborts, so T2's read request on A is blocked until that lock is released, ensuring T2 never sees the uncommitted value",
+        "It uses timestamps instead of locks",
+        "It only applies to write operations, not reads"
+      ],
+      "correct_index": 1,
+      "explanation": "Because the writer's exclusive lock isn't released until commit/abort, any reader requesting access to that same item is forced to wait, so it can never observe the dirty (uncommitted) value.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-23-dirty-read-8",
+      "test_id": "pt-dbms-sql-23-dirty-read",
+      "question_text": "Which isolation level (covered in the next chapter) is specifically associated with deliberately PERMITTING dirty reads for performance reasons?",
+      "options": [
+        "SERIALIZABLE",
+        "READ UNCOMMITTED",
+        "REPEATABLE READ",
+        "READ COMMITTED"
+      ],
+      "correct_index": 1,
+      "explanation": "READ UNCOMMITTED is the weakest isolation level and is the only one that allows a transaction to see another transaction's uncommitted (dirty) writes, trading correctness for performance.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "/root/content_c",
+    "independent_review": "passed",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Independent manual content review passed within independent_review_scope; engine/browser/release gates separate.",
+    "canonical_answer_indices_preserved": true,
+    "editorial_record": "Original explanations, examples and scenarios; external originality clearance and AdSense review unperformed.",
+    "independent_reviewer": "/root",
+    "independent_review_scope": "Full notes,20MCQs/options/explanations,diagram and read-from/recovery labs. Dirty status at observation time,writer later commit/abort,MVCC versus blocking and recovery distinctions sound after ambiguous seriality distractor and performance claim corrected. Manual editorial/fixture reasoning only; SQL engine,browser,originality and AdSense verification separate."
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-23-dirty-read",
+    "original_note_sha256": "e3393b5c13d61a8176bcc75d9066356a9e14eaec816338a0a9100e64add91fd8",
+    "status": "drafted; not included in prepared paired migrations"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "The writer state at read time decides",
+      "description": "A later commit does not retroactively remove the earlier uncommitted observation.",
+      "columns": [
+        "Event sequence",
+        "Observed value",
+        "Dirty read?"
+      ],
+      "rows": [
+        [
+          "Write900; read900; commit writer",
+          "Uncommitted writer value",
+          "Yes"
+        ],
+        [
+          "Write900; read900; abort writer",
+          "Uncommitted writer value",
+          "Yes"
+        ],
+        [
+          "Write900; abort; read1000",
+          "Restored committed value",
+          "No"
+        ],
+        [
+          "Write900; committed-version read1000",
+          "Older committed version",
+          "No"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "technical_review": "author self-review",
+    "server_rendering": "unverified",
+    "browser_rendering": "unverified"
+  },
+  "authoring_status": "drafted; verification pending"
+}

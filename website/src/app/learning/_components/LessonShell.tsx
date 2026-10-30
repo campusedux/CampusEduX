@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { List } from "lucide-react";
+import Link from "next/link";
+import { ArrowLeft, List } from "lucide-react";
 import { Drawer } from "@/components/ui/Drawer";
 import type { CourseOutline } from "@/lib/courseOutline";
 import { LessonSidebar } from "./LessonSidebar";
@@ -26,21 +27,31 @@ export function LessonShell({
   const [open, setOpen] = useState(false);
 
   return (
-    <div className="container-page pb-16 pt-6 lg:grid lg:grid-cols-[272px_minmax(0,1fr)] lg:gap-10 xl:grid-cols-[272px_minmax(0,1fr)_220px]">
+    <div className="lesson-reading container-page pb-16 pt-3 sm:pt-6 lg:grid lg:grid-cols-[272px_minmax(0,1fr)] lg:gap-10 xl:grid-cols-[272px_minmax(0,1fr)_220px]">
       <aside className="hidden lg:block">
         <div className="sticky top-24 max-h-[calc(100vh-7rem)] overflow-y-auto overscroll-contain pb-8 pr-2 [scrollbar-width:thin]">
           <LessonSidebar outline={outline} currentSlug={currentSlug} />
         </div>
       </aside>
 
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className="mb-5 inline-flex h-11 items-center gap-2 rounded-xl border border-line bg-card px-3.5 text-sm font-semibold text-ink shadow-card lg:hidden"
-      >
-        <List className="h-4 w-4" aria-hidden />
-        Course contents
-      </button>
+      <div className="mb-4 flex min-w-0 items-center justify-between gap-3 border-b border-line pb-3 lg:hidden">
+        <Link href={`/learning/${outline.gridSlug}`} className="inline-flex min-h-11 min-w-0 items-center gap-2 rounded-lg text-sm font-medium text-ink-muted hover:text-primary">
+          <ArrowLeft className="h-4 w-4 shrink-0" aria-hidden />
+          <span className="sr-only">Back to course: </span>
+          <span className="truncate">{outline.gridName}</span>
+        </Link>
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          aria-label="Course contents"
+          aria-haspopup="dialog"
+          aria-expanded={open}
+          className="inline-flex h-11 shrink-0 items-center gap-2 rounded-lg border border-line bg-card px-3 text-sm font-semibold text-ink"
+        >
+          <List className="h-4 w-4" aria-hidden />
+          Contents
+        </button>
+      </div>
       <Drawer open={open} onClose={() => setOpen(false)} side="left" title="Course contents">
         {open && (
           <div className="px-2 py-3">

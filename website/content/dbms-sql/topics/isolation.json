@@ -1,0 +1,517 @@
+{
+  "slug": "isolation",
+  "source_ref": "chapter-22-transactions/isolation",
+  "title": "Isolation",
+  "description": "Choose an explicit transaction observation contract, compare snapshots and locking reads, and protect current and cross-row decisions without overstating isolation guarantees.",
+  "dialect": "MySQL 8.4; engine-specific behavior labeled",
+  "references": [
+    {
+      "title": "MySQL8.4 isolation levels",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/innodb-transaction-isolation-levels.html"
+    },
+    {
+      "title": "MySQL8.4 consistent reads",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/innodb-consistent-read.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-22-isolation",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-22-isolation-1",
+          "test_id": "pt-dbms-sql-22-isolation",
+          "question_text": "What does the transaction isolation contract specify?",
+          "options": [
+            "Every query physically runs alone",
+            "Which concurrent interactions and observations are permitted under the chosen level and engine",
+            "Every application input is correct",
+            "All copies immediately have identical values"
+          ],
+          "correct_index": 1,
+          "explanation": "Weaker levels can permit anomalies, including dirty reads at READ UNCOMMITTED. Do not make an unqualified no-intermediate-state promise.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-22-isolation-2",
+          "test_id": "pt-dbms-sql-22-isolation",
+          "question_text": "Without isolation, what problem could occur if T2 reads while T1 is mid-update?",
+          "options": [
+            "T2 would always see a clean, fully consistent snapshot",
+            "T2 could see a confusing mix of some already-updated and some not-yet-updated rows, a state that never really existed",
+            "T2 would be blocked from reading entirely",
+            "T1 would automatically pause until T2 finishes"
+          ],
+          "correct_index": 1,
+          "explanation": "An insufficient observation contract can expose a mix that never existed as one committed state; precise behavior depends on the engine, read type and level.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-22-isolation-3",
+          "test_id": "pt-dbms-sql-22-isolation",
+          "question_text": "Does serializable behavior require literally executing every whole transaction one at a time?",
+          "options": [
+            "Yes, all independent work must always wait",
+            "No; eligible work can interleave while preserving required serial equivalence, though coordination has workload-dependent costs",
+            "Only on a single table",
+            "Only for read-only queries"
+          ],
+          "correct_index": 1,
+          "explanation": "Serial and serializable are distinct. Stronger guarantees can require blocking or retries without global physical serialization.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-22-isolation-4",
+          "test_id": "pt-dbms-sql-22-isolation",
+          "question_text": "How do real database systems typically balance isolation strength against performance?",
+          "options": [
+            "They always use perfect (fully serial) isolation",
+            "They offer configurable isolation levels (Chapter 25) that trade some isolation strength for better throughput",
+            "They disable isolation entirely by default",
+            "Isolation cannot be configured in any real system"
+          ],
+          "correct_index": 1,
+          "explanation": "Levels provide different contracts. Performance effects depend on workload, plans, contention and implementation, rather than a universal weaker-is-faster guarantee.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-22-isolation-5",
+          "test_id": "pt-dbms-sql-22-isolation",
+          "question_text": "Is Isolation the same concern as Atomicity?",
+          "options": [
+            "Yes, they are synonyms",
+            "Atomicity concerns supported all-or-nothing completion; isolation specifies permitted concurrent observations under the chosen level and engine.",
+            "Isolation only applies to single-statement transactions",
+            "Atomicity is a stricter version of Isolation"
+          ],
+          "correct_index": 1,
+          "explanation": "Atomicity concerns one supported transaction outcome; isolation concerns concurrent interactions and observations under the selected contract.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-22-isolation-6",
+          "test_id": "pt-dbms-sql-22-isolation",
+          "question_text": "What kinds of anomalies does Isolation (at varying strength) aim to prevent?",
+          "options": [
+            "Syntax errors",
+            "Concurrency anomalies like dirty reads, non-repeatable reads, and phantom reads (Chapter 23)",
+            "Disk space exhaustion",
+            "Slow query performance"
+          ],
+          "correct_index": 1,
+          "explanation": "Isolation levels are specifically calibrated against these named concurrency anomalies.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-22-isolation-7",
+          "test_id": "pt-dbms-sql-22-isolation",
+          "question_text": "Does 'isolation' in ACID refer to operating-system process isolation?",
+          "options": [
+            "Yes, they are the same concept",
+            "No — ACID Isolation is specifically about transaction visibility rules within the database, unrelated to OS/container isolation",
+            "ACID Isolation is implemented using OS process isolation exclusively",
+            "This is an interchangeable term across all contexts"
+          ],
+          "correct_index": 1,
+          "explanation": "Despite the shared word, these are unrelated concepts in different domains.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-22-isolation-8",
+          "test_id": "pt-dbms-sql-22-isolation",
+          "question_text": "At a documented serializable contract, how should supported concurrent results relate to a serial reference?",
+          "options": [
+            "All levels allow every dirty read",
+            "They should be equivalent to some permitted serial execution under the engine model",
+            "Every transaction must start at the same instant",
+            "The result must maximize every balance"
+          ],
+          "correct_index": 1,
+          "explanation": "This is a serializable-level statement, not a promise that every weaker isolation level looks as though no other transaction exists.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "cx-isolation-fundamentals-9",
+          "test_id": "pt-dbms-sql-22-isolation",
+          "question_text": "Does transactional support alone prove serializable execution for every query?",
+          "options": [
+            "No",
+            "Yes, every level is serializable",
+            "Only with a primary key",
+            "Only for text tables"
+          ],
+          "correct_index": 0,
+          "explanation": "The actual isolation level and statement semantics determine the contract.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "cx-isolation-fundamentals-10",
+          "test_id": "pt-dbms-sql-22-isolation",
+          "question_text": "Does an older committed snapshot value necessarily constitute a dirty read?",
+          "options": [
+            "Yes, all old data is dirty",
+            "No",
+            "Only if numeric",
+            "Only after an UPDATE"
+          ],
+          "correct_index": 1,
+          "explanation": "Dirty reads concern an uncommitted source, not age alone.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "cx-isolation-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "cx-isolation-application-1",
+          "test_id": "cx-isolation-application",
+          "question_text": "Can serializable work physically interleave?",
+          "options": [
+            "No, one transaction must always occupy the whole server",
+            "Yes, if required serial equivalence is preserved",
+            "Only if all work aborts",
+            "Only if no rows exist"
+          ],
+          "correct_index": 1,
+          "explanation": "Serializability is an equivalence guarantee, not literal no-overlap scheduling.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "cx-isolation-application-2",
+          "test_id": "cx-isolation-application",
+          "question_text": "What does ordinary InnoDB READ COMMITTED generally provide per statement?",
+          "options": [
+            "One permanent database-wide snapshot",
+            "Every uncommitted writer value",
+            "A fresh committed snapshot",
+            "Only replica values"
+          ],
+          "correct_index": 2,
+          "explanation": "Later statements can observe newly committed changes.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "cx-isolation-application-3",
+          "test_id": "cx-isolation-application",
+          "question_text": "What generally establishes the ordinary REPEATABLE READ snapshot in this context?",
+          "options": [
+            "A comment before BEGIN",
+            "Any other connection’s query",
+            "The table filename",
+            "The first consistent read"
+          ],
+          "correct_index": 3,
+          "explanation": "First-read timing matters for snapshot contents.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "cx-isolation-application-4",
+          "test_id": "cx-isolation-application",
+          "question_text": "Does a stable snapshot automatically enforce a cross-row on-call invariant?",
+          "options": [
+            "No",
+            "Yes, any snapshot is sufficient",
+            "Only if names are unique",
+            "Only if both rows are integers"
+          ],
+          "correct_index": 0,
+          "explanation": "Decision coordination must protect the actual shared rule.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "cx-isolation-application-5",
+          "test_id": "cx-isolation-application",
+          "question_text": "What must a reservation inspect after a conditional decrement?",
+          "options": [
+            "Only whether SQL parsed",
+            "Whether the required row effect occurred",
+            "Only its output color",
+            "Only the number of comments"
+          ],
+          "correct_index": 1,
+          "explanation": "An unmet predicate can return no changed row without an SQL exception.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "cx-isolation-application-6",
+          "test_id": "cx-isolation-application",
+          "question_text": "Do locking reads and ordinary consistent reads necessarily share one visibility context?",
+          "options": [
+            "Yes, for every statement",
+            "Only with SELECT star",
+            "No",
+            "Only if sorted"
+          ],
+          "correct_index": 2,
+          "explanation": "InnoDB current locking reads differ from ordinary historical snapshot reads.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "cx-isolation-application-7",
+          "test_id": "cx-isolation-application",
+          "question_text": "What should a retryable aborted operation normally recompute?",
+          "options": [
+            "Only a stale replacement value",
+            "Only an external email",
+            "The old snapshot identity",
+            "Its complete logical decision with fresh state"
+          ],
+          "correct_index": 3,
+          "explanation": "Earlier observations may no longer be valid for the new attempt.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "cx-isolation-application-8",
+          "test_id": "cx-isolation-application",
+          "question_text": "Can weaker isolation be declared universally faster?",
+          "options": [
+            "No",
+            "Yes, for every workload",
+            "Only for three columns",
+            "Only after a restart"
+          ],
+          "correct_index": 0,
+          "explanation": "Plans, contention and transaction duration also determine performance.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "cx-isolation-application-9",
+          "test_id": "cx-isolation-application",
+          "question_text": "Why inspect every writer of a shared invariant?",
+          "options": [
+            "Only screens can modify data",
+            "An alternate path can bypass one workflow’s coordination",
+            "Background imports inherit every UI rule",
+            "All writers automatically serialize"
+          ],
+          "correct_index": 1,
+          "explanation": "Correctness must hold at the trusted shared boundary.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "cx-isolation-application-10",
+          "test_id": "cx-isolation-application",
+          "question_text": "What does a one-session SELECT result not prove?",
+          "options": [
+            "The returned literal value",
+            "The output column name",
+            "Actual multi-connection isolation behavior",
+            "That the query executed"
+          ],
+          "correct_index": 2,
+          "explanation": "Interleaving, waits and outcomes require controlled concurrent evidence.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-22-isolation-1",
+      "test_id": "pt-dbms-sql-22-isolation",
+      "question_text": "What does Isolation guarantee?",
+      "options": [
+        "Data is permanently stored",
+        "Concurrent transactions don't see each other's uncommitted, intermediate state",
+        "Every transaction runs faster",
+        "All constraints are automatically enforced"
+      ],
+      "correct_index": 1,
+      "explanation": "Isolation controls what one transaction can observe of another's in-progress work.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-22-isolation-2",
+      "test_id": "pt-dbms-sql-22-isolation",
+      "question_text": "Without isolation, what problem could occur if T2 reads while T1 is mid-update?",
+      "options": [
+        "T2 would always see a clean, fully consistent snapshot",
+        "T2 could see a confusing mix of some already-updated and some not-yet-updated rows, a state that never really existed",
+        "T2 would be blocked from reading entirely",
+        "T1 would automatically pause until T2 finishes"
+      ],
+      "correct_index": 1,
+      "explanation": "This inconsistent mixed view is exactly what isolation is designed to prevent.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-22-isolation-3",
+      "test_id": "pt-dbms-sql-22-isolation",
+      "question_text": "Does perfect isolation (fully serial execution) come with a cost?",
+      "options": [
+        "No, it's free",
+        "Yes — it sacrifices all the throughput benefits of running transactions concurrently",
+        "Perfect isolation is always faster than any concurrent execution",
+        "There is no such thing as perfect isolation"
+      ],
+      "correct_index": 1,
+      "explanation": "The theoretical ideal of full serial execution trades away concurrency's performance benefits entirely.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-22-isolation-4",
+      "test_id": "pt-dbms-sql-22-isolation",
+      "question_text": "How do real database systems typically balance isolation strength against performance?",
+      "options": [
+        "They always use perfect (fully serial) isolation",
+        "They offer configurable isolation levels (Chapter 25) that trade some isolation strength for better throughput",
+        "They disable isolation entirely by default",
+        "Isolation cannot be configured in any real system"
+      ],
+      "correct_index": 1,
+      "explanation": "Configurable isolation levels are the practical real-world compromise, covered in depth in Chapter 25.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-22-isolation-5",
+      "test_id": "pt-dbms-sql-22-isolation",
+      "question_text": "Is Isolation the same concern as Atomicity?",
+      "options": [
+        "Yes, they are synonyms",
+        "No — Atomicity is about one transaction's own all-or-nothing completion; Isolation is about transactions not observing each other's in-progress state",
+        "Isolation only applies to single-statement transactions",
+        "Atomicity is a stricter version of Isolation"
+      ],
+      "correct_index": 1,
+      "explanation": "These are related but distinct ACID properties addressing different concerns.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-22-isolation-6",
+      "test_id": "pt-dbms-sql-22-isolation",
+      "question_text": "What kinds of anomalies does Isolation (at varying strength) aim to prevent?",
+      "options": [
+        "Syntax errors",
+        "Concurrency anomalies like dirty reads, non-repeatable reads, and phantom reads (Chapter 23)",
+        "Disk space exhaustion",
+        "Slow query performance"
+      ],
+      "correct_index": 1,
+      "explanation": "Isolation levels are specifically calibrated against these named concurrency anomalies.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-22-isolation-7",
+      "test_id": "pt-dbms-sql-22-isolation",
+      "question_text": "Does 'isolation' in ACID refer to operating-system process isolation?",
+      "options": [
+        "Yes, they are the same concept",
+        "No — ACID Isolation is specifically about transaction visibility rules within the database, unrelated to OS/container isolation",
+        "ACID Isolation is implemented using OS process isolation exclusively",
+        "This is an interchangeable term across all contexts"
+      ],
+      "correct_index": 1,
+      "explanation": "Despite the shared word, these are unrelated concepts in different domains.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-22-isolation-8",
+      "test_id": "pt-dbms-sql-22-isolation",
+      "question_text": "From a single transaction's own point of view under proper isolation, how does concurrent execution appear?",
+      "options": [
+        "As if many other transactions are visibly interleaved with it",
+        "As if it were running alone, even though other transactions may be executing concurrently",
+        "As a series of random errors",
+        "Isolation provides no particular appearance guarantee"
+      ],
+      "correct_index": 1,
+      "explanation": "This 'as if alone' illusion is exactly what isolation aims to provide to each transaction.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "coding_problems": [],
+  "coding_not_applicable": "Isolation needs controlled connections, read types, barriers and outcomes. Two solved observation/decision exercises and SQL lab fragments are included;a result-only judge cannot establish the concurrent contract.",
+  "review": {
+    "reviewer": "/root",
+    "independent_review": "passed",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Independent manual content review passed within independent_review_scope; engine/browser/release gates separate.",
+    "editorial_record": "Original scenario-led prose and assessments. External originality and AdSense review unperformed.",
+    "canonical_answer_indices_preserved": true,
+    "independent_reviewer": "/root/finish_e_transactions",
+    "independent_review_scope": "Full notes,20MCQs/options/explanations,diagram and solved observation/decision labs. Snapshot,currentlocking,write-skew and chosen-level distinction sound;originalQ5 corrected and independently reread. Manual reasoning only;engine,provider,browser,originality and AdSense evidence remain separate."
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-22-isolation",
+    "original_note_sha256": "ce27be892f0ee9ef8e97662483d09f1fb4364c48a6d3282c9e0f6c75a4b6a8d9",
+    "status": "drafted; not included in prepared paired migrations"
+  },
+  "notes": "## Specify what concurrent work is allowed to observe\n\nIsolation describes the interaction and observation contract between concurrent transactions. At a strong serializable level, supported executions should have results equivalent to some serial transaction order under the engine's documented model. Weaker levels permit different anomalies. Saying a database supports transactions therefore does not establish that every request behaves as though no other request exists, or that every SELECT is prevented from seeing every kind of intermediate state.\n\nStart with the decision a workflow must make. A historical report can need a consistent view of a past committed state. A live dashboard can prefer a fresh committed observation on each statement. A last-seat reservation must connect a current availability decision with the write that consumes the seat. These purposes involve different observations and enforcement requirements even when all use the same tables and familiar transaction commands.\n\n## Separate isolation from atomicity\n\nAtomicity concerns one transaction's supported commit outcome: its participating pending changes do not remain as an arbitrary partially committed transaction after abort. Isolation concerns how another transaction interacts with that work while executions overlap. A writer reading its own pending changes is not proof that other transactions can read them, and another reader seeing an old committed version is not proof that the writer performed no update.\n\nConsider moving three kits from depot one to depot two. Within the writer's transaction the source can already be changed while the destination is not yet changed. Its own code must understand that pending state. A competing operation's permitted observation depends on isolation and statement type. Preventing partial transaction commit and preventing a particular intermediate observation are related reliability concerns with distinct definitions and tests.\n\n## Identify anomalies through complete histories\n\nA dirty read consumes another transaction's uncommitted value. The writer might later commit or roll back; the read is dirty at the time it occurs. A nonrepeatable read observes different committed values for the same item across reads in one transaction. A phantom concerns a changed set of qualifying rows. These names classify particular observations, not a universal ranking of business severity.\n\nA lost update can arise when two clients read the same committed quantity and later send unconditional replacement values computed from that stale observation. No dirty read is necessary for one intended decrement to disappear. Write skew can involve different rows: each transaction checks a shared invariant and changes a different part, allowing their combined effect to violate the rule. Analyze the actual reads, predicates, writes and outcomes instead of choosing a label from final row values alone.\n\n| Concern | Question to ask | Evidence needed |\n|---|---|---|\n| Dirty read | Was the source writer committed when read? | Actual observed version and writer outcome |\n| Nonrepeatable read | Did one reader see a changed committed item? | Both reads and intervening commit |\n| Lost update | Was an intended effect overwritten? | Operation contract and stale-write history |\n| Write skew | Did separate decisions violate a shared invariant? | Cross-row reads, predicates and final effects |\n\n## Understand committed snapshots\n\nInnoDB ordinary consistent reads can use multiversion data rather than block behind every current writer. Under READ COMMITTED, each such statement obtains a fresh committed snapshot. Under REPEATABLE READ, the first ordinary consistent read generally establishes the snapshot used by later ordinary consistent reads in that transaction. The timing of that first read therefore matters, not merely the time the client issued START TRANSACTION.\n\nA stable snapshot can keep a report internally repeatable while another transaction commits changes. It does not mean every statement inside the transaction reads only that historical view. Own writes and locking reads have different behavior. Combining an earlier snapshot observation with a later current locking read requires care because the observations can refer to different database moments. State which read type each part of the workflow uses.\n\n## Use current protection for a current decision\n\nA suitable conditional relative update can connect an eligibility predicate to a quantity change in one statement. A locking read inside a transaction can protect a row while the caller makes a dependent decision. Neither should be chosen mechanically: the complete invariant can involve additional rows or a range whose absence matters. An appropriate index and predicate influence which records and intervals an engine actually protects.\n\n```sql\nSTART TRANSACTION;\nSELECT remaining FROM isolation_seats\nWHERE session_id=7 FOR UPDATE;\n-- Trusted workflow validates the protected state and request.\nUPDATE isolation_seats SET remaining=remaining-1\nWHERE session_id=7 AND remaining>0;\n-- Trusted workflow verifies the required effect.\nCOMMIT;\n```\n\nThis fragment assumes a disposable InnoDB fixture and one authorized reservation attempt. It names required application decisions without implementing them in comments. If the predicate matches no row, statement success is not a successful reservation. If another condition spans several sessions, locking only session seven might not protect that broader rule. The transaction boundary and coordination mechanism must follow the real business requirement.\n\n## Compare stronger and weaker contracts honestly\n\nREAD UNCOMMITTED can permit dirty reads in InnoDB. READ COMMITTED and REPEATABLE READ prevent that particular anomaly for ordinary reads under their contracts while differing in snapshot behavior and other interactions. SERIALIZABLE aims for a stronger serial-equivalence guarantee and can introduce locking, blocking or retries depending on context. Named levels must be interpreted through the actual engine rather than assumed identical across every database.\n\nStronger coordination can increase resource use or contention for a workload, but there is no universal rule that a weaker level always makes every query faster. An inefficient plan, long transaction or hot row can dominate latency at several levels. Conversely, blindly serializing all transactions globally can waste independent execution opportunities. Measure the intended workload while preserving its correctness requirement instead of treating performance and isolation as one fixed slider.\n\nSerializable execution also does not require literally running one transaction at a time. Eligible work can interleave while the engine preserves the required serial-equivalent behavior. This distinction is why a serial reference model helps correctness reasoning without forcing every implementation to use a single global application lock. Inspect actual guarantees and failure handling rather than equating physical overlap with an automatic isolation violation.\n\n## Protect invariants beyond one row\n\nSuppose two coordinators are on call and at least one must remain. Each transaction reads that another coordinator is available and turns its own row off. Stable snapshots of the original state do not by themselves prove the combined rule survives. A shared guard row followed by every relevant decision path, or another verified serializable strategy, can coordinate this cross-row invariant. One counter update or unique row key alone does not express that rule.\n\nThe repair must include all writers, not just the visible screen. An administrative tool or background import using another path can bypass application-only coordination. Test allowed and denied outcomes at the trusted enforcement boundary, including conflicting attempts and cleanup. A user interface warning can explain contention but cannot establish that a direct caller is prevented from violating the shared invariant.\n\n## Handle aborts and connection lifetime\n\nAn isolation conflict can lead to waiting, timeout or transaction abort rather than the exact interleaving imagined in a textbook. Retry the complete logical operation when the documented error is retryable, using fresh observations and bounded attempts. Repeating only a stale final assignment can preserve the original mistake. A lost commit acknowledgment also requires reconciliation rather than blind repetition of a potentially completed effect.\n\nPooled sessions can retain isolation settings or unresolved transactions unless the driver and application deliberately reset them. End the intended transaction on every path and discard an unusable connection when cleanup cannot be confirmed. A transaction that only reads can still retain a snapshot or other resources. Inspect session state and connection ownership instead of assuming that no visible write means no cleanup responsibility.\n\n## Solve two isolation design exercises\n\nFirst exercise: A reads a value under READ COMMITTED, B changes it and commits, and A reads again. Predict the new committed observation. Repeat under an already established ordinary REPEATABLE READ snapshot and predict the earlier value instead. Explain why neither ordinary committed read needs to expose B's unfinished version. Record both connections and exact barriers rather than using a screenshot as the entire proof.\n\nSecond exercise: two requests each observe one remaining seat. Describe a conditional update or protected decision that allows at most one reservation, then include the zero-row denial and rollback branches. Extend the requirement to two related rows and identify what additional coordination is needed. Continue with [isolation-level experiments](/learning/dbms-sql-tutorial/isolation-level-lab), [locking protocols](/learning/dbms-sql-tutorial/locking-protocol-lab) and [serial schedules](/learning/dbms-sql-tutorial/serial-schedule) to connect the observation contract with a testable operation.\n",
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Stable observations and protected decisions answer different questions",
+      "description": "A historical snapshot can remain stable while a writer commits. A current locking decision protects relevant resources. Serializable behavior targets serial equivalence without requiring literal global one-at-a-time execution.",
+      "columns": [
+        "Purpose",
+        "Mechanism to analyze",
+        "Limit to verify"
+      ],
+      "rows": [
+        [
+          "Repeat historical report",
+          "Ordinary consistent snapshot",
+          "Own writes/current reads differ"
+        ],
+        [
+          "Reserve current capacity",
+          "Conditional update or locking decision",
+          "Required effects and full invariant"
+        ],
+        [
+          "Coordinate cross-row rule",
+          "Shared protocol or suitable serializable execution",
+          "All writers and retry paths"
+        ],
+        [
+          "Claim concurrency evidence",
+          "Controlled independent connections",
+          "Engine/provider scope remains explicit"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "technical_review": "author self-review only",
+    "server_rendering": "pending",
+    "browser_rendering": "unverified",
+    "independent_review": "pending"
+  },
+  "sql_verification": {
+    "scope": "not executed; concurrency/recovery/provider verification separate",
+    "all_passed": false,
+    "cases": []
+  }
+}

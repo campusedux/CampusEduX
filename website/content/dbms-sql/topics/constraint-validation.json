@@ -1,0 +1,666 @@
+{
+  "source_ref": "chapter-10-sql-constraints/constraint-validation",
+  "slug": "constraint-validation",
+  "title": "Constraint Validation",
+  "description": "Separate legacy-state inspection from ongoing enforcement, validate each invariant under its NULL and comparison rules, and distinguish PostgreSQL staged validation from disabled checking.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Validation asks whether accepted state matches a rule\n\nConstraint validation checks whether the relevant stored state satisfies an intended integrity rule. A campus activity table may contain old rows before a required-age policy was introduced. Adding a definition is not enough to make those facts correct. The transition must establish whether existing values agree with the rule and whether later writes remain protected.\n\nDifferent constraints ask different questions. A required-value rule checks presence, a CHECK evaluates its predicate, a unique rule checks the protected combination, and a foreign key checks the relevant parent association. One generic query cannot automatically validate every kind. Begin with the exact invariant and the product's comparison and enforcement semantics.\n\n## A preflight query is useful but not enforcement\n\nA diagnostic SELECT can report suspicious legacy rows before a proposed change. For a required age of at least eighteen, it can distinguish missing values from known ages below the boundary. Reporting those cases makes the data policy visible and supports review. It does not add a constraint or stop another writer from creating a new invalid row afterward.\n\nThat distinction matters even on an empty table. A preflight query returning no rows means no violation was observed in that query's population and snapshot. It does not prove a future write is valid or that the target definition already exists. Validate the intended state and install the appropriate ongoing boundary as separate steps of the actual transition.\n\n## Match diagnostics to three-valued logic\n\nFor CHECK(age >= 18), a NULL age produces UNKNOWN and is not itself a FALSE check violation. If the final contract also requires age, the preflight must include the missing marker through IS NULL. A query using only age < 18 would omit those missing cases and could misleadingly declare the combined required-age rule ready.\n\nLikewise, salary <= 0 identifies known failures of a positive-salary comparison but not unknown salary. Decide whether presence is required before designing the diagnostic. Do not fill unknown values with arbitrary numbers merely to make the report empty. A valid repair needs an accepted source or a deliberate decision that the optional model should remain.\n\n```sql\nSELECT claim_id,\n       CASE WHEN age IS NULL THEN 'missing' ELSE 'below_minimum' END AS issue\nFROM claims\nWHERE age IS NULL OR age < 18\nORDER BY claim_id;\n```\n\n## Existing values can prevent ordinary constraint addition\n\nAdding a normally validated enforced rule to populated data requires compatible existing state under the target's applicable rules. A negative quantity conflicts with a nonnegative CHECK, duplicate complete keys conflict with uniqueness, and an unresolved nonmissing child reference conflicts with a supported foreign key. Those are different defects even if the ALTER statements all fail.\n\nA failing validation should identify the conflicting state for an explicit domain decision. It does not authorize deleting a row, inventing a key or turning enforcement off. Some products support staged validation features for particular rule kinds, but those features still preserve a defined integrity contract rather than make inconsistent facts magically valid.\n\n## Unique validation follows the actual comparison domain\n\nA conceptual duplicate report can group protected values and count repeated combinations. The grouping must match the intended identity, including every scoped key component. Checking student_id alone would incorrectly report legitimate multiple enrollments when the intended key is student_id and course_id. Checking too many unrelated properties can instead hide a real repeated identity.\n\nString collation and nullable uniqueness rules also matter. A diagnostic using different comparison semantics from the intended constraint can disagree with actual enforcement. Inspect the target type and collation, and state how NULL is treated. The goal is to validate the real invariant rather than an approximation that happens to return a convenient count on a small sample.\n\n## Foreign-key validation follows complete references\n\nA child reference must use the correct complete parent identity and the supported matching rules. A department number local to a campus needs its campus role too. An ordinary optional single-column NULL reference does not require a matching parent row under the illustrated policy, while a separate NOT NULL rule can make presence mandatory.\n\nA missing-parent diagnostic should therefore distinguish absent optional references from nonmissing orphan proposals. A SELECT join is not itself a foreign key, and a temporary-table check is not proof of native persistent referential actions. Use the actual enforced object when making that stronger execution claim. The separate foreign-key package provides clearly scoped persistent InnoDB laboratory cases.\n\n## PostgreSQL NOT VALID is not disabled enforcement\n\nPostgreSQL supports NOT VALID for applicable CHECK and foreign-key additions. It separates validating the existing backlog from establishing the applicable checks for new writes under that feature's rules. Existing rows are not automatically proven correct merely because the declaration was accepted. Later VALIDATE CONSTRAINT performs the supported validation step.\n\nThis is different from declaring the rule unenforced or temporarily disabling checks. It is also not the same as deferring an otherwise enforced constraint until transaction end. State which population and timing are affected. The native syntax is documented comparison material here; a MariaDB compatibility lab does not execute PostgreSQL staged validation simply by using similar terminology.\n\n## Staging can change disruption without eliminating work\n\nSeparating declaration and validation can help schedule work and reduce particular blocking patterns under supported PostgreSQL behaviour. It does not mean validation never scans data, takes locks or interacts with concurrent work. The actual rule kind, table state and engine version determine the operational requirements. Avoid teaching NOT VALID as a universal zero-lock switch.\n\nMySQL alteration and validation have their own supported algorithms and restrictions. A small fixture that adds one check cannot establish production duration on a large busy table. Treat correctness, lock behaviour and workload performance as separate forms of evidence. The content-writing pass records local fixture results without claiming that unperformed production measurements passed.\n\n## Disabling checks creates a different integrity problem\n\nTurning off foreign-key checking can permit states that the intended reference would otherwise reject. Re-enabling checking should not be assumed to scan and validate every legacy row introduced during that window in MySQL. A successful later setting change is therefore not proof that the loaded dataset is referentially valid.\n\nThese exercises never disable checking. The accepted strategy is to diagnose and resolve incompatible facts through an explicit policy, then use supported enforcement. Where a workflow needs a staged import, preserve a clear boundary between proposed data and accepted application state. Do not disguise an unenforced loading shortcut as equivalent to PostgreSQL's controlled deferred or staged-validation features.\n\n## Coordinate the state transition with relevant writers\n\nA diagnostic scan and a later constraint change can observe different states if active writers continue using the old contract. A repair can also overwrite a newer accepted value if its update policy is too broad. Define which writers participate, which rows may change and which invariant must remain true during the transition.\n\nThe laboratory enforcement task supplies compatible current quantities and runs in one isolated session. It validates the intended definition and later rejected writes without simulating a rolling deployment. A production transition needs its own concurrency and failure analysis. The difference is a limit of the fixture's evidence, not a reason to omit either the explanation or the actual constraint.\n\n## Exercise both legacy diagnostics and final protection\n\nThe introductory task reports missing and below-minimum ages with separate issue labels. It includes the inclusive eighteen boundary and empty input, so the query cannot confuse unknown with a known low value. It does not repair rows or decide how the institution should obtain accepted replacements.\n\nThe medium task starts with quantities that already satisfy required nonnegative state. It adds the required rule and a named nonnegative check, preserves the rows, and rejects later NULL or negative writes under strict settings. Empty input still requires the final definition. Those cases distinguish a clean legacy snapshot from an ongoing accepted-state boundary.\n\n## Keep validation status narrower than overall readiness\n\nA package can accurately report that its supplied synthetic rows and selected rejected writes passed on the recorded engine. That is not proof of every provider, migration application, native feature or future workload. A useful status names the rule, population, operation and environment so readers can understand exactly what the evidence supports.\n\nThe notes, diagnostics and expected outputs should agree on NULL, complete identities and comparison boundaries. Recorded MariaDB compatibility checks establish those exercise results. Exact MySQL/provider execution, native PostgreSQL NOT VALID and VALIDATE operations, production locking and application migration application remain separate checks. Complete teaching content should expose those limits rather than use one clean preflight result as a claim that every integrity requirement is finished.\n",
+  "references": [
+    {
+      "title": "PostgreSQL 18 ALTER TABLE validation",
+      "url": "https://www.postgresql.org/docs/18/sql-altertable.html"
+    },
+    {
+      "title": "MySQL 8.4 Foreign key constraints",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/create-table-foreign-keys.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-10-constraint-validation",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-10-constraint-validation-1",
+          "test_id": "pt-dbms-sql-10-constraint-validation",
+          "question_text": "By default, when is a CHECK constraint evaluated for a normal INSERT statement?",
+          "options": [
+            "Only when the table is queried afterward",
+            "Immediately, at the moment the INSERT statement executes",
+            "Only at the end of the transaction, regardless of constraint type",
+            "Only when explicitly requested via VALIDATE CONSTRAINT"
+          ],
+          "correct_index": 1,
+          "explanation": "Unless a constraint is explicitly declared deferrable and deferred (see PostgreSQL's DEFERRABLE), every constraint is checked immediately at statement execution time by default.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-10-constraint-validation-2",
+          "test_id": "pt-dbms-sql-10-constraint-validation",
+          "question_text": "What does ordinary validated constraint addition require of relevant current state?",
+          "options": [
+            "The table must first be truncated",
+            "Compatibility with the intended rule under the actual engine’s validation semantics",
+            "The table must have fewer than 1000 rows",
+            "Nothing; the constraint always applies only to future rows"
+          ],
+          "correct_index": 1,
+          "explanation": "Rule kinds, NULL and supported staged forms need precise scope.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-10-constraint-validation-3",
+          "test_id": "pt-dbms-sql-10-constraint-validation",
+          "question_text": "What does PostgreSQL NOT VALID separate for an applicable constraint?",
+          "options": [
+            "The constraint is completely inactive until manually enabled",
+            "The existing backlog validation from applicable ongoing checks for new writes",
+            "The constraint only applies to SELECT statements",
+            "NOT VALID constraints are automatically dropped after 24 hours"
+          ],
+          "correct_index": 1,
+          "explanation": "It does not mean disabled enforcement or transaction-end deferral.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-10-constraint-validation-4",
+          "test_id": "pt-dbms-sql-10-constraint-validation",
+          "question_text": "Why consider supported staged validation for a large table?",
+          "options": [
+            "Because NOT VALID constraints run faster forever",
+            "To separate operational work under the documented locking and validation rules",
+            "Because plain ADD CONSTRAINT is deprecated",
+            "Because VALIDATE CONSTRAINT is required by the SQL standard"
+          ],
+          "correct_index": 1,
+          "explanation": "It does not guarantee zero locks or eliminate all scans.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-10-constraint-validation-5",
+          "test_id": "pt-dbms-sql-10-constraint-validation",
+          "question_text": "What kind of internal check does the engine effectively perform when adding a UNIQUE constraint to a populated table?",
+          "options": [
+            "A full table scan checking for NULLs only",
+            "A duplicate-detection scan, conceptually similar to GROUP BY ... HAVING COUNT(*) > 1",
+            "No check; UNIQUE constraints are never validated against existing data",
+            "A check that the table has an index already"
+          ],
+          "correct_index": 1,
+          "explanation": "Adding UNIQUE requires confirming no existing duplicate values are present, which is effectively a group-and-count duplicate detection scan performed internally by the engine.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-10-constraint-validation-6",
+          "test_id": "pt-dbms-sql-10-constraint-validation",
+          "question_text": "What must foreign-key validation examine?",
+          "options": [
+            "No validation is needed for foreign keys",
+            "The complete relevant nonmissing child references under the chosen match and presence rules",
+            "Only a check that the parent table is not empty",
+            "A check that the child table has fewer rows than the parent"
+          ],
+          "correct_index": 1,
+          "explanation": "Optional NULL and scoped composite roles need correct treatment.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-10-constraint-validation-7",
+          "test_id": "pt-dbms-sql-10-constraint-validation",
+          "question_text": "What is a real risk of temporarily disabling constraint checking (e.g., MySQL's SET FOREIGN_KEY_CHECKS=0) during a bulk data load?",
+          "options": [
+            "It permanently disables the constraint even after re-enabling",
+            "Bad or inconsistent data can be inserted during the disabled window and may not be caught unless carefully audited afterward",
+            "It automatically drops all indexes on the table",
+            "It converts all constraints to deferred mode permanently"
+          ],
+          "correct_index": 1,
+          "explanation": "While checks are off, violating data can be loaded without error; re-enabling checks does not necessarily retroactively re-scan and catch every issue unless the engine/process explicitly re-validates.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-10-constraint-validation-8",
+          "test_id": "pt-dbms-sql-10-constraint-validation",
+          "question_text": "Is constraint validation for an ordinary UPDATE statement any different in timing from an INSERT statement, under default (non-deferred) settings?",
+          "options": [
+            "Yes, UPDATE is always checked at COMMIT while INSERT is checked immediately",
+            "No, both INSERT and UPDATE are validated immediately against all applicable constraints at statement execution time by default",
+            "Yes, UPDATE constraints are only checked once per session",
+            "No, UPDATE statements are exempt from CHECK constraints entirely"
+          ],
+          "correct_index": 1,
+          "explanation": "Under the default immediate-checking mode used by every constraint type unless explicitly deferred, both INSERT and UPDATE statements are validated at the moment they execute.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-10-constraint-validation-new-9",
+          "test_id": "pt-dbms-sql-10-constraint-validation",
+          "question_text": "Does a clean diagnostic SELECT protect later writes?",
+          "options": [
+            "Yes",
+            "No",
+            "Only if ordered",
+            "Only with a COUNT"
+          ],
+          "correct_index": 1,
+          "explanation": "Observation and enforcement are different operations.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-10-constraint-validation-new-10",
+          "test_id": "pt-dbms-sql-10-constraint-validation",
+          "question_text": "Which missing age must a required-age preflight include?",
+          "options": [
+            "Only age<18",
+            "Only empty headings",
+            "Actual NULL through IS NULL",
+            "Only the maximum age"
+          ],
+          "correct_index": 2,
+          "explanation": "The combined rule includes presence as well as range.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-10-constraint-validation-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-10-constraint-validation-application-new-1",
+          "test_id": "pt-dbms-sql-10-constraint-validation-application",
+          "question_text": "Does CHECK(age>=18) itself reject UNKNOWN?",
+          "options": [
+            "Yes",
+            "Only with INT",
+            "No",
+            "Only when named"
+          ],
+          "correct_index": 2,
+          "explanation": "A separate required rule is needed for missing age.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-10-constraint-validation-application-new-2",
+          "test_id": "pt-dbms-sql-10-constraint-validation-application",
+          "question_text": "Why group all components for a uniqueness diagnostic?",
+          "options": [
+            "To make every component globally unique",
+            "To remove all duplicates automatically",
+            "To grant access",
+            "To inspect the intended complete identity"
+          ],
+          "correct_index": 3,
+          "explanation": "Too few or too many grouping roles can misstate conflicts.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-10-constraint-validation-application-new-3",
+          "test_id": "pt-dbms-sql-10-constraint-validation-application",
+          "question_text": "Does re-enabling MySQL foreign-key checks prove loaded legacy data was rescanned?",
+          "options": [
+            "No",
+            "Yes",
+            "Only if names are short",
+            "Only after a SELECT"
+          ],
+          "correct_index": 0,
+          "explanation": "The disabled window can leave unresolved inconsistent facts.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-10-constraint-validation-application-new-4",
+          "test_id": "pt-dbms-sql-10-constraint-validation-application",
+          "question_text": "Is NOT VALID the same as DEFERRABLE?",
+          "options": [
+            "Yes",
+            "No",
+            "Only for checks",
+            "Only with an index"
+          ],
+          "correct_index": 1,
+          "explanation": "Backlog validation and transaction timing are different features.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-10-constraint-validation-application-new-5",
+          "test_id": "pt-dbms-sql-10-constraint-validation-application",
+          "question_text": "What does a failed existing-data validation authorize by itself?",
+          "options": [
+            "Deleting every conflicting row",
+            "Inventing a parent id",
+            "No arbitrary data deletion or fabrication",
+            "Disabling all checks"
+          ],
+          "correct_index": 2,
+          "explanation": "Repair requires an accepted domain policy.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-10-constraint-validation-application-new-6",
+          "test_id": "pt-dbms-sql-10-constraint-validation-application",
+          "question_text": "Why coordinate active writers during preparation?",
+          "options": [
+            "Scans automatically stop all clients forever",
+            "Validation changes every application version",
+            "Writers are irrelevant",
+            "They can change state between a scan and enforcement"
+          ],
+          "correct_index": 3,
+          "explanation": "The transition must keep the intended invariant compatible.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-10-constraint-validation-application-new-7",
+          "test_id": "pt-dbms-sql-10-constraint-validation-application",
+          "question_text": "Does staged validation guarantee zero locking?",
+          "options": [
+            "No",
+            "Yes",
+            "Only on a huge table",
+            "Only with NULL"
+          ],
+          "correct_index": 0,
+          "explanation": "Operational work and supported lock rules remain.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-10-constraint-validation-application-new-8",
+          "test_id": "pt-dbms-sql-10-constraint-validation-application",
+          "question_text": "What should a native reference claim use?",
+          "options": [
+            "Only a query mirror",
+            "The actual supported enforced object and engine",
+            "Only matching names",
+            "Only a diagram"
+          ],
+          "correct_index": 1,
+          "explanation": "Object kind and enforcement matter.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-10-constraint-validation-application-new-9",
+          "test_id": "pt-dbms-sql-10-constraint-validation-application",
+          "question_text": "Why test invalid writes after final enforcement?",
+          "options": [
+            "To hide the preflight result",
+            "To change the schema label",
+            "To distinguish clean current rows from a protected future boundary",
+            "To benchmark a production workload"
+          ],
+          "correct_index": 2,
+          "explanation": "A valid snapshot alone does not prove enforcement.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-10-constraint-validation-application-new-10",
+          "test_id": "pt-dbms-sql-10-constraint-validation-application",
+          "question_text": "What stays outside the compatibility cases?",
+          "options": [
+            "The supplied age issue labels",
+            "The tested quantity rejection",
+            "The preserved valid rows",
+            "Native PostgreSQL staged validation and exact provider execution"
+          ],
+          "correct_index": 3,
+          "explanation": "Evidence remains scoped to what actually ran.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cx-validation-required-age-preflight",
+      "slug": "validation-required-age-preflight",
+      "title": "Diagnose a combined presence and minimum-age rule",
+      "difficulty": "Easy",
+      "task": "Before any rule change, return claim_id and issue for rows violating the intended required age>=18 contract. issue is missing when age IS NULL, otherwise below_minimum for a supplied age<18. This is read-only preflight, not repair or enforcement.",
+      "schema_sql": "CREATE TABLE claims (claim_id INT PRIMARY KEY,age INT NULL);",
+      "seed_sql": "INSERT INTO claims VALUES (1,NULL),(2,17),(3,18),(4,30);",
+      "expected": "claim_id\tissue\n1\tmissing\n2\tbelow_minimum",
+      "ordering": "Ascending claim_id.",
+      "constraints": [
+        "Differentiate presence from a known range violation.",
+        "Do not alter or repair the source."
+      ],
+      "edge_cases": [
+        "18 is valid.",
+        "Empty or entirely compatible input returns no issue rows."
+      ],
+      "hints": [
+        "Combine IS NULL with the known below-boundary predicate.",
+        "Label missing separately with CASE."
+      ],
+      "solution_sql": "SELECT claim_id,CASE WHEN age IS NULL THEN 'missing' ELSE 'below_minimum' END AS issue FROM claims WHERE age IS NULL OR age<18 ORDER BY claim_id;",
+      "explanation": "The preflight reflects the complete intended presence-and-range contract without pretending the SELECT installs it.",
+      "validation_cases": [
+        {
+          "seed_sql": "",
+          "expected": ""
+        },
+        {
+          "seed_sql": "INSERT INTO claims VALUES (8,18),(7,NULL);",
+          "expected": "claim_id\tissue\n7\tmissing"
+        }
+      ]
+    },
+    {
+      "id": "cx-validation-protect-quantities",
+      "slug": "validation-protect-quantities",
+      "title": "Enforce required nonnegative state after compatible preparation",
+      "difficulty": "Medium",
+      "task": "The supplied inventory rows already have nonmissing nonnegative quantity values. Enforce quantity INT NOT NULL and add CONSTRAINT chk_quantity_valid CHECK(quantity>=0), preserving item ids and values. Return item_id,quantity. This isolated exercise does not claim a production online-validation strategy.",
+      "schema_sql": "SET SESSION sql_mode='STRICT_ALL_TABLES'; CREATE TABLE inventory (item_id INT PRIMARY KEY,quantity INT NULL);",
+      "seed_sql": "INSERT INTO inventory VALUES (2,0),(1,5);",
+      "expected": "item_id\tquantity\n1\t5\n2\t0",
+      "ordering": "Ascending item_id.",
+      "constraints": [
+        "Positive fixtures are already compatible.",
+        "Do not invent repairs or disable checks."
+      ],
+      "edge_cases": [
+        "Empty inventory still receives enforcement.",
+        "NULL and negative later writes are rejected separately."
+      ],
+      "hints": [
+        "Preserve the intended column definition when changing required presence.",
+        "Add the named check after compatible preparation."
+      ],
+      "solution_sql": "ALTER TABLE inventory MODIFY COLUMN quantity INT NOT NULL; ALTER TABLE inventory ADD CONSTRAINT chk_quantity_valid CHECK(quantity>=0); SELECT item_id,quantity FROM inventory ORDER BY item_id;",
+      "explanation": "The final definition protects both presence and range rather than relying on the earlier clean snapshot.",
+      "validation_cases": [
+        {
+          "seed_sql": "",
+          "expected": ""
+        },
+        {
+          "seed_sql": "INSERT INTO inventory VALUES (8,0);",
+          "expected": "item_id\tquantity\n8\t0"
+        }
+      ],
+      "negative_validation_cases": [
+        {
+          "sql": "INSERT INTO inventory VALUES (99,NULL);",
+          "error_codes": [
+            1048
+          ]
+        },
+        {
+          "sql": "INSERT INTO inventory VALUES (99,-1);",
+          "error_codes": [
+            3819,
+            4025
+          ]
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-10-constraint-validation-1",
+      "test_id": "pt-dbms-sql-10-constraint-validation",
+      "question_text": "By default, when is a CHECK constraint evaluated for a normal INSERT statement?",
+      "options": [
+        "Only when the table is queried afterward",
+        "Immediately, at the moment the INSERT statement executes",
+        "Only at the end of the transaction, regardless of constraint type",
+        "Only when explicitly requested via VALIDATE CONSTRAINT"
+      ],
+      "correct_index": 1,
+      "explanation": "Unless a constraint is explicitly declared deferrable and deferred (see PostgreSQL's DEFERRABLE), every constraint is checked immediately at statement execution time by default.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-10-constraint-validation-2",
+      "test_id": "pt-dbms-sql-10-constraint-validation",
+      "question_text": "What must be true before ALTER TABLE ... ADD CONSTRAINT succeeds on a table that already contains rows?",
+      "options": [
+        "The table must first be truncated",
+        "Every existing row must already satisfy the new constraint's rule",
+        "The table must have fewer than 1000 rows",
+        "Nothing; the constraint always applies only to future rows"
+      ],
+      "correct_index": 1,
+      "explanation": "Adding a constraint to a populated table triggers an implicit validation scan of existing data; if any row violates the new rule, the ALTER TABLE fails.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-10-constraint-validation-3",
+      "test_id": "pt-dbms-sql-10-constraint-validation",
+      "question_text": "In PostgreSQL, what does adding a constraint with the NOT VALID option actually mean?",
+      "options": [
+        "The constraint is completely inactive until manually enabled",
+        "The constraint is fully enforced for all new INSERT/UPDATE statements, but existing rows have not yet been checked",
+        "The constraint only applies to SELECT statements",
+        "NOT VALID constraints are automatically dropped after 24 hours"
+      ],
+      "correct_index": 1,
+      "explanation": "NOT VALID skips the initial full-table scan of pre-existing rows for performance, but the constraint immediately governs all new writes; VALIDATE CONSTRAINT later confirms old rows comply.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-10-constraint-validation-4",
+      "test_id": "pt-dbms-sql-10-constraint-validation",
+      "question_text": "Why might a large production table use the ADD CONSTRAINT ... NOT VALID followed by VALIDATE CONSTRAINT pattern instead of a plain ADD CONSTRAINT?",
+      "options": [
+        "Because NOT VALID constraints run faster forever",
+        "To avoid a long table lock caused by scanning every existing row in a single blocking operation",
+        "Because plain ADD CONSTRAINT is deprecated",
+        "Because VALIDATE CONSTRAINT is required by the SQL standard"
+      ],
+      "correct_index": 1,
+      "explanation": "Splitting the operation lets the initial attach be fast with a brief lock, while the potentially slow full-table validation scan happens separately, reducing disruption on large, busy tables.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-10-constraint-validation-5",
+      "test_id": "pt-dbms-sql-10-constraint-validation",
+      "question_text": "What kind of internal check does the engine effectively perform when adding a UNIQUE constraint to a populated table?",
+      "options": [
+        "A full table scan checking for NULLs only",
+        "A duplicate-detection scan, conceptually similar to GROUP BY ... HAVING COUNT(*) > 1",
+        "No check; UNIQUE constraints are never validated against existing data",
+        "A check that the table has an index already"
+      ],
+      "correct_index": 1,
+      "explanation": "Adding UNIQUE requires confirming no existing duplicate values are present, which is effectively a group-and-count duplicate detection scan performed internally by the engine.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-10-constraint-validation-6",
+      "test_id": "pt-dbms-sql-10-constraint-validation",
+      "question_text": "Adding a FOREIGN KEY constraint to a populated child table requires what kind of validation?",
+      "options": [
+        "No validation is needed for foreign keys",
+        "A scan of every child row checking it has a matching row in the parent table",
+        "Only a check that the parent table is not empty",
+        "A check that the child table has fewer rows than the parent"
+      ],
+      "correct_index": 1,
+      "explanation": "The engine must confirm every existing child-table row's foreign key value matches an existing parent row (or is NULL); any orphan causes the ADD CONSTRAINT to fail.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-10-constraint-validation-7",
+      "test_id": "pt-dbms-sql-10-constraint-validation",
+      "question_text": "What is a real risk of temporarily disabling constraint checking (e.g., MySQL's SET FOREIGN_KEY_CHECKS=0) during a bulk data load?",
+      "options": [
+        "It permanently disables the constraint even after re-enabling",
+        "Bad or inconsistent data can be inserted during the disabled window and may not be caught unless carefully audited afterward",
+        "It automatically drops all indexes on the table",
+        "It converts all constraints to deferred mode permanently"
+      ],
+      "correct_index": 1,
+      "explanation": "While checks are off, violating data can be loaded without error; re-enabling checks does not necessarily retroactively re-scan and catch every issue unless the engine/process explicitly re-validates.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-10-constraint-validation-8",
+      "test_id": "pt-dbms-sql-10-constraint-validation",
+      "question_text": "Is constraint validation for an ordinary UPDATE statement any different in timing from an INSERT statement, under default (non-deferred) settings?",
+      "options": [
+        "Yes, UPDATE is always checked at COMMIT while INSERT is checked immediately",
+        "No, both INSERT and UPDATE are validated immediately against all applicable constraints at statement execution time by default",
+        "Yes, UPDATE constraints are only checked once per session",
+        "No, UPDATE statements are exempt from CHECK constraints entirely"
+      ],
+      "correct_index": 1,
+      "explanation": "Under the default immediate-checking mode used by every constraint type unless explicitly deferred, both INSERT and UPDATE statements are validated at the moment they execute.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "coordinator",
+    "independent_review": "unavailable; no agent tools",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Definitions and examples checked against questions; no plagiarism certification.",
+    "existing_question_corrections": [
+      "tq-dbms-sql-10-constraint-validation-2",
+      "tq-dbms-sql-10-constraint-validation-3",
+      "tq-dbms-sql-10-constraint-validation-4",
+      "tq-dbms-sql-10-constraint-validation-6"
+    ],
+    "canonical_answer_indices_preserved": true,
+    "batch_review": {
+      "reviewer": "coordinator",
+      "independent": false,
+      "scope": "This new package: explained definitions and boundaries, retained source question identities/canonical indices, new correct answers and explanations, exercise solutions and recorded fixtures, diagram trace and prepared integration.",
+      "execution_evidence": "Focused MariaDB reference cases and selected actual LessonBlock rendering passed; no browser QA or exact MySQL/provider execution.",
+      "source_preservation": "Original snapshots retained; eight retained exercises across this continuation matched source identity, difficulty, schema, seed and trailing checker.",
+      "limits": "No independent worker available. Output fixtures do not prove arbitrary student submissions used a requested technique. Native PostgreSQL/other-engine concepts remain documented or explicitly mirrored, not verified by MariaDB."
+    }
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-10-constraint-validation",
+    "original_note_sha256": "675e2b394c930b3613e3450b612a56bb1e4822204132c99ae61a9309193ee365",
+    "status": "paired migration prepared; not applied"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Legacy inspection, ongoing enforcement and native staged validation are different claims",
+      "description": "A clean report is an observation, while a constraint protects accepted writes; PostgreSQL backlog validation is a separately scoped feature.",
+      "columns": [
+        "Mechanism",
+        "What is established",
+        "What is not established"
+      ],
+      "rows": [
+        [
+          "Preflight SELECT",
+          "Observed violations in the queried population",
+          "Future write protection"
+        ],
+        [
+          "Enforced constraint",
+          "Applicable accepted-state boundary",
+          "Universal production performance"
+        ],
+        [
+          "PostgreSQL NOT VALID",
+          "Applicable new-write checks with backlog not yet proven",
+          "Transaction-end deferral"
+        ],
+        [
+          "Later validation",
+          "Supported existing-state verification",
+          "Automatic repair of incorrect facts"
+        ],
+        [
+          "Recorded local cases",
+          "Synthetic results on the named engine",
+          "Exact provider or applied-migration success"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "coordinator checked required-range diagnostics, snapshot versus enforcement and staged-validation versus deferral distinction",
+    "server_rendering": "passed",
+    "browser_rendering": "unverified",
+    "independent_review": "unavailable; no agent tools",
+    "server_rendering_evidence": "Selected actual LessonBlock Vitest rendering passed for this batch; no browser QA."
+  },
+  "sql_verification": {
+    "engine": "11.8.6-MariaDB-0+deb13u1 from Debian",
+    "scope": "MariaDB compatibility execution; exact MySQL 8.4/provider execution unverified",
+    "fingerprint": "3ea1d2e3dadffe847a5f1f8a5d9c7badbf96f353021c12bc0ab7831d9d98c886",
+    "cases": [
+      {
+        "problem": "validation-required-age-preflight",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "validation-required-age-preflight",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "validation-required-age-preflight",
+        "case": 2,
+        "passed": true
+      },
+      {
+        "problem": "validation-protect-quantities",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "validation-protect-quantities",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "validation-protect-quantities",
+        "case": 2,
+        "passed": true
+      },
+      {
+        "problem": "validation-protect-quantities",
+        "negative_case": 0,
+        "error_code": 1048,
+        "passed": true
+      },
+      {
+        "problem": "validation-protect-quantities",
+        "negative_case": 1,
+        "error_code": 4025,
+        "passed": true
+      }
+    ],
+    "all_passed": true
+  }
+}

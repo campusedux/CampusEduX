@@ -1,0 +1,671 @@
+{
+  "source_ref": "chapter-5-keys-and-integrity/primary-key",
+  "slug": "primary-key",
+  "title": "Primary Key",
+  "description": "Choose and enforce a primary identity, distinguish uniqueness from generation and ordering, and test single-column and composite SQL primary keys.",
+  "dialect": "MySQL 8.4",
+  "notes": "## The selected identity of a relation\n\nA primary key is the candidate key selected as a relation's principal declared identifier. Its values identify tuples uniquely, and every key component must be nonmissing. In Student(student_id, student_name, programme), a declared primary key on student_id means that one identifier cannot belong to two stored student rows. The name and programme can repeat because they play different descriptive roles.\n\nA table can have at most one PRIMARY KEY constraint, and that constraint can involve several attributes. Ordinary SQL definitions can omit a primary-key declaration, depending on engine and configuration rules, so it is inaccurate to say every possible SQL table necessarily declares exactly one. Good identity design and a particular product's permitted syntax are related but distinct questions.\n\n## Uniqueness and nonmissing values work together\n\nUniqueness prevents two rows from claiming the same identifying value or combination. Nonmissing key components ensure the declared identity is definite. A primary key combines these obligations. It does not require the identifier to be an integer, positive, consecutive, or meaningful to users unless separate rules establish those properties. Text or composite identifiers can also be appropriate under the model.\n\nA plain nullable UNIQUE column has a different absence policy. In MySQL, multiple NULLs can be allowed by a nullable unique constraint. If an alternate identity must be both unique and required, use a compatible nonmissing declaration as well. Do not infer a classical required identifier from the word UNIQUE alone, and do not assume other products implement optional uniqueness in precisely the same way.\n\n## A composite primary key is one constraint\n\nEnrollment can use student_id and course_id together when its fact grain is one enrollment per student-course pair. The combined values identify the enrollment. One student can appear in several pairs, and one course can appear with several students. A primary key on the pair is one constraint, not two independent primary keys.\n\nDeclaring each component separately as PRIMARY KEY is invalid as a way to request two primary keys. Declaring each separately UNIQUE would impose different, overly restrictive rules: a student could occur only once and a course could occur only once. State the combined identifying rule directly. Include valid repeated components in fixtures so the difference is observable rather than hidden by a one-row example.\n\n## Choose the key from the fact grain\n\nIf the database records multiple attempts at one course, the student-course pair may no longer identify one tuple. A separate attempt identifier or an appropriate expanded combination is needed to distinguish occurrences. Adding a descriptive value such as score merely to avoid collisions can permit contradictory copies of the same intended attempt and conceal the underlying identity problem.\n\nA student name is usually a poor primary identity because different students can share it and one student's name can change. An institutional number may be a candidate if policy guarantees its uniqueness and availability. An internal surrogate can be useful when business labels are mutable or inconvenient for references. The decision should follow explicit identity and lifecycle requirements rather than assuming the first column must be primary.\n\n## Generated values are a separate feature\n\nDeclaring PRIMARY KEY does not by itself generate the next identifier. MySQL offers AUTO_INCREMENT for supported definitions, but generation and uniqueness are separate ideas. An ordinary INT PRIMARY KEY can require the caller to supply an acceptable identifier. A generated identifier can have gaps after rejected operations or other engine behaviour; it should not be treated as a guaranteed count of students.\n\nAutomatic generation also changes how some inputs are interpreted. In particular, inserting NULL into an auto-generated identity can request generation under the applicable product rules rather than serving as a simple test of prohibited missing identity. To test nonmissing primary-key enforcement directly, use a definition without that generation behaviour and isolate the intended error condition.\n\n## Physical indexing is not logical row order\n\nA database can use an index to enforce or access a primary key. Physical details depend on the storage engine; a logical key definition alone is not a universal claim about file layout across products. Nor does a fast key lookup guarantee every query using that table is fast. Predicates, result size, selected attributes, and available plans still matter.\n\nA primary key also does not promise that SELECT output is sorted by that key. Request ORDER BY when an application needs deterministic presentation. The identifier can supply a useful tie-breaker because it distinguishes rows, but the ordering contract belongs to the query. An observed index traversal is not a substitute for the explicitly requested sort order.\n\n## Changing referenced identities has consequences\n\nOther relations can use foreign keys to refer to a primary identity. Changing a referenced value therefore requires understanding the configured referential actions and allowed transitions. An enforced rule may reject the change, or a supported cascading policy may coordinate it. It is misleading to say every such update silently creates orphans or every database automatically repairs all references.\n\nStable identifiers reduce unnecessary changes to referencing facts. A surrogate can often remain unchanged when a student's email changes, but it is not metaphysically immutable: systems can still require carefully managed identity migrations. Describe stability as a design objective and policy, not a guarantee that an artificial identifier can never need to change under any future circumstances.\n\n## Add a primary key only to compatible data\n\nA proposed key cannot be applied successfully to conflicting existing rows without a deliberate resolution. Audit repeated proposed identities and prohibited missing components first. A table may look correct when sampled while containing an unseen conflict elsewhere. A successful SELECT or application typecheck does not prove an ALTER TABLE operation would succeed on the complete intended dataset.\n\n```sql\nALTER TABLE students\nADD PRIMARY KEY (student_id);\n```\n\nThe statement expresses a schema requirement, not a data-cleanup algorithm. Do not delete arbitrary conflicting records or invent replacement identities merely to make it succeed. In an isolated exercise, fixtures can already satisfy the proposed rule. A real application change requires authorized migration planning, dependency review, and verification appropriate to the existing data and callers.\n\n## Test key enforcement and permitted repetition\n\nA focused test starts with two valid student identities sharing a name. It then attempts an existing identity with different descriptive values and expects rejection. A separate test attempts a prohibited missing identity. Different values outside the key must not make a duplicate identifying value acceptable. Otherwise the constraint is protecting a wider combination than the intended primary identity.\n\nFor a composite key, test several students on one course and one student on several courses. Then attempt the same complete pair with a changed score. The duplicate identity should still be rejected. Optional non-key attributes can remain NULL when allowed, so verify that primary-key enforcement does not accidentally turn every column into a required field or alter the meaning of missing scores.\n\n## Explain exactly what was proved\n\nAn exercise can verify accepted rows, duplicate rejection, nonmissing key enforcement, and the resulting query output on its local engine. It cannot establish every foreign-key transition, authorization rule, or production migration property unless those paths were actually tested. Keep MariaDB compatibility execution distinct from exact MySQL or hosted-provider execution, and identify temporary-table scope where that is the chosen local mechanism.\n\nFor tied score reports, the unique identifier can resolve otherwise unspecified presentation ties. A dependable primary-key design selects a genuine minimal identity, preserves legitimate repeated descriptive values, and states how references and lifecycle changes are handled. Separate that identity from generation, display order, and performance assumptions. Then verify both permitted facts and targeted failures. These distinctions make the primary key a clear data contract rather than a vague label attached to whichever column happens to look important.\n",
+  "references": [],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-5-primary-key",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-5-primary-key-1",
+          "test_id": "pt-dbms-sql-5-primary-key",
+          "question_text": "What two constraints does declaring a column PRIMARY KEY enforce automatically?",
+          "options": [
+            "UNIQUE and NOT NULL",
+            "CHECK and DEFAULT",
+            "FOREIGN KEY and CASCADE",
+            "INDEX and TRIGGER"
+          ],
+          "correct_index": 0,
+          "explanation": "PRIMARY KEY bundles uniqueness with a mandatory NOT NULL requirement.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-5-primary-key-2",
+          "test_id": "pt-dbms-sql-5-primary-key",
+          "question_text": "How many separate PRIMARY KEY constraints can one SQL table declare?",
+          "options": [
+            "As many as needed",
+            "At most one, which may span several columns",
+            "Exactly two",
+            "Zero, unless UNIQUE is also declared"
+          ],
+          "correct_index": 1,
+          "explanation": "A table may omit a primary-key declaration under ordinary supported definitions, but it cannot declare multiple separate primary keys.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-5-primary-key-3",
+          "test_id": "pt-dbms-sql-5-primary-key",
+          "question_text": "What is the key difference between PRIMARY KEY and a plain UNIQUE constraint?",
+          "options": [
+            "There is no real difference",
+            "PRIMARY KEY additionally forbids NULL values, while plain UNIQUE still permits NULL",
+            "UNIQUE is enforced faster than PRIMARY KEY",
+            "PRIMARY KEY can only apply to text columns"
+          ],
+          "correct_index": 1,
+          "explanation": "Both enforce uniqueness, but PRIMARY KEY also mandates NOT NULL — UNIQUE alone does not.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-5-primary-key-4",
+          "test_id": "pt-dbms-sql-5-primary-key",
+          "question_text": "In an SQL engine that indexes primary keys, what is the index’s role?",
+          "options": [
+            "The column is encrypted",
+            "It supports key enforcement and access; actual query speed and storage details require engine-specific evidence",
+            "The column is automatically converted to text",
+            "All other columns become NOT NULL too"
+          ],
+          "correct_index": 1,
+          "explanation": "Index support does not promise every query is faster or that results have an inherent order.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-5-primary-key-5",
+          "test_id": "pt-dbms-sql-5-primary-key",
+          "question_text": "Why is changing a primary key's values risky once other tables reference it via foreign keys?",
+          "options": [
+            "It is never actually risky",
+            "Referencing facts depend on that identity, so rejection or coordinated changes depend on configured integrity rules",
+            "Foreign keys automatically update themselves with zero configuration in every engine",
+            "Primary keys cannot be referenced by foreign keys in the first place"
+          ],
+          "correct_index": 1,
+          "explanation": "The update may be rejected or handled by supported configured actions; it does not necessarily create orphans.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-5-primary-key-6",
+          "test_id": "pt-dbms-sql-5-primary-key",
+          "question_text": "Why might a surrogate key be preferred as the primary key over a natural value like email?",
+          "options": [
+            "Surrogate keys are always shorter to type",
+            "It can remain stable when mutable business labels change, reducing unnecessary reference changes",
+            "Natural keys are illegal as primary keys",
+            "There is no real reason; it's purely arbitrary"
+          ],
+          "correct_index": 1,
+          "explanation": "Stability is a design advantage, not a universal guarantee that a surrogate can never change.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-5-primary-key-7",
+          "test_id": "pt-dbms-sql-5-primary-key",
+          "question_text": "Can a table have a composite primary key spanning two columns and still be considered to have 'one' primary key?",
+          "options": [
+            "No, that would count as two primary keys",
+            "Yes — a composite primary key spanning multiple columns is still exactly one primary key constraint",
+            "Only if both columns are of the same data type",
+            "Composite primary keys are not allowed in SQL"
+          ],
+          "correct_index": 1,
+          "explanation": "A composite primary key is one single constraint that happens to involve more than one column.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-5-primary-key-8",
+          "test_id": "pt-dbms-sql-5-primary-key",
+          "question_text": "What happens if you try to declare PRIMARY KEY on two different columns of the same table separately?",
+          "options": [
+            "The table gets two independent primary keys",
+            "This is a schema error — a table can only have one PRIMARY KEY constraint (use a composite key if multiple columns are needed together)",
+            "The first declaration silently wins with no error",
+            "SQL automatically merges them into a UNIQUE constraint instead"
+          ],
+          "correct_index": 1,
+          "explanation": "You cannot have two separate PRIMARY KEY constraints on one table; a genuinely multi-column key must be declared as one composite PRIMARY KEY.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-5-primary-key-new-9",
+          "test_id": "pt-dbms-sql-5-primary-key",
+          "question_text": "Does PRIMARY KEY alone generate the next integer identifier?",
+          "options": [
+            "Yes; all keys auto-increment",
+            "No; generation requires a separate supported feature",
+            "Only when sorted",
+            "Only for an empty table"
+          ],
+          "correct_index": 1,
+          "explanation": "Identity enforcement and value generation are distinct.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-5-primary-key-new-10",
+          "test_id": "pt-dbms-sql-5-primary-key",
+          "question_text": "Does a primary key promise SELECT output order?",
+          "options": [
+            "Yes; every query is key-sorted",
+            "Only text keys lack order",
+            "No; request ORDER BY for the presentation contract",
+            "Only composite keys require sorting"
+          ],
+          "correct_index": 2,
+          "explanation": "Logical identity does not imply a result ordering guarantee.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-5-primary-key-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-5-primary-key-application-new-1",
+          "test_id": "pt-dbms-sql-5-primary-key-application",
+          "question_text": "Why can a repeated name be valid under a student_id primary key?",
+          "options": [
+            "All names are automatically unique",
+            "The key only applies to the first row",
+            "Name is descriptive and different identities can share it",
+            "Repeated names disable the primary key"
+          ],
+          "correct_index": 2,
+          "explanation": "The constraint concerns the declared identity attributes.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-5-primary-key-application-new-2",
+          "test_id": "pt-dbms-sql-5-primary-key-application",
+          "question_text": "What should happen to the same primary identifier with a different name?",
+          "options": [
+            "It must become a second valid identity",
+            "It changes the key definition",
+            "It is always silently merged",
+            "It should still violate the primary uniqueness rule"
+          ],
+          "correct_index": 3,
+          "explanation": "Changing non-key values does not create a different key identity.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-5-primary-key-application-new-3",
+          "test_id": "pt-dbms-sql-5-primary-key-application",
+          "question_text": "Why is NULL insertion into an auto-generated identifier not a simple missing-key rejection test?",
+          "options": [
+            "It may request generation under the engine’s rules",
+            "NULL always means zero",
+            "Generated keys have no constraints",
+            "Every test must use a name instead"
+          ],
+          "correct_index": 0,
+          "explanation": "Generation changes the semantics of supplied values.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-5-primary-key-application-new-4",
+          "test_id": "pt-dbms-sql-5-primary-key-application",
+          "question_text": "Why should student_id and course_id not each be separately UNIQUE for an ordinary many-to-many enrollment?",
+          "options": [
+            "It would permit duplicate pairs",
+            "That would prohibit legitimate repeated individual components",
+            "It would remove every type",
+            "It would make names mandatory"
+          ],
+          "correct_index": 1,
+          "explanation": "The combined pair, not each component alone, identifies the enrollment.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-5-primary-key-application-new-5",
+          "test_id": "pt-dbms-sql-5-primary-key-application",
+          "question_text": "Does adding a key declaration resolve conflicting existing rows automatically?",
+          "options": [
+            "Yes; it always deletes conflicts",
+            "Yes; it invents student identities",
+            "No; compatible data or an authorized resolution is needed",
+            "Only when a SELECT succeeds"
+          ],
+          "correct_index": 2,
+          "explanation": "The constraint is not a data-cleanup policy.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-5-primary-key-application-new-6",
+          "test_id": "pt-dbms-sql-5-primary-key-application",
+          "question_text": "Why can an artificial identifier be useful when email changes?",
+          "options": [
+            "It proves email ownership",
+            "It guarantees no business rule is needed",
+            "It prevents all future migrations",
+            "It can preserve the referenced identity independently of that label"
+          ],
+          "correct_index": 3,
+          "explanation": "Stable internal identity can decouple references from mutable business fields.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-5-primary-key-application-new-7",
+          "test_id": "pt-dbms-sql-5-primary-key-application",
+          "question_text": "What must be inspected before changing a referenced primary value?",
+          "options": [
+            "Foreign-key definitions and configured transition behaviour",
+            "Only the table title",
+            "Only the first displayed row",
+            "Only column label length"
+          ],
+          "correct_index": 0,
+          "explanation": "References constrain what identity changes are allowed.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-5-primary-key-application-new-8",
+          "test_id": "pt-dbms-sql-5-primary-key-application",
+          "question_text": "Does a primary key make every non-key attribute NOT NULL?",
+          "options": [
+            "Yes; every column becomes required",
+            "No; non-key nullability follows its own declaration",
+            "Only names become required",
+            "Only scores become required"
+          ],
+          "correct_index": 1,
+          "explanation": "Key-component requirements do not automatically apply to all attributes.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-5-primary-key-application-new-9",
+          "test_id": "pt-dbms-sql-5-primary-key-application",
+          "question_text": "What is needed if repeated course attempts are separate facts?",
+          "options": [
+            "Always a key on score alone",
+            "Only a name change",
+            "An identity that distinguishes the intended occurrences",
+            "Removing every uniqueness rule"
+          ],
+          "correct_index": 2,
+          "explanation": "The primary identity must match the fact grain.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-5-primary-key-application-new-10",
+          "test_id": "pt-dbms-sql-5-primary-key-application",
+          "question_text": "Which claim is supported by isolated key-enforcement tests?",
+          "options": [
+            "Production migration success",
+            "Every provider’s referential actions",
+            "All application authorization paths",
+            "The exercised key behaviour on the recorded local engine"
+          ],
+          "correct_index": 3,
+          "explanation": "Evidence is limited to the actual exercised boundary.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cx-primary-key-student",
+      "slug": "primary-key-student",
+      "title": "Add and verify one student primary identity",
+      "difficulty": "Easy",
+      "task": "Add PRIMARY KEY(student_id) to students, then return student_id and student_name. The definition has no automatic identifier generation. Repeated names remain allowed.",
+      "starter_sql": "-- Add the primary key and return student identities and names.",
+      "schema_sql": "CREATE TABLE students (student_id INT NULL, student_name VARCHAR(80) NOT NULL);",
+      "seed_sql": "INSERT INTO students VALUES (2,'Asha'),(1,'Asha');",
+      "expected": "student_id\tstudent_name\n1\tAsha\n2\tAsha",
+      "ordering": "Ascending student_id.",
+      "constraints": [
+        "Initial identifiers are unique and nonmissing.",
+        "No AUTO_INCREMENT behaviour is present."
+      ],
+      "edge_cases": [
+        "A duplicate identifier with a different name must fail.",
+        "A missing identifier must fail after key creation."
+      ],
+      "hints": [
+        "ALTER TABLE can add the primary constraint.",
+        "A name is not part of this identity."
+      ],
+      "solution_sql": "ALTER TABLE students ADD PRIMARY KEY (student_id);\nSELECT student_id, student_name FROM students ORDER BY student_id;",
+      "explanation": "The primary-key declaration establishes uniqueness and required identity values while permitting descriptive name repetition.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO students VALUES (9,'Mira');",
+          "expected": "student_id\tstudent_name\n9\tMira"
+        },
+        {
+          "seed_sql": "",
+          "expected": ""
+        }
+      ],
+      "negative_validation_cases": [
+        {
+          "sql": "INSERT INTO students VALUES (1,'Other');",
+          "error_codes": [
+            1062
+          ]
+        },
+        {
+          "sql": "INSERT INTO students VALUES (NULL,'Other');",
+          "error_codes": [
+            1048
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cx-primary-key-enrollment",
+      "slug": "primary-key-enrollment",
+      "title": "Add one composite enrollment primary key",
+      "difficulty": "Medium",
+      "task": "Add one PRIMARY KEY(student_id, course_id) to enrollments. Return student_id, course_id and optional score. Keep missing non-key scores unchanged. The contract permits one enrollment per pair.",
+      "starter_sql": "-- Add the combined primary key, then return enrollment facts.",
+      "schema_sql": "CREATE TABLE enrollments (student_id INT NULL, course_id INT NULL, score INT NULL);",
+      "seed_sql": "INSERT INTO enrollments VALUES (1,10,NULL),(1,20,80),(2,10,60);",
+      "expected": "student_id\tcourse_id\tscore\n1\t10\tNULL\n1\t20\t80\n2\t10\t60",
+      "ordering": "Ascending student_id, course_id.",
+      "constraints": [
+        "Initial identity pairs are unique and nonmissing.",
+        "This local exercise does not establish parent existence or referential actions."
+      ],
+      "edge_cases": [
+        "Individual key components can repeat in different pairs.",
+        "The non-key score can remain NULL."
+      ],
+      "hints": [
+        "Use a single PRIMARY KEY clause listing both attributes.",
+        "Do not include score in the key."
+      ],
+      "solution_sql": "ALTER TABLE enrollments ADD PRIMARY KEY (student_id, course_id);\nSELECT student_id, course_id, score FROM enrollments ORDER BY student_id, course_id;",
+      "explanation": "The one composite identity allows valid many-to-many pairs. Required key components do not make the optional score mandatory.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO enrollments VALUES (4,8,NULL),(4,9,100),(5,8,NULL);",
+          "expected": "student_id\tcourse_id\tscore\n4\t8\tNULL\n4\t9\t100\n5\t8\tNULL"
+        },
+        {
+          "seed_sql": "",
+          "expected": ""
+        }
+      ],
+      "negative_validation_cases": [
+        {
+          "sql": "INSERT INTO enrollments VALUES (1,10,99);",
+          "error_codes": [
+            1062
+          ]
+        },
+        {
+          "sql": "INSERT INTO enrollments VALUES (99,NULL,70);",
+          "error_codes": [
+            1048
+          ]
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-5-primary-key-1",
+      "test_id": "pt-dbms-sql-5-primary-key",
+      "question_text": "What two constraints does declaring a column PRIMARY KEY enforce automatically?",
+      "options": [
+        "UNIQUE and NOT NULL",
+        "CHECK and DEFAULT",
+        "FOREIGN KEY and CASCADE",
+        "INDEX and TRIGGER"
+      ],
+      "correct_index": 0,
+      "explanation": "PRIMARY KEY bundles uniqueness with a mandatory NOT NULL requirement.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-5-primary-key-2",
+      "test_id": "pt-dbms-sql-5-primary-key",
+      "question_text": "How many primary keys can a single table have?",
+      "options": [
+        "As many as needed",
+        "Exactly one (though it may span multiple columns)",
+        "Exactly two",
+        "Zero, unless UNIQUE is also declared"
+      ],
+      "correct_index": 1,
+      "explanation": "A table has exactly one primary key; it can be composite (multi-column) but there is still only one.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-5-primary-key-3",
+      "test_id": "pt-dbms-sql-5-primary-key",
+      "question_text": "What is the key difference between PRIMARY KEY and a plain UNIQUE constraint?",
+      "options": [
+        "There is no real difference",
+        "PRIMARY KEY additionally forbids NULL values, while plain UNIQUE still permits NULL",
+        "UNIQUE is enforced faster than PRIMARY KEY",
+        "PRIMARY KEY can only apply to text columns"
+      ],
+      "correct_index": 1,
+      "explanation": "Both enforce uniqueness, but PRIMARY KEY also mandates NOT NULL — UNIQUE alone does not.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-5-primary-key-4",
+      "test_id": "pt-dbms-sql-5-primary-key",
+      "question_text": "What commonly happens automatically when a column is declared PRIMARY KEY?",
+      "options": [
+        "The column is encrypted",
+        "The engine typically creates an index on it, speeding up lookups by that key",
+        "The column is automatically converted to text",
+        "All other columns become NOT NULL too"
+      ],
+      "correct_index": 1,
+      "explanation": "Most engines auto-index the primary key since it's the most common lookup path — a helpful side effect, not something manually configured.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-5-primary-key-5",
+      "test_id": "pt-dbms-sql-5-primary-key",
+      "question_text": "Why is changing a primary key's values risky once other tables reference it via foreign keys?",
+      "options": [
+        "It is never actually risky",
+        "Every referencing row's foreign key value would become invalid/orphaned unless carefully coordinated",
+        "Foreign keys automatically update themselves with zero configuration in every engine",
+        "Primary keys cannot be referenced by foreign keys in the first place"
+      ],
+      "correct_index": 1,
+      "explanation": "Referencing rows depend on the primary key's exact value; changing it breaks that link unless a cascading update is explicitly set up.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-5-primary-key-6",
+      "test_id": "pt-dbms-sql-5-primary-key",
+      "question_text": "Why might a surrogate key be preferred as the primary key over a natural value like email?",
+      "options": [
+        "Surrogate keys are always shorter to type",
+        "A surrogate key's value never needs to change for business reasons, making it a more stable long-term identifier",
+        "Natural keys are illegal as primary keys",
+        "There is no real reason; it's purely arbitrary"
+      ],
+      "correct_index": 1,
+      "explanation": "A natural value can change (e.g. a person changes their email); a surrogate key's value has no business meaning and so never needs to change.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-5-primary-key-7",
+      "test_id": "pt-dbms-sql-5-primary-key",
+      "question_text": "Can a table have a composite primary key spanning two columns and still be considered to have 'one' primary key?",
+      "options": [
+        "No, that would count as two primary keys",
+        "Yes — a composite primary key spanning multiple columns is still exactly one primary key constraint",
+        "Only if both columns are of the same data type",
+        "Composite primary keys are not allowed in SQL"
+      ],
+      "correct_index": 1,
+      "explanation": "A composite primary key is one single constraint that happens to involve more than one column.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-5-primary-key-8",
+      "test_id": "pt-dbms-sql-5-primary-key",
+      "question_text": "What happens if you try to declare PRIMARY KEY on two different columns of the same table separately?",
+      "options": [
+        "The table gets two independent primary keys",
+        "This is a schema error — a table can only have one PRIMARY KEY constraint (use a composite key if multiple columns are needed together)",
+        "The first declaration silently wins with no error",
+        "SQL automatically merges them into a UNIQUE constraint instead"
+      ],
+      "correct_index": 1,
+      "explanation": "You cannot have two separate PRIMARY KEY constraints on one table; a genuinely multi-column key must be declared as one composite PRIMARY KEY.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "coordinator",
+    "independent_review": "unavailable; no agent tools",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Definitions and examples checked against questions; no plagiarism certification.",
+    "existing_question_corrections": [
+      "tq-dbms-sql-5-primary-key-2",
+      "tq-dbms-sql-5-primary-key-4",
+      "tq-dbms-sql-5-primary-key-5",
+      "tq-dbms-sql-5-primary-key-6"
+    ],
+    "canonical_answer_indices_preserved": true
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-5-primary-key",
+    "original_note_sha256": "4c27d9b93aa4e2dd231e4b0f00d3f297a599457d904cbddf2fd402652922f442",
+    "status": "paired migration prepared; not applied"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "One composite primary constraint identifies complete enrollment pairs",
+      "description": "The same student can take several courses and a course can have several students. Only repetition of the complete identifying pair conflicts.",
+      "columns": [
+        "Proposed fact",
+        "Pair identity",
+        "Outcome under the rule"
+      ],
+      "rows": [
+        [
+          "Student 1, course 10, missing score",
+          "(1, 10)",
+          "Valid first enrollment"
+        ],
+        [
+          "Student 1, course 20, score 80",
+          "(1, 20)",
+          "Valid; same student, different course"
+        ],
+        [
+          "Student 2, course 10, score 60",
+          "(2, 10)",
+          "Valid; same course, different student"
+        ],
+        [
+          "Student 1, course 10, score 99",
+          "(1, 10)",
+          "Reject duplicate identity despite changed score"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "coordinator checked at-most-one constraint wording, generation separation and composite identity",
+    "server_rendering": "passed",
+    "browser_rendering": "unverified",
+    "independent_review": "unavailable; no agent tools",
+    "server_rendering_evidence": "2026-10-29: actual LessonBlock rendering passed for all authored packages in focused Vitest suite."
+  },
+  "sql_verification": {
+    "engine": "11.8.6-MariaDB-0+deb13u1 from Debian",
+    "scope": "MariaDB compatibility execution; exact MySQL 8.4/provider execution unverified",
+    "fingerprint": "d801c7eb0e7f28e2cb4452b674c29645182e3313998005b308455767a24786b2",
+    "cases": [
+      {
+        "problem": "primary-key-student",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "primary-key-student",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "primary-key-student",
+        "case": 2,
+        "passed": true
+      },
+      {
+        "problem": "primary-key-student",
+        "negative_case": 0,
+        "error_code": 1062,
+        "passed": true
+      },
+      {
+        "problem": "primary-key-student",
+        "negative_case": 1,
+        "error_code": 1048,
+        "passed": true
+      },
+      {
+        "problem": "primary-key-enrollment",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "primary-key-enrollment",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "primary-key-enrollment",
+        "case": 2,
+        "passed": true
+      },
+      {
+        "problem": "primary-key-enrollment",
+        "negative_case": 0,
+        "error_code": 1062,
+        "passed": true
+      },
+      {
+        "problem": "primary-key-enrollment",
+        "negative_case": 1,
+        "error_code": 1048,
+        "passed": true
+      }
+    ],
+    "all_passed": true
+  }
+}

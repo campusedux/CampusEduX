@@ -1,0 +1,651 @@
+{
+  "source_ref": "chapter-8-sql-fundamentals/dml",
+  "slug": "dml",
+  "title": "DML",
+  "description": "Change MySQL rows with explicit INSERT, targeted UPDATE, and selective DELETE while preserving constraints, transaction boundaries, affected populations, and concurrent correctness.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Changing rows within an existing definition\n\nData Manipulation Language, or DML, concerns operations on data represented by existing database objects. INSERT adds rows, UPDATE changes qualifying rows, and DELETE removes qualifying rows. These statements use a table's definition rather than replacing it. The distinction matters because a valid operation must respect the declared types, required values, keys, relationships, and other trusted rules.\n\nSQL category names are teaching conventions rather than a complete behavioral specification. SELECT is often discussed separately as DQL, although product documentation can include querying within a broader DML family. This topic concentrates on row-changing operations in MySQL 8.4. Do not infer rollback, permission, or performance behavior from a category label alone.\n\nUse a fictional supply table with supply_id, supply_name, quantity, and retired. Each identifier is unique, quantity is a nonnegative whole number, and retired is zero or one. The examples describe isolated fixture rows. They do not authorize modifying an application's shared data or changing its existing access and integrity rules.\n\n## Inserting complete and intentional rows\n\nAn INSERT should normally name its target columns explicitly. This makes the mapping from each supplied value to its intended attribute visible. A positional insert that assumes every current column appears in a fixed order can break when the definition evolves. The explicit list also helps a reviewer distinguish a missing required value from a deliberately omitted optional attribute.\n\n```sql\nINSERT INTO supplies (supply_id, supply_name, quantity, retired)\nVALUES (41, 'Tripod', 3, 0), (42, 'Screen', 0, 0);\n```\n\nThe two rows represent different supplies, including a recorded zero quantity for Screen. A unique identifier constraint rejects an attempt to insert another row with the same key. Zero is not missing information, and omitting a quantity should not silently mean zero unless the model actually defines a suitable default.\n\nIn MySQL strict contexts, omitting a required column without a usable default can fail. Other modes, statement options, or special column behavior can change the outcome, so avoid an unconditional claim that every omitted value always causes exactly the same error. Validate inputs and rely on the actual enforced contract rather than permissive coercion as a data-cleaning strategy.\n\n## Updating only the intended population\n\nUPDATE names the target table, describes new values, and can restrict the affected population with WHERE. A quantity increment can use the current stored quantity as part of the expression. The predicate is not optional in the sense of safety: SQL permits broad updates, so the caller must express the intended scope deliberately.\n\n```sql\nUPDATE supplies\nSET quantity = quantity + 2\nWHERE supply_id = 41 AND retired = 0;\n```\n\nIf supply 41 is active with quantity three, its new quantity is five. Supply 42 remains unchanged. A retired row with identifier 41 would not qualify under this condition. These examples show why testing only the targeted ordinary row is insufficient: include an unrelated row and a row failing an additional eligibility condition.\n\nWithout a limiting predicate, an UPDATE ordinarily attempts the assignment for all target rows. Permissions, constraints, safe-update settings, or other context may reject the operation, but they should not be treated as an automatic universal warning system. A query can be syntactically valid and still target a much broader population than intended.\n\n## Removing rows without removing the table\n\nDELETE removes rows satisfying its predicate. The table definition remains available afterward. A fixture can remove retired supplies whose quantity is zero while preserving active supplies and retired supplies that still have recorded stock. The compound condition expresses a business population more precisely than deleting every retired row.\n\n```sql\nDELETE FROM supplies\nWHERE retired = 1 AND quantity = 0;\n```\n\nA DELETE without WHERE ordinarily attempts to remove all target rows, subject to the actual permissions and constraints. It does not drop the table object. TRUNCATE is a separate operation with different MySQL transaction and operational behavior; substituting it for a selective delete changes the task because it has no equivalent row predicate.\n\nA preliminary SELECT using the same predicate helps inspect the intended population, but it is not a concurrency guarantee. Another session can change rows between the preview and write. For a real sensitive operation, use the established transaction and enforcement mechanism appropriate to the shared rule. The preview is evidence for a moment, not a lock over future state.\n\n## Understanding transactions and storage engines\n\nFor transactional tables such as InnoDB, row changes in an open transaction can generally be committed or rolled back under the applicable statement and engine rules. That statement needs context: autocommit can make successful statements permanent individually, and nontransactional engines do not provide equivalent rollback behavior. DML is not a universal promise of reversibility.\n\nAn explicit transaction can group several related changes. If a later condition fails, the caller needs a policy that rolls back the intended unit rather than accidentally committing an earlier partial effect. A statement error does not automatically mean every earlier successful statement in the transaction has been undone. Inspect the actual error behavior and complete the transaction explicitly.\n\nDDL or other implicit-commit operations can also disrupt an assumed transaction boundary. Do not interleave permanent structural changes into a workflow and then promise that one later ROLLBACK reverses everything. Keep the row-change examples focused on a known transactional fixture and record the actual engine used for verification.\n\n## Preserving validity during a write\n\nConstraints protect shared states even when a caller sends a bad value. An update that would make quantity negative should be rejected by the fixture's nonnegative rule. A required name should not become NULL, and an insert should not create duplicate identifiers. Test these failure cases rather than demonstrating only inputs that happen to satisfy every rule.\n\nTrusted authorization remains separate from value validity. A perfectly valid quantity adjustment can still be unauthorized for the actor. A client-supplied supply_id proves neither ownership nor permission to write it. The application and database must enforce the existing access contract at the actual trusted boundary; hiding a row in the interface is insufficient.\n\nTriggers and related database behavior can introduce additional effects where configured. A row change may update audit data or be rejected by a rule not visible in the simple statement. Inspect the target definition and direct callers before changing application behavior. The classroom fixture has only the declared constraints and does not stand in for an unknown production trigger environment.\n\n## Checking affected rows and concurrent intent\n\nApplications should interpret operation results using the driver's documented semantics. Matched rows and changed rows can differ, for example when an assignment sets a value to what it already contains. A zero count may indicate a missing identifier, a predicate that no longer qualifies, or an unchanged value depending on the API and operation. Do not turn every zero into the same success or failure without a defined contract.\n\nA conditional update can sometimes express a rule against current state more directly than a stale read followed by an unconditional write. For instance, a decrement can require sufficient quantity in its predicate. Whether that is enough for a multi-step workflow depends on its full integrity and transaction requirements. DML syntax provides tools; the operation's contract determines how to combine them correctly.\n\nRetries also need care. Repeating quantity equals quantity plus two adds two again if the first attempt committed before its response was lost. A statement that sets a fixed value can have different repeat behavior from an increment. Classify the actual effect and use the established retry mechanism instead of assuming every DML operation is safe to replay.\n\n## Recognizing dialect-specific convenience\n\nSome products provide MERGE or other upsert forms that combine insertion and update logic. Such operations belong to the manipulation family, but their syntax and concurrency behavior differ. MySQL uses its own supported forms rather than accepting every other product's MERGE statement unchanged. Learn the underlying desired effect before choosing a dialect-specific spelling.\n\nA convenience form is not a reason to skip checking uniqueness, conflicts, or unwanted overwrites. An insert that updates an existing key can replace information the caller did not intend to touch. Keep input ownership and existing-value policy explicit. A concise statement can still express a broad or destructive effect.\n\n## Verifying the complete row transition\n\nFor each exercise, define the initial fixture and the exact final rows, including required order. Include unrelated records, a threshold quantity, an empty input, and cases that should be rejected. Compare the final state rather than merely checking that the last statement returned no error. This makes the operation's scope and integrity visible.\n\nDML is useful because it expresses intentional transitions within a shared structural contract. Clear column lists, precise predicates, known transaction boundaries, and trusted enforcement keep those transitions understandable. Preserve the distinction between a successful statement, a valid final state, and an authorized business operation when reviewing any real row-changing workflow.\n",
+  "references": [
+    {
+      "title": "MySQL transaction control",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/commit.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-8-dml",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-8-dml-1",
+          "test_id": "pt-dbms-sql-8-dml",
+          "question_text": "Which three verbs form the core of DML?",
+          "options": [
+            "CREATE, ALTER, DROP",
+            "INSERT, UPDATE, DELETE",
+            "SELECT, JOIN, GROUP BY",
+            "GRANT, REVOKE, COMMIT"
+          ],
+          "correct_index": 1,
+          "explanation": "INSERT, UPDATE, and DELETE change the data stored in existing tables — the essence of DML.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-8-dml-2",
+          "test_id": "pt-dbms-sql-8-dml",
+          "question_text": "What happens if you run `UPDATE employees SET salary = 0;` with no WHERE clause?",
+          "options": [
+            "Nothing happens without a WHERE clause — it is required and the statement fails",
+            "Every single row in the table gets its salary set to 0",
+            "Only the first row is updated by default",
+            "Only rows with a NULL salary are updated"
+          ],
+          "correct_index": 1,
+          "explanation": "Without a WHERE clause, UPDATE applies to every row in the table — a classic, dangerous mistake.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-8-dml-3",
+          "test_id": "pt-dbms-sql-8-dml",
+          "question_text": "When can a MySQL row change be reversed with ROLLBACK?",
+          "options": [
+            "No, DML changes are permanent the instant they run, like DDL on most engines",
+            "When it belongs to an uncommitted transaction on a transactional engine, subject to its actual statement rules",
+            "Only INSERT is transactional; UPDATE and DELETE are not",
+            "Only on weekends"
+          ],
+          "correct_index": 1,
+          "explanation": "Autocommit and nontransactional engines prevent a universal rollback claim.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-8-dml-4",
+          "test_id": "pt-dbms-sql-8-dml",
+          "question_text": "What does previewing a DELETE predicate with SELECT establish?",
+          "options": [
+            "Run the DELETE immediately with no checks — SQL always warns you first",
+            "It helps inspect currently qualifying rows, but does not freeze them against concurrent changes",
+            "Always omit the WHERE clause to be safe",
+            "Rename the table first"
+          ],
+          "correct_index": 1,
+          "explanation": "A matching preview is useful evidence, not a substitute for trusted concurrent enforcement.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-8-dml-5",
+          "test_id": "pt-dbms-sql-8-dml",
+          "question_text": "In a MySQL strict context, what can happen when a required column without a usable default is omitted?",
+          "options": [
+            "The column is silently set to NULL anyway",
+            "The INSERT can fail because the required value was not supplied",
+            "The column is automatically set to zero",
+            "The entire table is dropped"
+          ],
+          "correct_index": 1,
+          "explanation": "Mode, options, and special column behavior matter; the question is explicitly scoped.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-8-dml-6",
+          "test_id": "pt-dbms-sql-8-dml",
+          "question_text": "How does TRUNCATE TABLE typically differ from DELETE FROM table (no WHERE) for emptying a table?",
+          "options": [
+            "They are always functionally and transactionally identical on every engine, with zero differences",
+            "TRUNCATE is generally faster but, on many engines, cannot be selectively filtered and may not be rollback-able the same way DELETE is",
+            "DELETE removes the table's structure while TRUNCATE does not",
+            "TRUNCATE only works on views, never on tables"
+          ],
+          "correct_index": 1,
+          "explanation": "TRUNCATE and DELETE both empty a table but differ meaningfully in performance, filtering ability, and rollback/transactional behavior depending on the engine.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-8-dml-7",
+          "test_id": "pt-dbms-sql-8-dml",
+          "question_text": "Why is accidentally omitting a write predicate dangerous?",
+          "options": [
+            "Because SQL statements without WHERE always fail to execute",
+            "It can broaden an intended targeted UPDATE or DELETE to all target rows, unless other controls reject it",
+            "Because WHERE is required syntax and omitting it is impossible",
+            "Because it only affects SELECT statements, which are harmless"
+          ],
+          "correct_index": 1,
+          "explanation": "Do not rely on every environment providing an automatic warning.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-8-dml-8",
+          "test_id": "pt-dbms-sql-8-dml",
+          "question_text": "Which SQL sub-language category does MERGE (an 'upsert' statement combining insert/update logic) generally belong to?",
+          "options": [
+            "DDL",
+            "DML",
+            "DCL",
+            "TCL"
+          ],
+          "correct_index": 1,
+          "explanation": "MERGE manipulates row data (inserting or updating), placing it firmly in the DML family even though its syntax is more elaborate than a plain INSERT/UPDATE.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-8-dml-new-9",
+          "test_id": "pt-dbms-sql-8-dml",
+          "question_text": "Why list INSERT target columns explicitly?",
+          "options": [
+            "To bypass NOT NULL rules",
+            "To make the value-to-attribute mapping clear and reduce positional coupling",
+            "To disable primary keys",
+            "To commit every unrelated transaction"
+          ],
+          "correct_index": 1,
+          "explanation": "Explicit mapping makes the intended row construction reviewable.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-8-dml-new-10",
+          "test_id": "pt-dbms-sql-8-dml",
+          "question_text": "Is a valid quantity adjustment automatically authorized?",
+          "options": [
+            "Yes; nonnegative values grant write access",
+            "Only if the identifier is numeric",
+            "No; actor permission is a separate trusted rule",
+            "Only if a row is visible in a dropdown"
+          ],
+          "correct_index": 2,
+          "explanation": "Data validity does not establish authority over the row.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-8-dml-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-8-dml-application-new-1",
+          "test_id": "pt-dbms-sql-8-dml-application",
+          "question_text": "Supply 41 has quantity 3 and is active. A targeted update adds 2. What is its new quantity?",
+          "options": [
+            "2",
+            "3",
+            "5",
+            "6"
+          ],
+          "correct_index": 2,
+          "explanation": "The stored value is incremented by the stated amount.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-8-dml-application-new-2",
+          "test_id": "pt-dbms-sql-8-dml-application",
+          "question_text": "The update requires retired = 0, but the target row has retired = 1. What should happen under that predicate?",
+          "options": [
+            "The retired flag is automatically removed",
+            "Every other row receives the increment",
+            "The table is dropped",
+            "The row does not qualify"
+          ],
+          "correct_index": 3,
+          "explanation": "The additional eligibility condition restricts the population.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-8-dml-application-new-3",
+          "test_id": "pt-dbms-sql-8-dml-application",
+          "question_text": "A delete requires retired = 1 AND quantity = 0. Which row qualifies?",
+          "options": [
+            "A retired row with zero quantity",
+            "An active row with zero quantity",
+            "A retired row with quantity five",
+            "An active row with quantity five"
+          ],
+          "correct_index": 0,
+          "explanation": "Both parts of the conjunction must be true.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-8-dml-application-new-4",
+          "test_id": "pt-dbms-sql-8-dml-application",
+          "question_text": "A preview shows five rows; another session changes one before the write. What did the preview not provide?",
+          "options": [
+            "A query result at the preview moment",
+            "A guarantee that the later qualifying population is unchanged",
+            "A way to inspect the predicate",
+            "A list of then-visible rows"
+          ],
+          "correct_index": 1,
+          "explanation": "The preview did not lock future state by itself.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-8-dml-application-new-5",
+          "test_id": "pt-dbms-sql-8-dml-application",
+          "question_text": "The first write commits, its response is lost, and an increment is retried. What can occur?",
+          "options": [
+            "The database always deduplicates it",
+            "The first commit is automatically reversed",
+            "The quantity can be incremented twice",
+            "The retry becomes a read"
+          ],
+          "correct_index": 2,
+          "explanation": "Repeated additive effects require an explicit retry contract.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-8-dml-application-new-6",
+          "test_id": "pt-dbms-sql-8-dml-application",
+          "question_text": "A later statement fails inside an open transaction. What must the caller not assume universally?",
+          "options": [
+            "That error handling is needed",
+            "That the transaction must be completed",
+            "That engine behavior matters",
+            "That all earlier successful statements were rolled back"
+          ],
+          "correct_index": 3,
+          "explanation": "Statement and transaction rollback scope can differ.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-8-dml-application-new-7",
+          "test_id": "pt-dbms-sql-8-dml-application",
+          "question_text": "A DML operation runs with autocommit enabled and succeeds. Can a much later ROLLBACK be assumed to reverse it?",
+          "options": [
+            "No; the statement may already be committed",
+            "Yes; DML is forever reversible",
+            "Only if the row has a name",
+            "Only if the query was short"
+          ],
+          "correct_index": 0,
+          "explanation": "The actual transaction boundary determines reversibility.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-8-dml-application-new-8",
+          "test_id": "pt-dbms-sql-8-dml-application",
+          "question_text": "A supply update attempts quantity -1 under the declared check. What validates enforcement?",
+          "options": [
+            "A successful read of a different valid row",
+            "The write is rejected and the prior valid state remains",
+            "A comment saying quantities are nonnegative",
+            "A shorter table name"
+          ],
+          "correct_index": 1,
+          "explanation": "Failure-path execution is needed to verify the promised domain.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-8-dml-application-new-9",
+          "test_id": "pt-dbms-sql-8-dml-application",
+          "question_text": "An API reports zero affected rows. What should interpretation follow?",
+          "options": [
+            "A universal rule that the table is missing",
+            "A universal success assumption",
+            "The driver and operation contract for matched versus changed rows",
+            "The alphabetic table order"
+          ],
+          "correct_index": 2,
+          "explanation": "Different APIs and assignments can produce zero for different reasons.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-8-dml-application-new-10",
+          "test_id": "pt-dbms-sql-8-dml-application",
+          "question_text": "A MySQL tutorial copies another product's MERGE form directly. What needs checking?",
+          "options": [
+            "Only whether the text contains INSERT",
+            "Only the number of statements",
+            "Only the presence of a semicolon",
+            "Supported target syntax and the intended conflict behavior"
+          ],
+          "correct_index": 3,
+          "explanation": "The broad category does not make product-specific grammar portable.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "dsa-dbms-sql-dml-targeted-increase",
+      "slug": "dml-targeted-increase",
+      "title": "Increase one active supply quantity",
+      "difficulty": "Easy",
+      "task": "Add two to quantity only for supply_id 41 when retired = 0. Then return supply_id, supply_name, quantity, retired for all supplies ordered by supply_id. Preserve all unrelated rows.",
+      "schema_sql": "CREATE TABLE supplies (supply_id INT PRIMARY KEY, supply_name VARCHAR(40) NOT NULL, quantity INT NOT NULL CHECK (quantity >= 0), retired INT NOT NULL CHECK (retired IN (0,1))) ENGINE=InnoDB;",
+      "seed_sql": "INSERT INTO supplies VALUES (42,'Screen',0,0),(41,'Tripod',3,0),(43,'Mic',8,1);",
+      "expected": "supply_id\tsupply_name\tquantity\tretired\n41\tTripod\t5\t0\n42\tScreen\t0\t0\n43\tMic\t8\t1",
+      "ordering": "supply_id ascending",
+      "constraints": [
+        "Unique required identifiers",
+        "Quantity nonnegative",
+        "retired is 0 or 1"
+      ],
+      "edge_cases": [
+        "A retired target is unchanged",
+        "A missing target changes nothing",
+        "Unrelated supplies remain unchanged"
+      ],
+      "hints": [
+        "Use the identifier and eligibility predicate together",
+        "Compute from the current quantity"
+      ],
+      "starter_sql": "-- Perform the targeted UPDATE, then SELECT all final rows.\n",
+      "solution_sql": "UPDATE supplies SET quantity = quantity + 2 WHERE supply_id = 41 AND retired = 0;\nSELECT supply_id,supply_name,quantity,retired FROM supplies ORDER BY supply_id;",
+      "explanation": "The compound predicate restricts the increment to the active target. The final ordered read makes unintended changes to other rows visible.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO supplies VALUES (41,'Tripod',3,1),(9,'Box',1,0);",
+          "expected": "supply_id\tsupply_name\tquantity\tretired\n9\tBox\t1\t0\n41\tTripod\t3\t1"
+        },
+        {
+          "seed_sql": "",
+          "expected": ""
+        }
+      ]
+    },
+    {
+      "id": "dsa-dbms-sql-dml-selective-maintenance",
+      "slug": "dml-selective-maintenance",
+      "title": "Insert, adjust, and selectively remove fixture supplies",
+      "difficulty": "Medium",
+      "task": "Inside one explicit transaction, insert supply 90 named Cable with quantity 4 and retired 0; add 1 to every existing active supply other than 90; delete only retired supplies with quantity 0; commit. Return supply_id, supply_name, quantity, retired ordered by supply_id. Fixtures never contain supply_id 90 before the insertion. This exercise changes temporary fixture data only.",
+      "schema_sql": "CREATE TABLE supplies (supply_id INT PRIMARY KEY, supply_name VARCHAR(40) NOT NULL, quantity INT NOT NULL CHECK (quantity >= 0), retired INT NOT NULL CHECK (retired IN (0,1))) ENGINE=InnoDB;",
+      "seed_sql": "INSERT INTO supplies VALUES (1,'Tripod',2,0),(2,'Screen',0,0),(3,'Old Mic',0,1),(4,'Old Stand',2,1);",
+      "expected": "supply_id\tsupply_name\tquantity\tretired\n1\tTripod\t3\t0\n2\tScreen\t1\t0\n4\tOld Stand\t2\t1\n90\tCable\t4\t0",
+      "ordering": "supply_id ascending",
+      "constraints": [
+        "InnoDB transactional fixture",
+        "No preexisting supply_id 90",
+        "Preserve retired rows with positive quantity",
+        "Retain all validity constraints"
+      ],
+      "edge_cases": [
+        "Active zero quantities are increased, not deleted",
+        "Retired positive quantities remain",
+        "The newly inserted Cable must stay at four",
+        "Empty initial input still produces Cable"
+      ],
+      "hints": [
+        "Use an explicit INSERT column list",
+        "Exclude supply_id 90 from the increment",
+        "Combine retired and zero quantity in DELETE"
+      ],
+      "starter_sql": "-- START TRANSACTION; perform the three writes; COMMIT; then SELECT.\n",
+      "solution_sql": "START TRANSACTION;\nINSERT INTO supplies (supply_id,supply_name,quantity,retired) VALUES (90,'Cable',4,0);\nUPDATE supplies SET quantity = quantity + 1 WHERE retired = 0 AND supply_id <> 90;\nDELETE FROM supplies WHERE retired = 1 AND quantity = 0;\nCOMMIT;\nSELECT supply_id,supply_name,quantity,retired FROM supplies ORDER BY supply_id;",
+      "explanation": "The transaction groups the three valid fixture changes. Explicit predicates distinguish existing active supplies from the new row and remove only the stated retired-empty population.",
+      "validation_cases": [
+        {
+          "seed_sql": "",
+          "expected": "supply_id\tsupply_name\tquantity\tretired\n90\tCable\t4\t0"
+        },
+        {
+          "seed_sql": "INSERT INTO supplies VALUES (5,'Legacy',0,1),(6,'Retained',1,1);",
+          "expected": "supply_id\tsupply_name\tquantity\tretired\n6\tRetained\t1\t1\n90\tCable\t4\t0"
+        }
+      ],
+      "negative_validation_cases": [
+        {
+          "sql": "UPDATE supplies SET quantity = -1 WHERE supply_id = 90;",
+          "error_codes": [
+            3819,
+            4025
+          ]
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-8-dml-1",
+      "test_id": "pt-dbms-sql-8-dml",
+      "question_text": "Which three verbs form the core of DML?",
+      "options": [
+        "CREATE, ALTER, DROP",
+        "INSERT, UPDATE, DELETE",
+        "SELECT, JOIN, GROUP BY",
+        "GRANT, REVOKE, COMMIT"
+      ],
+      "correct_index": 1,
+      "explanation": "INSERT, UPDATE, and DELETE change the data stored in existing tables — the essence of DML.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-8-dml-2",
+      "test_id": "pt-dbms-sql-8-dml",
+      "question_text": "What happens if you run `UPDATE employees SET salary = 0;` with no WHERE clause?",
+      "options": [
+        "Nothing happens without a WHERE clause — it is required and the statement fails",
+        "Every single row in the table gets its salary set to 0",
+        "Only the first row is updated by default",
+        "Only rows with a NULL salary are updated"
+      ],
+      "correct_index": 1,
+      "explanation": "Without a WHERE clause, UPDATE applies to every row in the table — a classic, dangerous mistake.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-8-dml-3",
+      "test_id": "pt-dbms-sql-8-dml",
+      "question_text": "Are DML changes (INSERT/UPDATE/DELETE) transactional — can they be rolled back before COMMIT — on mainstream engines?",
+      "options": [
+        "No, DML changes are permanent the instant they run, like DDL on most engines",
+        "Yes — DML is transactional and can be undone with ROLLBACK before COMMIT",
+        "Only INSERT is transactional; UPDATE and DELETE are not",
+        "Only on weekends"
+      ],
+      "correct_index": 1,
+      "explanation": "Unlike DDL on most engines, DML participates fully in transactions and can be rolled back before commit.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-8-dml-4",
+      "test_id": "pt-dbms-sql-8-dml",
+      "question_text": "What is a safe practice before running a DELETE with a WHERE clause you're not fully confident about?",
+      "options": [
+        "Run the DELETE immediately with no checks — SQL always warns you first",
+        "Run the equivalent SELECT with the same WHERE clause first, to preview exactly which rows would be affected",
+        "Always omit the WHERE clause to be safe",
+        "Rename the table first"
+      ],
+      "correct_index": 1,
+      "explanation": "Previewing the affected rows with a matching SELECT is a standard, effective safety practice before a risky UPDATE/DELETE.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-8-dml-5",
+      "test_id": "pt-dbms-sql-8-dml",
+      "question_text": "What happens when you INSERT a row but omit a column that is declared NOT NULL with no default value?",
+      "options": [
+        "The column is silently set to NULL anyway",
+        "The INSERT fails — this is intentional, preventing a silently incomplete row",
+        "The column is automatically set to zero",
+        "The entire table is dropped"
+      ],
+      "correct_index": 1,
+      "explanation": "A NOT NULL column without a default requires an explicit value; omitting it causes the INSERT to fail by design.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-8-dml-6",
+      "test_id": "pt-dbms-sql-8-dml",
+      "question_text": "How does TRUNCATE TABLE typically differ from DELETE FROM table (no WHERE) for emptying a table?",
+      "options": [
+        "They are always functionally and transactionally identical on every engine, with zero differences",
+        "TRUNCATE is generally faster but, on many engines, cannot be selectively filtered and may not be rollback-able the same way DELETE is",
+        "DELETE removes the table's structure while TRUNCATE does not",
+        "TRUNCATE only works on views, never on tables"
+      ],
+      "correct_index": 1,
+      "explanation": "TRUNCATE and DELETE both empty a table but differ meaningfully in performance, filtering ability, and rollback/transactional behavior depending on the engine.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-8-dml-7",
+      "test_id": "pt-dbms-sql-8-dml",
+      "question_text": "Why is 'omitting the WHERE clause' singled out as one of the most damaging SQL mistakes?",
+      "options": [
+        "Because SQL statements without WHERE always fail to execute",
+        "Because it silently turns a targeted UPDATE/DELETE into one that affects every row in the table, with no warning",
+        "Because WHERE is required syntax and omitting it is impossible",
+        "Because it only affects SELECT statements, which are harmless"
+      ],
+      "correct_index": 1,
+      "explanation": "The WHERE clause is what limits DML to specific rows; without it, the statement silently applies to the entire table.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-8-dml-8",
+      "test_id": "pt-dbms-sql-8-dml",
+      "question_text": "Which SQL sub-language category does MERGE (an 'upsert' statement combining insert/update logic) generally belong to?",
+      "options": [
+        "DDL",
+        "DML",
+        "DCL",
+        "TCL"
+      ],
+      "correct_index": 1,
+      "explanation": "MERGE manipulates row data (inserting or updating), placing it firmly in the DML family even though its syntax is more elaborate than a plain INSERT/UPDATE.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "coordinator",
+    "independent_review": "unavailable; no agent tools",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Definitions and examples checked against questions; no plagiarism certification.",
+    "existing_question_corrections": [
+      "tq-dbms-sql-8-dml-3",
+      "tq-dbms-sql-8-dml-4",
+      "tq-dbms-sql-8-dml-5",
+      "tq-dbms-sql-8-dml-7"
+    ],
+    "canonical_answer_indices_preserved": true
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-8-dml",
+    "original_note_sha256": "857901e4508e6d8cfdab222e95ce48b0b6103fe36248ab4d57dfe28392867590",
+    "status": "paired migration prepared; not applied"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Supply populations under three row operations",
+      "description": "Each write has its own population. The newly inserted row is excluded from the increment, active empty rows are retained, and retired rows with positive stock are not deleted.",
+      "columns": [
+        "Initial or introduced row",
+        "Operation effect",
+        "Final state"
+      ],
+      "rows": [
+        [
+          "Active quantity 2",
+          "Increment existing active rows",
+          "Quantity 3"
+        ],
+        [
+          "Active quantity 0",
+          "Increment; not a retired deletion target",
+          "Quantity 1"
+        ],
+        [
+          "Retired quantity 0",
+          "Selective delete",
+          "Absent"
+        ],
+        [
+          "Retired quantity 2",
+          "No qualifying update or delete",
+          "Quantity 2"
+        ],
+        [
+          "New Cable quantity 4",
+          "Explicit insert; excluded from increment",
+          "Quantity 4"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "coordinator review",
+    "server_rendering": "passed",
+    "browser_rendering": "unverified",
+    "independent_review": "unavailable; no agent tools",
+    "rendering_check": "2026-10-29: 44 authored-package render checks and 8 diagram/access integration checks passed. Desktop/mobile browser rendering unverified."
+  },
+  "sql_verification": {
+    "engine": "11.8.6-MariaDB-0+deb13u1 from Debian",
+    "scope": "MariaDB compatibility execution; exact MySQL 8.4/provider execution unverified",
+    "fingerprint": "05b54ac2363b26f0efb3c420d922434aa2b829971f25a51195635b35b1b9290b",
+    "cases": [
+      {
+        "problem": "dml-targeted-increase",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "dml-targeted-increase",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "dml-targeted-increase",
+        "case": 2,
+        "passed": true
+      },
+      {
+        "problem": "dml-selective-maintenance",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "dml-selective-maintenance",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "dml-selective-maintenance",
+        "case": 2,
+        "passed": true
+      },
+      {
+        "problem": "dml-selective-maintenance",
+        "negative_case": 0,
+        "error_code": 4025,
+        "passed": true
+      }
+    ],
+    "all_passed": true
+  }
+}

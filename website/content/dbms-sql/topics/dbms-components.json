@@ -1,0 +1,519 @@
+{
+  "source_ref": "chapter-1-database-foundations/dbms-components",
+  "slug": "dbms-components",
+  "title": "DBMS Components",
+  "description": "Trace query processing, transaction coordination, buffer memory, and persistent storage as cooperating DBMS responsibilities, with clear limits on simplified architecture diagrams.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Reading an architecture as cooperating responsibilities\n\nA DBMS brings together several kinds of work: understanding requests, finding data, coordinating changes, managing memory, and preserving persistent state. Introductory diagrams often separate these responsibilities into a database engine, query processor, storage manager, transaction manager, and buffer manager. This is a useful teaching model. It is not a promise that every product implements exactly five independent programs with those names.\n\nThe word engine needs special care. Here, database engine refers broadly to the core runtime coordinating database work. In MySQL documentation, a storage engine such as InnoDB is a more specific part of the architecture behind the common server layer. Treating these meanings as identical can lead to incorrect claims about which component parses SQL, manages connections, or implements a table's transactional storage behavior.\n\nA component diagram is therefore a map of responsibilities and interactions. It helps you ask where a requirement is handled and which other responsibilities it depends on. It should not hide those dependencies behind a simple arrow chain. A query can touch the same subsystem several times, and transaction, access, and memory concerns can affect more than one stage of its work.\n\n## Understanding the query processor's job\n\nThe query processor interprets a request and determines a way to produce its result. A relational system typically parses statement syntax, resolves names against definitions, checks relevant properties, and plans operations. For example, a student lookup must refer to an existing table and column before an access plan can be useful. A syntactically valid name is not enough if that name does not exist in the intended schema.\n\nPlanning considers available access structures and the shape of the query. A system might scan records or use an index, and a larger query may involve joins, filtering, and aggregation. The optimizer aims to choose an appropriate strategy using the information available to it. Its choice is not a guarantee that every workload will meet its target latency or that every estimate exactly matches current data.\n\nThe resulting execution work still needs data access and appropriate transactional behavior. The query processor does not produce a correct result merely by constructing a plan on paper. It relies on storage, memory, catalog information, and the relevant rules for visibility and concurrency. These interactions explain why a query-planning diagram is only one view of the overall DBMS architecture.\n\n## Connecting logical records to physical storage\n\nThe storage manager handles responsibilities involved in representing and accessing persistent data. Logical rows and indexes must have a physical representation in files, pages, or other structures used by the product. Applications ordinarily request values through supported queries rather than calculate the physical byte address of each row themselves. That separation supports the logical interfaces on which applications depend.\n\nA requested record can require access to one or several pages. Index structures may help locate relevant data, while updates can require maintaining those structures as well as changing a row. Physical organization, row width, locality, and the workload can affect the required work. These details matter for performance, but they do not replace the logical meaning or integrity rules of the records being stored.\n\nDo not interpret storage manager as a guarantee that every request goes directly to disk. Data is commonly accessed through memory management facilities. A useful architecture explanation must account for both a page already available in memory and a page that must be fetched from persistent storage. The storage and buffer responsibilities cooperate, and products may draw their internal boundaries differently.\n\n## Explaining the buffer manager's role\n\nA buffer manager manages memory used for database pages. If a required valid page is already in the buffer pool, the system can avoid fetching that page from persistent storage again. This is a cache hit for that page access. It does not mean the whole query is instantly complete: permissions, visibility decisions, computation, synchronization, and other page accesses can still require work.\n\nIf a needed page is not available, the system may have to fetch it and find suitable memory for it. That can involve choosing which existing buffer contents may be replaced and handling pages with pending changes. A workload that repeatedly needs more pages than its effective working memory can incur substantial additional I/O. The correct conclusion requires workload evidence, not merely observing that the product has a configurable buffer pool.\n\nA modified in-memory page is commonly called dirty because its contents differ from the persistent copy that needs to be maintained. Dirty does not mean invalid or corrupted. The system must coordinate when those changes are written and how recovery information is preserved. Flushing every changed page immediately and never flushing changed pages are both inadequate descriptions of how a real transactional database manages this work.\n\n## Coordinating transactions and visibility\n\nThe transaction-management responsibility includes coordinating related operations and their interaction with concurrent work. The system must determine what a transaction can observe and what happens when operations conflict. Depending on the implementation and chosen guarantees, this can involve locks, versions, snapshots, conflict detection, and recovery records. These mechanisms do not necessarily live in one independent module with one universal interface.\n\nFor example, a query may read an appropriate record version while another transaction changes the current record. A write may wait or fail because of conflicting work. The required behavior depends on the database, statements, isolation settings, and application algorithm. Merely placing transaction manager in an architecture diagram does not prove that a particular registration or payment workflow preserves its intended invariant.\n\nRecovery also connects transaction work to storage and memory. With write-ahead logging, the required log information must reach the appropriate durable state before the corresponding changed data pages are persisted under the recovery protocol. This relationship is about ordering and recoverability, not a claim that every modified page is written at the instant the application changes a value.\n\n## Following a simple read without inventing a universal pipeline\n\nImagine an authorized query retrieving one student's stored name by identifier. The system interprets the request, consults the relevant definitions, and chooses execution operations. Those operations need an appropriate view of records under the transaction rules. They access pages through the engine's storage and memory facilities. If the required data is already buffered, a physical page read may be avoided.\n\nOn a cache miss, the relevant storage and buffer work obtains the needed page. The execution logic then produces the requested value, subject to the applicable checks and visibility rules. This is an explanatory trace, not a fixed sequence that every implementation follows exactly once. Authentication, authorization, transaction context, and caching can interact with several parts of request handling.\n\nThe broad runtime coordinates these responsibilities and their supporting catalog facilities. Catalog information describes objects such as tables, columns, constraints, and indexes. Different products assign ownership of those facilities differently. MySQL's common server layer and pluggable storage architecture are one reason not to equate the educational engine box with a particular table storage engine.\n\n## Diagnosing symptoms across component boundaries\n\nSuppose a report becomes slow. An inefficient access plan is one possible cause, but so are repeated physical reads, waits on concurrent work, or pressure elsewhere in request handling. A symptom observed at the query interface can originate in another responsibility. Investigating only the component nearest the visible symptom can lead to an ineffective change or an unsupported explanation.\n\nUse evidence that distinguishes hypotheses. A plan helps explain chosen operations; page and I/O observations help evaluate data-access cost; wait information helps examine coordination delays. Increasing a buffer setting without understanding the workload may not address an incorrect query or lock conflict. Likewise, adding an index does not establish that a recovery or authorization problem has been solved.\n\nWhen explaining components in an assessment, name the responsibility, the information it needs, and a relevant interaction. A query processor plans operations, a buffer manager manages page memory, a storage manager handles persistent representation, and transaction facilities coordinate visibility and changes. The broad runtime brings those responsibilities together. That account is more accurate and useful than treating a five-box teaching picture as a universal implementation blueprint.",
+  "references": [
+    {
+      "title": "MySQL storage engine architecture",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/pluggable-storage-overview.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-1-dbms-components",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-1-dbms-components-1",
+          "test_id": "pt-dbms-sql-1-dbms-components",
+          "question_text": "Which five responsibility labels does this introductory model use?",
+          "options": [
+            "Database Engine, Storage Manager, Query Processor, Transaction Manager, Buffer Manager",
+            "Database Engine, Application Developer, End User, Designer, DBA",
+            "Data, Information, Metadata, Knowledge, and the Query Processor",
+            "Storage Manager, Buffer Manager, and three copies of the Query Processor"
+          ],
+          "correct_index": 0,
+          "explanation": "The notes name exactly these five components as the DBMS subsystems covered in the chapter.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-1-dbms-components-2",
+          "test_id": "pt-dbms-sql-1-dbms-components",
+          "question_text": "In the query pipeline example, which component is responsible for parsing the SQL and choosing an execution plan?",
+          "options": [
+            "The Query Processor",
+            "The Buffer Manager",
+            "The Storage Manager",
+            "The Transaction Manager"
+          ],
+          "correct_index": 0,
+          "explanation": "The notes state the Query Processor parses, validates, and chooses the execution plan for a query.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-1-dbms-components-3",
+          "test_id": "pt-dbms-sql-1-dbms-components",
+          "question_text": "What happens when the execution plan requests a data page that is already cached in memory?",
+          "options": [
+            "The buffer manager can serve that page without a new physical fetch, although other work or waits can remain",
+            "The whole query must complete with zero latency",
+            "The page is necessarily fetched from disk again",
+            "Every authorization check is removed"
+          ],
+          "correct_index": 0,
+          "explanation": "A cache hit avoids the relevant page fetch. It does not guarantee that the complete query has no other work or synchronization.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-1-dbms-components-4",
+          "test_id": "pt-dbms-sql-1-dbms-components",
+          "question_text": "Which responsibilities cooperate in this topic's conceptual read trace, rather than forming a universal once-only pipeline?",
+          "options": [
+            "Query interpretation/planning, transaction visibility, buffer access, and persistent-data access",
+            "Only drawing the user interface",
+            "Only the administrator's job title",
+            "Only copying an arbitrary file"
+          ],
+          "correct_index": 0,
+          "explanation": "These are interacting responsibilities. A real product can combine them or revisit them during execution.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-1-dbms-components-5",
+          "test_id": "pt-dbms-sql-1-dbms-components",
+          "question_text": "Why does the notes say diagnosing performance problems requires understanding the whole pipeline, not just one component?",
+          "options": [
+            "Because a bottleneck in one component, like an undersized buffer pool, can show up as a symptom in another, like slow query response times",
+            "Because each component operates in complete isolation with no effect on the others",
+            "Because the Database Engine automatically fixes all performance problems on its own",
+            "Because only the Storage Manager can ever cause performance problems"
+          ],
+          "correct_index": 0,
+          "explanation": "The notes explicitly warn that a root cause in one component (buffer sizing) can manifest as a symptom in another (perceived query slowness).",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-1-dbms-components-6",
+          "test_id": "pt-dbms-sql-1-dbms-components",
+          "question_text": "What does the broad core-runtime engine label mean in this educational model?",
+          "options": [
+            "Coordination of the cooperating runtime responsibilities and supporting catalog facilities",
+            "Exactly the same implementation boundary as every product's storage-engine plugin",
+            "A guarantee that all requests use one fixed disk sequence",
+            "A replacement for query processing and transaction rules"
+          ],
+          "correct_index": 0,
+          "explanation": "This broad educational use must be distinguished from a product-specific term such as MySQL storage engine.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-1-dbms-components-7",
+          "test_id": "pt-dbms-sql-1-dbms-components",
+          "question_text": "Why does the notes caution against treating the five-component breakdown as a literal, universal codebase map for every DBMS product?",
+          "options": [
+            "Because different products use different internal terminology and groupings, such as MySQL's pluggable storage engine concept blending Storage Manager and Engine ideas",
+            "Because only PostgreSQL actually has any of these five components",
+            "Because this breakdown applies only to NoSQL databases, not relational ones",
+            "Because the five components never interact with each other in real systems"
+          ],
+          "correct_index": 0,
+          "explanation": "The notes explicitly warn that this is a teaching model and that real products may organize or name these responsibilities differently.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-1-dbms-components-8",
+          "test_id": "pt-dbms-sql-1-dbms-components",
+          "question_text": "In real engines like PostgreSQL or InnoDB, the notes say the Buffer Manager and Transaction Manager interact tightly around which mechanism used for crash recovery?",
+          "options": [
+            "Write-ahead logging, which must coordinate closely with which pages are dirty in the buffer pool",
+            "GRANT/REVOKE privilege management",
+            "ER diagram normalization rules",
+            "The naive end user's login form"
+          ],
+          "correct_index": 0,
+          "explanation": "The notes specifically name write-ahead logging as the coordination point between the Buffer Manager's dirty pages and the Transaction Manager's recovery guarantees.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "question_text": "Does a five-component teaching diagram identify five universally separate executable programs?",
+          "options": [
+            "Yes; every product must use exactly those five process names",
+            "Yes; no components can interact more than once",
+            "No; it separates responsibilities whose implementation boundaries vary",
+            "No; diagrams cannot teach anything about database work"
+          ],
+          "correct_index": 2,
+          "explanation": "The model is explanatory. Products combine and name internal responsibilities differently.",
+          "marks": 1,
+          "id": "tq-dbx2-dbms-components-1-9",
+          "test_id": "pt-dbms-sql-1-dbms-components",
+          "sort_order": 8
+        },
+        {
+          "question_text": "Does a page cache hit prove that an entire query completes instantly?",
+          "options": [
+            "Yes; authorization and computation disappear",
+            "No; it avoids that page fetch while other checks, work, or waits can remain",
+            "Yes; every other page is automatically cached",
+            "No; a hit always requires reading that page from disk again"
+          ],
+          "correct_index": 1,
+          "explanation": "A cache hit describes one access, not a universal latency guarantee for the full request.",
+          "marks": 1,
+          "id": "tq-dbx2-dbms-components-1-10",
+          "test_id": "pt-dbms-sql-1-dbms-components",
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbx2-dbms-components-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "question_text": "A query names a column that does not exist in the requested table. Which responsibility must detect that problem before a useful plan can execute?",
+          "options": [
+            "Only replacing a dirty buffer page",
+            "Resolving the statement against the database definitions",
+            "Only copying the final result to a screen",
+            "Only increasing a disk capacity setting"
+          ],
+          "correct_index": 1,
+          "explanation": "Parsing and name resolution need the catalog definitions. Physical access cannot repair an invalid reference.",
+          "marks": 1,
+          "id": "tq-dbx2-dbms-components-2-1",
+          "test_id": "pt-dbx2-dbms-components-application",
+          "sort_order": 0
+        },
+        {
+          "question_text": "The optimizer selects an index access path. What still needs to happen?",
+          "options": [
+            "Execution must obtain the relevant data under the applicable visibility and access rules",
+            "The result is already correct without reading data",
+            "All transactional coordination becomes unnecessary",
+            "Every execution estimate must now be exact"
+          ],
+          "correct_index": 0,
+          "explanation": "A plan specifies operations; actual execution still depends on storage, memory and the relevant guarantees.",
+          "marks": 1,
+          "id": "tq-dbx2-dbms-components-2-2",
+          "test_id": "pt-dbx2-dbms-components-application",
+          "sort_order": 1
+        },
+        {
+          "question_text": "An in-memory page has been modified relative to its persistent copy. What does dirty mean here?",
+          "options": [
+            "The page must be corrupted",
+            "The page can never be read again",
+            "The page is automatically an unauthorized record",
+            "The page has changes that need appropriate persistence handling"
+          ],
+          "correct_index": 3,
+          "explanation": "Dirty is a memory/persistence state, not a synonym for damaged or invalid data.",
+          "marks": 1,
+          "id": "tq-dbx2-dbms-components-2-3",
+          "test_id": "pt-dbx2-dbms-components-application",
+          "sort_order": 2
+        },
+        {
+          "question_text": "A needed page is absent from the buffer pool. Which responsibilities must cooperate?",
+          "options": [
+            "Only the application's button styling",
+            "Memory management and the required persistent-data access",
+            "Only the spelling of a table alias",
+            "No database responsibility because all data is always cached"
+          ],
+          "correct_index": 1,
+          "explanation": "A cache miss can require fetching a page and arranging suitable memory for it.",
+          "marks": 1,
+          "id": "tq-dbx2-dbms-components-2-4",
+          "test_id": "pt-dbx2-dbms-components-application",
+          "sort_order": 3
+        },
+        {
+          "question_text": "Why can a write-ahead logging protocol constrain when a dirty data page is persisted?",
+          "options": [
+            "Required log information must be durable before the corresponding data-page write under the protocol",
+            "Log information must always be discarded first",
+            "Every page must bypass all buffers",
+            "Transaction recovery never uses persistent information"
+          ],
+          "correct_index": 0,
+          "explanation": "The log/data ordering supports recovery; it is not a requirement to flush every page immediately after every change.",
+          "marks": 1,
+          "id": "tq-dbx2-dbms-components-2-5",
+          "test_id": "pt-dbx2-dbms-components-application",
+          "sort_order": 4
+        },
+        {
+          "question_text": "A query is slow because it waits on conflicting work. Would a shorter SQL string necessarily fix it?",
+          "options": [
+            "Yes; statement length determines every wait",
+            "No; the wait and transaction interaction need investigation",
+            "Yes; every index removes every conflict",
+            "No; query observations can never reveal waits"
+          ],
+          "correct_index": 1,
+          "explanation": "A visible query symptom can be caused by coordination rather than the length of the statement.",
+          "marks": 1,
+          "id": "tq-dbx2-dbms-components-2-6",
+          "test_id": "pt-dbx2-dbms-components-application",
+          "sort_order": 5
+        },
+        {
+          "question_text": "In MySQL, does the term storage engine mean exactly the same thing as this topic's broad core-runtime engine box?",
+          "options": [
+            "No; MySQL distinguishes a common server layer and pluggable storage engines",
+            "Yes; InnoDB alone must implement every client interface",
+            "Yes; all product terms have identical boundaries",
+            "No; MySQL cannot process relational queries"
+          ],
+          "correct_index": 0,
+          "explanation": "The educational use of engine is broader than MySQL's specific storage-engine architecture.",
+          "marks": 1,
+          "id": "tq-dbx2-dbms-components-2-7",
+          "test_id": "pt-dbx2-dbms-components-application",
+          "sort_order": 6
+        },
+        {
+          "question_text": "Which catalog information can help a query processor understand a statement?",
+          "options": [
+            "Only the user's preferred screen color",
+            "Only the text of an unrelated email",
+            "Table, column, constraint, and index definitions",
+            "Only an arbitrary file name outside the database"
+          ],
+          "correct_index": 2,
+          "explanation": "The catalog supplies object definitions needed for resolving and planning database operations.",
+          "marks": 1,
+          "id": "tq-dbx2-dbms-components-2-8",
+          "test_id": "pt-dbx2-dbms-components-application",
+          "sort_order": 7
+        },
+        {
+          "question_text": "A report repeatedly reads pages beyond its effective cache working set. What is a plausible cost to investigate?",
+          "options": [
+            "A guarantee that every result is unauthorized",
+            "Proof that the logical schema is invalid",
+            "A rule that every record must now be deleted",
+            "Additional physical page fetches and related I/O pressure"
+          ],
+          "correct_index": 3,
+          "explanation": "Cache behavior can affect data-access cost. Measurements are needed before attributing the entire symptom to it.",
+          "marks": 1,
+          "id": "tq-dbx2-dbms-components-2-9",
+          "test_id": "pt-dbx2-dbms-components-application",
+          "sort_order": 8
+        },
+        {
+          "question_text": "Which explanation best uses the component model?",
+          "options": [
+            "Assert one fixed arrow sequence applies exactly once to every query",
+            "Treat every component as an unrelated standalone program",
+            "Name the responsibilities and their interactions while acknowledging product-specific boundaries",
+            "Infer full application correctness from five labels"
+          ],
+          "correct_index": 2,
+          "explanation": "The model helps reason about coordinated work; it is not proof of a universal implementation or application invariant.",
+          "marks": 1,
+          "id": "tq-dbx2-dbms-components-2-10",
+          "test_id": "pt-dbx2-dbms-components-application",
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [],
+  "coding_not_applicable": "Conceptual architecture and diagnosis; programming tasks for individual SQL, transaction, or indexing behaviors belong to their dedicated topics.",
+  "review": {
+    "reviewer": "coordinator",
+    "independent_review": "unavailable; no agent tools",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "definitions, worked examples and question coverage checked; no external plagiarism certification",
+    "existing_question_corrections": [
+      "tq-dbms-sql-1-dbms-components-1",
+      "tq-dbms-sql-1-dbms-components-3",
+      "tq-dbms-sql-1-dbms-components-4",
+      "tq-dbms-sql-1-dbms-components-6"
+    ],
+    "canonical_answer_indices_preserved": true,
+    "answer_position_policy": "Original indices retained; new canonical positions shuffled; website display order also shuffled per attempt."
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-1-dbms-components",
+    "original_note_sha256": "20bf9945fb89d93734cb5da0a32f23f921446bac6918245054caf7a5fbe3870a",
+    "status": "paired migration prepared; not applied"
+  },
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-1-dbms-components-1",
+      "test_id": "pt-dbms-sql-1-dbms-components",
+      "question_text": "Which five components does this chapter identify as the cooperating subsystems of a DBMS?",
+      "options": [
+        "Database Engine, Storage Manager, Query Processor, Transaction Manager, Buffer Manager",
+        "Database Engine, Application Developer, End User, Designer, DBA",
+        "Data, Information, Metadata, Knowledge, and the Query Processor",
+        "Storage Manager, Buffer Manager, and three copies of the Query Processor"
+      ],
+      "correct_index": 0,
+      "explanation": "The notes name exactly these five components as the DBMS subsystems covered in the chapter.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-1-dbms-components-2",
+      "test_id": "pt-dbms-sql-1-dbms-components",
+      "question_text": "In the query pipeline example, which component is responsible for parsing the SQL and choosing an execution plan?",
+      "options": [
+        "The Query Processor",
+        "The Buffer Manager",
+        "The Storage Manager",
+        "The Transaction Manager"
+      ],
+      "correct_index": 0,
+      "explanation": "The notes state the Query Processor parses, validates, and chooses the execution plan for a query.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-1-dbms-components-3",
+      "test_id": "pt-dbms-sql-1-dbms-components",
+      "question_text": "What happens when the execution plan requests a data page that is already cached in memory?",
+      "options": [
+        "The Buffer Manager returns it immediately without going to disk",
+        "The Storage Manager must always re-read it from disk regardless of caching",
+        "The Transaction Manager rejects the request",
+        "The Database Engine restarts the query from scratch"
+      ],
+      "correct_index": 0,
+      "explanation": "The notes describe this as a cache hit, where the Buffer Manager returns the already-cached page immediately.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-1-dbms-components-4",
+      "test_id": "pt-dbms-sql-1-dbms-components",
+      "question_text": "According to the pipeline described in the notes, what is the correct order of components a read query passes through?",
+      "options": [
+        "Query Processor -> Transaction Manager supervision -> Buffer Manager -> Storage Manager",
+        "Storage Manager -> Query Processor -> Database Engine -> Buffer Manager",
+        "Buffer Manager -> Storage Manager -> Transaction Manager -> Query Processor",
+        "Transaction Manager -> Storage Manager -> Query Processor -> Buffer Manager"
+      ],
+      "correct_index": 0,
+      "explanation": "The notes describe the pipeline as Client -> Query Processor -> (wrapped by Transaction Manager) -> Buffer Manager -> Storage Manager.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-1-dbms-components-5",
+      "test_id": "pt-dbms-sql-1-dbms-components",
+      "question_text": "Why does the notes say diagnosing performance problems requires understanding the whole pipeline, not just one component?",
+      "options": [
+        "Because a bottleneck in one component, like an undersized buffer pool, can show up as a symptom in another, like slow query response times",
+        "Because each component operates in complete isolation with no effect on the others",
+        "Because the Database Engine automatically fixes all performance problems on its own",
+        "Because only the Storage Manager can ever cause performance problems"
+      ],
+      "correct_index": 0,
+      "explanation": "The notes explicitly warn that a root cause in one component (buffer sizing) can manifest as a symptom in another (perceived query slowness).",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-1-dbms-components-6",
+      "test_id": "pt-dbms-sql-1-dbms-components",
+      "question_text": "What role does the Database Engine play according to the overview, beyond just being 'one more component' alongside the other four?",
+      "options": [
+        "It acts as the overarching coordinator of the whole pipeline and owns the catalog/metadata used by the other components",
+        "It is entirely separate from and unrelated to the other four components",
+        "It replaces the need for a Query Processor entirely",
+        "It only manages user accounts and nothing else"
+      ],
+      "correct_index": 0,
+      "explanation": "The notes describe the Database Engine as the overarching coordinator that also owns the metadata/catalog enabling query validation.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-1-dbms-components-7",
+      "test_id": "pt-dbms-sql-1-dbms-components",
+      "question_text": "Why does the notes caution against treating the five-component breakdown as a literal, universal codebase map for every DBMS product?",
+      "options": [
+        "Because different products use different internal terminology and groupings, such as MySQL's pluggable storage engine concept blending Storage Manager and Engine ideas",
+        "Because only PostgreSQL actually has any of these five components",
+        "Because this breakdown applies only to NoSQL databases, not relational ones",
+        "Because the five components never interact with each other in real systems"
+      ],
+      "correct_index": 0,
+      "explanation": "The notes explicitly warn that this is a teaching model and that real products may organize or name these responsibilities differently.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-1-dbms-components-8",
+      "test_id": "pt-dbms-sql-1-dbms-components",
+      "question_text": "In real engines like PostgreSQL or InnoDB, the notes say the Buffer Manager and Transaction Manager interact tightly around which mechanism used for crash recovery?",
+      "options": [
+        "Write-ahead logging, which must coordinate closely with which pages are dirty in the buffer pool",
+        "GRANT/REVOKE privilege management",
+        "ER diagram normalization rules",
+        "The naive end user's login form"
+      ],
+      "correct_index": 0,
+      "explanation": "The notes specifically name write-ahead logging as the coordination point between the Buffer Manager's dirty pages and the Transaction Manager's recovery guarantees.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Cooperating responsibilities in a DBMS read",
+      "description": "This responsibility map is deliberately not a universal execution sequence. A real request can revisit these facilities, and products can combine their implementation boundaries.",
+      "columns": [
+        "Responsibility",
+        "Illustrative work",
+        "Important interaction"
+      ],
+      "rows": [
+        [
+          "Query processor",
+          "Resolve names and plan execution",
+          "Consults catalog definitions and requests data"
+        ],
+        [
+          "Transaction facilities",
+          "Apply visibility and coordination rules",
+          "Interact with reads, writes and recovery"
+        ],
+        [
+          "Buffer manager",
+          "Manage cached and dirty pages",
+          "Coordinates memory replacement and persistence"
+        ],
+        [
+          "Storage manager",
+          "Access persistent representation and indexes",
+          "Cooperates with buffers and recovery protocols"
+        ],
+        [
+          "Broad runtime / engine",
+          "Coordinate the overall request",
+          "Product-specific boundaries; not synonymous with every storage plugin"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "coordinator review",
+    "server_rendering": "passed",
+    "browser_rendering": "unverified",
+    "independent_review": "unavailable; no agent tools",
+    "rendering_check": "Actual LessonBlock/TopicDiagrams in React server rendering; 18 authored package checks passed; desktop/mobile browser QA remains unverified"
+  }
+}

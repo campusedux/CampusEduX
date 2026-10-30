@@ -1,0 +1,606 @@
+{
+  "source_ref": "chapter-22-transactions/rollback",
+  "slug": "rollback",
+  "title": "ROLLBACK",
+  "description": "Use ROLLBACK to discard pending transactional changes, distinguish statement and transaction failures, and recognize implicit commits, savepoint and external-effect limits.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Discard a pending transaction deliberately\n\nROLLBACK ends an active transaction by undoing its supported uncommitted changes. It is the appropriate outcome when a multi-step operation cannot satisfy its contract and should not be committed partially. A booking workflow might undo a capacity update after another required step fails. The command is a transaction operation, not a universal time machine for every action a program performed.\n\nRead [transaction boundaries](/learning/dbms-sql-tutorial/transaction-boundaries), [COMMIT](/learning/dbms-sql-tutorial/commit) and [atomicity](/learning/dbms-sql-tutorial/atomicity). The examples assume MySQL 8.4 and InnoDB row changes. Before relying on rollback, establish the actual engine, connection, transaction state and whether any statement already committed work implicitly or explicitly.\n\n## Start from a small reversible change\n\nSuppose stock_counts contains item one with quantity ten. An educational experiment changes that quantity to seven inside an explicit transaction and then rolls back. A read in the same transaction can see the tentative seven. After rollback, the transaction's own subtraction no longer remains committed, and a subsequent ordinary read sees the applicable committed state.\n\n```sql\nSTART TRANSACTION;\nUPDATE stock_counts\nSET quantity = quantity - 3\nWHERE item_id = 1;\nROLLBACK;\nSELECT item_id, quantity FROM stock_counts ORDER BY item_id;\n```\n\nWithout concurrent writers, the fixture returns the original ten. That qualification matters: rollback removes this transaction's changes, rather than restoring the entire database to a historical snapshot and erasing other sessions' legitimate committed work. The right mental model is discarding one transaction's supported changes, not rewinding every row in the system to one clock time.\n\n## Trace the retained transfer exercise\n\nThe existing practice task has two InnoDB accounts starting at one thousand and five hundred. It requires subtracting three hundred from account one, adding three hundred to account two and then issuing ROLLBACK. The checker reads both account identities and balances afterward. The predicted final balances are one thousand and five hundred, with the alternative fixture similarly retaining its original amounts.\n\nThe requested intermediate writes matter. A solution containing only SELECT would show the same final fixture without attempting the required transaction. Final-state judging alone cannot distinguish that shortcut from a proper rollback demonstration. Review the submitted operation sequence and use an appropriate execution trace when proving transaction behavior, rather than declaring every matching final table a complete atomicity test.\n\nThe educational task also does not implement a production transfer service. It does not establish authorization, sufficient-funds handling, request idempotency or two-session conflict behavior. Those requirements must be designed at their trusted boundaries. A small successful reversal illustrates one operation under a synthetic contract; it cannot grant a broader claim about financial correctness.\n\n## Know what autocommit has already made permanent\n\nWith autocommit enabled, a successful standalone transactional statement normally commits its own transaction. Sending ROLLBACK afterward cannot undo that already committed update. Use an explicit transaction boundary when several operations must be decided together. Verify connection reuse so that START TRANSACTION, writes and final rollback all occur on the same database session.\n\nCOMMIT also ends the opportunity to roll back that transaction. If a committed change was wrong, recovery needs a separately authorized compensating operation or another reviewed restoration process. That correction must account for newer legitimate changes and dependent records. Blindly reversing arithmetic later can damage state when the surrounding facts have changed.\n\n## Treat errors according to their actual scope\n\nAn exception is not a portable synonym for complete rollback. InnoDB can roll back only the failed statement for some errors while earlier successful statements remain pending. A deadlock can instead roll back the whole selected transaction. Lock-wait timeout handling depends on documented settings. The caller must know which state remains before deciding whether to retry or discard the operation.\n\nA safe application error path explicitly closes its unsuccessful transaction when the connection remains usable, and discards or resets an unusable session according to its connection-library contract. Do not keep issuing dependent business writes after a failure merely because the database accepted the next SQL statement. Recoverability of the connection and validity of the business operation are different questions.\n\nAlso handle failure during cleanup. A network error while sending rollback can leave the client without confirmation of the transaction's outcome or session lifetime. If the uncertainty follows a commit attempt, never assume a later rollback request proves the commit failed. Use durable request identity and reconciliation to distinguish confirmed success, confirmed reversal and an unknown result.\n\n## Keep savepoint rollback distinct from full rollback\n\nA savepoint marks a location within an active transaction. ROLLBACK TO SAVEPOINT can undo supported changes after that location while leaving the outer transaction active. Earlier pending changes can still be committed or rolled back later. This is partial transaction control, not an independently committed nested transaction.\n\n```sql\nSTART TRANSACTION;\nUPDATE stock_counts SET quantity = quantity - 1 WHERE item_id = 1;\nSAVEPOINT optional_step;\nUPDATE stock_counts SET quantity = quantity - 2 WHERE item_id = 1;\nROLLBACK TO SAVEPOINT optional_step;\nROLLBACK;\n```\n\nIn the isolated ten-unit fixture, the savepoint rollback first removes the second subtraction while the first remains pending; the final full rollback removes the first as well. Savepoint names, lifetime and lock behavior follow the engine's rules. Do not promise that rolling back to a marker releases every lock acquired after it. See [SAVEPOINT](/learning/dbms-sql-tutorial/savepoint) for the detailed contract.\n\n## Exclude nontransactional and implicitly committed work\n\nMyISAM table writes do not participate in InnoDB-style transactional rollback. Mixing engines can leave nontransactional effects after ROLLBACK, with warnings or other diagnostics indicating incomplete reversal. Never infer the provider's default table engine from a historical tutorial observation; inspect the actual table definitions in an authorized environment.\n\nMany MySQL DDL statements cause implicit commits. Some temporary-table operations have special behavior and are not undone like ordinary row updates even when they do not commit the surrounding transaction. Do not teach that placing arbitrary CREATE, ALTER or DROP text between START TRANSACTION and ROLLBACK makes the operation harmless. Database migrations need their own verified operational contract.\n\nGenerated sequence values and other side effects also deserve specific treatment. A rolled-back insert can leave an auto-increment gap; gaps do not prove a partially committed business row remains. Logs, monitoring records and external actions may persist as evidence of the attempt. Atomic reversal of transactional data does not mean the system literally contains no trace that an operation was tried.\n\n## Separate external effects and retry intent\n\nAn email, remote API call or file export is ordinarily outside a local database rollback boundary. If a notification was already delivered, ROLLBACK cannot make the recipient unread it. A reviewed outbox or compensation design can coordinate workflows, but introduces separate delivery, idempotency and repair requirements. Keep those limits visible when teaching transaction cleanup.\n\nA retry should repeat a defined business unit only when the original outcome and error class justify it. Repeating the last UPDATE after the engine rolled back the whole transaction can omit required earlier steps. Conversely, retrying an entire operation after an uncertain successful commit can duplicate its effect. Preserve the request identity and inspect the documented state rather than guessing from the last error message.\n\n## Test reversal rather than merely matching a screenshot\n\nThe retained beginner task reverses two account updates; the intermediate stock task rolls back a later two-unit decrement to a savepoint, then commits the earlier one-unit decrement. Predict both the tentative state and final state. Include an empty stock table and an unrelated item to confirm that cleanup does not erase unrelated facts. Keep fixture initialization outside the transaction being tested so rollback does not also remove the setup.\n\nA transaction also has a resource lifetime. Keep the interval between its first dependent read and its final decision short enough for the workload, and avoid waiting for human input while holding database locks. An explicit rollback closes failed work; it should not be postponed merely to preserve a convenient debugging session.\n\nFor a separate reasoning exercise, compare an autocommitted update, an explicit transaction ending in rollback, and an explicit transaction ending in commit before a later rollback. State which changes remain and why. Then add one nontransactional participant and identify the guarantee that no longer holds. Record engine execution separately from these predictions. The useful skill is knowing exactly which pending effects can still be discarded and deliberately closing every transaction path.",
+  "references": [
+    {
+      "title": "MySQL8.4 COMMIT and ROLLBACK",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/commit.html"
+    },
+    {
+      "title": "MySQL8.4 InnoDB error handling",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/innodb-error-handling.html"
+    },
+    {
+      "title": "MySQL8.4 implicit commit statements",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/implicit-commit.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-22-rollback",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-22-rollback-1",
+          "test_id": "pt-dbms-sql-22-rollback",
+          "question_text": "What does ROLLBACK do?",
+          "options": [
+            "Makes changes permanent",
+            "Discards supported uncommitted changes in the current transaction and ends it",
+            "Speeds up the transaction",
+            "Deletes the entire table"
+          ],
+          "correct_index": 1,
+          "explanation": "The statement does not undo previous commits, unrelated sessions or nontransactional/external effects.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-22-rollback-2",
+          "test_id": "pt-dbms-sql-22-rollback",
+          "question_text": "In an isolated InnoDB row-update fixture without implicit commits, what remains after full ROLLBACK?",
+          "options": [
+            "The transaction’s own pending row changes are removed, preserving the original committed fixture",
+            "Partially updated",
+            "Deleted",
+            "Locked permanently"
+          ],
+          "correct_index": 0,
+          "explanation": "The isolated fixture returns its baseline data; real systems can retain logs, allocation gaps and independent concurrent commits.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-22-rollback-3",
+          "test_id": "pt-dbms-sql-22-rollback",
+          "question_text": "Can ROLLBACK happen automatically, without an explicit ROLLBACK statement?",
+          "options": [
+            "No, only an explicit statement triggers it",
+            "Yes, some conditions can roll back a transaction; other errors roll back only a statement",
+            "Only COMMIT can be automatic, never ROLLBACK",
+            "Automatic rollback only exists in theory, never in real systems"
+          ],
+          "correct_index": 1,
+          "explanation": "Failure scope is engine- and error-specific, so the caller must close unsuccessful work deliberately.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-22-rollback-4",
+          "test_id": "pt-dbms-sql-22-rollback",
+          "question_text": "What happens to writes on a MyISAM table when a MySQL transaction is rolled back?",
+          "options": [
+            "It works identically to InnoDB",
+            "They are not reversed as transactional InnoDB writes would be; incomplete rollback can produce diagnostics",
+            "It raises a syntax error",
+            "It deletes the table"
+          ],
+          "correct_index": 1,
+          "explanation": "This follows MyISAM nontransactional behavior; no actual provider default or empirical run is asserted.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-22-rollback-5",
+          "test_id": "pt-dbms-sql-22-rollback",
+          "question_text": "What is a common real-world mistake related to ROLLBACK/COMMIT?",
+          "options": [
+            "Using ROLLBACK too often",
+            "Forgetting to explicitly ROLLBACK or COMMIT an open transaction, leaving it hanging and potentially holding locks",
+            "Using COMMIT instead of ROLLBACK by mistake is impossible",
+            "ROLLBACK cannot be misused"
+          ],
+          "correct_index": 1,
+          "explanation": "Relying on driver auto-rollback-on-disconnect rather than explicitly closing transactions is fragile, real-world practice.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-22-rollback-6",
+          "test_id": "pt-dbms-sql-22-rollback",
+          "question_text": "Which ACID property is illustrated by discarding an incomplete transaction’s supported row changes?",
+          "options": [
+            "Durability",
+            "Atomicity",
+            "Isolation only",
+            "None of them"
+          ],
+          "correct_index": 1,
+          "explanation": "Atomicity concerns the all-or-nothing committed data effect, not literal absence of every diagnostic trace.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-22-rollback-7",
+          "test_id": "pt-dbms-sql-22-rollback",
+          "question_text": "Accounts1 and2 start at1000 and500; an isolated InnoDB transaction subtracts300 from1, adds300 to2, then rolls back. What is account1 after rollback?",
+          "options": [
+            "300 less than before",
+            "Exactly what it was before the transaction started",
+            "300 more than before",
+            "Zero"
+          ],
+          "correct_index": 1,
+          "explanation": "Its own pending debit is undone, returning account1 to1000 in this isolated fixture.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-22-rollback-8",
+          "test_id": "pt-dbms-sql-22-rollback",
+          "question_text": "Should application code assume a transaction rollback never needs explicit error handling?",
+          "options": [
+            "Yes, rollback never needs handling",
+            "No, handle the documented failure scope, close the transaction and reconcile uncertain outcomes",
+            "Only network errors need handling",
+            "Rollback errors are impossible to detect"
+          ],
+          "correct_index": 1,
+          "explanation": "Some errors leave earlier work pending; connection loss can prevent outcome confirmation.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-22-rollback-new-9",
+          "test_id": "pt-dbms-sql-22-rollback",
+          "question_text": "A standalone UPDATE autocommits. What can a later ROLLBACK undo from that committed statement?",
+          "options": [
+            "The entire database history",
+            "Nothing from that already committed update",
+            "Only the first column",
+            "Every other user change"
+          ],
+          "correct_index": 1,
+          "explanation": "Rollback applies to pending supported work, not past committed transactions.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-22-rollback-new-10",
+          "test_id": "pt-dbms-sql-22-rollback",
+          "question_text": "What connection must run the boundary and its writes?",
+          "options": [
+            "Any unrelated pooled session",
+            "Only a browser session",
+            "The same database session",
+            "A different connection per statement"
+          ],
+          "correct_index": 2,
+          "explanation": "Transaction state belongs to the database connection.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-22-rollback-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-22-rollback-application-new-1",
+          "test_id": "pt-dbms-sql-22-rollback-application",
+          "question_text": "A failed statement leaves an earlier update pending. What is needed when the business operation failed?",
+          "options": [
+            "Assume every exception committed everything",
+            "Continue dependent writes blindly",
+            "Hide the error in the interface",
+            "Explicitly close or discard that unsuccessful transaction appropriately"
+          ],
+          "correct_index": 3,
+          "explanation": "Error scope does not always include the entire transaction.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-22-rollback-application-new-2",
+          "test_id": "pt-dbms-sql-22-rollback-application",
+          "question_text": "Does rollback erase another transaction’s later legitimate committed work?",
+          "options": [
+            "No",
+            "Yes, all work after START is removed",
+            "Only if IDs are equal",
+            "Only when the table has an index"
+          ],
+          "correct_index": 0,
+          "explanation": "It reverses its own supported uncommitted effects.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-22-rollback-application-new-3",
+          "test_id": "pt-dbms-sql-22-rollback-application",
+          "question_text": "An insert rolls back but an auto-increment value is skipped. Is a committed business row proved?",
+          "options": [
+            "Yes, every gap means a row survives",
+            "No, allocation gaps can remain",
+            "Only for strings",
+            "Only with SELECT DISTINCT"
+          ],
+          "correct_index": 1,
+          "explanation": "Allocation side effects and committed row existence differ.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-22-rollback-application-new-4",
+          "test_id": "pt-dbms-sql-22-rollback-application",
+          "question_text": "What does ROLLBACK TO SAVEPOINT ordinarily leave?",
+          "options": [
+            "An independent committed nested transaction",
+            "Every earlier transaction erased",
+            "The outer transaction active",
+            "All locks necessarily released"
+          ],
+          "correct_index": 2,
+          "explanation": "The remaining pending work still needs a final decision.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-22-rollback-application-new-5",
+          "test_id": "pt-dbms-sql-22-rollback-application",
+          "question_text": "Can ROLLBACK unsend a previously delivered notification?",
+          "options": [
+            "Yes, automatically",
+            "Only if the email has one recipient",
+            "Only with InnoDB",
+            "No"
+          ],
+          "correct_index": 3,
+          "explanation": "External effects require their own coordination contract.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-22-rollback-application-new-6",
+          "test_id": "pt-dbms-sql-22-rollback-application",
+          "question_text": "Why is a matching final transfer table insufficient by itself?",
+          "options": [
+            "A SELECT-only shortcut could match without performing the required writes",
+            "The output has two rows",
+            "The balances are integers",
+            "The checker orders by ID"
+          ],
+          "correct_index": 0,
+          "explanation": "Evidence must assess the requested transaction sequence as well as final state.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-22-rollback-application-new-7",
+          "test_id": "pt-dbms-sql-22-rollback-application",
+          "question_text": "What does a lost commit response establish?",
+          "options": [
+            "A confirmed rollback",
+            "An uncertain outcome requiring reconciliation",
+            "A never-started transaction",
+            "A guaranteed permission denial"
+          ],
+          "correct_index": 1,
+          "explanation": "Commit may have completed before the response disappeared.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-22-rollback-application-new-8",
+          "test_id": "pt-dbms-sql-22-rollback-application",
+          "question_text": "Can arbitrary MySQL DDL be made harmless merely by adding a final ROLLBACK?",
+          "options": [
+            "Yes, always",
+            "Only if the table name is short",
+            "No, implicit commits and nonreversible effects must be checked",
+            "Only when it contains no indexes"
+          ],
+          "correct_index": 2,
+          "explanation": "DDL has a different operational rollback contract.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-22-rollback-application-new-9",
+          "test_id": "pt-dbms-sql-22-rollback-application",
+          "question_text": "Why keep fixture initialization outside the transaction under test?",
+          "options": [
+            "To grant access",
+            "To avoid defining types",
+            "To force all reads to be dirty",
+            "So rollback does not also remove the setup being checked"
+          ],
+          "correct_index": 3,
+          "explanation": "The test needs a stable committed baseline.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-22-rollback-application-new-10",
+          "test_id": "pt-dbms-sql-22-rollback-application",
+          "question_text": "After a whole-transaction deadlock rollback, what retry unit needs review?",
+          "options": [
+            "The complete business operation",
+            "Only the last write regardless of earlier steps",
+            "Every historical request",
+            "An unrelated SELECT"
+          ],
+          "correct_index": 0,
+          "explanation": "Required earlier steps were rolled back too.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cp-dbms-sql-rollback-a-failed-transfer",
+      "slug": "rollback-a-failed-transfer",
+      "title": "Rollback a Failed Transfer",
+      "difficulty": "Easy",
+      "task": "Write a transaction that attempts to transfer 300 from account id 1 to account id 2, but then rolls it back instead of committing. Debit account 1 by 300, credit account 2 by 300, then `ROLLBACK`.",
+      "schema_sql": "CREATE TABLE accounts (\n  id INTEGER PRIMARY KEY,\n  balance INTEGER NOT NULL\n) ENGINE=InnoDB;",
+      "seed_sql": "INSERT INTO accounts (id, balance) VALUES (1, 1000), (2, 500);",
+      "expected": "id\tbalance\n1\t1000\n2\t500",
+      "ordering": "Retain the ordering stated in the original task.",
+      "constraints": [
+        "Preserve the original fixture and requested output."
+      ],
+      "edge_cases": [
+        "Verify the alternative seeded fixture."
+      ],
+      "hints": [
+        "Trace the required output grain and conditions."
+      ],
+      "solution_sql": "START TRANSACTION; UPDATE accounts SET balance = balance - 300 WHERE id = 1; UPDATE accounts SET balance = balance + 300 WHERE id = 2; ROLLBACK;",
+      "explanation": "The requested debit and credit are pending InnoDB changes. Full rollback discards both, and the retained trailing checker reads the original balances. Final output alone cannot prove the writes were attempted.",
+      "validation_cases": [
+        {
+          "hidden": true,
+          "seed_sql": "INSERT INTO accounts (id, balance) VALUES (1, 5000), (2, 2000);",
+          "expected": "id\tbalance\n1\t5000\n2\t2000"
+        }
+      ],
+      "existing_problem": true,
+      "original_description_md5": "bedcdc27fb9c06a00524ede0d3fa48fb",
+      "original_problem": {
+        "id": "cp-dbms-sql-rollback-a-failed-transfer",
+        "topic_id": null,
+        "title": "Rollback a Failed Transfer",
+        "difficulty": "Easy",
+        "slug": "rollback-a-failed-transfer",
+        "description": "Write a transaction that attempts to transfer 300 from account id 1 to account id 2, but then rolls it back instead of committing. Debit account 1 by 300, credit account 2 by 300, then `ROLLBACK`.\n\n```sql\nCREATE TABLE accounts (\n  id INTEGER PRIMARY KEY,\n  balance INTEGER NOT NULL\n) ENGINE=InnoDB;\n```\n\n**Sample data**:\n\n```sql\nINSERT INTO accounts (id, balance) VALUES (1, 1000), (2, 500);\n```\n",
+        "examples": "[{\"input\": \"\", \"output\": \"id\\tbalance\\n1\\t1000\\n2\\t500\"}]",
+        "test_cases": "[{\"hidden\": true, \"seed_sql\": \"INSERT INTO accounts (id, balance) VALUES (1, 5000), (2, 2000);\", \"expected\": \"id\\tbalance\\n1\\t5000\\n2\\t2000\"}]",
+        "starter_code": null,
+        "editorial": "Reference: `START TRANSACTION; UPDATE accounts SET balance = balance - 300 WHERE id = 1; UPDATE accounts SET balance = balance + 300 WHERE id = 2; ROLLBACK;` — the balances must equal the original seed values exactly, proving the transaction left no trace.",
+        "supported_languages": null,
+        "sql_schema_sql": "CREATE TABLE accounts (\n  id INTEGER PRIMARY KEY,\n  balance INTEGER NOT NULL\n) ENGINE=InnoDB;",
+        "sql_seed_sql": "INSERT INTO accounts (id, balance) VALUES (1, 1000), (2, 500);",
+        "sql_check_sql": "SELECT id, balance FROM accounts ORDER BY id;",
+        "learning_topic_id": null,
+        "status": "published",
+        "is_premium": null,
+        "show_on_website": null,
+        "show_on_mobile": null,
+        "sort_order": 1
+      },
+      "check_sql": "SELECT id, balance FROM accounts ORDER BY id;",
+      "original_check_sql": "SELECT id, balance FROM accounts ORDER BY id;"
+    },
+    {
+      "id": "cx-rollback-stock-trial",
+      "slug": "rollback-stock-trial",
+      "title": "Retain the first decrement after savepoint rollback",
+      "difficulty": "Medium",
+      "task": "Start a transaction, subtract1 from item1 if it exists, set a savepoint, then subtract2 more. Roll back to the savepoint and commit the surviving first decrement. Return item_id,quantity for every item ordered by item_id.",
+      "schema_sql": "CREATE TABLE stock_counts(item_id INT PRIMARY KEY,quantity INT NOT NULL) ENGINE=InnoDB;",
+      "seed_sql": "INSERT INTO stock_counts VALUES (1,10),(2,4);",
+      "solution_sql": "START TRANSACTION; UPDATE stock_counts SET quantity=quantity-1 WHERE item_id=1; SAVEPOINT trial; UPDATE stock_counts SET quantity=quantity-2 WHERE item_id=1; ROLLBACK TO SAVEPOINT trial; COMMIT; SELECT item_id,quantity FROM stock_counts ORDER BY item_id;",
+      "expected": "item_id\tquantity\n1\t9\n2\t4",
+      "explanation": "Rollback to the marker removes only the second decrement. The earlier one-unit decrement is committed, and the unrelated item remains unchanged.",
+      "ordering": "Apply the ORDER BY explicitly required by the task; scalar results contain one row.",
+      "constraints": [
+        "Only synthetic fixture tables are in scope."
+      ],
+      "edge_cases": [
+        "Check empty input and the supplied contrasting fixtures."
+      ],
+      "hints": [
+        "Rollback to the marker removes only the second decrement. The earlier one-unit decrement is committed, and the unrelated item remains unchanged."
+      ],
+      "validation_cases": [
+        {
+          "seed_sql": "",
+          "expected": ""
+        },
+        {
+          "seed_sql": "INSERT INTO stock_counts VALUES (2,8);",
+          "expected": "item_id\tquantity\n2\t8"
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-22-rollback-1",
+      "test_id": "pt-dbms-sql-22-rollback",
+      "question_text": "What does ROLLBACK do?",
+      "options": [
+        "Makes changes permanent",
+        "Undoes every change made in the current transaction, restoring the pre-transaction state",
+        "Speeds up the transaction",
+        "Deletes the entire table"
+      ],
+      "correct_index": 1,
+      "explanation": "ROLLBACK is the undo mechanism for an in-progress transaction.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-22-rollback-2",
+      "test_id": "pt-dbms-sql-22-rollback",
+      "question_text": "After a ROLLBACK, what state are the affected rows left in?",
+      "options": [
+        "Exactly as they were before the transaction started, as if it never ran",
+        "Partially updated",
+        "Deleted",
+        "Locked permanently"
+      ],
+      "correct_index": 0,
+      "explanation": "ROLLBACK fully reverses the transaction's effects, leaving no trace.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-22-rollback-3",
+      "test_id": "pt-dbms-sql-22-rollback",
+      "question_text": "Can ROLLBACK happen automatically, without an explicit ROLLBACK statement?",
+      "options": [
+        "No, only an explicit statement triggers it",
+        "Yes — a constraint violation, a deadlock, or a crash can all trigger an automatic rollback",
+        "Only COMMIT can be automatic, never ROLLBACK",
+        "Automatic rollback only exists in theory, never in real systems"
+      ],
+      "correct_index": 1,
+      "explanation": "Various failure conditions trigger automatic rollback without the application writing ROLLBACK itself.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-22-rollback-4",
+      "test_id": "pt-dbms-sql-22-rollback",
+      "question_text": "On the SQL judge platform used in this course, what happens if you run a ROLLBACK against a default MyISAM table?",
+      "options": [
+        "It works identically to InnoDB",
+        "It silently does nothing — the changes remain applied, since MyISAM is non-transactional",
+        "It raises a syntax error",
+        "It deletes the table"
+      ],
+      "correct_index": 1,
+      "explanation": "This was verified empirically — MyISAM ignores ROLLBACK entirely, a genuine platform-specific gotcha.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-22-rollback-5",
+      "test_id": "pt-dbms-sql-22-rollback",
+      "question_text": "What is a common real-world mistake related to ROLLBACK/COMMIT?",
+      "options": [
+        "Using ROLLBACK too often",
+        "Forgetting to explicitly ROLLBACK or COMMIT an open transaction, leaving it hanging and potentially holding locks",
+        "Using COMMIT instead of ROLLBACK by mistake is impossible",
+        "ROLLBACK cannot be misused"
+      ],
+      "correct_index": 1,
+      "explanation": "Relying on driver auto-rollback-on-disconnect rather than explicitly closing transactions is fragile, real-world practice.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-22-rollback-6",
+      "test_id": "pt-dbms-sql-22-rollback",
+      "question_text": "Which ACID property is most directly demonstrated by ROLLBACK leaving no trace of an incomplete transaction?",
+      "options": [
+        "Durability",
+        "Atomicity",
+        "Isolation only",
+        "None of them"
+      ],
+      "correct_index": 1,
+      "explanation": "Atomicity's all-or-nothing guarantee is exactly what ROLLBACK enforces when a transaction doesn't complete.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-22-rollback-7",
+      "test_id": "pt-dbms-sql-22-rollback",
+      "question_text": "In the transfer example, if ROLLBACK is issued after both UPDATE statements, what is account 1's final balance?",
+      "options": [
+        "300 less than before",
+        "Exactly what it was before the transaction started",
+        "300 more than before",
+        "Zero"
+      ],
+      "correct_index": 1,
+      "explanation": "ROLLBACK undoes both updates completely, restoring the original balance.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-22-rollback-8",
+      "test_id": "pt-dbms-sql-22-rollback",
+      "question_text": "Should application code assume a transaction rollback never needs explicit error handling?",
+      "options": [
+        "Yes, rollback never needs handling",
+        "No — application code should be prepared to catch failures that trigger automatic rollback and treat the transaction as rolled back",
+        "Only network errors need handling",
+        "Rollback errors are impossible to detect"
+      ],
+      "correct_index": 1,
+      "explanation": "Automatic rollbacks from underlying failures still need to be handled correctly by the calling application.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "/root",
+    "independent_review": "passed",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Independent manual content review passed within independent_review_scope; engine/browser/release gates separate.",
+    "canonical_answer_indices_preserved": true,
+    "independent_reviewer": "/root/content_b",
+    "independent_review_scope": "Full notes,20MCQs/options/explanations,diagram,both reference SQL/checker contracts and alternative fixtures. Statement versus transaction error scope,engine/external boundaries and result-only judging limitations sound. Manual editorial reasoning only; engine/browser/originality/AdSense separate."
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-22-rollback",
+    "original_note_sha256": "fc56b0ec92ba0868048ede529f7fc33ef1adea6d20d59f658c19c74d3105124a",
+    "status": "drafted; not included in prepared paired migrations"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Rollback scope is narrower than erasing every effect",
+      "description": "The boundary and participating engine determine which pending changes can be reversed.",
+      "columns": [
+        "Action",
+        "Full transactional rollback effect"
+      ],
+      "rows": [
+        [
+          "Pending InnoDB row update",
+          "Own change discarded"
+        ],
+        [
+          "Previously committed update",
+          "Not reversed"
+        ],
+        [
+          "Delivered external notification",
+          "Not unsent"
+        ],
+        [
+          "Savepoint rollback",
+          "Only selected later work; outer transaction continues"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "provided",
+    "technical_review": "author review; independent review pending",
+    "server_rendering": "passed",
+    "browser_rendering": "unverified",
+    "independent_review": "pending",
+    "server_rendering_evidence": "2026-10-29 full Vitest:1310 passed/12 skipped; actual LessonBlock/TopicDiagrams render over230 packages. Browser visual QA remains unverified."
+  },
+  "authoring_status": "drafted; verification pending",
+  "sql_verification": {
+    "scope": "not executed; exact MySQL/provider verification pending",
+    "all_passed": false,
+    "cases": []
+  }
+}

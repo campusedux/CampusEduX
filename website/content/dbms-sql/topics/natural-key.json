@@ -1,0 +1,643 @@
+{
+  "source_ref": "chapter-5-keys-and-integrity/natural-key",
+  "slug": "natural-key",
+  "title": "Natural Key",
+  "description": "Evaluate business identifiers against fact grain, scope, uniqueness and lifecycle, then audit and enforce a required course-code identity.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Identity drawn from the business model\n\nA natural key is an identifying attribute or combination already meaningful in the domain being modeled. A campus course code can identify a course under an institutional policy. A campus code together with a local student number can identify a student if local numbers are only unique within campuses. The identifier has a role beyond being an arbitrary internal row label.\n\nMeaningfulness alone does not establish a key. A student's name is meaningful, yet different students can share it. A course title can describe several offerings. A proposed natural key must satisfy the same identifying and minimality requirements as any candidate key. Start with the actual facts and explicit uniqueness policy rather than assuming that a familiar label is inherently suitable for identification.\n\n## Identify the correct kind of object\n\nA course catalogue entry, a scheduled course offering, and an individual enrollment are different facts. A course code that identifies the catalogue entry does not necessarily identify a particular year's offering. The offering may need a term and section identifier. An enrollment needs to distinguish the participating student as well. A natural identifier can be correct for one level and insufficient for another.\n\nThe same issue applies to published items. An externally issued publication identifier can identify the kind of publication it was issued for, but it does not automatically identify every physical copy in a library. Several copies can share that publication identifier while requiring different loan histories. Always state the represented object before presenting an external identifier as a natural-key example.\n\n## Uniqueness requires a defined scope\n\nAn institutional course code may be unique across one campus system but reused by another institution. A local registration number may be unique within one campus and reused elsewhere. If the database spans both institutions or campuses, the natural identity may need an additional scope component. A value is not globally unique merely because one department currently treats it as unique.\n\nHistorical scope matters too. A code can be retired and later reused for a different catalogue entry. If both historical entries must coexist, the identifier needs an appropriate edition, period, or separate identity policy. Do not silently merge distinct historical facts because their current labels match. A useful natural-key specification explains where and when the issuing authority guarantees identity.\n\n## Current uniqueness is evidence about current data\n\nA sample with no duplicate course codes establishes no observed conflict in that sample. It does not prove the identifier is guaranteed unique across all allowed future records. The policy can be wrong, undocumented, or inconsistently applied. Data-entry errors and imported records can also violate an otherwise valid policy, which is why trusted enforcement remains useful.\n\nAudit repeated values before adding a constraint to existing data. Keep record identifiers in diagnostic output or provide a clear grouped count for investigation. A conflict might indicate duplicated records, a reused identifier, or an incorrect assumption about fact grain. The appropriate correction follows that interpretation; deleting an arbitrary record can destroy legitimate history and does not repair a mistaken identity model.\n\n## Business identifiers can change\n\nA natural identifier can be corrected, reissued, or renamed under a business policy. If child facts reference it directly, that change can affect many relationships. The supported referential actions and transaction strategy determine whether the update is rejected or coordinated. It is inaccurate to claim all natural keys constantly change or that no natural key can ever remain stable; evaluate the actual issuing and correction policy.\n\nA public course code can change while the underlying course identity remains the same. An internal surrogate can decouple related records from that label, leaving the code as a required unique alternate identity if policy still demands it. This is a design choice about lifecycle and callers. A surrogate does not eliminate the need to validate or enforce the natural business identifier.\n\n## Representation needs a comparison policy\n\nA course identifier can contain leading zeros, letters, separators, or case distinctions. Treat it as the documented identifier rather than assuming it is a number suitable for arithmetic. Converting code 007 to integer seven may discard a meaningful representation distinction. Similarly, trimming and case folding should follow an explicit canonicalization policy shared by forms, imports, and lookups.\n\nStored uniqueness follows applicable comparison rules, including collation for strings. Decide whether db101 and DB101 are equivalent identifiers or distinct codes. A constraint can enforce the selected policy, but its behaviour must match the intended definition. Do not equate visually different spellings with guaranteed distinct database values without checking the actual comparison contract and engine behaviour.\n\n## Meaningful lookup can be convenient\n\nUsers often know a course code from a catalogue, so a lookup by that identifier can be convenient. An internal course_id can remain useful for stored references and programmatic selection. A result can return both without forcing users to learn arbitrary numbers. Meaningful identifiers and internal identifiers can coexist when each role and guarantee is clear.\n\n```sql\nSELECT course_id, course_title\nFROM courses\nWHERE course_code = 'DB101';\n```\n\nThe query assumes a defined required unique course-code policy. It returns no row if the requested code is absent. Searching by title instead is a different contract and can return several courses. A friendly user label should not silently replace the actual identifying predicate when precise selection matters.\n\n## Composite natural identities need every component\n\nIf a local course code is only unique within a department, the pair department_code and local_course_code can form a natural identity. The pair permits the same local code in different departments and several courses in one department. Declaring each component independently unique would incorrectly prohibit those legitimate facts. One combined constraint expresses the intended scope.\n\nMinimality still needs checking. If the institution later guarantees every local course code is globally unique, department_code becomes redundant for identification under that stronger rule. The combination remains a superkey but is no longer a minimal candidate key. Logical classification follows the guarantees, not just the fact that a multi-column SQL declaration happens to exist.\n\n## Physical trade-offs need measurements\n\nA long text or composite natural key can make referencing columns and supporting indexes wider. That can affect storage, comparison cost, and access patterns. The impact depends on the actual engine, representation, data distribution, workload, and schema. Avoid presenting every natural key as slower or every integer surrogate as a universal performance solution.\n\nNatural identifiers also offer benefits: they can support recognizable diagnostics, imports, and communication with an issuing system. A wide key might be entirely appropriate for a small reference catalogue. A separate internal key might be more suitable for heavily referenced mutable identities. Compare the actual costs and lifecycle needs rather than choosing solely from a slogan about meaningfulness or speed.\n\n## Enforce the business promise independently\n\nIf course_code must identify one required catalogue entry, a suitable UNIQUE and NOT NULL declaration can protect that promise even when course_id is primary. Test a new internal identifier with an existing natural code, a prohibited missing code, and distinct codes sharing the same descriptive title. These cases isolate the natural identity from the internal identity and preserve legitimate repetition.\n\nA code lookup should also define how retired or redirected identifiers are handled. That lifecycle decision belongs in the application contract rather than being guessed from a failed match. The exercises use canonical fixture codes to make comparison expectations explicit. They verify current duplicate detection and local uniqueness enforcement, not external identifier issuance, production authorization, or every provider's behaviour. A dependable natural-key decision states the fact grain, uniqueness scope, absence policy, comparison rules, and lifecycle. With those assumptions visible, meaningful business identifiers can be useful keys without becoming unsupported guarantees about every similarly named column.\n",
+  "references": [],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-5-natural-key",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-5-natural-key-1",
+          "test_id": "pt-dbms-sql-5-natural-key",
+          "question_text": "What is a natural key?",
+          "options": [
+            "A key value chosen by a random number generator",
+            "A candidate key based on domain-meaningful attributes, possibly a combination",
+            "A key that is always numeric",
+            "A key with no formal database definition"
+          ],
+          "correct_index": 1,
+          "explanation": "Natural keys derive from meaningful real-world attributes, like an ISBN or national ID.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-5-natural-key-2",
+          "test_id": "pt-dbms-sql-5-natural-key",
+          "question_text": "Which is a plausible natural identifier for a publication edition when the issuing policy guarantees the relevant identity?",
+          "options": [
+            "An auto-incrementing integer id with no external meaning",
+            "The edition’s applicable ISBN, rather than a physical library-copy identity",
+            "A randomly generated UUID",
+            "A row's internal storage address"
+          ],
+          "correct_index": 1,
+          "explanation": "The represented object matters: several physical copies can share the publication identifier.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-5-natural-key-3",
+          "test_id": "pt-dbms-sql-5-natural-key",
+          "question_text": "What is a genuine operational risk of using a natural key as a primary key?",
+          "options": [
+            "Natural keys are always slower to compare than any other data type",
+            "The real-world value might need to change later (e.g. a corrected ID), which is painful once other tables have foreign keys pointing at it",
+            "Natural keys cannot be indexed",
+            "SQL does not allow natural keys as PRIMARY KEY"
+          ],
+          "correct_index": 1,
+          "explanation": "Unlike a surrogate key with no business meaning, a natural key's value can legitimately need correction or reissue, creating downstream update problems.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-5-natural-key-4",
+          "test_id": "pt-dbms-sql-5-natural-key",
+          "question_text": "Why might an assumed natural key turn out to not actually be unique in practice?",
+          "options": [
+            "This never happens with natural keys",
+            "Real-world data-entry errors, legacy ID reuse, or coincidental duplicate values can violate an assumption that seemed safe on paper",
+            "Natural keys are unique by mathematical law",
+            "Only surrogate keys can ever have duplicates"
+          ],
+          "correct_index": 1,
+          "explanation": "Real-world data is messier than assumptions — natural keys can have unexpected duplicates that only surface once actually checked or enforced.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-5-natural-key-5",
+          "test_id": "pt-dbms-sql-5-natural-key",
+          "question_text": "What is one advantage of a natural key over a surrogate key?",
+          "options": [
+            "It requires no design effort and doesn't need to be independently meaningful",
+            "It's independently meaningful outside the database, without needing an extra lookup to understand it",
+            "It is always shorter to store",
+            "It never changes over time"
+          ],
+          "correct_index": 1,
+          "explanation": "A natural key already carries real-world meaning, unlike an arbitrary surrogate value.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-5-natural-key-6",
+          "test_id": "pt-dbms-sql-5-natural-key",
+          "question_text": "How can a natural key negatively affect foreign key performance?",
+          "options": [
+            "Natural keys can never be referenced by foreign keys",
+            "If the natural key is long, composite, or an inconvenient type, foreign keys referencing it become wider and potentially slower to index than a compact surrogate integer",
+            "Foreign keys referencing natural keys are always faster",
+            "This is purely a hypothetical concern with no real basis"
+          ],
+          "correct_index": 1,
+          "explanation": "Wider referenced values and indexes can affect costs, but exact performance requires workload and engine evidence.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-5-natural-key-7",
+          "test_id": "pt-dbms-sql-5-natural-key",
+          "question_text": "Is 'a person's full name' generally considered a reliable natural key?",
+          "options": [
+            "Yes, names are always unique",
+            "No — multiple people can share the same name, making it an unreliable choice for uniqueness",
+            "Only for people whose names start with a vowel",
+            "Names are never allowed as database columns"
+          ],
+          "correct_index": 1,
+          "explanation": "Name collisions are common in the real world, making plain name a poor natural-key candidate.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-5-natural-key-8",
+          "test_id": "pt-dbms-sql-5-natural-key",
+          "question_text": "What is the fundamental trade-off between natural keys and surrogate keys?",
+          "options": [
+            "There is no trade-off; one is strictly better in every case",
+            "Natural identities carry business meaning and need scope/lifecycle guarantees; surrogates separate internal identity but do not remove business rules",
+            "Surrogate keys are always slower to generate",
+            "Natural keys can never be used in a WHERE clause"
+          ],
+          "correct_index": 1,
+          "explanation": "Neither approach is universally superior; stability, reference requirements and actual guarantees determine the design.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-5-natural-key-new-9",
+          "test_id": "pt-dbms-sql-5-natural-key",
+          "question_text": "Why can a course code identify a catalogue entry but not a particular offering?",
+          "options": [
+            "All codes are invalid",
+            "Different terms or sections can offer the same catalogue course",
+            "Offerings cannot have keys",
+            "A title always identifies the offering"
+          ],
+          "correct_index": 1,
+          "explanation": "Fact grain determines the identifying requirements.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-5-natural-key-new-10",
+          "test_id": "pt-dbms-sql-5-natural-key",
+          "question_text": "What scope component may be needed when local student numbers repeat across campuses?",
+          "options": [
+            "student_name always",
+            "The displayed row number",
+            "campus_code",
+            "The current score"
+          ],
+          "correct_index": 2,
+          "explanation": "The campus-number pair can express scoped identity.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-5-natural-key-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-5-natural-key-application-new-1",
+          "test_id": "pt-dbms-sql-5-natural-key-application",
+          "question_text": "Does a meaningful student name automatically form a natural key?",
+          "options": [
+            "Yes; all names are unique",
+            "Only if sorted alphabetically",
+            "No; meaningfulness does not establish uniqueness",
+            "Only if stored as text"
+          ],
+          "correct_index": 2,
+          "explanation": "A key needs an identifying guarantee as well as domain meaning.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-5-natural-key-application-new-2",
+          "test_id": "pt-dbms-sql-5-natural-key-application",
+          "question_text": "Why preserve leading zeros when the code contract requires them?",
+          "options": [
+            "Zeros always imply NULL",
+            "Every code must be integer",
+            "Arithmetic defines identity",
+            "Numeric conversion can discard identifier representation distinctions"
+          ],
+          "correct_index": 3,
+          "explanation": "An identifier is not automatically a quantity.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-5-natural-key-application-new-3",
+          "test_id": "pt-dbms-sql-5-natural-key-application",
+          "question_text": "What can explain two historical catalogue entries sharing a current code?",
+          "options": [
+            "The issuing policy may permit code reuse across time",
+            "One row must be deleted immediately",
+            "Every primary key has failed",
+            "Names must be globally unique"
+          ],
+          "correct_index": 0,
+          "explanation": "Historical scope may be part of the actual identity.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-5-natural-key-application-new-4",
+          "test_id": "pt-dbms-sql-5-natural-key-application",
+          "question_text": "Does a surrogate primary key remove required natural-code uniqueness?",
+          "options": [
+            "Yes; generated ids validate codes",
+            "No; enforce that independent business rule separately",
+            "Only if the code is text",
+            "Only if the table is large"
+          ],
+          "correct_index": 1,
+          "explanation": "Internal identity does not prevent a business-label collision.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-5-natural-key-application-new-5",
+          "test_id": "pt-dbms-sql-5-natural-key-application",
+          "question_text": "What can a no-duplicate sample establish?",
+          "options": [
+            "Every future natural identifier is valid",
+            "The issuing authority never reuses values",
+            "No observed conflict in that sample",
+            "A new constraint was applied"
+          ],
+          "correct_index": 2,
+          "explanation": "Sample evidence is narrower than a schema guarantee.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-5-natural-key-application-new-6",
+          "test_id": "pt-dbms-sql-5-natural-key-application",
+          "question_text": "Why inspect collation for string identifiers?",
+          "options": [
+            "Collation always encrypts codes",
+            "It creates missing values",
+            "It chooses the fact grain",
+            "Stored uniqueness can treat different spellings as equivalent"
+          ],
+          "correct_index": 3,
+          "explanation": "Comparison behaviour must match identity policy.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-5-natural-key-application-new-7",
+          "test_id": "pt-dbms-sql-5-natural-key-application",
+          "question_text": "Which claim about natural-key performance is justified without a benchmark?",
+          "options": [
+            "Wider representations can affect costs, but actual impact needs evidence",
+            "Every natural key is slower",
+            "Every natural key prevents indexes",
+            "Every surrogate makes every query faster"
+          ],
+          "correct_index": 0,
+          "explanation": "Physical trade-offs depend on engine and workload.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-5-natural-key-application-new-8",
+          "test_id": "pt-dbms-sql-5-natural-key-application",
+          "question_text": "Why can a publication identifier fail to identify one library copy?",
+          "options": [
+            "Libraries cannot use natural identifiers",
+            "Several physical copies can share that publication identity",
+            "Every copy is an author",
+            "Publication codes are always NULL"
+          ],
+          "correct_index": 1,
+          "explanation": "Publication and copy are different fact types.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-5-natural-key-application-new-9",
+          "test_id": "pt-dbms-sql-5-natural-key-application",
+          "question_text": "Which test isolates a natural-code uniqueness rule?",
+          "options": [
+            "A repeated primary id with a new code only",
+            "A repeated descriptive title with distinct codes",
+            "A new internal id with an existing required code",
+            "A different result alias"
+          ],
+          "correct_index": 2,
+          "explanation": "It challenges the alternate business identity independently.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-5-natural-key-application-new-10",
+          "test_id": "pt-dbms-sql-5-natural-key-application",
+          "question_text": "What must be reviewed before correcting a referenced natural identifier?",
+          "options": [
+            "Only screen order",
+            "Only font size",
+            "Only the number of characters typed",
+            "Its reference dependencies and supported transition policy"
+          ],
+          "correct_index": 3,
+          "explanation": "Changing an identity can affect related facts.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cx-natural-key-audit",
+      "slug": "natural-key-audit",
+      "title": "Audit a proposed institutional course-code identity",
+      "difficulty": "Easy",
+      "task": "Return course_code and occurrences for repeated course codes. This is a current-data audit; titles do not define identity.",
+      "schema_sql": "CREATE TABLE courses (course_id INT PRIMARY KEY, course_code VARCHAR(20) NOT NULL, course_title VARCHAR(80) NOT NULL);",
+      "seed_sql": "INSERT INTO courses VALUES (1,'DB101','Databases'),(2,'DB101','Foundations'),(3,'NW101','Networks');",
+      "expected": "course_code\toccurrences\nDB101\t2",
+      "ordering": "Ascending course_code.",
+      "constraints": [
+        "Fixture codes are canonical uppercase spellings with no case-sensitive ambiguity."
+      ],
+      "edge_cases": [
+        "Different titles can still conflict on one proposed code.",
+        "Repeated titles with distinct codes are not code conflicts."
+      ],
+      "hints": [
+        "Group by the proposed business identifier.",
+        "Use HAVING to retain counts above one."
+      ],
+      "solution_sql": "SELECT course_code, COUNT(*) AS occurrences FROM courses GROUP BY course_code HAVING COUNT(*) > 1 ORDER BY course_code;",
+      "explanation": "The grouping detects conflicting current code claims without assuming a title is an identity or prescribing arbitrary deletion.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO courses VALUES (1,'DB101','Databases'),(2,'DB201','Databases');",
+          "expected": ""
+        },
+        {
+          "seed_sql": "INSERT INTO courses VALUES (1,'A1','A'),(2,'A1','B'),(3,'A1','C');",
+          "expected": "course_code\toccurrences\nA1\t3"
+        }
+      ]
+    },
+    {
+      "id": "cx-natural-key-enforce",
+      "slug": "natural-key-enforce",
+      "title": "Enforce a required natural identity alongside the internal key",
+      "difficulty": "Medium",
+      "task": "Add UNIQUE(course_code) named natural_course_identity to courses. course_id is already primary and course_code already NOT NULL. Return course_id, course_code, course_title, preserving repeated titles.",
+      "starter_sql": "-- Add natural_course_identity and return the course facts.",
+      "schema_sql": "CREATE TABLE courses (course_id INT PRIMARY KEY, course_code VARCHAR(20) NOT NULL, course_title VARCHAR(80) NOT NULL);",
+      "seed_sql": "INSERT INTO courses VALUES (1,'DB101','Databases'),(2,'DB201','Databases');",
+      "expected": "course_id\tcourse_code\tcourse_title\n1\tDB101\tDatabases\n2\tDB201\tDatabases",
+      "ordering": "Ascending course_id.",
+      "constraints": [
+        "The policy guarantees required course codes unique within this catalogue.",
+        "Initial fixture data satisfies the intended rule."
+      ],
+      "edge_cases": [
+        "New internal ids cannot justify repeated natural codes.",
+        "Names and titles remain descriptive."
+      ],
+      "hints": [
+        "Keep the existing primary key.",
+        "Use one independent UNIQUE declaration for the natural code."
+      ],
+      "solution_sql": "ALTER TABLE courses ADD CONSTRAINT natural_course_identity UNIQUE (course_code);\nSELECT course_id, course_code, course_title FROM courses ORDER BY course_id;",
+      "explanation": "The constraint enforces the business-code promise separately from internal row identity. It does not verify external issuance truth.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO courses VALUES (7,'A1','Art');",
+          "expected": "course_id\tcourse_code\tcourse_title\n7\tA1\tArt"
+        },
+        {
+          "seed_sql": "",
+          "expected": ""
+        }
+      ],
+      "negative_validation_cases": [
+        {
+          "sql": "INSERT INTO courses VALUES (99,'DB101','Other');",
+          "error_codes": [
+            1062
+          ]
+        },
+        {
+          "sql": "INSERT INTO courses VALUES (99,NULL,'Other');",
+          "error_codes": [
+            1048
+          ]
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-5-natural-key-1",
+      "test_id": "pt-dbms-sql-5-natural-key",
+      "question_text": "What is a natural key?",
+      "options": [
+        "A key value chosen by a random number generator",
+        "A candidate key based on an attribute that already has real-world business meaning",
+        "A key that is always numeric",
+        "A key with no formal database definition"
+      ],
+      "correct_index": 1,
+      "explanation": "Natural keys derive from meaningful real-world attributes, like an ISBN or national ID.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-5-natural-key-2",
+      "test_id": "pt-dbms-sql-5-natural-key",
+      "question_text": "Which of these is the best example of a natural key?",
+      "options": [
+        "An auto-incrementing integer id with no external meaning",
+        "A book's ISBN",
+        "A randomly generated UUID",
+        "A row's internal storage address"
+      ],
+      "correct_index": 1,
+      "explanation": "ISBN is a real-world, externally meaningful identifier, making it a natural key.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-5-natural-key-3",
+      "test_id": "pt-dbms-sql-5-natural-key",
+      "question_text": "What is a genuine operational risk of using a natural key as a primary key?",
+      "options": [
+        "Natural keys are always slower to compare than any other data type",
+        "The real-world value might need to change later (e.g. a corrected ID), which is painful once other tables have foreign keys pointing at it",
+        "Natural keys cannot be indexed",
+        "SQL does not allow natural keys as PRIMARY KEY"
+      ],
+      "correct_index": 1,
+      "explanation": "Unlike a surrogate key with no business meaning, a natural key's value can legitimately need correction or reissue, creating downstream update problems.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-5-natural-key-4",
+      "test_id": "pt-dbms-sql-5-natural-key",
+      "question_text": "Why might an assumed natural key turn out to not actually be unique in practice?",
+      "options": [
+        "This never happens with natural keys",
+        "Real-world data-entry errors, legacy ID reuse, or coincidental duplicate values can violate an assumption that seemed safe on paper",
+        "Natural keys are unique by mathematical law",
+        "Only surrogate keys can ever have duplicates"
+      ],
+      "correct_index": 1,
+      "explanation": "Real-world data is messier than assumptions — natural keys can have unexpected duplicates that only surface once actually checked or enforced.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-5-natural-key-5",
+      "test_id": "pt-dbms-sql-5-natural-key",
+      "question_text": "What is one advantage of a natural key over a surrogate key?",
+      "options": [
+        "It requires no design effort and doesn't need to be independently meaningful",
+        "It's independently meaningful outside the database, without needing an extra lookup to understand it",
+        "It is always shorter to store",
+        "It never changes over time"
+      ],
+      "correct_index": 1,
+      "explanation": "A natural key already carries real-world meaning, unlike an arbitrary surrogate value.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-5-natural-key-6",
+      "test_id": "pt-dbms-sql-5-natural-key",
+      "question_text": "How can a natural key negatively affect foreign key performance?",
+      "options": [
+        "Natural keys can never be referenced by foreign keys",
+        "If the natural key is long, composite, or an inconvenient type, foreign keys referencing it become wider and potentially slower to index than a compact surrogate integer",
+        "Foreign keys referencing natural keys are always faster",
+        "This is purely a hypothetical concern with no real basis"
+      ],
+      "correct_index": 1,
+      "explanation": "A wide or complex natural key propagates that width/complexity into every referencing foreign key column and its index.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-5-natural-key-7",
+      "test_id": "pt-dbms-sql-5-natural-key",
+      "question_text": "Is 'a person's full name' generally considered a reliable natural key?",
+      "options": [
+        "Yes, names are always unique",
+        "No — multiple people can share the same name, making it an unreliable choice for uniqueness",
+        "Only for people whose names start with a vowel",
+        "Names are never allowed as database columns"
+      ],
+      "correct_index": 1,
+      "explanation": "Name collisions are common in the real world, making plain name a poor natural-key candidate.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-5-natural-key-8",
+      "test_id": "pt-dbms-sql-5-natural-key",
+      "question_text": "What is the fundamental trade-off between natural keys and surrogate keys?",
+      "options": [
+        "There is no trade-off; one is strictly better in every case",
+        "Natural keys are meaningful but can change or prove less unique than assumed; surrogate keys are stable and simple but carry no external meaning",
+        "Surrogate keys are always slower to generate",
+        "Natural keys can never be used in a WHERE clause"
+      ],
+      "correct_index": 1,
+      "explanation": "This exact trade-off — meaning and no invented value vs. stability and simplicity — is the core design decision covered further in 5.8.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "coordinator",
+    "independent_review": "unavailable; no agent tools",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Definitions and examples checked against questions; no plagiarism certification.",
+    "existing_question_corrections": [
+      "tq-dbms-sql-5-natural-key-1",
+      "tq-dbms-sql-5-natural-key-2",
+      "tq-dbms-sql-5-natural-key-6",
+      "tq-dbms-sql-5-natural-key-8"
+    ],
+    "canonical_answer_indices_preserved": true
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-5-natural-key",
+    "original_note_sha256": "ff1cd9077722d90dd7abc2516be68e9061db78f721c35c48b2df829af1bebe49",
+    "status": "paired migration prepared; not applied"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "A meaningful identifier must match the represented object and scope",
+      "description": "A useful natural identity is supported by an explicit issuance and scope policy; meaningful labels alone do not establish uniqueness.",
+      "columns": [
+        "Fact type",
+        "Proposed meaningful identifier",
+        "Required qualification"
+      ],
+      "rows": [
+        [
+          "Catalogue course",
+          "Institutional course code",
+          "Unique within the defined catalogue and period"
+        ],
+        [
+          "Course offering",
+          "Course code plus term and section",
+          "Must distinguish separate offerings"
+        ],
+        [
+          "Student",
+          "Campus plus local student number",
+          "Local number can repeat across campuses"
+        ],
+        [
+          "Physical library copy",
+          "Publication identifier alone",
+          "Insufficient when multiple copies share it"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "coordinator checked grain, natural identifier scope and independent business uniqueness",
+    "server_rendering": "passed",
+    "browser_rendering": "unverified",
+    "independent_review": "unavailable; no agent tools",
+    "server_rendering_evidence": "2026-10-29: actual LessonBlock rendering passed for all 79 packages; 87 focused Vitest tests passed."
+  },
+  "sql_verification": {
+    "engine": "11.8.6-MariaDB-0+deb13u1 from Debian",
+    "scope": "MariaDB compatibility execution; exact MySQL 8.4/provider execution unverified",
+    "fingerprint": "38da54365b5850957da2e721e60823b01fc522a3cb344314991b61edce108f82",
+    "cases": [
+      {
+        "problem": "natural-key-audit",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "natural-key-audit",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "natural-key-audit",
+        "case": 2,
+        "passed": true
+      },
+      {
+        "problem": "natural-key-enforce",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "natural-key-enforce",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "natural-key-enforce",
+        "case": 2,
+        "passed": true
+      },
+      {
+        "problem": "natural-key-enforce",
+        "negative_case": 0,
+        "error_code": 1062,
+        "passed": true
+      },
+      {
+        "problem": "natural-key-enforce",
+        "negative_case": 1,
+        "error_code": 1048,
+        "passed": true
+      }
+    ],
+    "all_passed": true
+  }
+}

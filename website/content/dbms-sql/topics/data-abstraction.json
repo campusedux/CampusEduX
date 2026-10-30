@@ -1,0 +1,617 @@
+{
+  "source_ref": "chapter-2-dbms-architecture/data-abstraction",
+  "slug": "data-abstraction",
+  "title": "Data Abstraction",
+  "description": "Use view, logical, and physical abstraction to simplify database interfaces while preserving identity, units, missing-value meaning, access checks, and useful error information.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Hiding detail while keeping useful meaning\n\nData abstraction presents information at a level suited to a task while hiding details that the task does not require. A banking customer needs to identify an account and understand its available information. They do not ordinarily need its page address or physical shard identifier. The goal is manageable complexity: consumers can work with a clear contract while the system retains the lower-level information needed to implement it.\n\nAbstraction does not mean removing every detail or showing the smallest possible number of fields. A useful interface exposes enough meaning for its consumer to make correct decisions. Hiding whether a balance is recorded, whether a result is provisional, or which currency a number uses can make an interface simpler in appearance but misleading in use. Choosing the right distinctions is central to the design.\n\nThe familiar view, logical, and physical levels describe three related perspectives. The three-schema architecture applies these ideas through external, conceptual, and internal schemas. These terms help identify responsibilities; they do not guarantee that every product implements exactly three isolated programs or that naming an interface after a level automatically makes it well designed.\n\n## Working at the view level\n\nThe view level presents task-facing information. A customer account perspective might contain account number, balance, and currency. A support agent may need account status and customer contact information. An authorized compliance report may need a different set of facts. These perspectives can draw from shared logical data without each consumer receiving every attribute stored elsewhere in the system.\n\nFor this topic, use Account with AccNo, Balance, CustomerID, BranchID, InterestRate, and Currency as a simplified logical example. Balance is a recorded amount for the stated account and currency, and NULL means no balance has been recorded in the teaching dataset. This is not a complete banking ledger, and the example does not imply that real financial authority should be based on one editable balance field.\n\nThe view level is closest to the consumer, but it is not necessarily a visual screen or a SQL VIEW object. A defined report or application response can also present an external perspective. What matters is the contract: which facts appear, whose records qualify, what the values mean, and which operations are permitted. A screen that hides a column while downloading it still exposes that value in its response.\n\n## Working at the logical level\n\nThe logical level describes what data exists and the relationships and rules governing it. AccNo identifies an account. CustomerID connects it to a customer, and BranchID connects it to a branch under the example's model. Balance has an amount and a currency context. InterestRate requires a definition of period and calculation meaning before a consumer can interpret it correctly.\n\nConstraints also belong to logical meaning. Is each account associated with exactly one customer, or can an account have multiple holders? Is a branch mandatory? Are negative balances permitted for the account type? These requirements change the model and allowed states. A physical index might help enforce or access some representation, but it does not replace the need to define the rule.\n\nThe logical model is broader than any one view. A customer interface can omit BranchID while the logical model retains it for other tasks. Conversely, adding a branch requirement to the logical schema can affect writes even if the customer's displayed columns remain unchanged. Abstraction helps manage dependencies, but it does not eliminate the need to trace them.\n\n## Working at the physical level\n\nThe physical level concerns representation and access: records, pages, indexes, storage placement, and related structures. An engine may locate an account through an index, read a cached page, or access additional storage. The customer should not need to know those details merely to read the promised account perspective.\n\nA hypothetical distribution by a hash of AccNo illustrates a physical placement decision when routing and guarantees remain hidden behind the logical interface. Real sharding is not automatically transparent. If callers must choose a shard or coordinate cross-server operations themselves, the placement has become an application dependency. The architectural example therefore needs an explicit assumption about supported routing and preserved behavior.\n\nPhysical information can still be useful to the right audience. An authorized operator investigating latency may need storage and plan diagnostics. Hiding raw internals from customers does not mean deleting diagnostic evidence. Good abstraction separates task-appropriate information and access, allowing operators to investigate without turning every customer into a storage administrator.\n\n## Following values through a mapping\n\nSuppose account 601 has a recorded balance of zero and account 602 has no recorded balance. A perspective that converts both to zero has erased a meaningful distinction. The first account has a known amount in the stated dataset; the second lacks that measurement. A consumer can be misled even though both rows display a neat numeric value.\n\nA query can expose a status alongside the amount without inventing a number. The following MySQL projection keeps the amount and describes its absence. It does not define access control; a trusted caller must still be restricted to the accounts it may read.\n\n```sql\nSELECT AccNo, Balance, Currency,\n       CASE WHEN Balance IS NULL\n            THEN 'not recorded'\n            ELSE 'recorded'\n       END AS BalanceStatus\nFROM Account\nORDER BY AccNo;\n```\n\nFor account 601, BalanceStatus is recorded and Balance remains zero. For account 602, the status is not recorded and Balance remains NULL. The consumer can present an appropriate message while preserving the underlying distinction. If a product uses a different absence policy, its mapping should express that documented meaning instead.\n\n## Preserving identity, units, and population\n\nSimplifying an interface should not merge different records accidentally. Two customers may share a display name, so an account perspective needs an appropriate identifier rather than a name-based join. A repeated name is an ordinary case, not malformed data. Likewise, a customer can hold several accounts, so one row per account differs from one row per customer.\n\nUnits are equally important. Summing amounts across different currencies without a conversion rule produces a number with no valid single currency meaning. An abstract customer summary should group by currency or use a separately specified conversion process. Hiding the currency label to make the table narrower does not make unlike amounts comparable.\n\nRow eligibility needs a contract too. An inner join can omit accounts whose optional descriptive record is absent. An aggregate can collapse several accounts into one summary. These operations can be appropriate, but the mapping should explain the intended population and grain. Consumers need to know what one returned row represents before interpreting a count or total.\n\n## Recognizing abstraction leaks\n\nAn abstraction leak occurs when lower-level details intrude into an interface whose consumer should not need them. A customer-facing message containing a raw shard identifier and an internal storage exception exposes implementation concerns without necessarily helping the customer act. A clearer message can state the observable problem and appropriate next step while authorized diagnostics retain the technical details.\n\nNot every error detail should be suppressed. If a requested operation fails because its input violates a meaningful rule, the consumer may need an accurate explanation of that rule. Calling every failure an unknown error hides useful distinctions. The design should communicate task-relevant facts while keeping sensitive or irrelevant internals out of the response.\n\nA second kind of leak is dependency on an implementation choice. If a client assumes account rows arrive in insertion order without requesting ordering, a new access path can reveal that assumption. The client then depended on physical encounter order rather than its logical contract. Explicit ordering, with a suitable tie-breaker, expresses the actual requirement.\n\n## Separating abstraction from authorization\n\nA limited perspective is not by itself proof of permission enforcement. The system must verify the actor and restrict access at a trusted boundary. A request supplying CustomerID does not establish that the caller owns that customer record. Hiding BranchID or InterestRate does not prevent unauthorized access to another person's balance if record-level checks are absent.\n\nReview the actual query and response path, including available bypasses. Keep authorization decisions out of an untrusted client, and preserve existing access rules when simplifying data. Abstraction can reduce unnecessary exposure and cognitive load, but it cannot replace authentication, authorization, or the integrity controls that give the returned facts their reliability.\n\n## Choosing a useful level of detail\n\nStart with the consumer's task, identify the facts and distinctions it needs, and define their source and meaning. Test examples involving zero, missing values, repeated names, several accounts, and different currencies. Check that errors remain actionable and that physical implementation details do not become accidental dependencies. These examples reveal both excessive exposure and harmful over-simplification.\n\nData abstraction succeeds when consumers can reason correctly without carrying irrelevant implementation knowledge. The view level presents task-facing facts, the logical level defines their shared structure and rules, and the physical level supplies a representation. Clear mappings connect them. Preserve meaningful distinctions across those mappings, and simplicity becomes a reliable interface property rather than merely a reduction in visible fields.\n",
+  "references": [],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-2-data-abstraction",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-2-data-abstraction-1",
+          "test_id": "pt-dbms-sql-2-data-abstraction",
+          "question_text": "What is the general principle that Data Abstraction describes?",
+          "options": [
+            "Encrypting all stored data for security",
+            "Hiding details not relevant at a given level and showing each audience only what it needs",
+            "Compressing data to save disk space",
+            "Replicating data across multiple servers"
+          ],
+          "correct_index": 1,
+          "explanation": "Data abstraction is about controlling what level of detail is exposed to different audiences, hiding irrelevant complexity.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-2-data-abstraction-2",
+          "test_id": "pt-dbms-sql-2-data-abstraction",
+          "question_text": "Which abstraction level presents task-specific information closest to the application consumer?",
+          "options": [
+            "Physical level",
+            "Logical level",
+            "View level",
+            "Internal storage level"
+          ],
+          "correct_index": 2,
+          "explanation": "The view level tailors information to a task; it should retain all distinctions the consumer needs.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-2-data-abstraction-3",
+          "test_id": "pt-dbms-sql-2-data-abstraction",
+          "question_text": "In the bank account example, at which level is `Account(AccNo, Balance, CustomerID, BranchID, InterestRate)` with its constraints defined?",
+          "options": [
+            "View level",
+            "Logical level",
+            "Physical level",
+            "Middleware level"
+          ],
+          "correct_index": 1,
+          "explanation": "The full structural definition with constraints is a logical-level (conceptual schema) concern, sitting between view and physical detail.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-2-data-abstraction-4",
+          "test_id": "pt-dbms-sql-2-data-abstraction",
+          "question_text": "How does the three-schema architecture (external/conceptual/internal) relate to the three levels of data abstraction (view/logical/physical)?",
+          "options": [
+            "They are unrelated concepts from different fields",
+            "External corresponds to view, conceptual to logical, and internal to physical; the architecture applies the abstraction principle",
+            "The three-schema architecture replaces the need for data abstraction entirely",
+            "Data abstraction only applies to the internal schema"
+          ],
+          "correct_index": 1,
+          "explanation": "The correspondences describe responsibilities, not a requirement for exactly three isolated software components.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-2-data-abstraction-5",
+          "test_id": "pt-dbms-sql-2-data-abstraction",
+          "question_text": "Assuming routing and logical guarantees stay hidden behind the same account interface, why is hash-based shard placement a physical concern?",
+          "options": [
+            "Because sharding is a customer-facing feature that must be visible in the app",
+            "Because sharding is a storage implementation detail irrelevant to what the customer needs to see, so it is abstracted away at the view level",
+            "Because sharding changes the logical structure of the Account table",
+            "Because sharding is only relevant to external schemas"
+          ],
+          "correct_index": 1,
+          "explanation": "The scenario explicitly assumes transparent routing and preserved semantics; actual sharding requires product-specific review.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-2-data-abstraction-6",
+          "test_id": "pt-dbms-sql-2-data-abstraction",
+          "question_text": "What would it mean for abstraction to 'leak through' at the view level, based on the notes?",
+          "options": [
+            "A customer sees a clean, simple balance screen as intended",
+            "A raw internal error code or a physical shard ID is shown directly to an end user",
+            "The logical schema correctly hides physical storage details",
+            "A DBA adjusts an index without notifying users"
+          ],
+          "correct_index": 1,
+          "explanation": "Abstraction leaking is when detail meant to stay hidden at a lower level surfaces at a higher, less-detailed level, defeating the purpose of abstraction.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-2-data-abstraction-7",
+          "test_id": "pt-dbms-sql-2-data-abstraction",
+          "question_text": "A mobile banking view shows '0' for an account balance regardless of whether the true stored value is 0 or NULL (no balance recorded yet). What problem does this illustrate?",
+          "options": [
+            "Correct abstraction, since users should never see NULL",
+            "Over-abstracting: hiding the NULL-vs-zero distinction can mislead users into misinterpreting missing data as an actual zero balance",
+            "A physical-level storage bug unrelated to abstraction",
+            "A violation of the three-schema architecture's mapping rules"
+          ],
+          "correct_index": 1,
+          "explanation": "The notes explicitly warn that over-abstracting can hide meaningful distinctions, like NULL versus 0, that users legitimately need to see correctly.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-2-data-abstraction-8",
+          "test_id": "pt-dbms-sql-2-data-abstraction",
+          "question_text": "A junior developer argues that since the three-schema architecture already handles all necessary separation, the concept of 'data abstraction' is redundant and can be ignored when designing a new external schema. What is the flaw in this reasoning?",
+          "options": [
+            "There is no flaw; abstraction and the three-schema architecture are unrelated",
+            "Data abstraction is the underlying principle that justifies and guides how each schema level should hide detail; ignoring it risks designing schemas that leak irrelevant complexity to the wrong audience",
+            "The three-schema architecture only applies to internal schemas, so abstraction is irrelevant to external schema design",
+            "Data abstraction only matters for physical-level design, not external schemas"
+          ],
+          "correct_index": 1,
+          "explanation": "Since each schema level is a direct application of data abstraction, ignoring the principle risks poor design choices, like exposing physical or logical detail that a given external schema's audience does not need.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-2-data-abstraction-new-9",
+          "test_id": "pt-dbms-sql-2-data-abstraction",
+          "question_text": "What is the danger of simplifying away currency labels?",
+          "options": [
+            "The database necessarily loses every index",
+            "Consumers may combine amounts with incompatible units",
+            "Account identifiers become dates",
+            "NULL automatically becomes a currency"
+          ],
+          "correct_index": 1,
+          "explanation": "A usable abstraction preserves units needed to interpret values.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-2-data-abstraction-new-10",
+          "test_id": "pt-dbms-sql-2-data-abstraction",
+          "question_text": "Which distinction should an account perspective preserve in this example?",
+          "options": [
+            "The storage page address for every customer",
+            "The raw internal exception name in every response",
+            "Recorded zero versus no recorded balance",
+            "The exact physical file offset"
+          ],
+          "correct_index": 2,
+          "explanation": "A known zero and an absent measurement have different meanings.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-2-data-abstraction-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-2-data-abstraction-application-new-1",
+          "test_id": "pt-dbms-sql-2-data-abstraction-application",
+          "question_text": "Account 601 has Balance = 0; account 602 has Balance = NULL. Which status mapping is faithful?",
+          "options": [
+            "Both recorded zero",
+            "Both not recorded",
+            "601 recorded; 602 not recorded",
+            "601 not recorded; 602 recorded"
+          ],
+          "correct_index": 2,
+          "explanation": "IS NULL detects absence without confusing it with numeric zero.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-2-data-abstraction-application-new-2",
+          "test_id": "pt-dbms-sql-2-data-abstraction-application",
+          "question_text": "A summary adds 100 INR to 20 USD and labels the total INR without conversion. What is wrong?",
+          "options": [
+            "It should have hidden both currencies",
+            "Every addition is forbidden in SQL",
+            "Only the index order is wrong",
+            "It combined different units without a defined conversion"
+          ],
+          "correct_index": 3,
+          "explanation": "A numeric sum across currencies lacks the claimed single-currency meaning.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-2-data-abstraction-application-new-3",
+          "test_id": "pt-dbms-sql-2-data-abstraction-application",
+          "question_text": "A customer sees raw shard IDs in a storage failure message. What design issue is illustrated?",
+          "options": [
+            "Irrelevant implementation detail leaked into the task-facing interface",
+            "The balance has necessarily changed",
+            "A conceptual key was automatically deleted",
+            "The customer has become a DBA"
+          ],
+          "correct_index": 0,
+          "explanation": "The customer needs a useful failure description; authorized diagnostics can retain technical details.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-2-data-abstraction-application-new-4",
+          "test_id": "pt-dbms-sql-2-data-abstraction-application",
+          "question_text": "A client supplies CustomerID and receives any requested customer's accounts. Does projection alone enforce ownership?",
+          "options": [
+            "Yes; omitting InterestRate proves access",
+            "No; actor-to-record access must be checked at a trusted boundary",
+            "Yes; CustomerID is always secret",
+            "Only page layout determines ownership"
+          ],
+          "correct_index": 1,
+          "explanation": "A caller-controlled identifier is not evidence of authorization.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-2-data-abstraction-application-new-5",
+          "test_id": "pt-dbms-sql-2-data-abstraction-application",
+          "question_text": "Two customers share a name. Which mapping avoids merging their accounts?",
+          "options": [
+            "Join all accounts on display name",
+            "Group all rows by name and discard identity",
+            "Relate accounts using the defined customer identifier",
+            "Use name length as a key"
+          ],
+          "correct_index": 2,
+          "explanation": "Identifiers preserve separate people even when labels repeat.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-2-data-abstraction-application-new-6",
+          "test_id": "pt-dbms-sql-2-data-abstraction-application",
+          "question_text": "A report changes from one row per account to one row per customer and currency. What must the consumer understand?",
+          "options": [
+            "Only the background color",
+            "Only the physical page count",
+            "That accounts no longer have identifiers",
+            "The new grain and aggregation meaning"
+          ],
+          "correct_index": 3,
+          "explanation": "A summary row represents a different fact from an individual account row.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-2-data-abstraction-application-new-7",
+          "test_id": "pt-dbms-sql-2-data-abstraction-application",
+          "question_text": "An operation fails a meaningful input rule. Should abstraction always replace the explanation with Unknown error?",
+          "options": [
+            "No; task-relevant rule feedback can remain actionable",
+            "Yes; all error distinctions are implementation secrets",
+            "Yes; validation must never be described",
+            "Only raw stack traces are acceptable"
+          ],
+          "correct_index": 0,
+          "explanation": "Abstraction hides irrelevant internals without suppressing useful explanations.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-2-data-abstraction-application-new-8",
+          "test_id": "pt-dbms-sql-2-data-abstraction-application",
+          "question_text": "A new index changes encounter order for an unordered account query. Which requirement should the consumer make explicit?",
+          "options": [
+            "The disk sector for the first account",
+            "The desired ORDER BY and any necessary tie-breaker",
+            "The original insertion timestamp of every page",
+            "The exact index name in every response"
+          ],
+          "correct_index": 1,
+          "explanation": "Specify the logical sequence instead of depending on physical access.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-2-data-abstraction-application-new-9",
+          "test_id": "pt-dbms-sql-2-data-abstraction-application",
+          "question_text": "An operator needs plan diagnostics while a customer needs an account summary. What does good abstraction allow?",
+          "options": [
+            "Only the customer can see every internal detail",
+            "Diagnostics must be permanently deleted",
+            "Different task-appropriate information under suitable access",
+            "Every consumer must receive identical responses"
+          ],
+          "correct_index": 2,
+          "explanation": "Different responsibilities justify different perspectives and access.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-2-data-abstraction-application-new-10",
+          "test_id": "pt-dbms-sql-2-data-abstraction-application",
+          "question_text": "After sharding, application code must choose a server for every account. Which original assumption no longer holds?",
+          "options": [
+            "Every account has an identifier",
+            "The customer can read a name",
+            "The model contains a balance attribute",
+            "Placement is fully hidden behind the logical interface"
+          ],
+          "correct_index": 3,
+          "explanation": "Server selection has become an application dependency rather than an invisible physical choice.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "dsa-dbms-sql-data-abstraction-balance-status",
+      "slug": "data-abstraction-balance-status",
+      "title": "Preserve missing and zero balances",
+      "difficulty": "Easy",
+      "task": "Return account_id, balance, currency, balance_status. Use 'not recorded' for NULL balances and 'recorded' otherwise. Preserve the original balance and order by account_id. This is a teaching projection, not a banking ledger or an authorization policy.",
+      "schema_sql": "CREATE TABLE accounts (account_id INT PRIMARY KEY, customer_id INT NOT NULL, balance DECIMAL(10,2) NULL, currency CHAR(3) NOT NULL);",
+      "seed_sql": "INSERT INTO accounts VALUES (602,2,NULL,'INR'),(601,1,0.00,'INR'),(603,1,25.50,'USD');",
+      "expected": "account_id\tbalance\tcurrency\tbalance_status\n601\t0.00\tINR\trecorded\n602\tNULL\tINR\tnot recorded\n603\t25.50\tUSD\trecorded",
+      "ordering": "account_id ascending",
+      "constraints": [
+        "account_id is unique",
+        "NULL means no balance recorded in this teaching dataset",
+        "Balances of zero and negative amounts are allowed"
+      ],
+      "edge_cases": [
+        "Zero is recorded",
+        "Negative balances remain recorded",
+        "NULL stays NULL"
+      ],
+      "hints": [
+        "Use CASE with IS NULL",
+        "Do not use balance = NULL"
+      ],
+      "solution_sql": "SELECT account_id, balance, currency, CASE WHEN balance IS NULL THEN 'not recorded' ELSE 'recorded' END AS balance_status FROM accounts ORDER BY account_id;",
+      "explanation": "The status describes missingness without replacing NULL or zero. Keeping currency preserves the unit needed to interpret each amount.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO accounts VALUES (1,1,-4.25,'USD');",
+          "expected": "account_id\tbalance\tcurrency\tbalance_status\n1\t-4.25\tUSD\trecorded"
+        },
+        {
+          "seed_sql": "",
+          "expected": ""
+        }
+      ]
+    },
+    {
+      "id": "dsa-dbms-sql-data-abstraction-currency-summary",
+      "slug": "data-abstraction-currency-summary",
+      "title": "Summarize recorded amounts without mixing currencies",
+      "difficulty": "Medium",
+      "task": "Return one row per customer_id and currency with columns customer_id, currency, account_count, recorded_count, recorded_total. Count all accounts, count non-NULL balances, and sum only recorded balances. Keep recorded_total NULL when every balance is missing. Do not convert currencies or treat this teaching sum as an authoritative banking balance. Order by customer_id then currency.",
+      "schema_sql": "CREATE TABLE accounts (account_id INT PRIMARY KEY, customer_id INT NOT NULL, balance DECIMAL(10,2) NULL, currency CHAR(3) NOT NULL);",
+      "seed_sql": "INSERT INTO accounts VALUES (1,1,100.00,'INR'),(2,1,20.00,'USD'),(3,1,NULL,'INR'),(4,2,NULL,'USD'),(5,1,0.00,'USD');",
+      "expected": "customer_id\tcurrency\taccount_count\trecorded_count\trecorded_total\n1\tINR\t2\t1\t100.00\n1\tUSD\t2\t2\t20.00\n2\tUSD\t1\t0\tNULL",
+      "ordering": "customer_id ascending, currency ascending",
+      "constraints": [
+        "Each row is an account",
+        "Currencies are explicit three-letter codes",
+        "NULL denotes an unrecorded balance"
+      ],
+      "edge_cases": [
+        "Do not combine different currencies",
+        "All-missing groups retain a NULL total",
+        "Zero counts as a recorded balance",
+        "Multiple accounts contribute separately"
+      ],
+      "hints": [
+        "Group by both customer_id and currency",
+        "COUNT(*) and COUNT(balance) answer different questions",
+        "SUM preserves NULL for an all-missing group"
+      ],
+      "solution_sql": "SELECT customer_id, currency, COUNT(*) AS account_count, COUNT(balance) AS recorded_count, SUM(balance) AS recorded_total FROM accounts GROUP BY customer_id, currency ORDER BY customer_id, currency;",
+      "explanation": "The grouping preserves currency units. The two counts distinguish how many accounts exist from how many have recorded amounts, while SUM retains an all-missing total as NULL.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO accounts VALUES (1,3,-5.00,'INR'),(2,3,0.00,'INR');",
+          "expected": "customer_id\tcurrency\taccount_count\trecorded_count\trecorded_total\n3\tINR\t2\t2\t-5.00"
+        },
+        {
+          "seed_sql": "",
+          "expected": ""
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-2-data-abstraction-1",
+      "test_id": "pt-dbms-sql-2-data-abstraction",
+      "question_text": "What is the general principle that Data Abstraction describes?",
+      "options": [
+        "Encrypting all stored data for security",
+        "Hiding details not relevant at a given level and showing each audience only what it needs",
+        "Compressing data to save disk space",
+        "Replicating data across multiple servers"
+      ],
+      "correct_index": 1,
+      "explanation": "Data abstraction is about controlling what level of detail is exposed to different audiences, hiding irrelevant complexity.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-2-data-abstraction-2",
+      "test_id": "pt-dbms-sql-2-data-abstraction",
+      "question_text": "Which of the three abstraction levels is closest to the end user and shows the least detail?",
+      "options": [
+        "Physical level",
+        "Logical level",
+        "View level",
+        "Internal storage level"
+      ],
+      "correct_index": 2,
+      "explanation": "The view level is the most abstract, showing end users only the minimal relevant information, like an account number and balance.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-2-data-abstraction-3",
+      "test_id": "pt-dbms-sql-2-data-abstraction",
+      "question_text": "In the bank account example, at which level is `Account(AccNo, Balance, CustomerID, BranchID, InterestRate)` with its constraints defined?",
+      "options": [
+        "View level",
+        "Logical level",
+        "Physical level",
+        "Middleware level"
+      ],
+      "correct_index": 1,
+      "explanation": "The full structural definition with constraints is a logical-level (conceptual schema) concern, sitting between view and physical detail.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-2-data-abstraction-4",
+      "test_id": "pt-dbms-sql-2-data-abstraction",
+      "question_text": "How does the three-schema architecture (external/conceptual/internal) relate to the three levels of data abstraction (view/logical/physical)?",
+      "options": [
+        "They are unrelated concepts from different fields",
+        "Each schema level is a direct, concrete application of the corresponding abstraction level: external=view, conceptual=logical, internal=physical",
+        "The three-schema architecture replaces the need for data abstraction entirely",
+        "Data abstraction only applies to the internal schema"
+      ],
+      "correct_index": 1,
+      "explanation": "The three-schema architecture is described as being built directly on top of the data abstraction principle, with each schema level corresponding to one abstraction level.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-2-data-abstraction-5",
+      "test_id": "pt-dbms-sql-2-data-abstraction",
+      "question_text": "Why does sharding the Account table by AccNo hash belong at the physical level rather than the view level?",
+      "options": [
+        "Because sharding is a customer-facing feature that must be visible in the app",
+        "Because sharding is a storage implementation detail irrelevant to what the customer needs to see, so it is abstracted away at the view level",
+        "Because sharding changes the logical structure of the Account table",
+        "Because sharding is only relevant to external schemas"
+      ],
+      "correct_index": 1,
+      "explanation": "Physical storage decisions like sharding are hidden from the customer-facing view level, which only needs to show account number and balance.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-2-data-abstraction-6",
+      "test_id": "pt-dbms-sql-2-data-abstraction",
+      "question_text": "What would it mean for abstraction to 'leak through' at the view level, based on the notes?",
+      "options": [
+        "A customer sees a clean, simple balance screen as intended",
+        "A raw internal error code or a physical shard ID is shown directly to an end user",
+        "The logical schema correctly hides physical storage details",
+        "A DBA adjusts an index without notifying users"
+      ],
+      "correct_index": 1,
+      "explanation": "Abstraction leaking is when detail meant to stay hidden at a lower level surfaces at a higher, less-detailed level, defeating the purpose of abstraction.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-2-data-abstraction-7",
+      "test_id": "pt-dbms-sql-2-data-abstraction",
+      "question_text": "A mobile banking view shows '0' for an account balance regardless of whether the true stored value is 0 or NULL (no balance recorded yet). What problem does this illustrate?",
+      "options": [
+        "Correct abstraction, since users should never see NULL",
+        "Over-abstracting: hiding the NULL-vs-zero distinction can mislead users into misinterpreting missing data as an actual zero balance",
+        "A physical-level storage bug unrelated to abstraction",
+        "A violation of the three-schema architecture's mapping rules"
+      ],
+      "correct_index": 1,
+      "explanation": "The notes explicitly warn that over-abstracting can hide meaningful distinctions, like NULL versus 0, that users legitimately need to see correctly.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-2-data-abstraction-8",
+      "test_id": "pt-dbms-sql-2-data-abstraction",
+      "question_text": "A junior developer argues that since the three-schema architecture already handles all necessary separation, the concept of 'data abstraction' is redundant and can be ignored when designing a new external schema. What is the flaw in this reasoning?",
+      "options": [
+        "There is no flaw; abstraction and the three-schema architecture are unrelated",
+        "Data abstraction is the underlying principle that justifies and guides how each schema level should hide detail; ignoring it risks designing schemas that leak irrelevant complexity to the wrong audience",
+        "The three-schema architecture only applies to internal schemas, so abstraction is irrelevant to external schema design",
+        "Data abstraction only matters for physical-level design, not external schemas"
+      ],
+      "correct_index": 1,
+      "explanation": "Since each schema level is a direct application of data abstraction, ignoring the principle risks poor design choices, like exposing physical or logical detail that a given external schema's audience does not need.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "coordinator",
+    "independent_review": "unavailable; no agent tools",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Definitions and examples checked against questions; no plagiarism certification.",
+    "existing_question_corrections": [
+      "tq-dbms-sql-2-data-abstraction-2",
+      "tq-dbms-sql-2-data-abstraction-4",
+      "tq-dbms-sql-2-data-abstraction-5"
+    ],
+    "canonical_answer_indices_preserved": true
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-2-data-abstraction",
+    "original_note_sha256": "04dea94690ff7306679d3b9b2723ad2deb0058cc597bb5804c600962570ab356",
+    "status": "paired migration prepared; not applied"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Account information at three abstraction levels",
+      "description": "Each audience receives information needed for its task. A customer perspective must preserve meaningful distinctions such as currency and missing balances while hiding irrelevant physical details.",
+      "columns": [
+        "Level",
+        "Example information",
+        "What it leaves to another level"
+      ],
+      "rows": [
+        [
+          "View / external",
+          "Account number, amount, currency, recorded status",
+          "Page addresses and raw shard diagnostics"
+        ],
+        [
+          "Logical / conceptual",
+          "Account identity, customer relationship, amount semantics",
+          "Exact page and index representation"
+        ],
+        [
+          "Physical / internal",
+          "Records, pages, indexes, supported placement",
+          "Task-specific presentation labels"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "coordinator review",
+    "server_rendering": "passed",
+    "browser_rendering": "unverified",
+    "independent_review": "unavailable; no agent tools",
+    "rendering_check": "2026-10-28: actual LessonBlock/TopicDiagrams server rendering; 25 authored-package tests passed. Desktop/mobile browser rendering unverified."
+  },
+  "sql_verification": {
+    "engine": "11.8.6-MariaDB-0+deb13u1 from Debian",
+    "scope": "MariaDB compatibility execution; exact MySQL 8.4/provider execution unverified",
+    "fingerprint": "4591dd3bb772d2181e9d83bfe15c7fe5d8a61016e8d7d6a4af521724df9c03c9",
+    "cases": [
+      {
+        "problem": "data-abstraction-balance-status",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "data-abstraction-balance-status",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "data-abstraction-balance-status",
+        "case": 2,
+        "passed": true
+      },
+      {
+        "problem": "data-abstraction-currency-summary",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "data-abstraction-currency-summary",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "data-abstraction-currency-summary",
+        "case": 2,
+        "passed": true
+      }
+    ],
+    "all_passed": true
+  }
+}

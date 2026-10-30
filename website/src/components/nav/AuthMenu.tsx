@@ -98,7 +98,7 @@ export function AuthMenu() {
       {open && (
         <div
           role="menu"
-          className="absolute right-0 z-50 mt-2 w-64 origin-top-right animate-scale-in rounded-2xl border border-line bg-card p-1.5 shadow-card-lg"
+          className="absolute right-0 z-chips mt-2 w-64 origin-top-right animate-scale-in rounded-2xl border border-line bg-card p-1.5 shadow-card-lg"
         >
           <div className="flex items-center gap-3 rounded-xl bg-surface px-3 py-3">
             <Avatar src={profile.avatarUrl} name={displayName} />

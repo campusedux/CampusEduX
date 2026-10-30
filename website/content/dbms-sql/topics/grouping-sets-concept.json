@@ -1,0 +1,568 @@
+{
+  "source_ref": "chapter-15-group-by-and-aggregation/grouping-sets-concept",
+  "slug": "grouping-sets-concept",
+  "title": "Grouping Sets Concept",
+  "description": "Design selected aggregation grains, distinguish subtotal NULL from missing data and emulate useful grouping sets in MySQL with tagged UNION ALL branches.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Request several aggregation grains deliberately\n\nGROUPING SETS describes a selected collection of aggregation levels within one result. Each grouping set lists the dimensions retained at that level. A report can ask for totals by region, totals by product and a grand total without asking for every region-product combination. The important design decision is the desired grain of each output row, because rows at different grains cannot safely be interpreted or summed as if they were independent sales.\n\nSuppose a workshop supplies service orders with a region, product and integer amount. Management needs two separate summaries of the same business activity. A regional summary answers where the amount came from; a product summary answers what was supplied. Combining those summaries into one tagged report makes comparison convenient, but it does not create two separate sets of revenue. The grand total is the same underlying activity viewed at the broadest grain.\n\n## Start with a fixture whose totals can be checked\n\nUse four rows: East Widget two hundred, West Widget three hundred thirty, East Gadget three hundred ten and West Gadget two hundred twenty. East totals five hundred ten and West totals five hundred fifty. Each product totals five hundred thirty. The grand total is one thousand sixty. These deliberately small values let a reader verify every level without relying on a screenshot or a large opaque dataset.\n\n```sql\nCREATE TABLE service_orders (\n  order_id INT PRIMARY KEY,\n  region VARCHAR(20),\n  product VARCHAR(20),\n  amount INT NOT NULL\n);\nINSERT INTO service_orders VALUES\n(1,'East','Widget',200),(2,'West','Widget',330),\n(3,'East','Gadget',310),(4,'West','Gadget',220);\n```\n\nOrdinary GROUP BY region gives one row per region. Ordinary GROUP BY product gives one row per product. GROUP BY region, product instead gives combinations, which are a different question. Being precise about that distinction prevents a common reporting mistake: adding more dimensions refines the grain rather than requesting several independent summaries.\n\n## Read native syntax in a supporting dialect\n\nThe following is PostgreSQL syntax and is presented as a dialect comparison, not as a MySQL submission. Its three grouping sets retain region, retain product and retain no grouping dimension respectively. The empty set denotes a grand total. Omitted grouping expressions appear as synthetic NULL placeholders in the corresponding rows.\n\n```sql\n-- PostgreSQL example; not MySQL 8.4 syntax.\nSELECT region, product, SUM(amount) AS total_amount,\n       GROUPING(region) AS region_omitted,\n       GROUPING(product) AS product_omitted\nFROM service_orders\nGROUP BY GROUPING SETS ((region), (product), ());\n```\n\nThe product subtotal for Widget has an omitted region and total five hundred thirty. The grand total has both dimensions omitted and total one thousand sixty. Without explicit ORDER BY, the engine does not promise the report's display order. Add ordering using level metadata and dimension values when a stable presentation is required.\n\n## Distinguish omitted dimensions from stored NULL\n\nA source order can itself have an unknown region. Its per-region group and the all-regions total may both display NULL in the region column, but their meanings differ. A GROUPING indicator distinguishes omission by the aggregation level from an ordinary grouped source value. Do not infer the level solely by inspecting whether a displayed dimension is NULL.\n\nFor a retained region group containing genuinely NULL source regions, GROUPING(region) is zero. For a row whose level omits region, it is one. When several dimensions exist, record the meaning of each indicator rather than guessing from the number of missing labels. Replacing all NULL labels with Total before distinguishing them would erase a real difference in the source information.\n\n## Emulate selected levels in MySQL explicitly\n\nMySQL 8.4 supports WITH ROLLUP rather than arbitrary GROUPING SETS syntax. A clear emulation uses separate grouped branches connected with UNION ALL. Give every branch an explicit level label. This preserves the intended independent grains while making its dialect support visible to the learner. It does not imply identical optimization or execution plans between native and emulated forms.\n\n```sql\nSELECT 'region' AS report_level, region AS dimension_value,\n       SUM(amount) AS total_amount\nFROM service_orders GROUP BY region\nUNION ALL\nSELECT 'product', product, SUM(amount)\nFROM service_orders GROUP BY product\nUNION ALL\nSELECT 'grand', NULL, SUM(amount)\nFROM service_orders\nORDER BY report_level, dimension_value;\n```\n\nThe report contains two regional rows, two product rows and one grand row for the stated fixture. Both product rows have the same amount, yet both belong in the result because their dimension identities differ. UNION ALL preserves branch results instead of attempting duplicate elimination. Explicit tags also protect a report where two grains could otherwise produce identically displayed values.\n\n## Compare selected sets with rollup and cube\n\nROLLUP follows a hierarchy based on dimension order. With region followed by product, its levels correspond to region-product detail, region subtotal and grand total. It does not request a product-only subtotal across all regions. CUBE describes all combinations of its dimensions, which can produce more levels than a report actually needs. GROUPING SETS lets the author select the required combinations directly in supporting engines.\n\nA list containing region-product, region and empty happens to follow a rollup-like hierarchy, but GROUPING SETS is not limited to hierarchical lists. Region-only and product-only levels illustrate that flexibility more clearly. Choose the smallest collection that answers the report's question so readers are not left to guess why unrelated subtotals appear together.\n\n## Keep filters consistent across branches\n\nWHERE restricts source rows before aggregation, whereas HAVING restricts groups afterward. An emulated report with three branches must apply the intended source filter consistently. Filtering cancelled orders in only the regional branch makes the totals incomparable. A shared source expression can clarify the filtering contract, but whether it is materialized or scanned once remains an optimizer question.\n\nFiltering out missing regions before aggregation also changes the grand total population. If the business question includes orders with unknown regions, retain them and label the source-null group distinctly. Do not hide incomplete source information merely to make the subtotal table look tidy. The report should explain both its inclusion rules and its grain metadata.\n\n## Handle empty input and measure semantics\n\nA grouped branch with no source groups can return no rows, while a scalar aggregate for the grand total can still produce a row whose SUM is NULL. Decide whether the reporting contract requires that NULL, a displayed zero or no grand row. Make any conversion explicit and test it. Empty input is not the same as a group containing known zero-valued orders.\n\nNot every measure can be combined by summing subgroup outputs. Distinct customer counts can overlap, and averages require counts or weights. The service example uses an additive integer amount precisely so its arithmetic is transparent. If the report changes to distinct participants or a percentage, recompute at the requested grain rather than summing rows from several levels.\n\n## Investigate performance without promising scan counts\n\nNative syntax can give an optimizer opportunities to share aggregation work, but the SQL text does not establish an exact physical scan count. UNION ALL branches can also be optimized in engine specific ways. Inspect EXPLAIN and measured behavior on representative data before claiming that one spelling always performs a fixed number of scans or is always faster.\n\nThe best initial optimization is often choosing only the grains the report needs and filtering the intended population early. Indexes, source cardinality, grouping keys and memory use still matter. A four-row correctness fixture verifies arithmetic and labels; it cannot establish production performance, spill behavior or hosted provider execution costs.\n\n## Solve tagged-summary exercises\n\nBeginner exercise: return regional rows plus one grand row, with explicit level and region labels. Check the two region totals and the grand total against the fixture before inspecting SQL. Intermediate exercise: return region and product totals in one report while preserving their independent identities, including a real NULL region. The solution keeps level tags and a distinct missing-region label, uses UNION ALL and orders the final result.\n\nFor report consumers, include a short grain legend beside the result rather than expecting them to reverse engineer NULL patterns. Exported spreadsheets need that metadata too: downstream users often add every numeric row unless the report makes overlapping totals explicit. Preserve level labels during pagination and sorting, and avoid showing a grand total on one page without explaining which source population it covers. Those presentation decisions protect the meaning of otherwise correct SQL.\n\nContinue with [rollup concepts](/learning/dbms-sql-tutorial/rollup-concept), [UNION ALL](/learning/dbms-sql-tutorial/union-all) and [multiple grouping columns](/learning/dbms-sql-tutorial/multiple-grouping-columns). Treat native PostgreSQL syntax, the MySQL emulation and provider execution as separate verification targets.",
+  "references": [
+    {
+      "title": "PostgreSQL grouping sets",
+      "url": "https://www.postgresql.org/docs/18/queries-table-expressions.html#QUERIES-GROUPING-SETS"
+    },
+    {
+      "title": "MySQL 8.4 GROUP BY modifiers",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/group-by-modifiers.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-15-grouping-sets-concept",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-15-grouping-sets-concept-1",
+          "test_id": "pt-dbms-sql-15-grouping-sets-concept",
+          "question_text": "What does `GROUP BY GROUPING SETS ((region), (product), ())` compute?",
+          "options": [
+            "Only a per-region total",
+            "Per-region totals, per-product totals, and a grand total, all in one query",
+            "A per-(region, product) breakdown only",
+            "An error, since GROUPING SETS requires ROLLUP"
+          ],
+          "correct_index": 1,
+          "explanation": "Each set in the list defines one grouping level: (region), (product), and the empty set () for the grand total — all computed together.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-15-grouping-sets-concept-2",
+          "test_id": "pt-dbms-sql-15-grouping-sets-concept",
+          "question_text": "In the GROUPING SETS result, what does a row with region = NULL and product = 'Widget' represent?",
+          "options": [
+            "An order whose region field is genuinely unknown",
+            "The subtotal for all Widget orders across every region (530)",
+            "A grand total row",
+            "An error row"
+          ],
+          "correct_index": 1,
+          "explanation": "That row comes from the (product) grouping set, which aggregates across all regions for each product — region shows NULL because it wasn't part of that grouping level, and the Widget total is 530.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-15-grouping-sets-concept-3",
+          "test_id": "pt-dbms-sql-15-grouping-sets-concept",
+          "question_text": "What does the empty grouping set `()` represent in GROUPING SETS?",
+          "options": [
+            "No output at all",
+            "The grand total across all rows, with every grouping column shown as NULL",
+            "A syntax error",
+            "The same as GROUP BY with no columns, which is disallowed"
+          ],
+          "correct_index": 1,
+          "explanation": "() is a valid grouping set representing zero grouping columns — i.e., one row aggregating the entire table, the grand total (1060 here).",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-15-grouping-sets-concept-4",
+          "test_id": "pt-dbms-sql-15-grouping-sets-concept",
+          "question_text": "What performance conclusion is justified from native GROUPING SETS syntax compared with a UNION ALL emulation?",
+          "options": [
+            "Still three scans either way — no difference",
+            "Native syntax can permit shared work, but exact physical scan counts and cost require the engine plan and measurements",
+            "GROUPING SETS requires more scans, not fewer",
+            "Zero scans for GROUPING SETS"
+          ],
+          "correct_index": 1,
+          "explanation": "SQL semantics do not guarantee one physical scan or a universal speed advantage.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-15-grouping-sets-concept-5",
+          "test_id": "pt-dbms-sql-15-grouping-sets-concept",
+          "question_text": "How can you distinguish a GROUPING SETS subtotal row's NULL from a genuine NULL value stored in the region column?",
+          "options": [
+            "It's impossible to distinguish them",
+            "Using the GROUPING() function, which returns 1 for a subtotal row and 0 for an actual per-value row",
+            "Subtotal NULLs are always shown as empty string instead",
+            "By checking if product is also NULL"
+          ],
+          "correct_index": 1,
+          "explanation": "GROUPING(region) returns 1 when the NULL is a synthesized subtotal/rollup marker and 0 when it reflects a real underlying NULL value in that column.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-15-grouping-sets-concept-6",
+          "test_id": "pt-dbms-sql-15-grouping-sets-concept",
+          "question_text": "Does MySQL (mainstream 8.x) support the full GROUPING SETS syntax?",
+          "options": [
+            "Yes, identical to PostgreSQL",
+            "No — MySQL only supports the simpler WITH ROLLUP modifier, not arbitrary GROUPING SETS",
+            "Yes, but only for two columns",
+            "No, MySQL supports neither GROUPING SETS nor ROLLUP"
+          ],
+          "correct_index": 1,
+          "explanation": "MySQL lacks full GROUPING SETS/CUBE support; it offers only WITH ROLLUP, a simpler hierarchical variant. PostgreSQL, SQL Server, and Oracle support full GROUPING SETS.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-15-grouping-sets-concept-7",
+          "test_id": "pt-dbms-sql-15-grouping-sets-concept",
+          "question_text": "In a supporting engine, can GROUPING SETS ((region), (product), ()) request independent rather than strictly hierarchical levels?",
+          "options": [
+            "No, GROUPING SETS must always be strictly hierarchical like ROLLUP",
+            "Yes — GROUPING SETS can list any arbitrary combination of grouping levels, not just nested/hierarchical ones",
+            "No, this syntax only works inside CUBE",
+            "Yes, but only if columns are listed in reverse order"
+          ],
+          "correct_index": 1,
+          "explanation": "Region-only and product-only levels are independent requested grains; arbitrary supported sets need not follow a rollup hierarchy.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-15-grouping-sets-concept-8",
+          "test_id": "pt-dbms-sql-15-grouping-sets-concept",
+          "question_text": "What is the grand total row's total_amount value in the GROUPING SETS example over the orders table?",
+          "options": [
+            "530",
+            "1060",
+            "310",
+            "200"
+          ],
+          "correct_index": 1,
+          "explanation": "The four current service-order amounts200, 330, 310 and220 sum to1060. The grand total must use the same eligible source population as its displayed grouping levels.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-15-grouping-sets-concept-new-9",
+          "test_id": "pt-dbms-sql-15-grouping-sets-concept",
+          "question_text": "What does a grouping set specify?",
+          "options": [
+            "The dimensions retained at one output grain",
+            "The number of physical disk reads",
+            "Every allowed table name",
+            "A transaction isolation level"
+          ],
+          "correct_index": 0,
+          "explanation": "Each set defines one aggregation level.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-15-grouping-sets-concept-new-10",
+          "test_id": "pt-dbms-sql-15-grouping-sets-concept",
+          "question_text": "Why tag MySQL UNION ALL branches with report_level?",
+          "options": [
+            "Tags force exactly one scan",
+            "Different summary grains need explicit identities",
+            "Tags authorize every order",
+            "Tags replace GROUP BY"
+          ],
+          "correct_index": 1,
+          "explanation": "The tag distinguishes summaries even when displayed values coincide.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-15-grouping-sets-concept-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-15-grouping-sets-concept-application-new-1",
+          "test_id": "pt-dbms-sql-15-grouping-sets-concept-application",
+          "question_text": "For the stated fixture, what is the East subtotal?",
+          "options": [
+            "530",
+            "550",
+            "510",
+            "1060"
+          ],
+          "correct_index": 2,
+          "explanation": "East combines 200 and 310.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-15-grouping-sets-concept-application-new-2",
+          "test_id": "pt-dbms-sql-15-grouping-sets-concept-application",
+          "question_text": "Why is summing every row of a multilevel report wrong?",
+          "options": [
+            "Every subtotal is NULL",
+            "UNION ALL deletes rows",
+            "SUM cannot add integers",
+            "The same underlying activity appears at several grains"
+          ],
+          "correct_index": 3,
+          "explanation": "Level rows overlap in represented activity.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-15-grouping-sets-concept-application-new-3",
+          "test_id": "pt-dbms-sql-15-grouping-sets-concept-application",
+          "question_text": "Which native example is explicitly outside MySQL 8.4 syntax?",
+          "options": [
+            "GROUP BY GROUPING SETS ((region), (product), ())",
+            "Ordinary GROUP BY region",
+            "UNION ALL",
+            "SUM(amount)"
+          ],
+          "correct_index": 0,
+          "explanation": "The notes label it as PostgreSQL.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-15-grouping-sets-concept-application-new-4",
+          "test_id": "pt-dbms-sql-15-grouping-sets-concept-application",
+          "question_text": "What does GROUPING(region)=0 mean for a NULL region group?",
+          "options": [
+            "The region was omitted for a subtotal",
+            "Region is retained and its grouped source value is NULL",
+            "Every order is cancelled",
+            "The query failed"
+          ],
+          "correct_index": 1,
+          "explanation": "The indicator separates source missingness from level omission.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-15-grouping-sets-concept-application-new-5",
+          "test_id": "pt-dbms-sql-15-grouping-sets-concept-application",
+          "question_text": "Does ROLLUP(region, product) include product-only totals across all regions?",
+          "options": [
+            "Yes, always",
+            "Only if names are short",
+            "No, its hierarchy retains region before product",
+            "Only without amounts"
+          ],
+          "correct_index": 2,
+          "explanation": "Product-only is not a prefix in that hierarchy.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-15-grouping-sets-concept-application-new-6",
+          "test_id": "pt-dbms-sql-15-grouping-sets-concept-application",
+          "question_text": "Why must source filters agree across emulation branches?",
+          "options": [
+            "UNION ALL requires identical row counts",
+            "Every filter changes the table engine",
+            "Ordering becomes illegal",
+            "Otherwise totals describe different populations"
+          ],
+          "correct_index": 3,
+          "explanation": "Comparability needs one inclusion contract.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-15-grouping-sets-concept-application-new-7",
+          "test_id": "pt-dbms-sql-15-grouping-sets-concept-application",
+          "question_text": "What can an empty-input scalar SUM return?",
+          "options": [
+            "One row containing NULL",
+            "Always no row",
+            "Every prior total",
+            "A required syntax error"
+          ],
+          "correct_index": 0,
+          "explanation": "Grouped and scalar aggregate empty behavior differs.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-15-grouping-sets-concept-application-new-8",
+          "test_id": "pt-dbms-sql-15-grouping-sets-concept-application",
+          "question_text": "Can distinct-customer subtotals always be summed into a grand count?",
+          "options": [
+            "Yes, all measures are additive",
+            "No, customers can appear in several groups",
+            "Only if labels match",
+            "Only with UNION instead of UNION ALL"
+          ],
+          "correct_index": 1,
+          "explanation": "Compute nonadditive measures at their actual target grain.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-15-grouping-sets-concept-application-new-9",
+          "test_id": "pt-dbms-sql-15-grouping-sets-concept-application",
+          "question_text": "What establishes an actual physical scan count?",
+          "options": [
+            "The phrase GROUPING SETS alone",
+            "A subtotal label",
+            "The engine plan and observed execution",
+            "A four-row screenshot"
+          ],
+          "correct_index": 2,
+          "explanation": "Optimization is not guaranteed by semantic syntax.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-15-grouping-sets-concept-application-new-10",
+          "test_id": "pt-dbms-sql-15-grouping-sets-concept-application",
+          "question_text": "For the fixture, how many rows are in region+product+grand summaries?",
+          "options": [
+            "4",
+            "6",
+            "1",
+            "5"
+          ],
+          "correct_index": 3,
+          "explanation": "Two region groups, two product groups and one grand total.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cx-grouping-sets-region-grand",
+      "slug": "grouping-sets-region-grand",
+      "title": "Build region and grand totals with explicit grain",
+      "difficulty": "Easy",
+      "task": "Return report_level, region_label, total_amount for each region with level 'region', plus a scalar grand total with level 'grand' and label 'All regions'. Source regions are non-NULL in this task. Use UNION ALL and order by report_level, region_label.",
+      "schema_sql": "CREATE TABLE grouped_sales(order_id INT PRIMARY KEY,region VARCHAR(20),product VARCHAR(20),amount INT NOT NULL);",
+      "seed_sql": "INSERT INTO grouped_sales VALUES (1,'East','Widget',200),(2,'West','Widget',330),(3,'East','Gadget',310),(4,'West','Gadget',220);",
+      "expected": "report_level\tregion_label\ttotal_amount\ngrand\tAll regions\t1060\nregion\tEast\t510\nregion\tWest\t550",
+      "ordering": "Use the explicit ORDER BY in the requested result.",
+      "edge_cases": [
+        "One region still needs a separate grand row."
+      ],
+      "hints": [
+        "Give every branch the same output columns."
+      ],
+      "solution_sql": "SELECT 'region' AS report_level,region AS region_label,SUM(amount) AS total_amount FROM grouped_sales GROUP BY region UNION ALL SELECT 'grand','All regions',SUM(amount) FROM grouped_sales ORDER BY report_level,region_label;",
+      "explanation": "The scalar grand branch and grouped region branch retain explicit separate identities.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO grouped_sales VALUES (1,'North','Widget',5);",
+          "expected": "report_level\tregion_label\ttotal_amount\ngrand\tAll regions\t5\nregion\tNorth\t5"
+        }
+      ]
+    },
+    {
+      "id": "cx-grouping-sets-two-independent-grains",
+      "slug": "grouping-sets-two-independent-grains",
+      "title": "Keep source NULL regions distinct from product summaries",
+      "difficulty": "Medium",
+      "task": "Return report_level, dimension_value, total_amount for region and product summaries only. Use 'region' or 'product' tags. Map NULL regions to '[unknown region]'; products are non-NULL. Order by report_level, then known region labels before the unknown-region label, then dimension_value. The display marker is reserved and cannot occur as an actual region label.",
+      "schema_sql": "CREATE TABLE grouped_sales(order_id INT PRIMARY KEY,region VARCHAR(20),product VARCHAR(20),amount INT NOT NULL);",
+      "seed_sql": "INSERT INTO grouped_sales VALUES (1,NULL,'Widget',10),(2,'East','Widget',20),(3,'East','Gadget',5);",
+      "expected": "report_level\tdimension_value\ttotal_amount\nproduct\tGadget\t5\nproduct\tWidget\t30\nregion\tEast\t25\nregion\t[unknown region]\t10",
+      "ordering": "Order by report_level, then known region labels before unknown-region label, then dimension_value.",
+      "edge_cases": [
+        "Real NULL region contributes to product totals.",
+        "Empty grouped input returns no rows."
+      ],
+      "hints": [
+        "Group raw region before applying its display label."
+      ],
+      "solution_sql": "SELECT report_level,dimension_value,total_amount FROM (SELECT 'region' AS report_level,COALESCE(region,'[unknown region]') AS dimension_value,SUM(amount) AS total_amount FROM grouped_sales GROUP BY region UNION ALL SELECT 'product',product,SUM(amount) FROM grouped_sales GROUP BY product) AS report_rows ORDER BY report_level,CASE WHEN report_level='region' AND dimension_value='[unknown region]' THEN 1 ELSE 0 END,dimension_value;",
+      "explanation": "Tagged independent grains are wrapped in an outer query so an explicit sort key places the unknown-region display row last within region rows, independent of punctuation collation.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO grouped_sales VALUES (1,NULL,'Widget',0);",
+          "expected": "report_level\tdimension_value\ttotal_amount\nproduct\tWidget\t0\nregion\t[unknown region]\t0"
+        },
+        {
+          "seed_sql": "",
+          "expected": ""
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": null,
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-15-grouping-sets-concept-1",
+      "test_id": "pt-dbms-sql-15-grouping-sets-concept",
+      "question_text": "What does `GROUP BY GROUPING SETS ((region), (product), ())` compute?",
+      "options": [
+        "Only a per-region total",
+        "Per-region totals, per-product totals, and a grand total, all in one query",
+        "A per-(region, product) breakdown only",
+        "An error, since GROUPING SETS requires ROLLUP"
+      ],
+      "correct_index": 1,
+      "explanation": "Each set in the list defines one grouping level: (region), (product), and the empty set () for the grand total — all computed together.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-15-grouping-sets-concept-2",
+      "test_id": "pt-dbms-sql-15-grouping-sets-concept",
+      "question_text": "In the GROUPING SETS result, what does a row with region = NULL and product = 'Widget' represent?",
+      "options": [
+        "An order whose region field is genuinely unknown",
+        "The subtotal for all Widget orders across every region (530)",
+        "A grand total row",
+        "An error row"
+      ],
+      "correct_index": 1,
+      "explanation": "That row comes from the (product) grouping set, which aggregates across all regions for each product — region shows NULL because it wasn't part of that grouping level, and the Widget total is 530.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-15-grouping-sets-concept-3",
+      "test_id": "pt-dbms-sql-15-grouping-sets-concept",
+      "question_text": "What does the empty grouping set `()` represent in GROUPING SETS?",
+      "options": [
+        "No output at all",
+        "The grand total across all rows, with every grouping column shown as NULL",
+        "A syntax error",
+        "The same as GROUP BY with no columns, which is disallowed"
+      ],
+      "correct_index": 1,
+      "explanation": "() is a valid grouping set representing zero grouping columns — i.e., one row aggregating the entire table, the grand total (1060 here).",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-15-grouping-sets-concept-4",
+      "test_id": "pt-dbms-sql-15-grouping-sets-concept",
+      "question_text": "How many logical scans of the base `orders` table does `GROUP BY GROUPING SETS ((region), (product), ())` conceptually require, versus three separate GROUP BY queries UNIONed together?",
+      "options": [
+        "Still three scans either way — no difference",
+        "One scan for GROUPING SETS versus three scans for the UNION ALL approach",
+        "GROUPING SETS requires more scans, not fewer",
+        "Zero scans for GROUPING SETS"
+      ],
+      "correct_index": 1,
+      "explanation": "GROUPING SETS lets the engine compute all listed grouping levels from a single pass over the base data, whereas three separate GROUP BY queries combined with UNION ALL each scan the table independently.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-15-grouping-sets-concept-5",
+      "test_id": "pt-dbms-sql-15-grouping-sets-concept",
+      "question_text": "How can you distinguish a GROUPING SETS subtotal row's NULL from a genuine NULL value stored in the region column?",
+      "options": [
+        "It's impossible to distinguish them",
+        "Using the GROUPING() function, which returns 1 for a subtotal row and 0 for an actual per-value row",
+        "Subtotal NULLs are always shown as empty string instead",
+        "By checking if product is also NULL"
+      ],
+      "correct_index": 1,
+      "explanation": "GROUPING(region) returns 1 when the NULL is a synthesized subtotal/rollup marker and 0 when it reflects a real underlying NULL value in that column.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-15-grouping-sets-concept-6",
+      "test_id": "pt-dbms-sql-15-grouping-sets-concept",
+      "question_text": "Does MySQL (mainstream 8.x) support the full GROUPING SETS syntax?",
+      "options": [
+        "Yes, identical to PostgreSQL",
+        "No — MySQL only supports the simpler WITH ROLLUP modifier, not arbitrary GROUPING SETS",
+        "Yes, but only for two columns",
+        "No, MySQL supports neither GROUPING SETS nor ROLLUP"
+      ],
+      "correct_index": 1,
+      "explanation": "MySQL lacks full GROUPING SETS/CUBE support; it offers only WITH ROLLUP, a simpler hierarchical variant. PostgreSQL, SQL Server, and Oracle support full GROUPING SETS.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-15-grouping-sets-concept-7",
+      "test_id": "pt-dbms-sql-15-grouping-sets-concept",
+      "question_text": "Is `GROUPING SETS ((region, product), (region), ())` a valid, non-hierarchical set of grouping levels?",
+      "options": [
+        "No, GROUPING SETS must always be strictly hierarchical like ROLLUP",
+        "Yes — GROUPING SETS can list any arbitrary combination of grouping levels, not just nested/hierarchical ones",
+        "No, this syntax only works inside CUBE",
+        "Yes, but only if columns are listed in reverse order"
+      ],
+      "correct_index": 1,
+      "explanation": "Unlike ROLLUP's fixed hierarchy, GROUPING SETS accepts any explicit list of column-set combinations you choose to specify.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-15-grouping-sets-concept-8",
+      "test_id": "pt-dbms-sql-15-grouping-sets-concept",
+      "question_text": "What is the grand total row's total_amount value in the GROUPING SETS example over the orders table?",
+      "options": [
+        "530",
+        "1060",
+        "310",
+        "200"
+      ],
+      "correct_index": 1,
+      "explanation": "The grand total across all 8 orders (100+150+200+50+300+120+80+60) is 1060.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "/root/content_b",
+    "independent_review": "passed",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "canonical_answer_indices_preserved": true,
+    "independent_reviewer": "/root/review_d_and_programs",
+    "independent_review_scope": "Full notes,20MCQs with every option,canonical answer position and explanation,original diagrams,and all exercise contracts/fixtures or solved conceptual labs. Original identities/indices checked against public seed cache where applicable. Reported substantive findings corrected by coordinator and filtered recheck accepted;identified learner-facing spacing polished. Manual technical/editorial reasoning only;engine,provider,browser,external originality and AdSense evidence separate."
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-15-grouping-sets-concept",
+    "original_note_sha256": "20eaf496dd4d95f6ed5c6ed40f695cc09968714c804a49a536492b915bfe8aa3",
+    "status": "drafted; not included in prepared paired migrations"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Selected grains summarize one population in different ways",
+      "description": "The fixture totals 1060 at every complete grain; combining the report rows is not a new additive population.",
+      "columns": [
+        "Grouping set",
+        "Retained dimension",
+        "Fixture totals"
+      ],
+      "rows": [
+        [
+          "region",
+          "East / West",
+          "510 / 550"
+        ],
+        [
+          "product",
+          "Gadget / Widget",
+          "530 / 530"
+        ],
+        [
+          "empty",
+          "None: grand total",
+          "1060"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "provided",
+    "technical_review": "Independent manual diagram/content consistency review passed;actual static/browser rendering tracked separately.",
+    "server_rendering": "unverified",
+    "browser_rendering": "unverified",
+    "independent_review": "passed"
+  },
+  "authoring_status": "drafted; verification pending",
+  "sql_verification": {
+    "scope": "not executed; exact MySQL/provider verification pending",
+    "all_passed": false,
+    "cases": []
+  }
+}

@@ -50,22 +50,24 @@ export function CourseCta({ outline, courseTest }: { outline: CourseOutline; cou
   return (
     <>
       {/* Desktop / tablet card */}
-      <div className="card hidden p-5 lg:block">
+      <div className="card hidden min-w-0 p-4 [overflow-wrap:anywhere] lg:block">
         {/* Ring + counts: the card's focal point. 0% until the stored progress is readable. */}
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3">
           <ProgressRing
             value={progress.ready ? p.completed : 0}
             max={outline.total}
             label="Course progress"
             tone={allDone ? "success" : "primary"}
+            size={80}
+            stroke={8}
           />
           <div className="min-w-0">
             {allDone ? (
-              <p className="flex items-center gap-1.5 font-display text-lg font-bold text-success">
-                <CheckCircle2 className="h-5 w-5" aria-hidden /> Course complete
+              <p className="flex items-center gap-1.5 font-display text-base font-bold text-success">
+                <CheckCircle2 className="h-5 w-5 shrink-0" aria-hidden /> Course complete
               </p>
             ) : (
-              <p className="font-display text-lg font-bold text-ink">{progress.ready && p.started ? "Your progress" : "Ready to start?"}</p>
+              <p className="font-display text-base font-bold text-ink">{progress.ready && p.started ? "Your progress" : "Ready to start?"}</p>
             )}
             <p className="mt-1 text-sm text-ink-muted">
               <span className="font-semibold tabular-nums text-ink">{progress.ready ? p.completed : 0}</span> of{" "}
@@ -74,19 +76,19 @@ export function CourseCta({ outline, courseTest }: { outline: CourseOutline; cou
             <p className="mt-0.5 text-xs text-ink-faint">Saved on this device</p>
           </div>
         </div>
-        <Link href={href} className="btn-primary mt-5 h-12 w-full">
+        <Link href={href} className="btn-primary mt-4 h-11 w-full rounded-lg shadow-none">
           <Icon className="h-4 w-4" aria-hidden />
           {target.label}
         </Link>
         {target.label === "Continue" && (
-          <p className="mt-2 truncate text-center text-xs text-ink-muted" title={target.title}>
+          <p className="mt-2 text-center text-xs leading-5 text-ink-muted" title={target.title}>
             {target.title}
           </p>
         )}
         {courseTest && (
-          <Link href={`/mock-tests/${courseTest.id}`} className="btn-ghost mt-3 w-full">
-            <ListChecks className="h-4 w-4" aria-hidden />
-            {courseTest.title}
+          <Link href={`/mock-tests/${courseTest.id}`} className="btn-ghost mt-3 min-h-11 h-auto w-full rounded-lg px-3 py-2.5 text-left">
+            <ListChecks className="h-4 w-4 shrink-0" aria-hidden />
+            <span className="min-w-0 flex-1 leading-5">{courseTest.title}</span>
           </Link>
         )}
 
@@ -100,10 +102,10 @@ export function CourseCta({ outline, courseTest }: { outline: CourseOutline; cou
                 <li key={l.id}>
                   <Link
                     href={`/learning/${gridSlug}/${l.slug}`}
-                    className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-ink transition hover:bg-surface hover:text-primary"
+                    className="flex min-h-11 min-w-0 items-start gap-2 rounded-lg px-2 py-2.5 text-sm text-ink transition hover:bg-surface hover:text-primary"
                   >
-                    <span className="min-w-0 flex-1 truncate">{l.title}</span>
-                    <ArrowRight className="h-3.5 w-3.5 flex-shrink-0 text-ink-faint" aria-hidden />
+                    <span className="min-w-0 flex-1 leading-6">{l.title}</span>
+                    <ArrowRight className="mt-1 h-3.5 w-3.5 shrink-0 text-ink-faint" aria-hidden />
                   </Link>
                 </li>
               ))}
@@ -113,23 +115,23 @@ export function CourseCta({ outline, courseTest }: { outline: CourseOutline; cou
       </div>
 
       {/* Phone: fixed bar above the bottom tab bar (tab bar is md:hidden) */}
-      <div className="fixed inset-x-0 bottom-[calc(3.75rem+env(safe-area-inset-bottom))] z-30 border-t border-line/70 bg-card/95 px-4 py-3 backdrop-blur-xl md:bottom-0 lg:hidden">
-        <div className="mx-auto flex max-w-3xl items-center gap-3">
+      <div className="fixed inset-x-0 bottom-[calc(3.75rem+env(safe-area-inset-bottom))] z-30 border-t border-line/70 bg-card/95 py-2.5 pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] backdrop-blur-xl md:bottom-0 md:pb-[calc(0.625rem+env(safe-area-inset-bottom))] lg:hidden">
+        <div className="mx-auto flex min-w-0 max-w-3xl items-center gap-3">
           <div className="min-w-0 flex-1">
             {progress.ready && p.started ? (
               <>
-                <p className="truncate text-xs text-ink-muted">
+                <p className="truncate text-xs tabular-nums text-ink-muted">
                   {p.completed}/{outline.total} lessons · {p.percent}%
                 </p>
-                <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-line" aria-hidden>
-                  <div className="h-full rounded-full bg-gradient-to-r from-primary to-accent-violet" style={{ width: `${p.percent}%` }} />
+                <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-line" aria-hidden>
+                  <div className="h-full rounded-full bg-primary" style={{ width: `${p.percent}%` }} />
                 </div>
               </>
             ) : (
               <p className="truncate text-sm font-semibold text-ink">{outline.gridName}</p>
             )}
           </div>
-          <Link href={href} className="btn-primary h-11 flex-shrink-0 px-5">
+          <Link href={href} className="btn-primary h-11 min-w-[8rem] shrink-0 rounded-lg px-4 shadow-none">
             <Icon className="h-4 w-4" aria-hidden />
             {target.label}
           </Link>

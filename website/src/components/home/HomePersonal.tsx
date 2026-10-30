@@ -29,7 +29,12 @@ const WEEKDAY = new Intl.DateTimeFormat("en-IN", { weekday: "narrow" });
  *
  * Progress is device-only (see src/lib/learningProgress/store.ts).
  */
-export function HomePersonal({ courses, jobs }: { courses: PersonalCourse[]; jobs: JobCardData[] }) {
+export function HomePersonal({ courses, jobs, showContinue = true }: {
+  courses: PersonalCourse[];
+  jobs: JobCardData[];
+  /** The home page places the existing resume card directly below quick access. */
+  showContinue?: boolean;
+}) {
   const { loading, profile } = useSessionProfile();
   const progress = useLearningProgress();
   if (loading || !profile || !progress.ready) return null;
@@ -51,9 +56,9 @@ export function HomePersonal({ courses, jobs }: { courses: PersonalCourse[]; job
 
   return (
     <section className="container-page pt-6 sm:pt-8" aria-labelledby="home-personal-title">
-      <div className="animate-fade-in-up rounded-3xl border border-line bg-card p-5 shadow-card sm:p-7">
+      <div className="list-enter min-w-0 rounded-3xl border border-line bg-card p-5 shadow-card [overflow-wrap:anywhere] sm:p-7">
         <div className="flex flex-wrap items-end justify-between gap-3">
-          <div>
+          <div className="min-w-0 max-w-full">
             <p className="text-sm font-medium text-ink-muted">{greeting},</p>
             <h2 id="home-personal-title" className="h-section mt-0.5">
               Welcome back, {firstName}
@@ -67,59 +72,61 @@ export function HomePersonal({ courses, jobs }: { courses: PersonalCourse[]; job
           )}
         </div>
 
-        <div className="mt-5 grid gap-4 lg:grid-cols-[1.4fr_1fr_1fr]">
-          {/* Continue learning */}
-          <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-primary via-primary to-accent-violet p-5 text-white">
-            <span aria-hidden className="pointer-events-none absolute -right-10 -top-10 h-36 w-36 rounded-full bg-white/10" />
-            {last ? (
-              <div className="relative flex h-full flex-col">
-                <p className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-[0.14em] text-white/70">
-                  <PlayCircle className="h-4 w-4" aria-hidden /> Continue learning
-                </p>
-                <p className="mt-3 text-sm text-white/80">{last.gridName}</p>
-                <p className="font-display text-xl font-bold leading-snug">{last.topicTitle}</p>
-                {lastProgress && lastProgress.total > 0 && (
-                  <div className="mt-4">
-                    <div className="h-1.5 overflow-hidden rounded-full bg-white/20" role="progressbar" aria-label="Course progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={lastProgress.percent}>
-                      <div className="h-full origin-left animate-progress-fill rounded-full bg-white" style={{ width: `${lastProgress.percent}%` }} />
+        <div className={cn("mt-5 grid min-w-0 grid-cols-1 gap-3 lg:gap-4", !last || showContinue ? "lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,1fr)]" : "lg:grid-cols-2")}>
+          {/* The page may already show Continue learning above the catalogue. */}
+          {(!last || showContinue) && (
+            <div className="relative overflow-hidden rounded-[14px] bg-card p-4 text-ink sm:rounded-2xl sm:bg-gradient-to-br sm:from-primary sm:via-primary sm:to-accent-violet sm:p-5 sm:text-white">
+              <span aria-hidden className="pointer-events-none absolute -right-10 -top-10 h-36 w-36 rounded-full bg-white/10" />
+              {last ? (
+                <div className="relative flex h-full flex-col">
+                  <p className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-[0.14em] text-ink-muted sm:text-white/70">
+                    <PlayCircle className="h-4 w-4" aria-hidden /> Continue learning
+                  </p>
+                  <p className="mt-3 text-sm text-ink-muted sm:text-white/80">{last.gridName}</p>
+                  <p className="font-display text-base font-semibold sm:text-xl sm:font-bold leading-snug">{last.topicTitle}</p>
+                  {lastProgress && lastProgress.total > 0 && (
+                    <div className="mt-4">
+                      <div className="h-1.5 overflow-hidden rounded-full bg-white/20" role="progressbar" aria-label="Course progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={lastProgress.percent}>
+                        <div className="h-full origin-left animate-progress-fill rounded-full bg-white" style={{ width: `${lastProgress.percent}%` }} />
+                      </div>
+                      <p className="mt-1.5 text-xs text-ink-muted sm:text-white/80">
+                        {lastProgress.completed} of {lastProgress.total} lessons done
+                      </p>
                     </div>
-                    <p className="mt-1.5 text-xs text-white/80">
-                      {lastProgress.completed} of {lastProgress.total} lessons done
-                    </p>
+                  )}
+                  <div className="mt-auto pt-5">
+                    <Link
+                      href={`/learning/${last.gridSlug}/${last.topicSlug}`}
+                      className="theme-light inline-flex h-11 items-center gap-2 rounded-xl bg-white px-4 text-sm font-semibold text-primary-700 shadow-card transition hover:-translate-y-px motion-reduce:transform-none"
+                    >
+                      Resume lesson <ArrowRight className="h-4 w-4" aria-hidden />
+                    </Link>
                   </div>
-                )}
-                <div className="mt-auto pt-5">
-                  <Link
-                    href={`/learning/${last.gridSlug}/${last.topicSlug}`}
-                    className="theme-light inline-flex h-10 items-center gap-2 rounded-xl bg-white px-4 text-sm font-semibold text-primary-700 shadow-card transition hover:-translate-y-px motion-reduce:transform-none"
-                  >
-                    Resume lesson <ArrowRight className="h-4 w-4" aria-hidden />
-                  </Link>
                 </div>
-              </div>
-            ) : (
-              <div className="relative flex h-full flex-col">
-                <p className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-[0.14em] text-white/70">
-                  <BookOpen className="h-4 w-4" aria-hidden /> Start learning
-                </p>
-                <p className="mt-3 font-display text-xl font-bold leading-snug">
-                  {starter ? `Begin with ${starter.name}` : "Pick your first course"}
-                </p>
-                <p className="mt-1 text-sm text-white/80">Your progress on this device shows up here.</p>
-                <div className="mt-auto pt-5">
-                  <Link
-                    href={starter ? `/learning/${starter.slug}` : "/learning"}
-                    className="theme-light inline-flex h-10 items-center gap-2 rounded-xl bg-white px-4 text-sm font-semibold text-primary-700 shadow-card transition hover:-translate-y-px motion-reduce:transform-none"
-                  >
-                    {starter ? "Start course" : "Browse courses"} <ArrowRight className="h-4 w-4" aria-hidden />
-                  </Link>
+              ) : (
+                <div className="relative flex h-full flex-col">
+                  <p className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-[0.14em] text-ink-muted sm:text-white/70">
+                    <BookOpen className="h-4 w-4" aria-hidden /> Start learning
+                  </p>
+                  <p className="mt-3 font-display text-base font-semibold sm:text-xl sm:font-bold leading-snug">
+                    {starter ? `Begin with ${starter.name}` : "Pick your first course"}
+                  </p>
+                  <p className="mt-1 text-sm text-ink-muted sm:text-white/80">Your progress on this device shows up here.</p>
+                  <div className="mt-auto pt-5">
+                    <Link
+                      href={starter ? `/learning/${starter.slug}` : "/learning"}
+                      className="theme-light inline-flex h-11 items-center gap-2 rounded-xl bg-white px-4 text-sm font-semibold text-primary-700 shadow-card transition hover:-translate-y-px motion-reduce:transform-none"
+                    >
+                      {starter ? "Start course" : "Browse courses"} <ArrowRight className="h-4 w-4" aria-hidden />
+                    </Link>
+                  </div>
                 </div>
-              </div>
-            )}
-          </div>
+              )}
+            </div>
+          )}
 
           {/* Streak + daily goal */}
-          <div className="rounded-2xl border border-line bg-surface/60 p-5">
+          <div className="rounded-[14px] bg-card p-4 sm:rounded-2xl sm:border sm:border-line sm:bg-surface/60 sm:p-5">
             <p className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-[0.14em] text-ink-faint">
               <Target className="h-4 w-4" aria-hidden /> This week
             </p>
@@ -173,12 +180,12 @@ export function HomePersonal({ courses, jobs }: { courses: PersonalCourse[]; job
           </div>
 
           {/* Latest jobs */}
-          <div className="rounded-2xl border border-line bg-surface/60 p-5">
+          <div className="rounded-[14px] bg-card p-4 sm:rounded-2xl sm:border sm:border-line sm:bg-surface/60 sm:p-5">
             <div className="flex items-center justify-between">
               <p className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-[0.14em] text-ink-faint">
                 <Briefcase className="h-4 w-4" aria-hidden /> Latest jobs
               </p>
-              <Link href="/jobs" className="text-xs font-semibold text-primary hover:text-primary-700">
+              <Link href="/jobs" className="inline-flex min-h-11 min-w-11 items-center justify-end text-xs font-semibold text-primary hover:text-primary-700">
                 View all
               </Link>
             </div>
@@ -189,9 +196,9 @@ export function HomePersonal({ courses, jobs }: { courses: PersonalCourse[]; job
                     <Link href={`/jobs/${j.id}`} className="group block py-2.5">
                       <span className="block truncate text-sm font-semibold text-ink group-hover:text-primary">{j.title}</span>
                       <span className="mt-0.5 flex items-center gap-2 text-xs text-ink-muted">
-                        <span className="truncate">{j.company_name ?? "Company"}</span>
+                        <span className="min-w-0 truncate">{j.company_name ?? "Company"}</span>
                         {j.location && (
-                          <span className="inline-flex items-center gap-0.5 truncate">
+                          <span className="inline-flex min-w-0 items-center gap-0.5 truncate">
                             <MapPin className="h-3 w-3" aria-hidden />
                             {j.location}
                           </span>
@@ -216,12 +223,12 @@ export function HomePersonal({ courses, jobs }: { courses: PersonalCourse[]; job
         {recommended.length > 0 && (
           <div className="mt-6">
             <p className="text-sm font-semibold text-ink">Recommended for you</p>
-            <div className="mt-3 grid gap-3 sm:grid-cols-3">
+            <div className="mt-3 grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-3">
               {recommended.map((c) => (
                 <Link
                   key={c.slug}
                   href={`/learning/${c.slug}`}
-                  className="group flex items-center gap-3 rounded-2xl border border-line bg-card p-3.5 transition hover:border-primary/30 hover:bg-surface"
+                  className="group flex items-center gap-3 rounded-[14px] bg-card p-3 sm:rounded-2xl sm:border sm:border-line sm:p-3.5 transition hover:border-primary/30 hover:bg-surface"
                 >
                   <span className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-primary-50">
                     <BookOpen className="h-5 w-5 text-primary" aria-hidden />

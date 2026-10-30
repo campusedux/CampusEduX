@@ -1,0 +1,517 @@
+{
+  "slug": "materialized-views",
+  "source_ref": "chapter-19-views/materialized-views",
+  "title": "Materialized Views",
+  "description": "Design stored report results with explicit freshness, refresh and failure contracts, distinguishing PostgreSQL concurrent refresh from MySQL summary-table patterns.",
+  "dialect": "MySQL 8.4; engine-specific behavior labeled",
+  "references": [
+    {
+      "title": "MySQL8.4 views FAQ",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/faqs-views.html"
+    },
+    {
+      "title": "PostgreSQL REFRESH MATERIALIZED VIEW",
+      "url": "https://www.postgresql.org/docs/current/sql-refreshmaterializedview.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-19-materialized-views",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-19-materialized-views-1",
+          "test_id": "pt-dbms-sql-19-materialized-views",
+          "question_text": "What is the fundamental difference between a regular view and a materialized view?",
+          "options": [
+            "They are identical",
+            "A regular view stores a definition; a materialized view stores computed rows with an engine-specific maintenance/freshness contract",
+            "Regular views always store independent rows",
+            "Materialized views cannot be queried"
+          ],
+          "correct_index": 1,
+          "explanation": "Do not claim all engines require exactly the same explicit refresh mechanism; maintenance features vary.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-19-materialized-views-2",
+          "test_id": "pt-dbms-sql-19-materialized-views",
+          "question_text": "Does MySQL support CREATE MATERIALIZED VIEW natively?",
+          "options": [
+            "Yes, identically to PostgreSQL",
+            "No — MySQL has no native materialized view feature and it must be simulated with a real table plus a scheduled refresh job",
+            "Yes, but only in MySQL 8 Enterprise",
+            "No, and MySQL has no workaround at all"
+          ],
+          "correct_index": 1,
+          "explanation": "MySQL 8.4 has no equivalent native materialized-view object. A reviewed summary-table workflow is a related application-managed pattern, not automatically a scheduled deployment feature.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-19-materialized-views-3",
+          "test_id": "pt-dbms-sql-19-materialized-views",
+          "question_text": "For the explicitly refreshed PostgreSQL materialized-view pattern, when do source changes enter the stored result?",
+          "options": [
+            "Immediately and automatically, just like a regular view",
+            "Only after an explicit REFRESH MATERIALIZED VIEW (or engine-equivalent) is run",
+            "Never — materialized views are permanently frozen at creation time",
+            "Only if the base table is dropped and recreated"
+          ],
+          "correct_index": 1,
+          "explanation": "Under this pattern a successful refresh recomputes the stored result. Other engines can offer different maintenance modes, so avoid a universal explicit-refresh-only claim.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-19-materialized-views-4",
+          "test_id": "pt-dbms-sql-19-materialized-views",
+          "question_text": "What does `REFRESH MATERIALIZED VIEW CONCURRENTLY` require in PostgreSQL?",
+          "options": [
+            "Any index, including partial expressions",
+            "An already populated view and a suitable UNIQUE index over column names covering all rows, with other documented prerequisites",
+            "Only an ORDER BY",
+            "No index can be present"
+          ],
+          "correct_index": 1,
+          "explanation": "A mere unique-index label is insufficient; CONCURRENTLY excludes partial/expression qualifying indexes and WITH NO DATA.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-19-materialized-views-5",
+          "test_id": "pt-dbms-sql-19-materialized-views",
+          "question_text": "Which scenario is the best candidate for a materialized view rather than a regular view?",
+          "options": [
+            "A cheap single-row lookup queried once a day",
+            "An expensive multi-join aggregation queried frequently by a dashboard, where slight staleness is acceptable",
+            "A view that must always reflect the absolute latest data with zero staleness",
+            "A view with no aggregation at all"
+          ],
+          "correct_index": 1,
+          "explanation": "Materialized views shine when an expensive query is read often relative to how often the underlying data changes, and some staleness is tolerable — classic dashboard/reporting use case.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-19-materialized-views-6",
+          "test_id": "pt-dbms-sql-19-materialized-views",
+          "question_text": "Can a materialized view be indexed?",
+          "options": [
+            "No, indexing is impossible on any kind of view",
+            "Yes — because it physically stores data like a table, it can be indexed directly, unlike a regular (non-materialized) view",
+            "Only in MySQL",
+            "Only if it has no aggregate columns"
+          ],
+          "correct_index": 1,
+          "explanation": "PostgreSQL materialized views can have indexes. A materialized result and a normal view have different storage; other engines can offer specialized indexed-view features, so avoid universal cross-engine claims.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-19-materialized-views-7",
+          "test_id": "pt-dbms-sql-19-materialized-views",
+          "question_text": "In MySQL's simulated materialized-view pattern, what commonly triggers the periodic refresh?",
+          "options": [
+            "A UNIQUE constraint violation",
+            "A scheduled MySQL EVENT (or external cron job) that re-runs the aggregation and repopulates the snapshot table",
+            "The MySQL query optimizer automatically",
+            "A foreign key cascade"
+          ],
+          "correct_index": 1,
+          "explanation": "A reviewed scheduler or worker can recompute and publish a summary under an explicit coherent boundary. TRUNCATE has implicit-commit behavior in MySQL and is not a generally reversible transactional replacement; the refresh design must preserve reader and failure requirements.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-19-materialized-views-8",
+          "test_id": "pt-dbms-sql-19-materialized-views",
+          "question_text": "What risk does a nightly-refreshed materialized view introduce for reporting?",
+          "options": [
+            "It always corrupts the base tables",
+            "Users may see numbers that don't match a live query against the base tables, since the materialized data can be stale until the next refresh",
+            "It prevents any further writes to the base tables",
+            "It removes the need for any GRANT permissions"
+          ],
+          "correct_index": 1,
+          "explanation": "Because materialized views are only as fresh as their last refresh, reports built on them can diverge from the live base-table state — a trade-off that must be communicated to consumers.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "cx-materialized-views-fundamentals-9",
+          "test_id": "pt-dbms-sql-19-materialized-views",
+          "question_text": "What does the materialized result store?",
+          "options": [
+            "Computed query rows",
+            "Only a query name with no data",
+            "Every future source change automatically in all engines",
+            "Only a client screenshot"
+          ],
+          "correct_index": 0,
+          "explanation": "Stored computation requires a defined maintenance contract.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "cx-materialized-views-fundamentals-10",
+          "test_id": "pt-dbms-sql-19-materialized-views",
+          "question_text": "A new approved 50 order follows a stored 100 total. Before refresh, what can the summary show?",
+          "options": [
+            "Always 150 automatically",
+            "100 while a current live query shows 150",
+            "Zero by definition",
+            "An automatic authorization grant"
+          ],
+          "correct_index": 1,
+          "explanation": "Staleness follows the last maintenance boundary.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "cx-materialized-views-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "cx-materialized-views-application-1",
+          "test_id": "cx-materialized-views-application",
+          "question_text": "Does loading the dashboard page necessarily refresh the stored database result?",
+          "options": [
+            "Yes, all materialized views refresh per request",
+            "No",
+            "Only if the page is blue",
+            "Only after ORDER BY"
+          ],
+          "correct_index": 1,
+          "explanation": "Refresh must be an actual supported operation, not an assumed UI effect.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "cx-materialized-views-application-2",
+          "test_id": "cx-materialized-views-application",
+          "question_text": "What must incremental maintenance handle when an order changes regions?",
+          "options": [
+            "Only add to the new region",
+            "Only rename the report column",
+            "Remove its old-group contribution and add its new-group contribution",
+            "Ignore every update"
+          ],
+          "correct_index": 2,
+          "explanation": "Update and deletion semantics matter beyond inserts.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "cx-materialized-views-application-3",
+          "test_id": "cx-materialized-views-application",
+          "question_text": "Does a unique partial index satisfy the stated PostgreSQL concurrent-refresh requirement?",
+          "options": [
+            "Yes, any index suffices",
+            "Only if named refresh",
+            "Only if it is nonunique",
+            "No, the required index covers all rows and uses column names"
+          ],
+          "correct_index": 3,
+          "explanation": "The documented prerequisite excludes partial and expression indexes.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "cx-materialized-views-application-4",
+          "test_id": "cx-materialized-views-application",
+          "question_text": "Can PostgreSQL CONCURRENTLY refresh combine with WITH NO DATA?",
+          "options": [
+            "No",
+            "Yes, always",
+            "Only if the view is empty",
+            "Only with two readers"
+          ],
+          "correct_index": 0,
+          "explanation": "The options are incompatible under the documented contract.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "cx-materialized-views-application-5",
+          "test_id": "cx-materialized-views-application",
+          "question_text": "Does MySQL 8.4 accept PostgreSQL CREATE MATERIALIZED VIEW unchanged?",
+          "options": [
+            "Yes, universally",
+            "No",
+            "Only for one column",
+            "Only when an EVENT exists"
+          ],
+          "correct_index": 1,
+          "explanation": "A manually maintained summary table is a different implementation.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "cx-materialized-views-application-6",
+          "test_id": "cx-materialized-views-application",
+          "question_text": "Why can separate autocommitted DELETE and INSERT be a refresh defect?",
+          "options": [
+            "They always preserve one atomic replacement",
+            "They automatically create a snapshot",
+            "Readers can observe an empty or partial publication interval",
+            "They validate every source invariant"
+          ],
+          "correct_index": 2,
+          "explanation": "Publication needs an explicit coherent boundary.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "cx-materialized-views-application-7",
+          "test_id": "cx-materialized-views-application",
+          "question_text": "Why should a failed refresh not advance its success timestamp?",
+          "options": [
+            "It makes the table shorter",
+            "It disables every index",
+            "It changes the query alias",
+            "It would falsely imply source coverage was incorporated"
+          ],
+          "correct_index": 3,
+          "explanation": "Freshness indicators must reflect actual successful data coverage.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "cx-materialized-views-application-8",
+          "test_id": "cx-materialized-views-application",
+          "question_text": "Does storing a report fix an incorrect source join?",
+          "options": [
+            "No, it can persist the same mistake",
+            "Yes, materialization repairs cardinality",
+            "Only with a unique index",
+            "Only after a schedule"
+          ],
+          "correct_index": 0,
+          "explanation": "Correctness of the defining computation remains essential.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "cx-materialized-views-application-9",
+          "test_id": "cx-materialized-views-application",
+          "question_text": "What is an appropriate source-of-truth correction path?",
+          "options": [
+            "Edit totals arbitrarily to hide disagreement",
+            "Correct authoritative source facts and recompute through reviewed maintenance",
+            "Disable access controls",
+            "Drop the report without review"
+          ],
+          "correct_index": 1,
+          "explanation": "Direct cosmetic summary edits can conceal and later lose the real correction.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "cx-materialized-views-application-10",
+          "test_id": "cx-materialized-views-application",
+          "question_text": "What belongs in a performance comparison?",
+          "options": [
+            "Only the number of SELECT characters",
+            "Only a warm one-row test",
+            "Read latency, refresh cost, storage and freshness requirements",
+            "Only the object name"
+          ],
+          "correct_index": 2,
+          "explanation": "Stored computation moves work and adds operational obligations.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-19-materialized-views-1",
+      "test_id": "pt-dbms-sql-19-materialized-views",
+      "question_text": "What is the fundamental difference between a regular view and a materialized view?",
+      "options": [
+        "Materialized views cannot use joins",
+        "A regular view re-runs its query live on each access; a materialized view stores the computed result physically and needs an explicit refresh",
+        "Regular views are always faster",
+        "Materialized views are only for single-table queries"
+      ],
+      "correct_index": 1,
+      "explanation": "This is the defining trade-off: plain views compute on demand with no storage, while materialized views trade freshness for storage and read speed, requiring REFRESH to stay current.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-19-materialized-views-2",
+      "test_id": "pt-dbms-sql-19-materialized-views",
+      "question_text": "Does MySQL support CREATE MATERIALIZED VIEW natively?",
+      "options": [
+        "Yes, identically to PostgreSQL",
+        "No — MySQL has no native materialized view feature and it must be simulated with a real table plus a scheduled refresh job",
+        "Yes, but only in MySQL 8 Enterprise",
+        "No, and MySQL has no workaround at all"
+      ],
+      "correct_index": 1,
+      "explanation": "MySQL lacks native materialized view support; the common workaround is a regular table populated by a scheduled job (e.g., an EVENT) that periodically re-runs the defining query.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-19-materialized-views-3",
+      "test_id": "pt-dbms-sql-19-materialized-views",
+      "question_text": "After data changes in the base tables, when does a materialized view's data reflect those changes?",
+      "options": [
+        "Immediately and automatically, just like a regular view",
+        "Only after an explicit REFRESH MATERIALIZED VIEW (or engine-equivalent) is run",
+        "Never — materialized views are permanently frozen at creation time",
+        "Only if the base table is dropped and recreated"
+      ],
+      "correct_index": 1,
+      "explanation": "A materialized view's stored data goes stale after base-table changes and only updates when explicitly refreshed (or on an automatic schedule/trigger configured by the DBA).",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-19-materialized-views-4",
+      "test_id": "pt-dbms-sql-19-materialized-views",
+      "question_text": "What does `REFRESH MATERIALIZED VIEW CONCURRENTLY` require in PostgreSQL?",
+      "options": [
+        "A foreign key on the materialized view",
+        "A unique index on the materialized view",
+        "That the view be based on a single table",
+        "Nothing extra beyond a normal refresh"
+      ],
+      "correct_index": 1,
+      "explanation": "PostgreSQL requires a unique index on a materialized view before CONCURRENTLY refresh can be used, since it needs a way to match old and new rows for a non-locking update.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-19-materialized-views-5",
+      "test_id": "pt-dbms-sql-19-materialized-views",
+      "question_text": "Which scenario is the best candidate for a materialized view rather than a regular view?",
+      "options": [
+        "A cheap single-row lookup queried once a day",
+        "An expensive multi-join aggregation queried frequently by a dashboard, where slight staleness is acceptable",
+        "A view that must always reflect the absolute latest data with zero staleness",
+        "A view with no aggregation at all"
+      ],
+      "correct_index": 1,
+      "explanation": "Materialized views shine when an expensive query is read often relative to how often the underlying data changes, and some staleness is tolerable — classic dashboard/reporting use case.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-19-materialized-views-6",
+      "test_id": "pt-dbms-sql-19-materialized-views",
+      "question_text": "Can a materialized view be indexed?",
+      "options": [
+        "No, indexing is impossible on any kind of view",
+        "Yes — because it physically stores data like a table, it can be indexed directly, unlike a regular (non-materialized) view",
+        "Only in MySQL",
+        "Only if it has no aggregate columns"
+      ],
+      "correct_index": 1,
+      "explanation": "Since a materialized view physically stores rows, it can have indexes built on it directly, which is one of its major performance advantages over a plain view (see also 19.8).",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-19-materialized-views-7",
+      "test_id": "pt-dbms-sql-19-materialized-views",
+      "question_text": "In MySQL's simulated materialized-view pattern, what commonly triggers the periodic refresh?",
+      "options": [
+        "A UNIQUE constraint violation",
+        "A scheduled MySQL EVENT (or external cron job) that re-runs the aggregation and repopulates the snapshot table",
+        "The MySQL query optimizer automatically",
+        "A foreign key cascade"
+      ],
+      "correct_index": 1,
+      "explanation": "Since MySQL lacks native materialized views, teams typically use a scheduled EVENT or an external cron job to periodically TRUNCATE/re-INSERT (or otherwise repopulate) a snapshot table.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-19-materialized-views-8",
+      "test_id": "pt-dbms-sql-19-materialized-views",
+      "question_text": "What risk does a nightly-refreshed materialized view introduce for reporting?",
+      "options": [
+        "It always corrupts the base tables",
+        "Users may see numbers that don't match a live query against the base tables, since the materialized data can be stale until the next refresh",
+        "It prevents any further writes to the base tables",
+        "It removes the need for any GRANT permissions"
+      ],
+      "correct_index": 1,
+      "explanation": "Because materialized views are only as fresh as their last refresh, reports built on them can diverge from the live base-table state — a trade-off that must be communicated to consumers.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "coding_problems": [],
+  "coding_not_applicable": "The topic requires freshness, refresh publication and failure histories across supported engines. Two solved maintenance exercises and labeled SQL examples are included;a single query-result judge cannot establish refresh concurrency or native materialized-view lifecycle.",
+  "review": {
+    "reviewer": "/root",
+    "independent_review": "passed",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Independent manual content review passed within independent_review_scope; engine/browser/release gates separate.",
+    "editorial_record": "Original scenario-led prose and assessments. External originality and AdSense review unperformed.",
+    "canonical_answer_indices_preserved": true,
+    "independent_reviewer": "/root/review_f_and_foundations",
+    "independent_review_scope": "Full notes,20MCQs with every option,canonical answer position and explanation,original diagrams,and all exercise contracts/fixtures or solved conceptual labs. Original identities/indices checked against public seed cache where applicable. Reported substantive findings corrected by coordinator and filtered recheck accepted;identified learner-facing spacing polished. Manual technical/editorial reasoning only;engine,provider,browser,external originality and AdSense evidence separate."
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-19-materialized-views",
+    "original_note_sha256": "6335d0242dc155c77ed475eac19734748e4d2eac2e65d54a7f5972a7d2b301ca",
+    "status": "drafted; not included in prepared paired migrations"
+  },
+  "notes": "## Store a computed result with an explicit freshness contract\n\nA materialized view stores the result of a defining query as data that can be read later. A regular view stores a query definition whose result follows the base data visible to the executing statement. Materialized results can avoid repeatedly computing an expensive report, but their contents reflect the last supported maintenance or refresh process. The central trade-off is not simply faster versus slower: it is stored computation with a defined freshness, maintenance and failure contract.\n\nImagine a dashboard displaying approved workshop revenue by region. Computing several joins and aggregates for every page request can be expensive under a representative workload. A stored regional summary can serve repeated reads if the product accepts a stated delay. A seat-allocation decision requiring current capacity has a different requirement and must not blindly use the same stale summary merely because its query is fast.\n\n## Distinguish engine features from a manually maintained table\n\nPostgreSQL provides materialized-view objects and REFRESH MATERIALIZED VIEW syntax. MySQL 8.4 does not provide the same native materialized-view feature. A MySQL summary table maintained by a reviewed job can implement a related reporting pattern, but it remains an application-managed table with application-managed lifecycle and access rules. Label the engine rather than copying unsupported syntax into a MySQL exercise.\n\n```sql\n-- PostgreSQL illustration,not MySQL8.4 syntax:\nCREATE MATERIALIZED VIEW approved_region_totals AS\nSELECT region,SUM(amount) AS total_amount\nFROM reporting_orders\nWHERE status='approved'\nGROUP BY region;\n```\n\nThis definition identifies one row per represented region. A region absent from eligible source rows is absent from the result unless the defining query deliberately preserves a region dimension. NULL amounts, refund signs and repeated source values must follow the report's stated policy. Materializing an incorrect join or aggregate makes its mistake persist in a stored result; the feature does not correct the underlying query.\n\n## Trace staleness with a small source change\n\nSuppose eligible North orders total one hundred when the result is created. A new approved North order for fifty is then committed. A live query can report one hundred fifty under an appropriate current observation, but the stored result can still show one hundred until refresh or another supported maintenance process incorporates the change. That difference is expected under the stated stale-result contract, not proof that the new source transaction failed.\n\n| Moment | Eligible source total | Stored summary total | Interpretation |\n|---|---|---|---|\n| Initial build | 100 | 100 | Summary reflects that build |\n| New approved order commits | 150 | 100 | Summary is stale |\n| Successful refresh completes | 150 | 150 | New build is available |\n| Later source change | May differ again | Last build | Freshness must be measured |\n\nDisplay or expose a meaningful as-of reference when users need to judge freshness. A job's finish time can differ from the source snapshot or watermark it processed. Report the actual coverage boundary when possible rather than labeling every result current because the page itself loaded recently. A failed refresh must not advance a success timestamp that implies data was incorporated when it was not.\n\n## Plan full recomputation and incremental maintenance separately\n\nA full refresh reruns the defining computation and replaces the stored result under the engine's supported semantics. Incremental maintenance updates affected groups from source changes. The latter can reduce repeated work but must correctly handle inserts, updates, deletes, status transitions and corrections. An insert-only running sum is not a complete solution when an approved order can later be cancelled or move to another region.\n\nFor a region change, the old group can need a subtraction and the new group an addition. A NULL-to-known amount can change both known-value counts and totals. Removing the final eligible row can require deleting a group or retaining an explicit zero depending on the report contract. Write these cases before choosing triggers, change logs or scheduled recomputation. Hidden partial maintenance can leave plausible but permanently drifting totals.\n\n## Understand PostgreSQL concurrent refresh requirements\n\nPostgreSQL's CONCURRENTLY refresh option permits concurrent readers under its documented behavior, but it has specific prerequisites. The materialized view must already be populated and have an appropriate unique index over column names covering all rows. A partial or expression-only unique index does not satisfy that requirement. CONCURRENTLY cannot be combined with WITH NO DATA, and only one refresh can run at a time against a given materialized view.\n\n```sql\n-- PostgreSQL example when region is the intended unique result key:\nCREATE UNIQUE INDEX approved_region_totals_region_uq\nON approved_region_totals(region);\nREFRESH MATERIALIZED VIEW CONCURRENTLY approved_region_totals;\n```\n\nThe unique key must match the actual result grain. If region is nullable or several dimensions determine a row, inspect the real query and comparison semantics before selecting the key. Do not add an arbitrary row number solely to make a command appear satisfied without understanding how refresh matches rows. Permissions and operational locks also need actual engine tests; the word concurrent does not mean no resource cost or no possible failure.\n\n## Design a MySQL summary-table workflow deliberately\n\nA MySQL implementation can compute a summary into a separately owned table and expose it through the existing trusted reporting path. A scheduler, an authorized background worker or another reviewed mechanism can request refresh. The existence of an EVENT feature or a cron entry does not establish that the job is enabled, authorized, monitored or successfully completing. Avoid assuming deployment conventions the repository or operator has not specified.\n\nReplacing live summary contents with separate autocommitted DELETE and INSERT statements can expose an empty or partial result between them. A transactional replacement on compatible transactional tables or a reviewed build-and-swap design can address a particular publication boundary, each with its own locking and schema-operation implications. Do not use TRUNCATE inside a supposed reversible DML refresh without inspecting its implicit-commit semantics.\n\nThe refresh must also read a coherent source population under its chosen isolation contract. Several independent source queries can observe different committed moments. A completed replacement is not proof that all measures came from one snapshot unless the computation actually enforced that requirement. Document source coverage, publication boundary and rollback behavior as separate parts of the design.\n\n## Keep authority and access on the trusted path\n\nA stored summary can contain sensitive aggregates even when it omits individual names. Granting readers access to the summary does not automatically authorize every source table or every underlying record. Conversely, a definer-context refresh can have privileges different from the reporting caller. Review the actor performing refresh, the actor reading results and the protected data each can reach.\n\nA summary table is not a second authoritative source for operational decisions unless the business contract deliberately makes it one. Source corrections should follow the authoritative write path and then flow through maintenance. Editing a total directly to make a dashboard look right can conceal a faulty computation and be overwritten at the next refresh. Preserve lineage so discrepancies can be traced to source eligibility and aggregation rules.\n\n## Measure the complete cost and failure behavior\n\nCompare query latency, refresh duration, storage, write amplification and tolerated staleness on representative data. An expensive report served once a month may not justify constant incremental maintenance. A frequently read dashboard may benefit even when each refresh is substantial. No universal speed claim follows solely from storing the result, and a tiny warm-cache fixture does not establish production capacity.\n\nTest a failed refresh after work begins, a delayed schedule, two attempted overlapping refreshes, and a reader active during publication. Verify whether the last good result remains available and whether freshness indicators stay honest. Backups and restoration must account for whether the summary is rebuilt or restored, and for the time needed to make the reporting service useful again.\n\n## Solve two freshness exercises\n\nFirst exercise: materialize a North total of one hundred, commit a new eligible source order of fifty, and predict the live and stored totals before refresh. The solution is one hundred fifty versus one hundred under the stated snapshot pattern. After a successful full refresh both can show one hundred fifty until another source change. Explain why a page reload alone does not perform the missing database maintenance.\n\nSecond exercise: design an update that moves an approved fifty-unit order from North to South. Incremental maintenance must remove its old North contribution and add its South contribution while preserving the report's publication boundary. Include cancellation and failed-refresh branches. Continue with [view maintenance](/learning/dbms-sql-tutorial/view-maintenance), [aggregate query optimization](/learning/dbms-sql-tutorial/aggregate-query-optimization) and [transaction boundaries](/learning/dbms-sql-tutorial/transaction-boundaries) to compare computation, freshness and coherent publication independently.\n",
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "A stored result can lag a committed source change",
+      "description": "A100-unit source summary stays 100 after a new 50-unit source order until the supported refresh incorporates it. Freshness describes source coverage, not the time the browser loaded.",
+      "columns": [
+        "Event",
+        "Live eligible total",
+        "Stored total"
+      ],
+      "rows": [
+        [
+          "Initial build",
+          "100",
+          "100"
+        ],
+        [
+          "New approved 50 commits",
+          "150",
+          "100"
+        ],
+        [
+          "Refresh succeeds",
+          "150",
+          "150"
+        ],
+        [
+          "Refresh fails after another change",
+          "New source value",
+          "Last successful build; timestamp must remain honest"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "technical_review": "Independent manual diagram/content consistency review passed;actual static/browser rendering tracked separately.",
+    "server_rendering": "pending",
+    "browser_rendering": "unverified",
+    "independent_review": "passed"
+  },
+  "sql_verification": {
+    "scope": "not executed; concurrency/recovery/provider verification separate",
+    "all_passed": false,
+    "cases": []
+  }
+}

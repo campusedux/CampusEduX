@@ -1,0 +1,518 @@
+{
+  "source_ref": "chapter-2-dbms-architecture/database-apis",
+  "slug": "database-apis",
+  "title": "Database APIs",
+  "description": "Read database APIs as explicit calling contracts for connections, statements, results, transactions, parameters, errors, and cleanup, with Python DB-API examples and clear portability limits.",
+  "dialect": "MySQL 8.4",
+  "notes": "## A contract for requesting database work\n\nA database application programming interface defines how software asks for database operations and handles their results. It gives callers named operations and rules for connections, statement execution, result access, transactions, errors, and cleanup. Applications can work through those operations instead of manually constructing every database-protocol message. The API is the calling contract; an implementation supplies the actual behavior for a supported database environment.\n\nJDBC, ODBC, and Python's DB-API are familiar examples of access interfaces or specifications. Their details differ, so an example from one should not be treated as exact syntax for another. A project's existing client library and helper layer may expose an additional application-specific API above them. Trace the actual calls rather than assuming all functions named execute have identical semantics.\n\nThis topic uses Python DB-API vocabulary to illustrate common responsibilities. A PostgreSQL adapter such as psycopg2 is an example of an implementation, not a MySQL driver recommendation. The SQL course's database dialect remains MySQL where executable SQL is shown. Calling-interface examples and database dialect are separate choices that should be labeled clearly.\n\n## Distinguishing a specification from an implementation\n\nThe specification describes supported call shapes and behavior categories. A driver or adapter provides concrete connections and operations for its supported backend. The database server executes operations under its configured guarantees. Optional middleware can add routing or integration behavior, and a pool can manage reusable resources. These responsibilities are related but are not necessarily five mandatory sequential processes.\n\nFor example, an application may call a DB-API adapter directly, or its connection may reach a database proxy. Middleware can also be a library above the adapter. SQLite illustrates another important limit: a database API can access an embedded database without a separate network server. An API therefore cannot be defined only as a way to hide remote network packets.\n\nA shared calling pattern can improve portability and readability while allowing implementation-specific details. Connection parameters, supported optional features, result representations, and transaction behavior still need inspection. The name of a standard is a starting point for contract review, not proof that an arbitrary program will behave unchanged with every implementation.\n\n## Opening a connection deliberately\n\nA connection provides a context for database work under the selected implementation. A caller needs approved configuration and an explicit ownership lifecycle. It should not embed secret connection values in source or print them in diagnostics. The interface should make it clear whether the caller owns a direct connection or borrows a handle from an existing pool.\n\nIn a DB-API-style workflow, code obtains a connection and then a cursor for executing and retrieving results. Other interfaces may expose different abstractions, such as command objects or direct query methods. Use the established pattern for the project instead of adding a parallel wrapper merely because a tutorial uses different vocabulary.\n\nA context manager can help organize cleanup where supported, but the caller must read its exact semantics. Entering and exiting a connection context does not universally mean that the physical connection is closed, and transaction completion is a separate concern. A method with a familiar name can have different lifecycle effects in a pooled versus direct environment.\n\n## Executing a statement with parameters\n\nA statement operation accepts SQL and, where supported, separately supplied values. Python DB-API implementations advertise a parameter style rather than requiring one universal placeholder syntax. A caller should use the selected adapter's documented style and pass values through its supported mechanism. Text formatting or string concatenation is not a substitute for binding untrusted values.\n\nSuppose a request needs results for student 108. The application can construct a fixed query shape with a value placeholder and supply 108 separately. The driver is responsible for the supported value representation. A user-controlled table name or sort direction is different: these are SQL structure, so they require a validated mapping or another established safe construction.\n\nParameter binding does not establish record authorization. The trusted request path must still verify whether the actor may read student 108. A safely parameterized query can be perfectly safe from one class of SQL construction error while still exposing another person's records because the ownership check was omitted. Each boundary needs the control appropriate to its responsibility.\n\n## Retrieving results without confusing states\n\nResult APIs distinguish the operation from fetching its rows. A cursor can provide one row, a bounded group, or the remaining result according to the interface. Fetching every row at once can be convenient for small results but consume excessive memory for a large report. Choose retrieval behavior that matches the expected size and existing application contract.\n\nAn empty result is not the same as an error, and a row containing NULL is not the same as no row. Consider a lookup for one student's optional score. Finding the student with an absent score requires different handling from finding no permitted student. The API caller must preserve that distinction when mapping the result into application state.\n\nColumn names, order, and representations also matter. An explicit projection helps make the promised result stable. A caller that indexes a tuple by position needs to know exactly what each position means. Converting values into a dictionary does not by itself solve semantic problems such as wrong units, missing identifiers, or lossy numeric conversion.\n\n## Managing transactions through the interface\n\nAn API can expose commit and rollback operations, transaction settings, or a higher-level transaction helper. The application must understand which session owns the transaction and what automatic behavior the implementation applies. Consecutive statements do not form one transaction merely because they appear next to each other in the source code.\n\nWith a pool, the transaction should use the intended borrowed connection for its full unit of work. On failure, the caller needs a defined completion and cleanup policy. Returning a handle with an unfinished transaction can affect later requests. A resource being reusable does not prove that its state is clean or that the previous operation completed correctly.\n\nA failure around commit also needs honest interpretation. The caller may not know whether the operation committed before the response was lost. The API exception category can help diagnose the problem, but it does not magically establish a no-effect outcome. Retry safety depends on the operation contract and any verified reconciliation or duplicate-handling mechanism.\n\n## Interpreting errors and supported capabilities\n\nA database interface typically exposes categories of failures. Invalid SQL, denied access, constraint violations, missing connectivity, and unsupported features should not all become the same successful empty result. Translate errors into useful task-facing behavior while preserving enough bounded diagnostic context for investigation. Never include credentials or private record values simply to make an error easier to reproduce.\n\nImplementations can advertise capabilities such as parameter style and thread-safety level. A connection or cursor must not be shared across concurrent work unless its documented contract supports the intended use. A standard API name does not imply unrestricted thread safety or support for every optional extension. Inspect the installed implementation and the actual usage pattern.\n\nLikewise, a standard execute method does not standardize every SQL function contained in its query string. A vendor-specific function remains vendor-specific when sent through JDBC or DB-API. Portability requires reviewing both the calling interface and the database operations, including relevant type, comparison, transaction, and result semantics.\n\n## Closing resources on every path\n\nCursors, result handles, connections, and borrowed pool resources can retain memory or server-side capacity. Clean them up using the supported lifecycle on success, exceptions, and early returns. Pooling does not repair a permanently leaked borrowed connection; later requests can still wait until they time out. Resource ownership should be visible enough for a reviewer to trace.\n\nA useful API review follows one ordinary request and several failure cases from input to cleanup. Check missing and empty results, invalid values, denied access, database exceptions, transaction completion, and resource release. The API's value is a stable, understandable contract for that work. Its name alone is not a substitute for preserving meaning, access boundaries, and failure behavior in the implementation that actually runs.\n",
+  "references": [
+    {
+      "title": "Python DB-API specification, PEP 249",
+      "url": "https://peps.python.org/pep-0249/"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-2-database-apis",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-2-database-apis-1",
+          "test_id": "pt-dbms-sql-2-database-apis",
+          "question_text": "What is a database API?",
+          "options": [
+            "The physical file format used to store table data",
+            "A defined calling contract for database access operations such as connections, statements, results, transactions, and cleanup",
+            "A specific vendor's wire protocol implementation",
+            "A tool for physically indexing database records"
+          ],
+          "correct_index": 1,
+          "explanation": "APIs can support remote services or embedded databases; not all are identical standards.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-2-database-apis-2",
+          "test_id": "pt-dbms-sql-2-database-apis",
+          "question_text": "Which of these is given as an example of a database API?",
+          "options": [
+            "B+-tree indexing",
+            "Python's DB-API (e.g., via psycopg2)",
+            "TCP/IP",
+            "A connection pool"
+          ],
+          "correct_index": 1,
+          "explanation": "Python's DB-API is explicitly listed as an example of a standardized database API, alongside ODBC, JDBC, and ADO.NET.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-2-database-apis-3",
+          "test_id": "pt-dbms-sql-2-database-apis",
+          "question_text": "In the layered stack described, what sits directly beneath the Database API and does the actual vendor-specific translation?",
+          "options": [
+            "The application's user interface",
+            "The Driver",
+            "The conceptual schema",
+            "The external schema"
+          ],
+          "correct_index": 1,
+          "explanation": "The driver (2.13) is the layer directly beneath the API responsible for vendor-specific protocol translation.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-2-database-apis-4",
+          "test_id": "pt-dbms-sql-2-database-apis",
+          "question_text": "Do Application, API, Driver, Middleware, and Database always form one mandatory fixed deployment order?",
+          "options": [
+            "Which physical disk the data is stored on",
+            "No; the API specifies calls, implementations provide access, and optional middleware can occupy different positions",
+            "How many connections are pooled at once",
+            "The specific wire protocol bytes sent to the database"
+          ],
+          "correct_index": 1,
+          "explanation": "Some layers are specifications or libraries rather than separate processes. An embedded database may have no remote server.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-2-database-apis-5",
+          "test_id": "pt-dbms-sql-2-database-apis",
+          "question_text": "What can remain familiar across Python DB-API implementations despite backend differences?",
+          "options": [
+            "Because all three databases use identical internal storage",
+            "The general connection/cursor/execution/fetching pattern, while implementation details still need review",
+            "Because SQLite, MySQL, and PostgreSQL are actually the same software",
+            "Because middleware is required for this pattern to work at all"
+          ],
+          "correct_index": 1,
+          "explanation": "A similar pattern does not guarantee identical placeholders, SQL, types, or optional features.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-2-database-apis-6",
+          "test_id": "pt-dbms-sql-2-database-apis",
+          "question_text": "What can happen when borrowed connections and cursor resources are never released?",
+          "options": [
+            "No problem; the API automatically closes everything instantly",
+            "Resources can leak and pool acquisitions can exhaust; pooling does not automatically repair the leak",
+            "The conceptual schema becomes corrupted",
+            "The driver is automatically uninstalled"
+          ],
+          "correct_index": 1,
+          "explanation": "Cleanup must cover success, exceptions, and early returns.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-2-database-apis-7",
+          "test_id": "pt-dbms-sql-2-database-apis",
+          "question_text": "A developer uses a standard DB-API `execute()` call, but embeds a vendor-specific SQL function (only supported by one database) inside the query string. Is this application fully portable across database vendors?",
+          "options": [
+            "Yes, because the API call itself is standard, so portability is guaranteed",
+            "No, because while the API call is portable, the vendor-specific SQL syntax inside the query string is not, so true portability requires both a standard API and portable SQL",
+            "No, because DB-API only works with one specific vendor",
+            "Yes, but only if middleware is also used"
+          ],
+          "correct_index": 1,
+          "explanation": "The notes explicitly warn that a standard API call does not make arbitrary embedded vendor-specific SQL portable — both the API and the SQL itself need to be portable.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-2-database-apis-8",
+          "test_id": "pt-dbms-sql-2-database-apis",
+          "question_text": "A team believes that adopting JDBC alone eliminates the need to think about drivers, middleware, or connection pooling ever again. Why does this misunderstand the layered stack described?",
+          "options": [
+            "It is correct; JDBC alone handles every concern in the stack automatically",
+            "JDBC (the API) only standardizes the calling contract; the driver still does vendor translation, and middleware/pooling still separately manage routing and connection reuse — these are distinct layers with distinct responsibilities",
+            "Drivers and middleware are optional add-ons with no real function",
+            "Connection pooling is part of the JDBC standard itself and requires no separate configuration"
+          ],
+          "correct_index": 1,
+          "explanation": "The API, driver, and middleware/pooling layers each solve a different problem (what to call, how it's translated, and when/through which connection) — adopting a standard API does not subsume the responsibilities of the other layers.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-2-database-apis-new-9",
+          "test_id": "pt-dbms-sql-2-database-apis",
+          "question_text": "What should determine the placeholder syntax used with a Python database adapter?",
+          "options": [
+            "A universal assumption that every adapter uses one symbol",
+            "The selected implementation's documented parameter style",
+            "The table's visual name length",
+            "The browser locale"
+          ],
+          "correct_index": 1,
+          "explanation": "DB-API defines parameter-style categories rather than one syntax for all adapters.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-2-database-apis-new-10",
+          "test_id": "pt-dbms-sql-2-database-apis",
+          "question_text": "What distinction must a score lookup preserve?",
+          "options": [
+            "A missing row always means numeric zero",
+            "Every empty result is a syntax error",
+            "No row versus a row whose score is NULL",
+            "A NULL score means no query ran"
+          ],
+          "correct_index": 2,
+          "explanation": "Absence of a record and absence of one attribute are different states.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-2-database-apis-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-2-database-apis-application-new-1",
+          "test_id": "pt-dbms-sql-2-database-apis-application",
+          "question_text": "A query uses a vendor-only function through a standard execute method. Is it automatically portable?",
+          "options": [
+            "Yes; execute translates all possible SQL",
+            "Only if the function name is short",
+            "No; the SQL operation retains its dialect dependency",
+            "Only if a cursor was closed"
+          ],
+          "correct_index": 2,
+          "explanation": "The calling API does not standardize every function inside SQL text.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-2-database-apis-application-new-2",
+          "test_id": "pt-dbms-sql-2-database-apis-application",
+          "question_text": "An empty authorized result is returned successfully. Should it be treated as a database exception?",
+          "options": [
+            "Yes; all empty results indicate server failure",
+            "Only if columns are ordered",
+            "Only if identifiers are numeric",
+            "No; empty results can be valid operation outcomes"
+          ],
+          "correct_index": 3,
+          "explanation": "The application must distinguish empty state from failure.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-2-database-apis-application-new-3",
+          "test_id": "pt-dbms-sql-2-database-apis-application",
+          "question_text": "A lookup safely binds StudentID but never checks actor ownership. What remains unresolved?",
+          "options": [
+            "Record-level authorization",
+            "Parameter representation only",
+            "The number of SQL keywords",
+            "The cursor variable name"
+          ],
+          "correct_index": 0,
+          "explanation": "Correct binding and authorization solve different problems.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-2-database-apis-application-new-4",
+          "test_id": "pt-dbms-sql-2-database-apis-application",
+          "question_text": "A caller fetches a huge report with fetchall and memory usage spikes. Which contract needs attention?",
+          "options": [
+            "Only the SQL keyword capitalization",
+            "Result size and bounded retrieval behavior",
+            "Only the connection host label",
+            "Only the number of API layers"
+          ],
+          "correct_index": 1,
+          "explanation": "Fetching all remaining rows can create memory pressure.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-2-database-apis-application-new-5",
+          "test_id": "pt-dbms-sql-2-database-apis-application",
+          "question_text": "A connection context exits. Can every implementation be assumed to have closed the physical connection?",
+          "options": [
+            "Yes; every context manager has identical behavior",
+            "Only if the row count is zero",
+            "No; context and pooling lifecycle semantics must be read",
+            "Only if the API is JDBC"
+          ],
+          "correct_index": 2,
+          "explanation": "Transaction management, release, and physical close are distinct lifecycle effects.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-2-database-apis-application-new-6",
+          "test_id": "pt-dbms-sql-2-database-apis-application",
+          "question_text": "A shared cursor is used by concurrent threads without checking support. What must be inspected?",
+          "options": [
+            "Only the table count",
+            "Only whether both threads print the same name",
+            "Only the browser theme",
+            "The implementation's concurrency and thread-safety contract"
+          ],
+          "correct_index": 3,
+          "explanation": "Standardized access does not imply unrestricted concurrent sharing.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-2-database-apis-application-new-7",
+          "test_id": "pt-dbms-sql-2-database-apis-application",
+          "question_text": "A constraint rejection is converted into a successful empty result. What is wrong?",
+          "options": [
+            "The failure has been misrepresented as a valid empty state",
+            "The result is necessarily more portable",
+            "The database no longer needs constraints",
+            "The API automatically rolls back every earlier operation"
+          ],
+          "correct_index": 0,
+          "explanation": "Error and empty-result semantics must remain distinct.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-2-database-apis-application-new-8",
+          "test_id": "pt-dbms-sql-2-database-apis-application",
+          "question_text": "A pooled connection is leaked after an exception. Does the mere presence of a pool prevent exhaustion?",
+          "options": [
+            "Yes; a pool creates unlimited sessions",
+            "No; unreleased borrowers still consume capacity",
+            "Yes; failures release every resource automatically",
+            "Only the database vendor determines cleanup"
+          ],
+          "correct_index": 1,
+          "explanation": "The application and pool lifecycle must guarantee the intended release.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-2-database-apis-application-new-9",
+          "test_id": "pt-dbms-sql-2-database-apis-application",
+          "question_text": "One application uses an adapter for an embedded database without a network service. Is that still database API usage?",
+          "options": [
+            "No; every API requires a remote server",
+            "Only if middleware adds another computer",
+            "Yes; the API can target embedded execution",
+            "Only if a SQL string is never used"
+          ],
+          "correct_index": 2,
+          "explanation": "A database interface is not limited to remote protocols.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-2-database-apis-application-new-10",
+          "test_id": "pt-dbms-sql-2-database-apis-application",
+          "question_text": "A write loses its commit response. What does a generic API exception fail to prove by itself?",
+          "options": [
+            "That the caller encountered a failure",
+            "That the API has an error path",
+            "That retry handling needs a contract",
+            "That no committed effect occurred"
+          ],
+          "correct_index": 3,
+          "explanation": "The operation outcome can be uncertain around the communication boundary.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [],
+  "coding_not_applicable": "This topic assesses calling-interface and resource contracts rather than SQL syntax. The SQL judge cannot test Python/JDBC resource cleanup, binding APIs, thread safety, or driver behavior; concrete SQL tasks are covered by the applicable statement and transaction topics.",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-2-database-apis-1",
+      "test_id": "pt-dbms-sql-2-database-apis",
+      "question_text": "What is a Database API?",
+      "options": [
+        "The physical file format used to store table data",
+        "A standardized set of functions applications call to connect, query, fetch results, and manage transactions without knowing the vendor's native protocol",
+        "A specific vendor's wire protocol implementation",
+        "A tool for physically indexing database records"
+      ],
+      "correct_index": 1,
+      "explanation": "A database API is the standardized interface layer applications use, independent of the underlying vendor protocol.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-2-database-apis-2",
+      "test_id": "pt-dbms-sql-2-database-apis",
+      "question_text": "Which of these is given as an example of a database API?",
+      "options": [
+        "B+-tree indexing",
+        "Python's DB-API (e.g., via psycopg2)",
+        "TCP/IP",
+        "A connection pool"
+      ],
+      "correct_index": 1,
+      "explanation": "Python's DB-API is explicitly listed as an example of a standardized database API, alongside ODBC, JDBC, and ADO.NET.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-2-database-apis-3",
+      "test_id": "pt-dbms-sql-2-database-apis",
+      "question_text": "In the layered stack described, what sits directly beneath the Database API and does the actual vendor-specific translation?",
+      "options": [
+        "The application's user interface",
+        "The Driver",
+        "The conceptual schema",
+        "The external schema"
+      ],
+      "correct_index": 1,
+      "explanation": "The driver (2.13) is the layer directly beneath the API responsible for vendor-specific protocol translation.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-2-database-apis-4",
+      "test_id": "pt-dbms-sql-2-database-apis",
+      "question_text": "In the layered stack Application → API → Driver → Middleware → Database Server, what does the API standardize, specifically?",
+      "options": [
+        "Which physical disk the data is stored on",
+        "What functions the application calls (e.g., execute, fetchall), regardless of which database is underneath",
+        "How many connections are pooled at once",
+        "The specific wire protocol bytes sent to the database"
+      ],
+      "correct_index": 1,
+      "explanation": "The API standardizes the calling contract (what functions exist and how they're used); the driver handles how those calls become vendor-specific protocol messages.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-2-database-apis-5",
+      "test_id": "pt-dbms-sql-2-database-apis",
+      "question_text": "Why does the same Python DB-API pattern (connect/cursor/execute/fetchall) work whether the backend is PostgreSQL, MySQL, or SQLite?",
+      "options": [
+        "Because all three databases use identical internal storage",
+        "Because the API is a stable, standardized contract, while the driver underneath handles the vendor-specific translation for each backend",
+        "Because SQLite, MySQL, and PostgreSQL are actually the same software",
+        "Because middleware is required for this pattern to work at all"
+      ],
+      "correct_index": 1,
+      "explanation": "The API layer's stability across vendors comes from drivers absorbing the vendor-specific differences beneath it.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-2-database-apis-6",
+      "test_id": "pt-dbms-sql-2-database-apis",
+      "question_text": "What resource-management problem can occur if an application obtains cursors/connections through the API but never closes them?",
+      "options": [
+        "No problem; the API automatically closes everything instantly",
+        "Resource leaks on the server side, which connection pooling is designed to help mitigate",
+        "The conceptual schema becomes corrupted",
+        "The driver is automatically uninstalled"
+      ],
+      "correct_index": 1,
+      "explanation": "Failing to close cursors/connections leaks server-side resources; pooling helps manage and reclaim connections more centrally than leaving it purely to caller discipline.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-2-database-apis-7",
+      "test_id": "pt-dbms-sql-2-database-apis",
+      "question_text": "A developer uses a standard DB-API `execute()` call, but embeds a vendor-specific SQL function (only supported by one database) inside the query string. Is this application fully portable across database vendors?",
+      "options": [
+        "Yes, because the API call itself is standard, so portability is guaranteed",
+        "No, because while the API call is portable, the vendor-specific SQL syntax inside the query string is not, so true portability requires both a standard API and portable SQL",
+        "No, because DB-API only works with one specific vendor",
+        "Yes, but only if middleware is also used"
+      ],
+      "correct_index": 1,
+      "explanation": "The notes explicitly warn that a standard API call does not make arbitrary embedded vendor-specific SQL portable — both the API and the SQL itself need to be portable.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-2-database-apis-8",
+      "test_id": "pt-dbms-sql-2-database-apis",
+      "question_text": "A team believes that adopting JDBC alone eliminates the need to think about drivers, middleware, or connection pooling ever again. Why does this misunderstand the layered stack described?",
+      "options": [
+        "It is correct; JDBC alone handles every concern in the stack automatically",
+        "JDBC (the API) only standardizes the calling contract; the driver still does vendor translation, and middleware/pooling still separately manage routing and connection reuse — these are distinct layers with distinct responsibilities",
+        "Drivers and middleware are optional add-ons with no real function",
+        "Connection pooling is part of the JDBC standard itself and requires no separate configuration"
+      ],
+      "correct_index": 1,
+      "explanation": "The API, driver, and middleware/pooling layers each solve a different problem (what to call, how it's translated, and when/through which connection) — adopting a standard API does not subsume the responsibilities of the other layers.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "coordinator",
+    "independent_review": "unavailable; no agent tools",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Definitions and examples checked against questions; no plagiarism certification.",
+    "existing_question_corrections": [
+      "tq-dbms-sql-2-database-apis-1",
+      "tq-dbms-sql-2-database-apis-4",
+      "tq-dbms-sql-2-database-apis-5",
+      "tq-dbms-sql-2-database-apis-6"
+    ],
+    "canonical_answer_indices_preserved": true
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-2-database-apis",
+    "original_note_sha256": "2ff56accae531ef0ee7dec903872f83d2308b846df3091be26375b5da67c81c3",
+    "status": "paired migration prepared; not applied"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Database API calls and the contracts behind them",
+      "description": "These are responsibilities, not a mandatory five-process stack. Exact methods and supported behavior depend on the selected API implementation.",
+      "columns": [
+        "Operation",
+        "Caller responsibility",
+        "Common confusion"
+      ],
+      "rows": [
+        [
+          "Connect / borrow",
+          "Own or release the resource through the supported lifecycle",
+          "A context always physically closes a pooled connection"
+        ],
+        [
+          "Execute",
+          "Bind values and preserve trusted authorization",
+          "Parameters prove record ownership"
+        ],
+        [
+          "Fetch",
+          "Distinguish empty rows, NULL values, and failures",
+          "No row means a zero score"
+        ],
+        [
+          "Commit / rollback",
+          "Use the intended session and handle uncertainty",
+          "A lost commit response proves no effect"
+        ],
+        [
+          "Cleanup",
+          "Release cursors and connections on every path",
+          "Pooling repairs every leaked borrower"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "coordinator review",
+    "server_rendering": "passed",
+    "browser_rendering": "unverified",
+    "independent_review": "unavailable; no agent tools",
+    "rendering_check": "2026-10-28: actual LessonBlock/TopicDiagrams server rendering; 34 authored-package checks passed with 18 additional rendering/practice/access checks. Browser rendering unverified."
+  }
+}

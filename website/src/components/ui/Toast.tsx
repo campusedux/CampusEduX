@@ -48,7 +48,7 @@ export function Toaster() {
     <div
       aria-live="polite"
       aria-atomic="false"
-      className="pointer-events-none fixed inset-x-0 bottom-20 z-[150] flex flex-col items-center gap-2 px-4 md:bottom-6 md:right-6 md:left-auto md:items-end"
+      className="pointer-events-none fixed inset-x-0 bottom-20 z-modal flex flex-col items-center gap-2 px-4 md:bottom-6 md:right-6 md:left-auto md:items-end"
     >
       {items.map((t) => {
         const Icon = ICON[t.tone];

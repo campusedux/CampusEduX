@@ -1,9 +1,10 @@
 import type { LucideIcon } from "lucide-react";
-import { BookOpen, Check, Layers, ListChecks, Lock } from "lucide-react";
+import { BookOpen, Check, ChevronDown, Layers, ListChecks, Lock } from "lucide-react";
 import type { LearningGridBrief } from "@/lib/learning.types";
 import type { CourseOutline } from "@/lib/courseOutline";
 import { Badge } from "@/components/ui/Badge";
 import { CourseCover } from "@/components/learning/CourseCover";
+import { DBMS_SQL_SLUG } from "@/lib/databaseTutorial";
 
 const WHAT_YOU_LEARN_MAX = 8;
 
@@ -29,8 +30,8 @@ function StatPill({
   unit: string;
 }) {
   return (
-    <div className={`inline-flex items-center gap-2 rounded-full py-1 pl-1 pr-3.5 text-sm text-white ring-1 backdrop-blur-sm ${PILL[tone].box}`}>
-      <span className={`flex h-7 w-7 items-center justify-center rounded-full ${PILL[tone].icon}`}>
+    <div className={`inline-flex min-w-0 items-center gap-1.5 rounded-lg py-1 pl-1 pr-2.5 text-xs text-white ring-1 ${PILL[tone].box}`}>
+      <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md ${PILL[tone].icon}`}>
         <Icon className="h-3.5 w-3.5" aria-hidden />
       </span>
       <dt className="sr-only">{label}</dt>
@@ -70,12 +71,12 @@ export function CourseHero({
   const shownLearn = learn.slice(0, WHAT_YOU_LEARN_MAX);
 
   return (
-    <header className="overflow-hidden rounded-3xl border border-line bg-card shadow-card">
-      <div className="relative isolate">
-        <CourseCover course={{ ...brief, cover_image_url: coverImageUrl }} variant="banner" className="-z-10" />
-        <div aria-hidden className="absolute inset-0 -z-10 bg-gradient-to-r from-slate-950/75 via-slate-950/45 to-transparent" />
+    <header className="min-w-0 overflow-hidden rounded-2xl border border-line bg-card shadow-card [overflow-wrap:anywhere]">
+      <div className="relative isolate bg-slate-950">
+        <CourseCover course={{ ...brief, cover_image_url: coverImageUrl }} variant="banner" className="-z-10 opacity-20" />
+        <div aria-hidden className="absolute inset-0 -z-10 bg-slate-950/50" />
 
-        <div className="max-w-3xl px-6 py-8 sm:px-8 sm:py-10 lg:px-10 lg:py-12">
+        <div className="min-w-0 max-w-3xl px-4 py-5 sm:px-6 sm:py-6 lg:px-8 lg:py-8">
           {/* Solid card-coloured underlay keeps the tinted badges legible on the banner. */}
           <div className="flex flex-wrap items-center gap-2">
             <span className="inline-flex rounded-full bg-card">
@@ -89,34 +90,37 @@ export function CourseHero({
               </span>
             )}
           </div>
-          <h1 className="h-hero mt-5 text-white">{brief.name}</h1>
-          {description && <p className="mt-4 max-w-2xl text-[15px] leading-relaxed text-white/80 sm:text-base">{description}</p>}
+          <h1 className="mt-3 font-display text-2xl font-bold leading-tight tracking-tight text-white [text-wrap:balance] sm:text-[2rem] lg:text-[2.25rem]">{brief.name}</h1>
+          {description && <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-200 sm:text-base">{description}</p>}
 
-          <dl className="mt-6 flex flex-wrap gap-2.5">
-            <StatPill icon={Layers} tone="sky" value={outline.sections.length} label="Sections" unit="section" />
-            <StatPill icon={BookOpen} tone="emerald" value={outline.total} label="Lessons" unit="lesson" />
+          <dl className="mt-4 flex flex-wrap gap-2">
+            {outline.gridSlug !== DBMS_SQL_SLUG && <StatPill icon={Layers} tone="sky" value={outline.sections.length} label="Sections" unit="section" />}
+            <StatPill icon={BookOpen} tone="emerald" value={outline.total} label={outline.gridSlug === DBMS_SQL_SLUG ? "Topics" : "Lessons"} unit={outline.gridSlug === DBMS_SQL_SLUG ? "topic" : "lesson"} />
             {testCount > 0 && <StatPill icon={ListChecks} tone="amber" value={testCount} label="Practice tests" unit="practice test" />}
           </dl>
         </div>
       </div>
 
       {shownLearn.length >= 2 && (
-        <div className="px-6 py-6 sm:px-8 lg:px-10 lg:py-7">
-          <p className="text-xs font-bold uppercase tracking-[0.14em] text-ink-faint">What you&apos;ll learn</p>
-          <ul className="mt-4 grid gap-x-10 gap-y-3 sm:grid-cols-2">
+        <details className="group/outcomes border-t border-line px-4 py-2 sm:px-6 sm:py-3 lg:px-8">
+          <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 rounded-lg [&::-webkit-details-marker]:hidden">
+            <span className="text-xs font-bold uppercase tracking-[0.14em] text-ink-muted">What you&apos;ll learn</span>
+            <ChevronDown className="h-4 w-4 shrink-0 text-ink-faint transition-transform group-open/outcomes:rotate-180 motion-reduce:transition-none" aria-hidden />
+          </summary>
+          <ul className="mb-2 mt-2 grid gap-x-6 gap-y-2.5 sm:grid-cols-2">
             {shownLearn.map((name, i) => (
-              <li key={`${i}-${name}`} className="flex items-start gap-3 text-[15px] leading-snug text-ink">
+              <li key={`${i}-${name}`} className="flex min-w-0 items-start gap-2 text-sm leading-6 text-ink">
                 <span className="mt-px flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-success/15 text-success">
                   <Check className="h-3 w-3" strokeWidth={3} aria-hidden />
                 </span>
-                <span>{name}</span>
+                <span className="min-w-0">{name}</span>
               </li>
             ))}
           </ul>
           {learn.length > shownLearn.length && (
-            <p className="mt-4 text-xs font-medium text-ink-muted">+ {learn.length - shownLearn.length} more sections in the curriculum below</p>
+            <p className="mb-2 mt-3 text-xs font-medium text-ink-muted">+ {learn.length - shownLearn.length} more sections in the curriculum below</p>
           )}
-        </div>
+        </details>
       )}
     </header>
   );

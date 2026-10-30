@@ -1,0 +1,662 @@
+{
+  "source_ref": "chapter-9-ddl-and-schema-design/generated-columns",
+  "slug": "generated-columns",
+  "title": "Generated Columns",
+  "description": "Derive a row property through an engine-managed expression, choose stored or virtual representation deliberately, and test recalculation without assuming indexing or cross-engine support.",
+  "dialect": "MySQL 8.4",
+  "notes": "## A generated column belongs to the table definition\n\nA generated column exposes a value derived by an expression defined in the table rather than accepting an independent application-supplied fact. For a campus shop line, quantity and unit_price can determine line_total. Storing the expression in the definition makes that relationship visible at the database boundary instead of relying on every writer to calculate a separate total correctly.\n\nThis is different from merely aliasing quantity multiplied by unit_price in one SELECT. A query expression belongs to that query, while a generated column is a property of the table definition and can be referenced by supported later statements. Both can express a calculation, but they have different persistence, indexing and compatibility considerations.\n\n## Start from the meaning of the derived value\n\nFor the simple exercise, line_total means quantity times unit_price with an explicitly chosen exact decimal representation. It excludes tax, discounts and currency conversion because those rules are not part of the supplied model. A familiar label such as total must not hide an unstated business formula. Decide what the value represents before choosing storage or syntax.\n\nA historical invoice amount may need to preserve the accepted charge at purchase time, even when a product's current price changes. That is a different fact from a generated value based on the row's current inputs. Generated columns can keep a formula consistent, but they cannot decide whether the application needs a current calculation or an immutable historical observation.\n\n## Stored and virtual describe representation choices\n\nIn the illustrated MySQL forms, a STORED generated column stores its calculated value as part of the row's representation, while a VIRTUAL generated column is evaluated when needed rather than stored as an ordinary base-row value. Both still derive from the defined expression. Choosing stored does not turn the property into an independently editable business fact.\n\nA virtual generated value can also participate in supported indexes, whose storage has its own rules. It is therefore misleading to conclude that a virtual column can never consume related index space or can never be indexed. Check the exact engine, storage engine and feature restrictions rather than infer the complete indexing behaviour solely from whether the base-row value is stored.\n\n```sql\nCREATE TABLE order_lines (\n  line_id INT PRIMARY KEY,\n  quantity INT NOT NULL,\n  unit_price DECIMAL(8,2) NOT NULL,\n  line_total DECIMAL(12,2)\n    GENERATED ALWAYS AS (quantity * unit_price) STORED\n);\n```\n\n## Declare the result type and domain deliberately\n\nA generated expression has an output domain. Multiplying quantity by price can require more range than the unit price alone, so the result's decimal width deserves a deliberate choice. Exact decimal arithmetic is useful for this constrained example, but the required scale and rounding policy still come from the application's contract. No single width is automatically correct for every financial workload.\n\nBase-column constraints remain important. If negative quantity is invalid, say so through the chosen integrity rule rather than assuming generation rejects it automatically. A correct multiplication can produce a negative result from negative input. Calculation consistency and accepted source domains solve different problems; the second exercise combines explicit quantity restrictions with automatic derivation.\n\n## Missing inputs follow the expression's semantics\n\nIf a source property is nullable, the generated value follows the actual expression rules. A multiplication involving a missing value does not become zero automatically. A COALESCE expression can define a particular replacement policy, but that policy must be justified. Treating an unknown unit price as zero could incorrectly claim a free item rather than acknowledge missing information.\n\nThe exercises use required numeric source values so the formula has an unambiguous domain. A different application that permits unknown prices needs its own notes and cases. Choosing required inputs for a lab simplifies that stated contract; it is not evidence that generated columns universally require every source column to be NOT NULL.\n\n## Omit independent values for generated outputs\n\nInserts should name the base columns required by the task and allow the database to calculate the generated output. Attempting to supply an ordinary explicit generated value is not a supported way to override the formula. MySQL supports DEFAULT as the permitted explicit placeholder in relevant generated-column assignments; that is different from supplying an arbitrary alternative total.\n\nThe retained PostgreSQL-oriented question is scoped accordingly: a non-DEFAULT explicit value cannot simply replace a generated value under its generation rule. Do not confuse GENERATED ALWAYS AS an expression with GENERATED ALWAYS AS IDENTITY. The first derives a row expression, while identity uses a value generator to supply an identifier. Similar wording does not make them interchangeable features.\n\n## Changes to inputs trigger the relevant recalculation\n\nIf quantity changes from two to three while unit_price stays 4.50, the defined total changes from 9.00 to 13.50. The application should update the source property that represents the actual event, not write a conflicting total separately. The stored representation is maintained under the engine's generated-column semantics, and the virtual representation is evaluated from the updated inputs.\n\nThis solves one local consistency problem. It does not automatically summarize every order line into a parent order, update an external payment system, or compute a total across another table. Generated-column expression restrictions limit what can be represented, and a row-local derivation should not be advertised as a general replacement for multi-row aggregation or transactional business workflows.\n\n## Allowed expressions are product specific\n\nGenerated expressions are subject to the target engine's restrictions, including which functions and dependencies are allowed. A volatile current-time or random expression is not an appropriate default assumption for this feature. A reproducible value derived from the row's accepted inputs is easier to reason about than a property that could change merely because a clock advanced.\n\nSubqueries and references beyond the permitted expression context also have restrictions. Do not copy a legal SELECT expression into a generated definition and assume it will be accepted. The exercises use simple deterministic arithmetic on the same row. Other expression forms need their own native syntax and execution verification rather than a claim that all SQL calculations are eligible.\n\n## Source-column changes affect dependent definitions\n\nA generated expression depends on its referenced source roles. Removing or changing those roles can invalidate the definition or alter its accepted domain. Review the dependency before a source-column migration. Engine-specific dependency rules determine whether the attempted change is rejected or requires an explicit accompanying change; a student should not infer universal cascading behaviour.\n\nThe same review applies to a formula change. Switching line_total from gross amount to discounted amount changes its meaning even if the column name stays unchanged. Consumers, indexes and stored data treatment may need compatible transitions. A generated column keeps the selected formula consistent; it does not make an unannounced semantic change transparent to every caller.\n\n## Index usefulness needs a query and a measurement\n\nA supported generated-column index can help certain workloads when queries use an appropriate matching expression or property. That possibility is not a guarantee of faster performance. Selectivity, maintenance cost, existing indexes and the optimizer's actual plan still matter. A small output fixture cannot establish which index a production query will choose or whether it benefits the workload.\n\nStored values and indexes also add maintenance and storage costs when source rows change. A write-heavy workload can have a different tradeoff from a mostly read-only reporting dataset. Explain the reason for considering a generated property, then evaluate the supported definition and actual workload. The feature is a tool for a stated contract rather than a universal optimization rule.\n\n## Validate the formula and its update boundary\n\nThe introductory task creates a stored line_total from supplied line inputs and returns it with a deterministic identifier order. Cases include zero quantity, fractional unit price and empty input. The second uses a virtual amount and changes quantity before reading it. This exposes whether the output truly follows the new source state instead of preserving a stale application-computed value.\n\nBoundary values are chosen so the expected decimal results can be calculated by hand. Required-field and nonnegative-domain rejections test the target definition separately. Recorded MariaDB compatibility execution verifies those exact calculations and writes. It does not establish generated-column indexing performance, every PostgreSQL feature variant, exact MySQL/provider compatibility or the behaviour of the prepared application's unapplied migrations.\n",
+  "references": [
+    {
+      "title": "MySQL 8.4 Generated columns",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/create-table-generated-columns.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-9-generated-columns",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-9-generated-columns-1",
+          "test_id": "pt-dbms-sql-9-generated-columns",
+          "question_text": "What is a generated (computed) column?",
+          "options": [
+            "A column whose value is manually entered by the user on every insert",
+            "A column whose value is automatically derived from an expression over other columns in the same row",
+            "A column that stores a foreign key reference",
+            "A column used only for indexing purposes"
+          ],
+          "correct_index": 1,
+          "explanation": "Generated columns compute their value from an expression rather than accepting a directly supplied value.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-9-generated-columns-2",
+          "test_id": "pt-dbms-sql-9-generated-columns",
+          "question_text": "What representation distinction do STORED and VIRTUAL make in the illustrated MySQL forms?",
+          "options": [
+            "There is no difference, they are synonyms",
+            "STORED retains the calculated base-row value; VIRTUAL evaluates it when needed, with supported indexes having their own storage",
+            "VIRTUAL is only available in PostgreSQL; STORED is only available in MySQL",
+            "STORED columns cannot be indexed while VIRTUAL columns always can"
+          ],
+          "correct_index": 1,
+          "explanation": "Both derive from the formula; virtual indexing support is engine specific.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-9-generated-columns-3",
+          "test_id": "pt-dbms-sql-9-generated-columns",
+          "question_text": "Can an ordinary explicit non-DEFAULT value replace a PostgreSQL generated expression value?",
+          "options": [
+            "It succeeds and overrides the computed value",
+            "No; the defined expression supplies it rather than an independent ordinary value",
+            "It is silently ignored",
+            "It sets the column to NULL"
+          ],
+          "correct_index": 1,
+          "explanation": "DEFAULT is different from overriding with an arbitrary computed result.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-9-generated-columns-4",
+          "test_id": "pt-dbms-sql-9-generated-columns",
+          "question_text": "Can MySQL support indexes involving virtual generated columns in applicable cases?",
+          "options": [
+            "Indexing rules are unrelated to storage",
+            "Yes; support and restrictions depend on the engine and feature rules",
+            "VIRTUAL columns are always faster to index",
+            "STORED columns are always primary keys"
+          ],
+          "correct_index": 1,
+          "explanation": "Do not teach the false blanket rule that only stored generated columns can be indexed.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-9-generated-columns-5",
+          "test_id": "pt-dbms-sql-9-generated-columns",
+          "question_text": "Which kind of expression is typically NOT allowed in a generated column definition?",
+          "options": [
+            "Arithmetic on other columns in the same row",
+            "String concatenation of other columns in the same row",
+            "A call to a volatile, non-deterministic function like now() or random()",
+            "A CASE expression over other columns in the same row"
+          ],
+          "correct_index": 2,
+          "explanation": "Generated column expressions must generally be deterministic, so volatile functions are typically disallowed.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-9-generated-columns-6",
+          "test_id": "pt-dbms-sql-9-generated-columns",
+          "question_text": "What typically happens if you try to drop a source column that a generated column's expression depends on?",
+          "options": [
+            "It succeeds silently, leaving the generated column broken",
+            "Most engines block the drop unless the generated column is altered or dropped first",
+            "The generated column automatically becomes a regular column",
+            "It is impossible to ever create such a dependency"
+          ],
+          "correct_index": 1,
+          "explanation": "Dependency enforcement typically prevents dropping a column that a generated expression relies on.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-9-generated-columns-7",
+          "test_id": "pt-dbms-sql-9-generated-columns",
+          "question_text": "When is a generated full-name property worth considering for indexing?",
+          "options": [
+            "To reduce the total number of columns in the table",
+            "When a supported definition serves a real query pattern and measured benefit justifies maintenance costs",
+            "Because PostgreSQL requires it for text columns",
+            "To avoid needing a primary key"
+          ],
+          "correct_index": 1,
+          "explanation": "The expression and index do not automatically guarantee a faster query.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-9-generated-columns-8",
+          "test_id": "pt-dbms-sql-9-generated-columns",
+          "question_text": "What is a cost of using STORED generated columns extensively on a write-heavy table?",
+          "options": [
+            "They have no cost at all",
+            "They consume extra disk space and add CPU/write cost whenever source columns change",
+            "They prevent the table from ever being indexed",
+            "They disable transactions on the table"
+          ],
+          "correct_index": 1,
+          "explanation": "STORED columns are recalculated and rewritten to disk on relevant changes, incurring real storage and write overhead.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-9-generated-columns-new-9",
+          "test_id": "pt-dbms-sql-9-generated-columns",
+          "question_text": "Does a generated total decide whether a historical invoice should change?",
+          "options": [
+            "Yes, always",
+            "No; historical fact policy is a separate design decision",
+            "Only with STORED",
+            "Only if indexed"
+          ],
+          "correct_index": 1,
+          "explanation": "A current formula and a frozen accepted charge are different facts.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-9-generated-columns-new-10",
+          "test_id": "pt-dbms-sql-9-generated-columns",
+          "question_text": "What should an insert ordinarily supply for a generated total?",
+          "options": [
+            "Any conflicting total",
+            "Only an alias",
+            "The required base inputs while omitting an independent total",
+            "A random override"
+          ],
+          "correct_index": 2,
+          "explanation": "The definition supplies the derived value.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-9-generated-columns-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-9-generated-columns-application-new-1",
+          "test_id": "pt-dbms-sql-9-generated-columns-application",
+          "question_text": "Quantity rises from 2 to 3 at price 4.50. What is the defined new total?",
+          "options": [
+            "9.00",
+            "4.50",
+            "13.50",
+            "2.00"
+          ],
+          "correct_index": 2,
+          "explanation": "Generation follows the current source inputs.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-9-generated-columns-application-new-2",
+          "test_id": "pt-dbms-sql-9-generated-columns-application",
+          "question_text": "Does a multiplication formula itself reject negative quantity?",
+          "options": [
+            "Yes, by definition",
+            "Only for virtual columns",
+            "Only if sorted",
+            "No"
+          ],
+          "correct_index": 3,
+          "explanation": "Domain constraints are separate from calculation consistency.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-9-generated-columns-application-new-3",
+          "test_id": "pt-dbms-sql-9-generated-columns-application",
+          "question_text": "What happens to nullable arithmetic inputs without an explicit replacement policy?",
+          "options": [
+            "The expression follows SQL NULL semantics",
+            "They always become zero",
+            "They always become one",
+            "They disappear from the table"
+          ],
+          "correct_index": 0,
+          "explanation": "Missing values are not automatically free prices.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-9-generated-columns-application-new-4",
+          "test_id": "pt-dbms-sql-9-generated-columns-application",
+          "question_text": "Why choose an adequate decimal result width?",
+          "options": [
+            "To create a foreign key",
+            "The derived amount can need more range than one source value",
+            "To force a particular plan",
+            "To remove all input validation"
+          ],
+          "correct_index": 1,
+          "explanation": "Result representation is part of the domain contract.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-9-generated-columns-application-new-5",
+          "test_id": "pt-dbms-sql-9-generated-columns-application",
+          "question_text": "Is every legal SELECT expression legal in a generated-column definition?",
+          "options": [
+            "Yes",
+            "Only when aliased",
+            "No",
+            "Only with DISTINCT"
+          ],
+          "correct_index": 2,
+          "explanation": "Generated-expression restrictions are product specific.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-9-generated-columns-application-new-6",
+          "test_id": "pt-dbms-sql-9-generated-columns-application",
+          "question_text": "How does an identity generator differ from a generated row expression?",
+          "options": [
+            "They are always the same feature",
+            "Identity multiplies prices",
+            "Row expressions allocate sequence ranges",
+            "It supplies identifiers rather than deriving this row formula from source properties"
+          ],
+          "correct_index": 3,
+          "explanation": "Similar syntax words do not imply identical semantics.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-9-generated-columns-application-new-7",
+          "test_id": "pt-dbms-sql-9-generated-columns-application",
+          "question_text": "Does VIRTUAL mean related index storage can never exist?",
+          "options": [
+            "No",
+            "Yes",
+            "Only with an integer",
+            "Only if names match"
+          ],
+          "correct_index": 0,
+          "explanation": "Applicable indexes have their own storage rules.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-9-generated-columns-application-new-8",
+          "test_id": "pt-dbms-sql-9-generated-columns-application",
+          "question_text": "Why review a source-column drop?",
+          "options": [
+            "Generated columns have no dependencies",
+            "The generated expression depends on that role",
+            "The output name disappears first always",
+            "It authorizes every caller"
+          ],
+          "correct_index": 1,
+          "explanation": "Dependency rules must be handled deliberately.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-9-generated-columns-application-new-9",
+          "test_id": "pt-dbms-sql-9-generated-columns-application",
+          "question_text": "Does a stored generated column remove all write cost?",
+          "options": [
+            "Yes",
+            "Only on an empty table",
+            "No",
+            "Only for decimal values"
+          ],
+          "correct_index": 2,
+          "explanation": "Calculating and maintaining stored/indexed state has costs.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-9-generated-columns-application-new-10",
+          "test_id": "pt-dbms-sql-9-generated-columns-application",
+          "question_text": "What do these arithmetic fixtures establish?",
+          "options": [
+            "A production index speedup",
+            "Every dialect supports every expression",
+            "Hosted-provider execution",
+            "Recorded results for the supplied formula and update cases"
+          ],
+          "correct_index": 3,
+          "explanation": "Evidence must match the executed scope.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cx-generated-stored-total",
+      "slug": "generated-stored-total",
+      "title": "Define a stored amount from accepted line inputs",
+      "difficulty": "Easy",
+      "task": "Create TEMPORARY calculated_lines with line_id INT PRIMARY KEY, quantity INT NOT NULL, unit_price DECIMAL(8,2) NOT NULL and line_total DECIMAL(12,2) GENERATED ALWAYS AS(quantity*unit_price) STORED. Copy the three base inputs from line_input and return line_id and line_total.",
+      "schema_sql": "CREATE TABLE line_input (line_id INT PRIMARY KEY, quantity INT NOT NULL, unit_price DECIMAL(8,2) NOT NULL);",
+      "seed_sql": "INSERT INTO line_input VALUES (2,0,3.25),(1,2,4.50);",
+      "expected": "line_id\tline_total\n1\t9.00\n2\t0.00",
+      "ordering": "Ascending line_id.",
+      "constraints": [
+        "Insert base columns only.",
+        "Do not supply independent generated totals."
+      ],
+      "edge_cases": [
+        "Zero quantity produces zero amount.",
+        "Empty inputs still require the definition."
+      ],
+      "hints": [
+        "Declare the formula in CREATE TABLE.",
+        "Use an explicit insert column list excluding line_total."
+      ],
+      "solution_sql": "CREATE TEMPORARY TABLE calculated_lines (line_id INT PRIMARY KEY, quantity INT NOT NULL, unit_price DECIMAL(8,2) NOT NULL, line_total DECIMAL(12,2) GENERATED ALWAYS AS(quantity*unit_price) STORED); INSERT INTO calculated_lines (line_id,quantity,unit_price) SELECT line_id,quantity,unit_price FROM line_input; SELECT line_id,line_total FROM calculated_lines ORDER BY line_id;",
+      "explanation": "The engine derives the declared exact decimal total from the supplied base inputs.",
+      "validation_cases": [
+        {
+          "seed_sql": "",
+          "expected": ""
+        },
+        {
+          "seed_sql": "INSERT INTO line_input VALUES (7,3,1.25);",
+          "expected": "line_id\tline_total\n7\t3.75"
+        }
+      ]
+    },
+    {
+      "id": "cx-generated-virtual-update",
+      "slug": "generated-virtual-update",
+      "title": "Observe virtual recalculation after a quantity change",
+      "difficulty": "Medium",
+      "task": "Create TEMPORARY current_lines with the same three base input columns, quantity CHECK(quantity >= 0), and line_total DECIMAL(12,2) GENERATED ALWAYS AS(quantity*unit_price) VIRTUAL. Copy line_input, increase every quantity by 1, then return line_id, quantity and line_total. Do not update line_total directly.",
+      "schema_sql": "CREATE TABLE line_input (line_id INT PRIMARY KEY, quantity INT NOT NULL, unit_price DECIMAL(8,2) NOT NULL);",
+      "seed_sql": "INSERT INTO line_input VALUES (1,2,4.50),(2,0,3.25);",
+      "expected": "line_id\tquantity\tline_total\n1\t3\t13.50\n2\t1\t3.25",
+      "ordering": "Ascending line_id.",
+      "constraints": [
+        "Required source values; nonnegative quantity.",
+        "The generated amount follows the updated source state."
+      ],
+      "edge_cases": [
+        "Zero starting quantity becomes one.",
+        "Fractional unit price retains exact scale."
+      ],
+      "hints": [
+        "Declare VIRTUAL on the generated expression.",
+        "Change quantity only, then read the derived amount."
+      ],
+      "solution_sql": "CREATE TEMPORARY TABLE current_lines (line_id INT PRIMARY KEY, quantity INT NOT NULL CHECK(quantity>=0), unit_price DECIMAL(8,2) NOT NULL, line_total DECIMAL(12,2) GENERATED ALWAYS AS(quantity*unit_price) VIRTUAL); INSERT INTO current_lines (line_id,quantity,unit_price) SELECT line_id,quantity,unit_price FROM line_input; UPDATE current_lines SET quantity=quantity+1; SELECT line_id,quantity,line_total FROM current_lines ORDER BY line_id;",
+      "explanation": "The current source quantity determines the generated result; a stale independent amount is not maintained separately.",
+      "validation_cases": [
+        {
+          "seed_sql": "",
+          "expected": ""
+        },
+        {
+          "seed_sql": "INSERT INTO line_input VALUES (8,1,0.25);",
+          "expected": "line_id\tquantity\tline_total\n8\t2\t0.50"
+        }
+      ],
+      "negative_validation_cases": [
+        {
+          "sql": "INSERT INTO current_lines (line_id,quantity,unit_price) VALUES (90,-1,1.00);",
+          "error_codes": [
+            3819,
+            4025
+          ]
+        },
+        {
+          "sql": "INSERT INTO current_lines (line_id,quantity,unit_price) VALUES (90,NULL,1.00);",
+          "error_codes": [
+            1048
+          ]
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-9-generated-columns-1",
+      "test_id": "pt-dbms-sql-9-generated-columns",
+      "question_text": "What is a generated (computed) column?",
+      "options": [
+        "A column whose value is manually entered by the user on every insert",
+        "A column whose value is automatically derived from an expression over other columns in the same row",
+        "A column that stores a foreign key reference",
+        "A column used only for indexing purposes"
+      ],
+      "correct_index": 1,
+      "explanation": "Generated columns compute their value from an expression rather than accepting a directly supplied value.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-9-generated-columns-2",
+      "test_id": "pt-dbms-sql-9-generated-columns",
+      "question_text": "What is the difference between STORED and VIRTUAL generated columns?",
+      "options": [
+        "There is no difference, they are synonyms",
+        "STORED writes the computed value to disk; VIRTUAL computes it on read without storing it",
+        "VIRTUAL is only available in PostgreSQL; STORED is only available in MySQL",
+        "STORED columns cannot be indexed while VIRTUAL columns always can"
+      ],
+      "correct_index": 1,
+      "explanation": "STORED persists the value physically (usable in indexes); VIRTUAL computes it at query time without storage.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-9-generated-columns-3",
+      "test_id": "pt-dbms-sql-9-generated-columns",
+      "question_text": "What happens if you try to directly INSERT a value into a GENERATED ALWAYS AS column in PostgreSQL?",
+      "options": [
+        "It succeeds and overrides the computed value",
+        "It raises an error — the value must always be derived by the engine, not supplied directly",
+        "It is silently ignored",
+        "It sets the column to NULL"
+      ],
+      "correct_index": 1,
+      "explanation": "GENERATED ALWAYS columns cannot accept explicit values; the engine always computes them.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-9-generated-columns-4",
+      "test_id": "pt-dbms-sql-9-generated-columns",
+      "question_text": "Why can STORED generated columns be indexed directly while some engines restrict indexing on VIRTUAL ones?",
+      "options": [
+        "Indexing rules are unrelated to storage",
+        "STORED values physically exist on disk like a normal column, whereas VIRTUAL values are computed on the fly",
+        "VIRTUAL columns are always faster to index",
+        "STORED columns are always primary keys"
+      ],
+      "correct_index": 1,
+      "explanation": "Because STORED columns have a physical on-disk value, they can be indexed the same way as any other column.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-9-generated-columns-5",
+      "test_id": "pt-dbms-sql-9-generated-columns",
+      "question_text": "Which kind of expression is typically NOT allowed in a generated column definition?",
+      "options": [
+        "Arithmetic on other columns in the same row",
+        "String concatenation of other columns in the same row",
+        "A call to a volatile, non-deterministic function like now() or random()",
+        "A CASE expression over other columns in the same row"
+      ],
+      "correct_index": 2,
+      "explanation": "Generated column expressions must generally be deterministic, so volatile functions are typically disallowed.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-9-generated-columns-6",
+      "test_id": "pt-dbms-sql-9-generated-columns",
+      "question_text": "What typically happens if you try to drop a source column that a generated column's expression depends on?",
+      "options": [
+        "It succeeds silently, leaving the generated column broken",
+        "Most engines block the drop unless the generated column is altered or dropped first",
+        "The generated column automatically becomes a regular column",
+        "It is impossible to ever create such a dependency"
+      ],
+      "correct_index": 1,
+      "explanation": "Dependency enforcement typically prevents dropping a column that a generated expression relies on.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-9-generated-columns-7",
+      "test_id": "pt-dbms-sql-9-generated-columns",
+      "question_text": "What is a realistic reason to create a STORED generated column like full_name = first_name || ' ' || last_name and index it?",
+      "options": [
+        "To reduce the total number of columns in the table",
+        "To allow fast, indexable searching by full name without recomputing the concatenation on every query",
+        "Because PostgreSQL requires it for text columns",
+        "To avoid needing a primary key"
+      ],
+      "correct_index": 1,
+      "explanation": "Storing and indexing the computed value avoids repeated runtime concatenation and enables efficient lookups.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-9-generated-columns-8",
+      "test_id": "pt-dbms-sql-9-generated-columns",
+      "question_text": "What is a cost of using STORED generated columns extensively on a write-heavy table?",
+      "options": [
+        "They have no cost at all",
+        "They consume extra disk space and add CPU/write cost whenever source columns change",
+        "They prevent the table from ever being indexed",
+        "They disable transactions on the table"
+      ],
+      "correct_index": 1,
+      "explanation": "STORED columns are recalculated and rewritten to disk on relevant changes, incurring real storage and write overhead.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "coordinator",
+    "independent_review": "unavailable; no agent tools",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Definitions and examples checked against questions; no plagiarism certification. Replaced reserved-word target lines with calculated_lines after the focused SQL syntax check.",
+    "existing_question_corrections": [
+      "tq-dbms-sql-9-generated-columns-2",
+      "tq-dbms-sql-9-generated-columns-3",
+      "tq-dbms-sql-9-generated-columns-4",
+      "tq-dbms-sql-9-generated-columns-7"
+    ],
+    "canonical_answer_indices_preserved": true,
+    "batch_review": {
+      "reviewer": "coordinator",
+      "independent": false,
+      "scope": "This new package: explained definitions and boundaries, retained source question identities/canonical indices, new correct answers and explanations, exercise solutions and recorded fixtures, diagram trace and prepared integration.",
+      "execution_evidence": "Focused MariaDB reference cases and selected actual LessonBlock rendering passed; no browser QA or exact MySQL/provider execution.",
+      "source_preservation": "Original snapshots retained; eight retained exercises across this continuation matched source identity, difficulty, schema, seed and trailing checker.",
+      "limits": "No independent worker available. Output fixtures do not prove arbitrary student submissions used a requested technique. Native PostgreSQL/other-engine concepts remain documented or explicitly mirrored, not verified by MariaDB."
+    }
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-9-generated-columns",
+    "original_note_sha256": "d04bf6a973e50399326cc4879827669c99293edb6d4d65fd29d91e57c484f36e",
+    "status": "paired migration prepared; not applied"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "The generated amount follows its base inputs rather than independent edits",
+      "description": "Both stored and virtual definitions derive the same formula; their representations and supported indexes have different tradeoffs.",
+      "columns": [
+        "State",
+        "quantity",
+        "unit_price",
+        "Derived line_total"
+      ],
+      "rows": [
+        [
+          "Initial row",
+          "2",
+          "4.50",
+          "9.00"
+        ],
+        [
+          "After quantity update",
+          "3",
+          "4.50",
+          "13.50"
+        ],
+        [
+          "Stored representation",
+          "Current base inputs",
+          "Same formula",
+          "Maintained stored value"
+        ],
+        [
+          "Virtual representation",
+          "Current base inputs",
+          "Same formula",
+          "Evaluated value; index rules separate"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "coordinator checked decimal arithmetic, current-state derivation, null/domain separation and corrected virtual-index overclaim",
+    "server_rendering": "passed",
+    "browser_rendering": "unverified",
+    "independent_review": "unavailable; no agent tools",
+    "server_rendering_evidence": "Selected actual LessonBlock Vitest rendering passed for this batch; no browser QA."
+  },
+  "sql_verification": {
+    "engine": "11.8.6-MariaDB-0+deb13u1 from Debian",
+    "scope": "MariaDB compatibility execution; exact MySQL 8.4/provider execution unverified",
+    "fingerprint": "8cabb12762f9656bc1c609de80308a021c291ba12217b987008b64eee030a008",
+    "cases": [
+      {
+        "problem": "generated-stored-total",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "generated-stored-total",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "generated-stored-total",
+        "case": 2,
+        "passed": true
+      },
+      {
+        "problem": "generated-virtual-update",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "generated-virtual-update",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "generated-virtual-update",
+        "case": 2,
+        "passed": true
+      },
+      {
+        "problem": "generated-virtual-update",
+        "negative_case": 0,
+        "error_code": 4025,
+        "passed": true
+      },
+      {
+        "problem": "generated-virtual-update",
+        "negative_case": 1,
+        "error_code": 1048,
+        "passed": true
+      }
+    ],
+    "all_passed": true
+  }
+}

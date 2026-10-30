@@ -1,0 +1,603 @@
+{
+  "source_ref": "chapter-13-sorting-and-pagination/order-by",
+  "slug": "order-by",
+  "title": "ORDER BY",
+  "description": "Sort SQL results with ORDER BY, ASC and DESC, complete tied orders, and distinguish result ordering from physical access and changing-data consistency.",
+  "dialect": "MySQL 8.4",
+  "notes": "## A result needs an explicit sequence contract\n\nORDER BY specifies the presentation sequence of rows returned by a query. A campus equipment catalogue might show the cheapest items first or list product names alphabetically. The same qualifying rows can appear in several valid sequences, so filtering alone does not express that display requirement. State the intended sequence separately from the rule determining which equipment belongs in the result.\n\nWithout an applicable outer ordering requirement, SQL does not promise insertion order, primary-key order or the sequence observed yesterday. An engine can choose a different access path after data or statistics change. A small table repeatedly returning the same order is an observation, not a contract. Add ORDER BY wherever a consumer relies on row sequence.\n\n## Ascending is the default direction\n\nAn ordering term without an explicit direction normally uses ASC. Numeric prices then progress from lower to higher known values, while text follows its comparison ordering. DESC reverses the chosen direction. For a price-first catalogue, name price and specify the direction deliberately so readers do not have to infer whether the UI promises cheapest or most expensive first.\n\nA direction belongs to its ordering expression. In a list of several terms, a trailing DESC does not make every earlier expression descending. Give each term an explicit direction when mixed priorities could be misunderstood. The first exercise uses one numeric priority and a unique identity tie breaker, making the final sequence clear even when prices repeat.\n\n```sql\nSELECT equipment_id, price\nFROM equipment_prices\nORDER BY price ASC, equipment_id ASC;\n```\n\n## Ties need another comparison key\n\nOrdering by price alone does not define the relative order of equal-price equipment. Both items satisfy the requested primary order, so the database can return either first. If a test, page or export needs a repeatable sequence, add a tie breaker that distinguishes the remaining rows. A unique equipment identity is a common final key for a one-row-per-equipment result.\n\nThe tie breaker should fit the result grain. If a join returns several rows per equipment identity, equipment_id alone is no longer unique across that result. Add the relevant event or relationship identity if those rows need their own stable positions. Determinism comes from distinguishing result rows, not merely from appending a familiar column name without checking multiplicity.\n\n## Expressions can define the requested sort\n\nORDER BY can use compatible expressions, not only raw table columns. A display might sort by a computed total cost or the character length of a label. The expression determines the values being compared, so specify it according to the requirement. Sorting by a formatted text price can differ from sorting by its numeric amount.\n\nMySQL can also order by a [SELECT](/learning/dbms-sql-tutorial/select)-list alias in appropriate query shapes. A computed effective_price alias can make the expression easier to read. Resolve ambiguous names carefully and qualify source properties where useful. Aliases improve communication when they name one clear result meaning, but they do not change the underlying numeric or text comparison semantics.\n\n## Positional shorthand couples order to projection\n\nMySQL permits a numeric ordinal such as ORDER BY two to refer to the second selected expression in the supported form. This can be concise in an exploratory query, but it makes the ordering depend on the SELECT-list layout. Inserting another output column earlier can silently redirect the ordering while leaving the query syntactically valid.\n\nPrefer a descriptive column or alias for maintained application SQL. That choice is about clarity and change safety rather than a universal speed difference. A reviewer should be able to identify the intended sort without counting output positions. If an existing query uses ordinals, inspect its current projection before interpreting the sequence or changing its output columns.\n\n## Filtering and ordering are different operations\n\nWHERE chooses qualifying rows; ORDER BY arranges them. A condition finding available equipment does not imply a price ranking, and ordering by stock does not exclude unknown or empty stock. Keep those choices explicit. Otherwise a query can seem correct on a fixture where every selected row happens to satisfy an unstated condition and appear in a convenient existing order.\n\nIn the logical query model, ordering occurs after the result expressions relevant to the final sequence are formed. The optimizer can satisfy that requirement using an index or an explicit sorting operation. SQL semantics specify the sequence, not a mandatory physical algorithm. Do not assume that the word order always implies an identical sort procedure or memory cost for every plan.\n\n## LIMIT makes ordering more consequential\n\nA query taking the first few rows needs a meaningful order if the selected subset matters. Cheapest three equipment items requires ascending price and a defined tie policy. LIMIT without a sequence can return any qualifying subset, and a nonunique price order can choose different boundary items when several share the final admitted price. State whether the feature wants exactly three identities or all items tied at a rank.\n\nStable ordering within one result does not freeze the underlying catalogue across requests. A new cheaper item can change later page boundaries, and updates can move rows between positions. Pagination therefore needs its own consistency and continuation design. ORDER BY establishes a sequence for the observed result, while transaction isolation and pagination policy address changes over time.\n\n## NULL placement is a separate decision\n\nMySQL sorts [NULL](/learning/dbms-sql-tutorial/null-values) before known values in an ordinary ascending sort and after them in a descending sort. Other engines can have different defaults. If unknown prices should appear last regardless of the known-price direction, express that placement deliberately using the supported dialect rather than assume ASC or DESC encodes the whole display policy.\n\nAn ordering expression testing whether price is NULL can form a known-versus-missing group before the numeric price term. This preserves the source NULL instead of replacing it with an arbitrary numeric sentinel. Such a sentinel might collide with a legitimate value or place unknowns incorrectly when the domain changes. Keep missingness ordering separate from measurement meaning.\n\n## Text sorting follows the declared comparison rules\n\nAlphabetical-looking order depends on collation, including relevant case and accent behaviour. Human-language labels do not always follow simple byte order. A catalogue spanning several languages should define its intended presentation contract rather than assume every deployment uses the same default collation. Include representative labels if those differences matter to the feature.\n\nA text representation of a number can also sort differently from the numeric amount it visually resembles. Two, ten and one hundred stored as strings need not follow numeric magnitude order. Preserve numeric types for numeric ranking and convert only under a deliberate validated contract. Adding ORDER BY cannot repair a schema that obscures the underlying domain without choosing the appropriate expression.\n\n## Ordering scope matters in composed queries\n\nAn ordering inside a derived query does not by itself guarantee the final outer result sequence. The consumer's outermost applicable ORDER BY should state the presentation contract. A subquery may order as part of a supported operation that also chooses limited rows, but the final outer query can still need its own ordering for display.\n\nDISTINCT, grouped results and set operations can introduce additional restrictions on which ordering expressions are valid or meaningful. An unselected event timestamp can be ambiguous after many source events collapse into one department row. Choose a well-defined aggregate or representative value before sorting that result. Do not use a hidden unrelated property merely because an ordinary simple SELECT would allow it.\n\n## Verify both sequence and preserved population\n\nThe first exercise sorts known prices ascending with an identity tie breaker. The second sorts by label character length descending and then identity, using a computed alias. It includes equal-length names so a solution that omits the final key cannot claim a fully specified sequence. Both retain every source row within their stated non-NULL fixture contracts.\n\nWhen checking output, compare the ordered rows rather than an unordered set if sequence is part of the requirement. Also confirm that no unwanted filter or deduplication was introduced merely to make sorting easier. A complete explanation names each ordering key, its direction, its tie role and any missing-value policy, while keeping physical performance and cross-request consistency as separate questions.\n",
+  "references": [
+    {
+      "title": "MySQL 8.4 SELECT and ORDER BY",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/select.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-13-order-by",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-13-order-by-1",
+          "test_id": "pt-dbms-sql-13-order-by",
+          "question_text": "What does ORDER BY specify?",
+          "options": [
+            "Which rows qualify by a predicate",
+            "The returned row sequence by named keys or expressions",
+            "A uniqueness constraint",
+            "The number of inserted rows"
+          ],
+          "correct_index": 1,
+          "explanation": "It arranges the result rather than filtering it.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-13-order-by-2",
+          "test_id": "pt-dbms-sql-13-order-by",
+          "question_text": "What direction is used when an ordinary ordering term omits ASC or DESC?",
+          "options": [
+            "DESC",
+            "ASC",
+            "No defined direction",
+            "Always text order regardless of type"
+          ],
+          "correct_index": 1,
+          "explanation": "Name the direction explicitly when clarity helps.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-13-order-by-3",
+          "test_id": "pt-dbms-sql-13-order-by",
+          "question_text": "What can ORDER BY 2 DESC mean in a supported SELECT?",
+          "options": [
+            "Order by the second row only",
+            "Order by the second selected expression descending",
+            "Compare every row with literal 2",
+            "Delete two rows"
+          ],
+          "correct_index": 1,
+          "explanation": "The ordinal depends on SELECT-list position.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-13-order-by-4",
+          "test_id": "pt-dbms-sql-13-order-by",
+          "question_text": "Why are ordinals fragile in maintained queries?",
+          "options": [
+            "They are always unsupported",
+            "They always force descending order",
+            "Changing the SELECT-list layout can silently change the sort target",
+            "They always scan twice"
+          ],
+          "correct_index": 2,
+          "explanation": "Use descriptive properties or aliases for clarity.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-13-order-by-5",
+          "test_id": "pt-dbms-sql-13-order-by",
+          "question_text": "Can a valid computed value be an ordering expression?",
+          "options": [
+            "No, only primary keys",
+            "Yes, in appropriate query shapes",
+            "Only after storing a new column",
+            "Only in a procedure"
+          ],
+          "correct_index": 1,
+          "explanation": "Expressions can represent the actual ranking quantity.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-13-order-by-6",
+          "test_id": "pt-dbms-sql-13-order-by",
+          "question_text": "What row-order guarantee exists without ORDER BY?",
+          "options": [
+            "Insertion order always",
+            "Primary-key order always",
+            "No general presentation-sequence guarantee",
+            "First selected column always ascending"
+          ],
+          "correct_index": 2,
+          "explanation": "Observed access order is not a stable result contract.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-13-order-by-7",
+          "test_id": "pt-dbms-sql-13-order-by",
+          "question_text": "How is reverse name ordering requested?",
+          "options": [
+            "ORDER BY name ASC",
+            "SORT name REVERSE",
+            "ORDER BY name DESC",
+            "WHERE name DESC"
+          ],
+          "correct_index": 2,
+          "explanation": "DESC specifies the direction of that term.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-13-order-by-8",
+          "test_id": "pt-dbms-sql-13-order-by",
+          "question_text": "What does ordering by a selected effective_price alias use?",
+          "options": [
+            "Always the original undiscounted price",
+            "The computed expression represented by that alias",
+            "Always the first output column",
+            "A table rewrite"
+          ],
+          "correct_index": 1,
+          "explanation": "Use an unambiguous alias for the intended result quantity.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-13-order-by-new-9",
+          "test_id": "pt-dbms-sql-13-order-by",
+          "question_text": "Why add equipment_id after price?",
+          "options": [
+            "To distinguish equal-price result rows when equipment identity is unique in the result",
+            "To filter out ties",
+            "To make all prices unique in storage",
+            "To force an index"
+          ],
+          "correct_index": 0,
+          "explanation": "A tie breaker completes the requested sequence.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-13-order-by-new-10",
+          "test_id": "pt-dbms-sql-13-order-by",
+          "question_text": "Does price DESC, equipment_id imply both terms are descending?",
+          "options": [
+            "Yes, the last stated direction applies to all",
+            "No, the unqualified identity term defaults ascending",
+            "Only if price repeats",
+            "Only with numeric identifiers"
+          ],
+          "correct_index": 1,
+          "explanation": "Directions apply to their own terms.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-13-order-by-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-13-order-by-application-new-1",
+          "test_id": "pt-dbms-sql-13-order-by-application",
+          "question_text": "Why can a familiar identity fail as a complete tie breaker after a join?",
+          "options": [
+            "All identifiers lose their values",
+            "The result can contain several rows per source identity",
+            "Joins forbid ordering",
+            "Every join automatically deduplicates"
+          ],
+          "correct_index": 1,
+          "explanation": "Choose keys that distinguish the actual result grain.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-13-order-by-application-new-2",
+          "test_id": "pt-dbms-sql-13-order-by-application",
+          "question_text": "Does ORDER BY require one fixed physical sorting algorithm?",
+          "options": [
+            "Yes, every query uses the same in-memory algorithm",
+            "Only if NULL exists",
+            "No, an index or sorting operation can satisfy the contract",
+            "Only if an alias is used"
+          ],
+          "correct_index": 2,
+          "explanation": "Semantics specify sequence, not implementation.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-13-order-by-application-new-3",
+          "test_id": "pt-dbms-sql-13-order-by-application",
+          "question_text": "What does cheapest three require beyond LIMIT 3?",
+          "options": [
+            "Only any qualifying rows",
+            "Only DESC on identity",
+            "No other contract",
+            "A price order and a deliberate tie policy"
+          ],
+          "correct_index": 3,
+          "explanation": "The ordered subset must represent the feature.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-13-order-by-application-new-4",
+          "test_id": "pt-dbms-sql-13-order-by-application",
+          "question_text": "Does deterministic ordering freeze page membership across later requests?",
+          "options": [
+            "No, concurrent data changes can move boundaries",
+            "Yes, forever",
+            "Only when using three keys",
+            "Only with integer prices"
+          ],
+          "correct_index": 0,
+          "explanation": "Cross-request consistency needs a pagination and visibility policy.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-13-order-by-application-new-5",
+          "test_id": "pt-dbms-sql-13-order-by-application",
+          "question_text": "Where does MySQL ordinarily place NULL in ascending order?",
+          "options": [
+            "After every known value",
+            "Before known values",
+            "Nowhere, NULL rows are removed",
+            "Always at random"
+          ],
+          "correct_index": 1,
+          "explanation": "Explicit placement can make the display contract clearer.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-13-order-by-application-new-6",
+          "test_id": "pt-dbms-sql-13-order-by-application",
+          "question_text": "Why avoid replacing missing price with an arbitrary sorting sentinel?",
+          "options": [
+            "NULL can never be sorted",
+            "Every sentinel is automatically unique",
+            "The sentinel can collide with real values or distort meaning",
+            "It always improves indexes"
+          ],
+          "correct_index": 2,
+          "explanation": "A separate missingness sort key preserves source meaning.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-13-order-by-application-new-7",
+          "test_id": "pt-dbms-sql-13-order-by-application",
+          "question_text": "What determines text ordering details?",
+          "options": [
+            "Only the first character in the SQL query",
+            "Only the number of rows",
+            "Always raw ASCII order",
+            "The applicable type and collation"
+          ],
+          "correct_index": 3,
+          "explanation": "Define representative language expectations where needed.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-13-order-by-application-new-8",
+          "test_id": "pt-dbms-sql-13-order-by-application",
+          "question_text": "Does an inner derived-query order automatically guarantee final outer sequence?",
+          "options": [
+            "No, state the applicable final ordering at the outer level",
+            "Yes, for every query",
+            "Only if the table has two rows",
+            "Always when no alias appears"
+          ],
+          "correct_index": 0,
+          "explanation": "Ordering scope belongs to the query result contract.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-13-order-by-application-new-9",
+          "test_id": "pt-dbms-sql-13-order-by-application",
+          "question_text": "Why can sorting departments by an unselected event timestamp be ambiguous after DISTINCT?",
+          "options": [
+            "Dates can never be sorted",
+            "Several collapsed events can supply different timestamps",
+            "DISTINCT always chooses the newest row",
+            "Every department has one event"
+          ],
+          "correct_index": 1,
+          "explanation": "Choose an explicit aggregate or representative value.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-13-order-by-application-new-10",
+          "test_id": "pt-dbms-sql-13-order-by-application",
+          "question_text": "What must an order-sensitive test compare?",
+          "options": [
+            "Only an unordered set",
+            "Only the row count",
+            "The returned sequence as well as the required row population",
+            "Only the query length"
+          ],
+          "correct_index": 2,
+          "explanation": "Correct membership alone does not prove ordering.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cx-order-by-price-identity",
+      "slug": "order-by-price-identity",
+      "title": "Sort prices with deterministic ties",
+      "difficulty": "Easy",
+      "task": "Return equipment_id,price sorted by ascending price and then ascending equipment_id. Every fixture price is known. Preserve all rows.",
+      "schema_sql": "CREATE TABLE equipment_prices(equipment_id INT PRIMARY KEY,price INT NOT NULL);",
+      "seed_sql": "INSERT INTO equipment_prices VALUES (8,200),(3,100),(1,200),(5,50);",
+      "expected": "equipment_id\tprice\n5\t50\n3\t100\n1\t200\n8\t200",
+      "ordering": "As explicitly ordered in the result query.",
+      "constraints": [
+        "Use only the supplied synthetic tables and requested transition.",
+        "Preserve unrelated rows."
+      ],
+      "edge_cases": [
+        "Repeated prices require identity ordering.",
+        "A zero price remains a valid known value."
+      ],
+      "hints": [
+        "Put price first.",
+        "Add the unique identity as a final tie breaker."
+      ],
+      "solution_sql": "SELECT equipment_id,price FROM equipment_prices ORDER BY price ASC,equipment_id ASC;",
+      "explanation": "The primary key distinguishes equal-price equipment. It does not override earlier price comparisons.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO equipment_prices VALUES (9,10),(2,10),(7,5);",
+          "expected": "equipment_id\tprice\n7\t5\n2\t10\n9\t10"
+        },
+        {
+          "seed_sql": "INSERT INTO equipment_prices VALUES (4,0);",
+          "expected": "equipment_id\tprice\n4\t0"
+        }
+      ]
+    },
+    {
+      "id": "cx-order-by-label-length",
+      "slug": "order-by-label-length",
+      "title": "Rank labels by character length",
+      "difficulty": "Medium",
+      "task": "Return equipment_id,name,name_length with CHAR_LENGTH(name) as name_length. Sort longest names first, then ascending equipment_id for equal lengths. Names are non-NULL ASCII text in these fixtures. Preserve every row.",
+      "schema_sql": "CREATE TABLE equipment_names(equipment_id INT PRIMARY KEY,name VARCHAR(40) CHARACTER SET ascii NOT NULL);",
+      "seed_sql": "INSERT INTO equipment_names VALUES (7,'Mic'),(2,'Camera'),(9,'Stand'),(1,'Tripod'),(4,'');",
+      "expected": "equipment_id\tname\tname_length\n1\tTripod\t6\n2\tCamera\t6\n9\tStand\t5\n7\tMic\t3\n4\t\t0",
+      "ordering": "As explicitly ordered in the result query.",
+      "constraints": [
+        "Use only the supplied synthetic tables and requested transition.",
+        "Preserve unrelated rows."
+      ],
+      "edge_cases": [
+        "Equal lengths do not imply equal names.",
+        "An empty name sorts after longer names."
+      ],
+      "hints": [
+        "Compute the length in a named expression.",
+        "Use descending length but ascending identity."
+      ],
+      "solution_sql": "SELECT equipment_id,name,CHAR_LENGTH(name) AS name_length FROM equipment_names ORDER BY name_length DESC,equipment_id ASC;",
+      "explanation": "The computed alias names the ranking value. The final unique identity orders equal-length names and the empty name remains a legitimate zero-length row.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO equipment_names VALUES (8,'AA'),(3,'BB'),(1,'C');",
+          "expected": "equipment_id\tname\tname_length\n3\tBB\t2\n8\tAA\t2\n1\tC\t1"
+        },
+        {
+          "seed_sql": "INSERT INTO equipment_names VALUES (2,'');",
+          "expected": "equipment_id\tname\tname_length\n2\t\t0"
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-13-order-by-1",
+      "test_id": "pt-dbms-sql-13-order-by",
+      "question_text": "What does the ORDER BY clause do?",
+      "options": [
+        "Filters rows based on a condition",
+        "Sorts the result set by one or more columns or expressions",
+        "Groups rows sharing a common value",
+        "Limits the number of rows returned"
+      ],
+      "correct_index": 1,
+      "explanation": "ORDER BY sorts the final result set; it does not filter or group rows.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-13-order-by-2",
+      "test_id": "pt-dbms-sql-13-order-by",
+      "question_text": "In `SELECT name, price FROM products ORDER BY price;`, what sort direction is used?",
+      "options": [
+        "Descending, because that is the default",
+        "Ascending, because ASC is the default when no direction is given",
+        "Undefined, because a direction must always be specified",
+        "It sorts alphabetically regardless of data type"
+      ],
+      "correct_index": 1,
+      "explanation": "ASC is the implicit default direction whenever ASC/DESC is omitted.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-13-order-by-3",
+      "test_id": "pt-dbms-sql-13-order-by",
+      "question_text": "What does `ORDER BY 2 DESC` mean in `SELECT name, price FROM products ORDER BY 2 DESC`?",
+      "options": [
+        "Sort by the literal number 2",
+        "Sort by the second column in the SELECT list (price), descending",
+        "It causes a syntax error",
+        "Sort by the second row only"
+      ],
+      "correct_index": 1,
+      "explanation": "SQL allows ordering by the ordinal position of a column in the SELECT list; position 2 here is `price`.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-13-order-by-4",
+      "test_id": "pt-dbms-sql-13-order-by",
+      "question_text": "Why is ordering by column position (e.g. `ORDER BY 2`) generally discouraged in production code?",
+      "options": [
+        "It is not supported by any SQL engine",
+        "It runs slower than naming the column",
+        "If the SELECT list's column order changes, the sort silently changes meaning without any error",
+        "It always sorts descending"
+      ],
+      "correct_index": 2,
+      "explanation": "Positional ordering is fragile — reordering or adding columns to the SELECT list silently changes what gets sorted, with no warning.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-13-order-by-5",
+      "test_id": "pt-dbms-sql-13-order-by",
+      "question_text": "Can you ORDER BY an expression that is not a column in the table, such as `LENGTH(name)`?",
+      "options": [
+        "No, ORDER BY only accepts raw column names",
+        "Yes, ORDER BY can use any valid expression, including ones not listed in SELECT",
+        "Only if the expression is first stored as a view",
+        "Only in MySQL, not in standard SQL"
+      ],
+      "correct_index": 1,
+      "explanation": "ORDER BY accepts any expression, including expressions on columns not present in the SELECT list.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-13-order-by-6",
+      "test_id": "pt-dbms-sql-13-order-by",
+      "question_text": "What guarantee does SQL give about row order when ORDER BY is omitted?",
+      "options": [
+        "Rows always come back in primary key order",
+        "Rows always come back in insertion order",
+        "No guarantee at all — the order is unspecified and may vary",
+        "Rows come back in alphabetical order by the first column"
+      ],
+      "correct_index": 2,
+      "explanation": "Without ORDER BY, the engine is free to return rows in any order, and that order is not guaranteed to be stable across executions.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-13-order-by-7",
+      "test_id": "pt-dbms-sql-13-order-by",
+      "question_text": "Which of these correctly sorts products alphabetically by name, Z to A?",
+      "options": [
+        "ORDER BY name",
+        "ORDER BY name ASC",
+        "ORDER BY name DESC",
+        "SORT BY name DESC"
+      ],
+      "correct_index": 2,
+      "explanation": "DESC reverses the default ascending order, giving Z-to-A for text.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-13-order-by-8",
+      "test_id": "pt-dbms-sql-13-order-by",
+      "question_text": "Given `SELECT name, price, price * 0.9 AS discounted_price FROM products ORDER BY discounted_price;`, what is being sorted on?",
+      "options": [
+        "The original, undiscounted price",
+        "The computed discounted_price alias",
+        "The name column",
+        "This query is invalid because you cannot ORDER BY an alias"
+      ],
+      "correct_index": 1,
+      "explanation": "Most SQL engines allow ORDER BY to reference a SELECT-list alias, sorting by the computed expression it represents.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "coordinator",
+    "independent_review": "passed",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Independent manual review passed; native MySQL fixture evidence recorded separately; provider/browser/Supabase release gates remain separate.",
+    "existing_question_corrections": [
+      "tq-dbms-sql-13-order-by-1",
+      "tq-dbms-sql-13-order-by-2",
+      "tq-dbms-sql-13-order-by-3",
+      "tq-dbms-sql-13-order-by-4",
+      "tq-dbms-sql-13-order-by-5",
+      "tq-dbms-sql-13-order-by-6",
+      "tq-dbms-sql-13-order-by-7",
+      "tq-dbms-sql-13-order-by-8"
+    ],
+    "canonical_answer_indices_preserved": true,
+    "editorial_record": "Original snapshots retained. Questions rewritten for precise dialect and topic coverage while preserving identities and canonical answer positions; technical and independent review pending.",
+    "independent_reviewer": "Codex reviewer, current 2026-10-30 session",
+    "independent_review_scope": "Read full notes, all 640 MCQ stems/options/canonical answers/explanations, 64 exercise contracts/solutions/fixtures, and all 32 diagrams. Verified retained identities/answers through source-continuity tests; SQL execution evidence is recorded separately. No external originality, provider, live application or Supabase authorization clearance.",
+    "independent_review_record": "reports/independent-review-2026-10-30.json",
+    "content_sha256": "c3506d54abd072e8f963ba8f741b7b432c9f36b105ceaec1203a73d242c39d3c"
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-13-order-by",
+    "original_note_sha256": "39c963be2857c49bedee86f37e5ba8b88eee5718418c9fffc622cf4e500bab1d",
+    "status": "drafted; not yet included in prepared paired migrations"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "A unique final key resolves equal-price ties",
+      "description": "Price remains the primary ordering priority and identity only decides equal prices.",
+      "columns": [
+        "Equipment id",
+        "Price",
+        "Final position",
+        "Reason"
+      ],
+      "rows": [
+        [
+          "5",
+          "50",
+          "1",
+          "Lowest price"
+        ],
+        [
+          "3",
+          "100",
+          "2",
+          "Next price"
+        ],
+        [
+          "1",
+          "200",
+          "3",
+          "Lower identity within equal price"
+        ],
+        [
+          "8",
+          "200",
+          "4",
+          "Higher identity within equal price"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "drafted — verification pending",
+    "server_rendering": "pending",
+    "browser_rendering": "unverified",
+    "independent_review": "pending"
+  },
+  "authoring_status": "drafted — verification pending",
+  "sql_verification": {
+    "scope": "not executed; exact MySQL/provider verification pending",
+    "all_passed": false,
+    "cases": []
+  }
+}

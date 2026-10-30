@@ -1,5 +1,7 @@
 "use client";
 
+import { toast } from "@/components/ui/Toast";
+
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { ArrowRight, ChevronDown, GraduationCap, Info, User, Briefcase, Layers, Rocket, Globe } from "lucide-react";
@@ -81,6 +83,8 @@ export default function BuilderStart() {
       }));
       await saveNow();
       router.push("/custom-projects/features");
+    } catch (err) {
+      toast({ title: "Could not save", description: err instanceof Error ? err.message : undefined, tone: "error" });
     } finally {
       setGoing(false);
     }
@@ -301,7 +305,9 @@ export default function BuilderStart() {
         <button
           type="button"
           onClick={() => {
-            if (confirm("Discard this draft and start over?")) clearDraft();
+            if (confirm("Discard this draft and start over?")) {
+              clearDraft().catch((err) => toast({ title: "Could not save", description: err instanceof Error ? err.message : undefined, tone: "error" }));
+            }
           }}
           className="text-xs font-medium text-ink-muted underline hover:text-danger disabled:opacity-50"
           disabled={!userId}

@@ -1,0 +1,517 @@
+{
+  "source_ref": "chapter-1-database-foundations/query-processor",
+  "slug": "query-processor",
+  "title": "Query Processor",
+  "description": "Follow SQL through parsing, binding, optimization, and execution; understand catalog inputs, estimated costs, covering access, function predicates, and the limits of simplified plans.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Turning a requested result into executable work\n\nThe query processor transforms a database request into operations that can produce its result. In a relational DBMS, the request is commonly expressed in SQL. The statement describes wanted information rather than a complete program for finding physical bytes. The processor must understand that description, connect it to existing definitions, consider execution strategies, and coordinate the chosen work with the rest of the database runtime.\n\nFor teaching, distinguish parsing, semantic validation or binding, optimization, and execution. These labels identify responsibilities, not necessarily four independent programs or four passes that occur exactly once in every product. Implementations can rewrite statements and revisit information during planning and execution. The useful question is what must be established at each responsibility boundary before the request can yield an appropriate result.\n\nConsider a fictional students table with student_id, name, and department columns. A query requesting names where department equals CS is logically a filter followed by a projection of the required value. That description does not decide whether the system should scan all records or use an available index. Those physical choices belong to planning and depend on the actual objects, data, and workload.\n\n## Distinguishing syntax from meaning\n\nParsing checks the structure of a statement according to the supported language. A misplaced comma or missing required expression can prevent the parser from recognizing the intended command. This is different from finding no matching students in a valid query. One situation concerns whether the statement is accepted; the other concerns the records that satisfy an accepted condition.\n\nSemantic validation connects the statement to actual definitions. A column name may be written in a syntactically valid position but not exist in the named table. Binding resolves references to the intended objects and establishes information needed by later processing. The database's catalog is therefore a necessary input to understanding the request, not merely an administrative list that ordinary query execution can ignore.\n\nType and operation behavior also matter, although exact checking and conversion rules are product-specific. A programmer should not assume that every DBMS rejects or converts every mixed-type expression in the same way. Likewise, the location and implementation of access checks can vary. An introductory sequence helps explain responsibilities without establishing a universal internal authorization or conversion algorithm.\n\n## Describing logical operations before physical choices\n\nA logical explanation identifies the required relationships and transformations. For a simple student lookup, the source is students, the condition concerns department, and the requested output is name. More complex requests can include joins, grouping, ordering, and other operations. Understanding the logical result is essential before evaluating whether two physical strategies are equivalent for the requested task.\n\nRequired ordering is part of that task. Without an ORDER BY clause, do not infer an output order from the current access path. An index-based execution and a table scan can return qualifying rows in different sequences while both satisfy an unordered request. An application that needs a sequence must request it rather than treat a particular observed physical path as an ordering contract.\n\nThe optimizer can consider transformations that preserve the query's required meaning. That freedom is not permission to change which records qualify, how missing values are treated, or which ordering was required. When rewriting a query manually, apply the same discipline: a faster-looking expression is not a correct replacement unless the relevant results and edge cases remain equivalent.\n\n## Estimating the cost of available plans\n\nA physical plan describes operations such as scans, index accesses, and join strategies. For the department filter, the processor might consider a table scan and an access path using a suitable department index. A matching index does not guarantee that using it is cheapest. If most rows qualify, or the table is small, another access strategy can be reasonable under the engine's cost model.\n\nPlanning commonly relies on statistics about table size and data distribution. The number of rows and the estimated frequency of a department can affect the expected work. These are estimates, not a promise that the actual execution will match the predicted counts exactly. Data distribution can also differ from the simple assumptions made by a model, especially when predicates involve correlated values.\n\nAfter substantial data changes, statistics may no longer describe the relevant distribution accurately. Products have different automatic maintenance and manual refresh facilities. In MySQL, ANALYZE TABLE is an example of a product-supported statistics maintenance command. That observation is not an instruction to run it against a shared system without diagnosis and authorization. Inspect the product's behavior and the evidence that a statistics problem actually exists.\n\n## Understanding how projections affect access choices\n\nA query requesting only columns available from a suitable index may permit a covering or index-only access strategy, depending on the engine and its other requirements. A SELECT * request can require additional values that the index does not contain. It can therefore remove a particular access opportunity and return more data than the caller needs. The issue is the actual required information, not the number of characters in the SQL text.\n\nColumn coverage alone is not a universal guarantee that no other storage access will occur. Visibility checks, version handling, and implementation details can impose additional work. State the product and plan being examined before making a claim about physical reads. A general explanation should distinguish a possible optimization from a measured execution result.\n\nAn explicit list also makes the application contract clearer. If a table gains an unrelated column, the requested result shape remains intentional. That benefit exists even when a particular optimizer selects the same physical plan for both formulations. Query clarity, compatibility, and measured execution cost are separate reasons to evaluate a statement; one should not be used as fabricated evidence for another.\n\n## Being precise about functions and search predicates\n\nA predicate that applies a function to an indexed column can affect how the index is usable. For example, comparing UPPER(department) with CS does not necessarily provide the same direct search opportunity as comparing the stored department value itself. A plain index on the column may not support the desired efficient lookup on that expression. The exact result depends on the expression, collation, available structures, and optimizer capabilities.\n\nThis is sometimes discussed in terms of whether a predicate is sargable, meaning suitable for a useful search access strategy in the context being examined. Avoid turning the label into an absolute rule that every function prevents all index use. A database may still scan an index, use another condition, or support an appropriate indexed expression through product-specific facilities. Efficient lookup and any use of an index are different claims.\n\nDo not remove a function merely to obtain an apparently simpler predicate. The function may express required comparison semantics. Case and accent rules can depend on collation, and a rewrite must preserve the wanted behavior. Investigate the actual requirement and plan before choosing whether to revise the expression, use a supported access structure, or leave the query unchanged.\n\n## Executing under the database's other guarantees\n\nExecution carries out the chosen operations with the relevant storage, buffering, transaction, and access facilities. A plan is not itself the requested result. The engine must obtain the appropriate records or versions, perform the transformations, and return values under the applicable rules. Concurrent work or resource pressure can affect execution even when the plan appears reasonable.\n\nThis is why performance diagnosis cannot stop at the SQL text. Examine which operations are expensive and whether observed time reflects computation, page access, coordination waits, or another responsibility. An explain facility can reveal a planned strategy; appropriate execution observations can reveal actual behavior. The particular tool and its operational effect must be understood before using it on a real service.\n\nA useful query-processor explanation therefore separates accepted syntax, resolved meaning, estimated planning choices, and actual execution. It uses the catalog and statistics as inputs, acknowledges product-specific behavior, and checks that proposed changes preserve results. That reasoning helps you understand both a simple indexed lookup and later joins or aggregates without mistaking a tidy pipeline diagram for proof that a query is correct or fast.",
+  "references": [
+    {
+      "title": "MySQL range optimization",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/range-optimization.html"
+    },
+    {
+      "title": "MySQL optimizer statistics",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/optimizer-statistics.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-1-query-processor",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-1-query-processor-1",
+          "test_id": "pt-dbms-sql-1-query-processor",
+          "question_text": "What is the primary job of the Query Processor?",
+          "options": [
+            "Transforming a declarative SQL statement into an efficient sequence of physical operations",
+            "Physically writing data pages to disk",
+            "Authenticating client connections",
+            "Enforcing ACID properties across transactions"
+          ],
+          "correct_index": 0,
+          "explanation": "The processor interprets and plans physical work for a declarative request. It aims for an appropriate strategy, but efficiency for a deployment needs actual evidence.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-1-query-processor-2",
+          "test_id": "pt-dbms-sql-1-query-processor",
+          "question_text": "What are the four stages the notes describe the Query Processor taking a SQL statement through?",
+          "options": [
+            "Parsing, semantic validation/binding, query optimization, and execution",
+            "Backup, restore, replication, and failover",
+            "Design, development, testing, and deployment",
+            "Encryption, compression, indexing, and caching"
+          ],
+          "correct_index": 0,
+          "explanation": "The notes explicitly list these four stages: parsing, binding, optimization, and execution.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-1-query-processor-3",
+          "test_id": "pt-dbms-sql-1-query-processor",
+          "question_text": "In the example query filtering by department, what does the optimizer consider choosing between?",
+          "options": [
+            "An index scan versus a full table scan",
+            "A backup versus a restore",
+            "A GRANT versus a REVOKE statement",
+            "A naive user versus a sophisticated user"
+          ],
+          "correct_index": 0,
+          "explanation": "The notes describe the optimizer choosing between an index scan and a full table scan for the example query.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-1-query-processor-4",
+          "test_id": "pt-dbms-sql-1-query-processor",
+          "question_text": "What information does the query optimizer rely on to estimate which execution plan is cheapest?",
+          "options": [
+            "Statistics about table sizes and data distribution",
+            "The End User's personal preferences",
+            "The number of DBAs employed by the organization",
+            "The color scheme of the client application"
+          ],
+          "correct_index": 0,
+          "explanation": "The notes state that the optimizer's cost-based decisions rely on statistics about table sizes and data distribution.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-1-query-processor-5",
+          "test_id": "pt-dbms-sql-1-query-processor",
+          "question_text": "Why might the query optimizer choose a poor execution plan after a large bulk insert or delete, per the notes?",
+          "options": [
+            "Statistics may no longer describe the distribution accurately; inspect product-specific maintenance such as MySQL ANALYZE TABLE where indicated",
+            "Bulk changes prove all available indexes must be deleted",
+            "Statistics can never affect planning",
+            "A faster network automatically corrects every estimate"
+          ],
+          "correct_index": 0,
+          "explanation": "Investigate the relevant estimates and product behavior. Statistics maintenance is an operational action requiring appropriate diagnosis and authorization.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-1-query-processor-6",
+          "test_id": "pt-dbms-sql-1-query-processor",
+          "question_text": "Why can using SELECT * instead of an explicit column list prevent certain optimizations?",
+          "options": [
+            "It can block an index-only scan, which requires all needed columns to be present directly in the index",
+            "It always causes a syntax error",
+            "It disables the Transaction Manager's isolation guarantees",
+            "It prevents the Storage Manager from allocating new pages"
+          ],
+          "correct_index": 0,
+          "explanation": "The notes state that SELECT * can prevent index-only scans, which only work when the index alone contains all requested columns.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-1-query-processor-7",
+          "test_id": "pt-dbms-sql-1-query-processor",
+          "question_text": "A developer writes `WHERE UPPER(department) = 'CS'` on a table with a plain index on department, and notices the query is much slower than expected. What does the notes attribute this to?",
+          "options": [
+            "The function can affect efficient direct lookup through the plain column index; inspect semantics, collation, supported structures and the actual plan",
+            "Every function prevents every possible index use in every engine",
+            "Removing the function always preserves results",
+            "Every indexed expression guarantees the same performance"
+          ],
+          "correct_index": 0,
+          "explanation": "A function can change the useful search opportunity, but that is not an absolute ban on all index access. Any rewrite must preserve the intended comparison semantics.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-1-query-processor-8",
+          "test_id": "pt-dbms-sql-1-query-processor",
+          "question_text": "Which stage of the Query Processor's pipeline is responsible for checking that a referenced column actually exists in the table's schema before execution begins?",
+          "options": [
+            "Semantic validation / binding",
+            "Execution",
+            "Query optimization",
+            "Parsing"
+          ],
+          "correct_index": 0,
+          "explanation": "The notes assign checking that referenced tables/columns exist and types are compatible specifically to the semantic validation/binding stage, distinct from parsing (syntax) or optimization (plan choice).",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "question_text": "Can syntactically valid SQL refer to a column that does not exist?",
+          "options": [
+            "No; every valid-looking name must exist",
+            "Yes; the database must invent the column automatically",
+            "No; a table scan creates missing definitions",
+            "Yes; syntax recognition and resolving actual object names are different checks"
+          ],
+          "correct_index": 3,
+          "explanation": "Binding uses actual definitions to resolve names after the statement structure has been recognized.",
+          "marks": 1,
+          "id": "tq-dbx2-query-processor-1-9",
+          "test_id": "pt-dbms-sql-1-query-processor",
+          "sort_order": 8
+        },
+        {
+          "question_text": "Does a matching index prove that the optimizer should always choose it?",
+          "options": [
+            "Yes; an index is always cheaper regardless of table size",
+            "No; estimated qualifying rows and other costs can favor another strategy",
+            "Yes; statistics are irrelevant once an index exists",
+            "No; indexes can never support lookups"
+          ],
+          "correct_index": 1,
+          "explanation": "A physical choice depends on the actual access opportunity and cost estimates, not only index existence.",
+          "marks": 1,
+          "id": "tq-dbx2-query-processor-1-10",
+          "test_id": "pt-dbms-sql-1-query-processor",
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbx2-query-processor-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "question_text": "A student query has correct comma placement but names a missing column. Which responsibility identifies the issue?",
+          "options": [
+            "Only replacing an old buffer page",
+            "Only formatting the final table",
+            "Semantic validation and binding against definitions",
+            "Only increasing memory size"
+          ],
+          "correct_index": 2,
+          "explanation": "A valid syntactic position does not establish that the referenced object exists.",
+          "marks": 1,
+          "id": "tq-dbx2-query-processor-2-1",
+          "test_id": "pt-dbx2-query-processor-application",
+          "sort_order": 0
+        },
+        {
+          "question_text": "Most students have department CS. Is choosing a table scan automatically evidence of a broken optimizer?",
+          "options": [
+            "Yes; every available index must be used",
+            "No; fetching a large qualifying fraction can make another strategy reasonable",
+            "Yes; table scans are never legal SQL execution",
+            "No; logical conditions are ignored during planning"
+          ],
+          "correct_index": 1,
+          "explanation": "Selectivity and the cost model affect whether an index access is useful for the workload.",
+          "marks": 1,
+          "id": "tq-dbx2-query-processor-2-2",
+          "test_id": "pt-dbx2-query-processor-application",
+          "sort_order": 1
+        },
+        {
+          "question_text": "Large data changes alter the department distribution. Which planning input may need investigation?",
+          "options": [
+            "Only the capitalization of SELECT",
+            "Whether the statistics still describe the relevant distribution",
+            "Whether all records should become administrators",
+            "Whether the table name has enough letters"
+          ],
+          "correct_index": 1,
+          "explanation": "Statistics can influence estimated row counts and access costs. Their freshness and suitability require product-specific review.",
+          "marks": 1,
+          "id": "tq-dbx2-query-processor-2-3",
+          "test_id": "pt-dbx2-query-processor-application",
+          "sort_order": 2
+        },
+        {
+          "question_text": "A query uses SELECT * but its useful index contains only some requested values. What access opportunity may be lost?",
+          "options": [
+            "Every possible permission check",
+            "The ability to write a valid WHERE clause",
+            "The logical identity of every student",
+            "A covering or index-only strategy requiring the missing values to be available appropriately"
+          ],
+          "correct_index": 3,
+          "explanation": "Extra required columns can remove a covering opportunity; exact physical behavior still depends on the engine.",
+          "marks": 1,
+          "id": "tq-dbx2-query-processor-2-4",
+          "test_id": "pt-dbx2-query-processor-application",
+          "sort_order": 3
+        },
+        {
+          "question_text": "Every requested column is covered by an index. What should not be promised without product/plan evidence?",
+          "options": [
+            "That execution will require no other storage access under every implementation",
+            "That the result has named columns",
+            "That a query can request explicit columns",
+            "That coverage can be useful"
+          ],
+          "correct_index": 0,
+          "explanation": "Visibility and implementation requirements can add work. Coverage is not a universal no-other-access guarantee.",
+          "marks": 1,
+          "id": "tq-dbx2-query-processor-2-5",
+          "test_id": "pt-dbx2-query-processor-application",
+          "sort_order": 4
+        },
+        {
+          "question_text": "A programmer removes UPPER from a predicate solely to make it look index-friendly. What must be checked?",
+          "options": [
+            "Only whether the SQL string became shorter",
+            "Whether the rewrite preserves required comparison semantics and actual plan behavior",
+            "A rule that every collation has identical case behavior",
+            "A claim that every function prevents every index use"
+          ],
+          "correct_index": 1,
+          "explanation": "The function may express necessary behavior. A physical optimization must preserve the wanted result.",
+          "marks": 1,
+          "id": "tq-dbx2-query-processor-2-6",
+          "test_id": "pt-dbx2-query-processor-application",
+          "sort_order": 5
+        },
+        {
+          "question_text": "Can applying a function to a column always be described as preventing every use of any index?",
+          "options": [
+            "No; direct lookup, index scanning, other predicates and supported expression indexes are different possibilities",
+            "Yes; no database can ever use any index in that query",
+            "Yes; all SQL expressions have identical access properties",
+            "No; functions always guarantee the cheapest access"
+          ],
+          "correct_index": 0,
+          "explanation": "A precise statement identifies the available access strategy and actual product rather than making an absolute claim.",
+          "marks": 1,
+          "id": "tq-dbx2-query-processor-2-7",
+          "test_id": "pt-dbx2-query-processor-application",
+          "sort_order": 6
+        },
+        {
+          "question_text": "A query without ORDER BY returns a different sequence after the plan changes. What is the relevant contract?",
+          "options": [
+            "An unordered result does not guarantee the earlier observed sequence",
+            "The earlier physical order must be permanent",
+            "The new plan must be unauthorized",
+            "The query must now have a syntax error"
+          ],
+          "correct_index": 0,
+          "explanation": "Applications needing an order must request it. Access-path observations do not create an ordering guarantee.",
+          "marks": 1,
+          "id": "tq-dbx2-query-processor-2-8",
+          "test_id": "pt-dbx2-query-processor-application",
+          "sort_order": 7
+        },
+        {
+          "question_text": "An explain facility shows a plausible strategy, but execution waits on concurrent work. What should be investigated?",
+          "options": [
+            "Only whether the diagram uses four boxes",
+            "A rule that plans eliminate concurrency concerns",
+            "The relevant waits and transaction interactions as well as the plan",
+            "Only the query's file extension"
+          ],
+          "correct_index": 2,
+          "explanation": "Planning and observed execution are related but distinct sources of evidence.",
+          "marks": 1,
+          "id": "tq-dbx2-query-processor-2-9",
+          "test_id": "pt-dbx2-query-processor-application",
+          "sort_order": 8
+        },
+        {
+          "question_text": "Which proposed rewrite is acceptable as a correctness claim?",
+          "options": [
+            "Any rewrite with fewer characters",
+            "Any rewrite that happens to use an index",
+            "Any rewrite that returns one familiar sample row",
+            "One that preserves required rows, NULL treatment, values, and ordering under the relevant cases"
+          ],
+          "correct_index": 3,
+          "explanation": "Optimization must preserve the requested semantics, including edge cases and required result ordering.",
+          "marks": 1,
+          "id": "tq-dbx2-query-processor-2-10",
+          "test_id": "pt-dbx2-query-processor-application",
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [],
+  "coding_not_applicable": "This topic explains the processor and evidence used to reason about plans; executable query-writing exercises are covered by the dedicated SQL and query-optimization topics.",
+  "review": {
+    "reviewer": "coordinator",
+    "independent_review": "unavailable; no agent tools",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "definitions, worked examples and question coverage checked; no external plagiarism certification",
+    "existing_question_corrections": [
+      "tq-dbms-sql-1-query-processor-1",
+      "tq-dbms-sql-1-query-processor-5",
+      "tq-dbms-sql-1-query-processor-7"
+    ],
+    "canonical_answer_indices_preserved": true,
+    "answer_position_policy": "Original indices retained; new canonical positions shuffled; website display order also shuffled per attempt."
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-1-query-processor",
+    "original_note_sha256": "f32402a8ba29885d314f398bcc4ba5b4f642edf1188d635c5e890b34ed4578f1",
+    "status": "paired migration prepared; not applied"
+  },
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-1-query-processor-1",
+      "test_id": "pt-dbms-sql-1-query-processor",
+      "question_text": "What is the primary job of the Query Processor?",
+      "options": [
+        "Transforming a declarative SQL statement into an efficient sequence of physical operations",
+        "Physically writing data pages to disk",
+        "Authenticating client connections",
+        "Enforcing ACID properties across transactions"
+      ],
+      "correct_index": 0,
+      "explanation": "The notes define the Query Processor's role as turning declarative SQL into an efficient physical execution, distinct from storage or transaction responsibilities.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-1-query-processor-2",
+      "test_id": "pt-dbms-sql-1-query-processor",
+      "question_text": "What are the four stages the notes describe the Query Processor taking a SQL statement through?",
+      "options": [
+        "Parsing, semantic validation/binding, query optimization, and execution",
+        "Backup, restore, replication, and failover",
+        "Design, development, testing, and deployment",
+        "Encryption, compression, indexing, and caching"
+      ],
+      "correct_index": 0,
+      "explanation": "The notes explicitly list these four stages: parsing, binding, optimization, and execution.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-1-query-processor-3",
+      "test_id": "pt-dbms-sql-1-query-processor",
+      "question_text": "In the example query filtering by department, what does the optimizer consider choosing between?",
+      "options": [
+        "An index scan versus a full table scan",
+        "A backup versus a restore",
+        "A GRANT versus a REVOKE statement",
+        "A naive user versus a sophisticated user"
+      ],
+      "correct_index": 0,
+      "explanation": "The notes describe the optimizer choosing between an index scan and a full table scan for the example query.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-1-query-processor-4",
+      "test_id": "pt-dbms-sql-1-query-processor",
+      "question_text": "What information does the query optimizer rely on to estimate which execution plan is cheapest?",
+      "options": [
+        "Statistics about table sizes and data distribution",
+        "The End User's personal preferences",
+        "The number of DBAs employed by the organization",
+        "The color scheme of the client application"
+      ],
+      "correct_index": 0,
+      "explanation": "The notes state that the optimizer's cost-based decisions rely on statistics about table sizes and data distribution.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-1-query-processor-5",
+      "test_id": "pt-dbms-sql-1-query-processor",
+      "question_text": "Why might the query optimizer choose a poor execution plan after a large bulk insert or delete, per the notes?",
+      "options": [
+        "The statistics the optimizer relies on can become stale until refreshed, e.g. via ANALYZE",
+        "Bulk inserts automatically corrupt the system catalog",
+        "The Storage Manager blocks all queries during bulk operations",
+        "The Transaction Manager disables the optimizer permanently"
+      ],
+      "correct_index": 0,
+      "explanation": "The notes explain that stale statistics after bulk data changes can mislead the optimizer until they are refreshed.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-1-query-processor-6",
+      "test_id": "pt-dbms-sql-1-query-processor",
+      "question_text": "Why can using SELECT * instead of an explicit column list prevent certain optimizations?",
+      "options": [
+        "It can block an index-only scan, which requires all needed columns to be present directly in the index",
+        "It always causes a syntax error",
+        "It disables the Transaction Manager's isolation guarantees",
+        "It prevents the Storage Manager from allocating new pages"
+      ],
+      "correct_index": 0,
+      "explanation": "The notes state that SELECT * can prevent index-only scans, which only work when the index alone contains all requested columns.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-1-query-processor-7",
+      "test_id": "pt-dbms-sql-1-query-processor",
+      "question_text": "A developer writes `WHERE UPPER(department) = 'CS'` on a table with a plain index on department, and notices the query is much slower than expected. What does the notes attribute this to?",
+      "options": [
+        "A non-sargable predicate: wrapping the column in a function generally prevents the optimizer from using the plain index",
+        "The Buffer Manager refusing to cache any pages for functions",
+        "The Storage Manager deleting the index automatically",
+        "The Transaction Manager rolling back the query for being read-only"
+      ],
+      "correct_index": 0,
+      "explanation": "The notes give this exact example as a non-sargable predicate that defeats a plain index on the underlying column.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-1-query-processor-8",
+      "test_id": "pt-dbms-sql-1-query-processor",
+      "question_text": "Which stage of the Query Processor's pipeline is responsible for checking that a referenced column actually exists in the table's schema before execution begins?",
+      "options": [
+        "Semantic validation / binding",
+        "Execution",
+        "Query optimization",
+        "Parsing"
+      ],
+      "correct_index": 0,
+      "explanation": "The notes assign checking that referenced tables/columns exist and types are compatible specifically to the semantic validation/binding stage, distinct from parsing (syntax) or optimization (plan choice).",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Responsibilities involved in processing a student query",
+      "description": "The illustration follows a query requesting student names for department CS. These are conceptual responsibilities, not four universally separate processes or a guarantee of one fixed execution order.",
+      "columns": [
+        "Responsibility",
+        "Input or question",
+        "Useful output"
+      ],
+      "rows": [
+        [
+          "Parsing",
+          "Does the statement match the supported syntax?",
+          "Recognized statement structure"
+        ],
+        [
+          "Binding / semantic validation",
+          "Which actual objects and operations are referenced?",
+          "Resolved definitions and relevant properties"
+        ],
+        [
+          "Optimization",
+          "Which supported operations are suitable under the estimates?",
+          "A chosen physical strategy"
+        ],
+        [
+          "Execution",
+          "How are those operations carried out under actual runtime guarantees?",
+          "The permitted requested result and execution evidence"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "coordinator review",
+    "server_rendering": "passed",
+    "browser_rendering": "unverified",
+    "independent_review": "unavailable; no agent tools",
+    "rendering_check": "Actual LessonBlock/TopicDiagrams in React server rendering; 18 authored package checks passed; desktop/mobile browser QA remains unverified"
+  }
+}

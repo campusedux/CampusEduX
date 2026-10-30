@@ -6,6 +6,7 @@ import { Check, ChevronDown, Lock } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { useLearningProgress } from "@/lib/learningProgress";
 import type { CourseOutline } from "@/lib/courseOutline";
+import { DBMS_SQL_SLUG } from "@/lib/databaseTutorial";
 
 /**
  * Lesson-page navigation: course title + progress, then sections as native
@@ -23,28 +24,29 @@ export function LessonSidebar({
 }) {
   const progress = useLearningProgress();
   const { gridSlug } = outline;
+  const topicLabel = gridSlug === DBMS_SQL_SLUG ? "topics" : "lessons";
   const currentSectionId = outline.sections.find((s) => s.lessons.some((l) => l.slug === currentSlug))?.id;
   const [open, setOpen] = useState<Set<string>>(() => new Set(currentSectionId ? [currentSectionId] : []));
   const p = progress.courseProgress(gridSlug, outline.total);
 
   return (
-    <nav aria-label="Course contents" className="text-sm">
+    <nav aria-label="Course contents" className="text-sm [overflow-wrap:anywhere]">
       <Link prefetch={false}
         href={`/learning/${gridSlug}`}
         onClick={onNavigate}
-        className="block rounded-xl px-2.5 py-2 font-display text-base font-bold leading-snug text-ink transition hover:bg-surface hover:text-primary"
+        className="flex min-h-11 items-center rounded-lg px-2.5 py-2 font-display text-base font-bold leading-snug text-ink transition hover:bg-surface hover:text-primary"
       >
         {outline.gridName}
       </Link>
       <div className="px-2.5 pb-4 pt-1">
         <div className="h-1.5 overflow-hidden rounded-full bg-line" aria-hidden>
           <div
-            className="h-full rounded-full bg-gradient-to-r from-primary to-accent-violet transition-[width] duration-500"
+            className="h-full rounded-full bg-primary transition-[width] duration-300 motion-reduce:transition-none"
             style={{ width: `${progress.ready ? p.percent : 0}%` }}
           />
         </div>
         <p className="mt-1.5 text-xs text-ink-faint">
-          {progress.ready ? `${p.completed} of ${outline.total} lessons done` : `${outline.total} lessons`}
+          {progress.ready ? `${p.completed} of ${outline.total} ${topicLabel} done` : `${outline.total} ${topicLabel}`}
         </p>
       </div>
 
@@ -70,7 +72,7 @@ export function LessonSidebar({
             >
               <summary
                 className={cn(
-                  "flex cursor-pointer list-none items-center gap-2 rounded-lg px-2.5 py-2 transition hover:bg-surface [&::-webkit-details-marker]:hidden",
+                  "flex min-h-11 cursor-pointer list-none items-center gap-2 rounded-lg px-2.5 py-2 transition hover:bg-surface [&::-webkit-details-marker]:hidden",
                   s.id === currentSectionId ? "text-ink" : "text-ink-muted",
                 )}
               >
@@ -92,7 +94,7 @@ export function LessonSidebar({
                         onClick={onNavigate}
                         aria-current={active ? "page" : undefined}
                         className={cn(
-                          "-ml-px flex items-center gap-2 rounded-r-lg border-l-[3px] py-1.5 pl-3 pr-2 leading-snug transition-colors",
+                          "-ml-px flex min-h-11 items-center gap-2 rounded-r-lg border-l-[3px] py-2 pl-3 pr-2 leading-snug transition-colors",
                           // primary-50 is nearly the page colour in dark mode, so the active tint is an alpha of primary.
                           active
                             ? "border-primary bg-primary/10 font-semibold text-primary dark:bg-primary/25 dark:text-white"

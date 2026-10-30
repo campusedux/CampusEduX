@@ -1,0 +1,571 @@
+{
+  "slug": "update-anomaly",
+  "source_ref": "chapter-21-normalization-and-functional-dependencies/update-anomaly",
+  "title": "Update Anomaly",
+  "description": "Recognize conflicting copies of a shared fact, diagnose departmental inconsistencies, and reconstruct normalized directories without losing authority.",
+  "dialect": "MySQL 8.4; engine-specific behavior labeled",
+  "references": [
+    {
+      "title": "PostgreSQL constraints and relational integrity",
+      "url": "https://www.postgresql.org/docs/current/ddl-constraints.html"
+    },
+    {
+      "title": "MySQL foreign keys",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/create-table-foreign-keys.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-21-update-anomaly",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-21-update-anomaly-1",
+          "test_id": "pt-dbms-sql-21-update-anomaly",
+          "question_text": "Dr. Rao moves from Room 204 to Room 210. In the unnormalized StudentCourse table, how many rows must be updated to reflect this correctly?",
+          "options": [
+            "Exactly one, since InstructorID is unique",
+            "All rows referencing InstructorID = 'I1' (three rows in the sample data)",
+            "Zero, since InstructorOffice is a derived value",
+            "All rows in the table regardless of instructor"
+          ],
+          "correct_index": 1,
+          "explanation": "InstructorOffice is duplicated in every row where InstructorID = 'I1', so all three (S1/C1, S2/C1, S3/C1) rows carry the value and all three must change together.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-21-update-anomaly-2",
+          "test_id": "pt-dbms-sql-21-update-anomaly",
+          "question_text": "What specifically defines an update anomaly?",
+          "options": [
+            "A query returning stale cached results",
+            "A single logical fact being duplicated across multiple rows, such that updating it correctly requires touching every copy, and a partial update leaves the data inconsistent",
+            "A failed INSERT due to a missing key value",
+            "A row being permanently locked during a transaction"
+          ],
+          "correct_index": 1,
+          "explanation": "The defining feature is the multi-row duplication of one fact combined with the risk that not all copies get updated, producing contradictory data.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-21-update-anomaly-3",
+          "test_id": "pt-dbms-sql-21-update-anomaly",
+          "question_text": "An UPDATE statement changes InstructorOffice only for the S1/C1 row, missing S2/C1 and S3/C1. What is the resulting state of the data?",
+          "options": [
+            "The table becomes invalid and rejects further queries",
+            "The table now gives two different answers ('Room 210' and 'Room 204') for the same instructor I1's office, depending on which row is read",
+            "The database automatically propagates the change to the other rows",
+            "No inconsistency occurs since InstructorID is a foreign key"
+          ],
+          "correct_index": 1,
+          "explanation": "This is exactly the anomaly: the same fact (I1's office) now has contradictory stored values across rows, because it was redundantly stored to begin with.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-21-update-anomaly-4",
+          "test_id": "pt-dbms-sql-21-update-anomaly",
+          "question_text": "Which of these correctly distinguishes the update anomaly from the insertion anomaly?",
+          "options": [
+            "They are the same anomaly with different names",
+            "Insertion anomaly blocks adding a new valid fact; update anomaly risks inconsistency when changing an existing duplicated fact",
+            "Update anomaly only applies to DELETE statements",
+            "Insertion anomaly only occurs in normalized tables"
+          ],
+          "correct_index": 1,
+          "explanation": "An insertion anomaly concerns being unable to record an independent fact without inventing a relationship row. The update anomaly here instead leaves inconsistent copies after an incomplete existing-fact edit.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-21-update-anomaly-5",
+          "test_id": "pt-dbms-sql-21-update-anomaly",
+          "question_text": "Even if `UPDATE StudentCourse SET InstructorOffice = 'Room 210' WHERE InstructorID = 'I1'` correctly updates all matching rows, why is this still considered a symptom of poor design?",
+          "options": [
+            "Because WHERE clauses are inefficient in SQL",
+            "Because it requires rewriting three physical rows for what is logically a single fact change, whereas a normalized Instructor table would need exactly one row updated",
+            "Because it violates referential integrity",
+            "Because InstructorID cannot appear in a WHERE clause"
+          ],
+          "correct_index": 1,
+          "explanation": "Even a 'correct' broad update still does unnecessary work (N row rewrites for 1 logical fact) and still carries residual risk versus a normalized design where the fact lives in exactly one row.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-21-update-anomaly-6",
+          "test_id": "pt-dbms-sql-21-update-anomaly",
+          "question_text": "What makes the update anomaly worse under concurrent transactions?",
+          "options": [
+            "Concurrency has no effect on this anomaly",
+            "Two transactions updating different subsets of the duplicated rows around the same time can leave the office value in a genuinely inconsistent state even with correct per-statement logic",
+            "Concurrency automatically prevents anomalies via locking",
+            "Update anomalies cannot occur in multi-user systems"
+          ],
+          "correct_index": 1,
+          "explanation": "Because the fact exists in multiple rows, concurrent partial updates from different transactions can interleave and leave copies out of sync, compounding the anomaly.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-21-update-anomaly-7",
+          "test_id": "pt-dbms-sql-21-update-anomaly",
+          "question_text": "Which schema change permanently eliminates the update anomaly for instructor office changes?",
+          "options": [
+            "Adding a trigger that logs every UPDATE",
+            "Moving InstructorOffice into its own Instructor(InstructorID, InstructorName, InstructorOffice) relation, so the fact exists in exactly one row per instructor",
+            "Making InstructorOffice a computed column",
+            "Removing the WHERE clause from all UPDATE statements"
+          ],
+          "correct_index": 1,
+          "explanation": "Once InstructorOffice lives in a table keyed by InstructorID alone, changing an instructor's office is a single-row update with no duplicate copies to keep in sync.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-21-update-anomaly-8",
+          "test_id": "pt-dbms-sql-21-update-anomaly",
+          "question_text": "Which of the following changes to the StudentCourse table would NOT trigger an update anomaly risk?",
+          "options": [
+            "Changing InstructorOffice for instructor I1",
+            "Changing CourseName for course C1",
+            "Changing the EnrollmentDate of a single specific (StudentID, CourseID) enrollment",
+            "Changing InstructorName for instructor I2"
+          ],
+          "correct_index": 2,
+          "explanation": "EnrollmentDate depends on the whole composite key (StudentID, CourseID) and is unique to that one enrollment row — it isn't duplicated elsewhere, so changing it touches exactly one row and carries no update-anomaly risk.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "cx-update-anomaly-fundamentals-9",
+          "test_id": "pt-dbms-sql-21-update-anomaly",
+          "question_text": "What is an update anomaly?",
+          "options": [
+            "Repeated copies of one logical fact become inconsistent",
+            "Any slow SELECT statement",
+            "Every transaction rollback",
+            "An index with repeated values"
+          ],
+          "correct_index": 0,
+          "explanation": "The anomaly concerns conflicting representations of one fact.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "cx-update-anomaly-fundamentals-10",
+          "test_id": "pt-dbms-sql-21-update-anomaly",
+          "question_text": "Which dependency describes a current department phone?",
+          "options": [
+            "employee_name determines every department",
+            "department_id determines department_phone",
+            "phone always determines employee_id",
+            "salary determines department_phone"
+          ],
+          "correct_index": 1,
+          "explanation": "The department owns the single current phone fact.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "cx-update-anomaly-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "cx-update-anomaly-application-1",
+          "test_id": "cx-update-anomaly-application",
+          "question_text": "Does wrapping a one-copy update in a transaction automatically repair redundancy?",
+          "options": [
+            "Yes, it changes every copy automatically",
+            "No",
+            "Only if the column is text",
+            "Only if SELECT uses DISTINCT"
+          ],
+          "correct_index": 1,
+          "explanation": "Atomic execution does not invent missing update logic.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "cx-update-anomaly-application-2",
+          "test_id": "cx-update-anomaly-application",
+          "question_text": "What does COUNT(DISTINCT phone) ignore?",
+          "options": [
+            "Every repeated department",
+            "All text values",
+            "NULL values",
+            "Primary keys"
+          ],
+          "correct_index": 2,
+          "explanation": "Missing values require a separate completeness policy.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "cx-update-anomaly-application-3",
+          "test_id": "cx-update-anomaly-application",
+          "question_text": "Which design stores a current department phone once?",
+          "options": [
+            "A phone copy in every employee row",
+            "One table per phone digit",
+            "A DISTINCT view over conflicting copies only",
+            "A departments row referenced by employees"
+          ],
+          "correct_index": 3,
+          "explanation": "Separate ownership reduces repeated authoritative facts.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "cx-update-anomaly-application-4",
+          "test_id": "cx-update-anomaly-application",
+          "question_text": "What is an insertion anomaly in the directory design?",
+          "options": [
+            "A department phone cannot be stored without an employee row",
+            "An employee identifier is unique",
+            "A query returns sorted rows",
+            "A transaction commits successfully"
+          ],
+          "correct_index": 0,
+          "explanation": "Department existence is incorrectly tied to employee existence.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "cx-update-anomaly-application-5",
+          "test_id": "cx-update-anomaly-application",
+          "question_text": "What is a deletion anomaly here?",
+          "options": [
+            "Deleting a temporary result",
+            "Deleting the last employee loses the only department phone copy",
+            "Removing duplicate output with DISTINCT",
+            "Rejecting a foreign key violation"
+          ],
+          "correct_index": 1,
+          "explanation": "An unrelated department fact disappears with employee membership.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "cx-update-anomaly-application-6",
+          "test_id": "cx-update-anomaly-application",
+          "question_text": "Can equal values in independent facts be legitimate?",
+          "options": [
+            "No, all repetition requires decomposition",
+            "Only if stored as NULL",
+            "Yes",
+            "Only if indexed"
+          ],
+          "correct_index": 2,
+          "explanation": "Equal personal values need not represent one shared authoritative fact.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "cx-update-anomaly-application-7",
+          "test_id": "cx-update-anomaly-application",
+          "question_text": "Why not automatically choose MIN(phone) to repair conflicts?",
+          "options": [
+            "MIN cannot process text",
+            "It always returns NULL",
+            "It changes the department key",
+            "The smallest value is not necessarily authoritative"
+          ],
+          "correct_index": 3,
+          "explanation": "A deterministic rule needs a valid domain meaning.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "cx-update-anomaly-application-8",
+          "test_id": "cx-update-anomaly-application",
+          "question_text": "What does a department foreign key protect?",
+          "options": [
+            "References to existing department rows",
+            "The real-world correctness of every phone",
+            "All historical snapshots",
+            "The speed of every report"
+          ],
+          "correct_index": 0,
+          "explanation": "Referential integrity is distinct from factual accuracy.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "cx-update-anomaly-application-9",
+          "test_id": "cx-update-anomaly-application",
+          "question_text": "What must a useful decomposition preserve?",
+          "options": [
+            "Every redundant copy forever",
+            "The intended information and relationships",
+            "Only alphabetical order",
+            "The original number of columns in one table"
+          ],
+          "correct_index": 1,
+          "explanation": "Reconstruction should not lose facts or create spurious associations.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "cx-update-anomaly-application-10",
+          "test_id": "cx-update-anomaly-application",
+          "question_text": "How should a denormalized cache be governed?",
+          "options": [
+            "As an independent competing source of truth",
+            "By arbitrary last writer wins without review",
+            "With a declared authority and refresh/recovery policy",
+            "By removing all foreign keys"
+          ],
+          "correct_index": 2,
+          "explanation": "Derived copies need controlled synchronization and staleness.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-21-update-anomaly-1",
+      "test_id": "pt-dbms-sql-21-update-anomaly",
+      "question_text": "Dr. Rao moves from Room 204 to Room 210. In the unnormalized StudentCourse table, how many rows must be updated to reflect this correctly?",
+      "options": [
+        "Exactly one, since InstructorID is unique",
+        "All rows referencing InstructorID = 'I1' (three rows in the sample data)",
+        "Zero, since InstructorOffice is a derived value",
+        "All rows in the table regardless of instructor"
+      ],
+      "correct_index": 1,
+      "explanation": "InstructorOffice is duplicated in every row where InstructorID = 'I1', so all three (S1/C1, S2/C1, S3/C1) rows carry the value and all three must change together.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-21-update-anomaly-2",
+      "test_id": "pt-dbms-sql-21-update-anomaly",
+      "question_text": "What specifically defines an update anomaly?",
+      "options": [
+        "A query returning stale cached results",
+        "A single logical fact being duplicated across multiple rows, such that updating it correctly requires touching every copy, and a partial update leaves the data inconsistent",
+        "A failed INSERT due to a missing key value",
+        "A row being permanently locked during a transaction"
+      ],
+      "correct_index": 1,
+      "explanation": "The defining feature is the multi-row duplication of one fact combined with the risk that not all copies get updated, producing contradictory data.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-21-update-anomaly-3",
+      "test_id": "pt-dbms-sql-21-update-anomaly",
+      "question_text": "An UPDATE statement changes InstructorOffice only for the S1/C1 row, missing S2/C1 and S3/C1. What is the resulting state of the data?",
+      "options": [
+        "The table becomes invalid and rejects further queries",
+        "The table now gives two different answers ('Room 210' and 'Room 204') for the same instructor I1's office, depending on which row is read",
+        "The database automatically propagates the change to the other rows",
+        "No inconsistency occurs since InstructorID is a foreign key"
+      ],
+      "correct_index": 1,
+      "explanation": "This is exactly the anomaly: the same fact (I1's office) now has contradictory stored values across rows, because it was redundantly stored to begin with.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-21-update-anomaly-4",
+      "test_id": "pt-dbms-sql-21-update-anomaly",
+      "question_text": "Which of these correctly distinguishes the update anomaly from the insertion anomaly?",
+      "options": [
+        "They are the same anomaly with different names",
+        "Insertion anomaly blocks adding a new valid fact; update anomaly risks inconsistency when changing an existing duplicated fact",
+        "Update anomaly only applies to DELETE statements",
+        "Insertion anomaly only occurs in normalized tables"
+      ],
+      "correct_index": 1,
+      "explanation": "Insertion anomaly (21.2) is about being unable to insert a fact independently; update anomaly is about the risk of partial, inconsistent propagation of a change to an already-duplicated fact.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-21-update-anomaly-5",
+      "test_id": "pt-dbms-sql-21-update-anomaly",
+      "question_text": "Even if `UPDATE StudentCourse SET InstructorOffice = 'Room 210' WHERE InstructorID = 'I1'` correctly updates all matching rows, why is this still considered a symptom of poor design?",
+      "options": [
+        "Because WHERE clauses are inefficient in SQL",
+        "Because it requires rewriting three physical rows for what is logically a single fact change, whereas a normalized Instructor table would need exactly one row updated",
+        "Because it violates referential integrity",
+        "Because InstructorID cannot appear in a WHERE clause"
+      ],
+      "correct_index": 1,
+      "explanation": "Even a 'correct' broad update still does unnecessary work (N row rewrites for 1 logical fact) and still carries residual risk versus a normalized design where the fact lives in exactly one row.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-21-update-anomaly-6",
+      "test_id": "pt-dbms-sql-21-update-anomaly",
+      "question_text": "What makes the update anomaly worse under concurrent transactions?",
+      "options": [
+        "Concurrency has no effect on this anomaly",
+        "Two transactions updating different subsets of the duplicated rows around the same time can leave the office value in a genuinely inconsistent state even with correct per-statement logic",
+        "Concurrency automatically prevents anomalies via locking",
+        "Update anomalies cannot occur in multi-user systems"
+      ],
+      "correct_index": 1,
+      "explanation": "Because the fact exists in multiple rows, concurrent partial updates from different transactions can interleave and leave copies out of sync, compounding the anomaly.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-21-update-anomaly-7",
+      "test_id": "pt-dbms-sql-21-update-anomaly",
+      "question_text": "Which schema change permanently eliminates the update anomaly for instructor office changes?",
+      "options": [
+        "Adding a trigger that logs every UPDATE",
+        "Moving InstructorOffice into its own Instructor(InstructorID, InstructorName, InstructorOffice) relation, so the fact exists in exactly one row per instructor",
+        "Making InstructorOffice a computed column",
+        "Removing the WHERE clause from all UPDATE statements"
+      ],
+      "correct_index": 1,
+      "explanation": "Once InstructorOffice lives in a table keyed by InstructorID alone, changing an instructor's office is a single-row update with no duplicate copies to keep in sync.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-21-update-anomaly-8",
+      "test_id": "pt-dbms-sql-21-update-anomaly",
+      "question_text": "Which of the following changes to the StudentCourse table would NOT trigger an update anomaly risk?",
+      "options": [
+        "Changing InstructorOffice for instructor I1",
+        "Changing CourseName for course C1",
+        "Changing the EnrollmentDate of a single specific (StudentID, CourseID) enrollment",
+        "Changing InstructorName for instructor I2"
+      ],
+      "correct_index": 2,
+      "explanation": "EnrollmentDate depends on the whole composite key (StudentID, CourseID) and is unique to that one enrollment row — it isn't duplicated elsewhere, so changing it touches exactly one row and carries no update-anomaly risk.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cx-find-department-phone-conflicts",
+      "slug": "find-department-phone-conflicts",
+      "title": "Find conflicting department phones",
+      "difficulty": "Easy",
+      "task": "All phone values are NOT NULL. Return department_id for departments containing more than one distinct phone, ordered ascending.",
+      "schema_sql": "CREATE TABLE directory(employee_id INT PRIMARY KEY,department_id INT NOT NULL,phone VARCHAR(20) NOT NULL);",
+      "seed_sql": "INSERT INTO directory VALUES(1,10,'1000'),(2,10,'2000'),(3,20,'3000'),(4,20,'3000');",
+      "solution_sql": "SELECT department_id FROM directory GROUP BY department_id HAVING COUNT(DISTINCT phone)>1 ORDER BY department_id;",
+      "expected": "department_id\n10",
+      "ordering": "Ascending department_id.",
+      "edge_cases": [
+        "Many employees with the same phone.",
+        "Several conflicting departments.",
+        "Empty directory."
+      ],
+      "hints": [
+        "Several rows alone do not establish disagreement."
+      ],
+      "explanation": "A conflict requires distinct known phones within one department.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO directory VALUES(7,30,'A'),(8,30,'A'),(9,40,'B'),(10,40,'C');",
+          "expected": "department_id\n40"
+        }
+      ]
+    },
+    {
+      "id": "cx-normalized-department-directory",
+      "slug": "normalized-department-directory",
+      "title": "Display authoritative department phones",
+      "difficulty": "Medium",
+      "task": "Return employee id, name, and phone from normalized employees and departments, ordered by employee id. Every employee has a valid department_id.",
+      "schema_sql": "CREATE TABLE departments(id INT PRIMARY KEY,phone VARCHAR(20) NOT NULL); CREATE TABLE employees(id INT PRIMARY KEY,name VARCHAR(30) NOT NULL,department_id INT NOT NULL);",
+      "seed_sql": "INSERT INTO departments VALUES(10,'2000'),(20,'3000'); INSERT INTO employees VALUES(1,'Asha',10),(2,'Bao',10),(3,'Chen',20);",
+      "solution_sql": "SELECT e.id,e.name,d.phone FROM employees e JOIN departments d ON d.id=e.department_id ORDER BY e.id;",
+      "expected": "id\tname\tphone\n1\tAsha\t2000\n2\tBao\t2000\n3\tChen\t3000",
+      "ordering": "Ascending employee id.",
+      "edge_cases": [
+        "Department with no employees.",
+        "Several employees per department.",
+        "Distinct departments sharing a phone."
+      ],
+      "hints": [
+        "Join by the stable department identifier."
+      ],
+      "explanation": "Phone is read from its authoritative department row, so shared membership repeats a derived value without storing redundant employee facts.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO departments VALUES(30,'8000'),(40,'8000'),(50,'9000'); INSERT INTO employees VALUES(7,'Dia',40),(8,'Eli',30);",
+          "expected": "id\tname\tphone\n7\tDia\t8000\n8\tEli\t8000"
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "review": {
+    "reviewer": "/root/finish_f",
+    "independent_review": "passed",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Independent manual content review passed within independent_review_scope; engine/browser/release gates separate.",
+    "editorial_record": "Original scenario-led prose and assessments. External originality and AdSense review unperformed.",
+    "canonical_answer_indices_preserved": true,
+    "independent_reviewer": "/root/review_f_and_foundations",
+    "independent_review_scope": "Full notes,20MCQs with every option,canonical answer position and explanation,original diagrams,and all exercise contracts/fixtures or solved conceptual labs. Original identities/indices checked against public seed cache where applicable. Reported substantive findings corrected by coordinator and filtered recheck accepted;identified learner-facing spacing polished. Manual technical/editorial reasoning only;engine,provider,browser,external originality and AdSense evidence separate."
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-21-update-anomaly",
+    "original_note_sha256": "442341eedb8fc53772eee05a5c83f5f26b52df9846a3b53f31346971f918025a",
+    "status": "drafted; not included in prepared paired migrations"
+  },
+  "notes": "## One fact repeated in several rows\n\nAn update anomaly occurs when one logical fact is stored in multiple places and a change leaves those copies inconsistent. The problem is not merely that an UPDATE statement failed. A statement can succeed exactly as written while changing only one copy of a repeated departmental office address. The resulting table contains conflicting answers to the same business question.\n\nConsider a campus employee directory storing employee_id, employee_name, department_id, and department_phone in every employee row. The intended rule is that a department has one current phone number. If ten employees belong to the department, that one phone fact is repeated ten times. Updating only one employee row creates disagreement even though each employee identifier remains unique and every individual row is syntactically valid.\n\n## Identify the dependency before the repair\n\nA functional dependency states that one set of attribute values determines another under the business rules. Here department_id determines department_phone. Employee_id determines the entire employee record, but the phone is a property of the department rather than the employee. The repeated phone values reflect storing facts at different grains in the same relation.\n\nDependencies come from the domain, not merely from observing a small sample. Two departments might happen to share a phone today without phone determining department. Likewise, two employee rows agreeing on a phone do not prove that agreement will always hold. Ask who owns the fact, whether it can vary over time, and what identifier establishes that ownership before proposing a decomposition.\n\n## Reproduce the anomaly safely\n\nUse a local teaching fixture with two Arts employees and one Science employee. Initially both Arts rows show phone 1000. A narrowly targeted employee update changes one Arts copy to 2000. Querying the rows now exposes two phones for department 10, even though the intended current department phone is singular.\n\n```sql\nCREATE TABLE directory(\n employee_id INT PRIMARY KEY,employee_name VARCHAR(30),\n department_id INT NOT NULL,department_phone VARCHAR(20)\n);\nINSERT INTO directory VALUES\n (1,'Asha',10,'1000'),(2,'Bao',10,'1000'),(3,'Chen',20,'3000');\nUPDATE directory SET department_phone='2000' WHERE employee_id=1;\nSELECT employee_id,department_id,department_phone\nFROM directory ORDER BY employee_id;\n```\n\nThe conflicting Arts rows are the observable symptom. A transaction around this one row update would make the statement atomic, but it would not invent the missing requirement to update every departmental copy. Transactional correctness and a suitable schema design solve different problems. A transaction can consistently commit an inconsistent representation if the application writes only part of the repeated fact.\n\n## Detect disagreements without choosing a winner\n\nFor nonnull phone values, grouping by department_id and counting distinct phones identifies departments with conflicting copies. The example returns department 10 with a distinct count of two. This is a diagnostic, not an automatic repair: it does not establish whether 1000 or 2000 is authoritative, or whether the business rule was misunderstood.\n\n```sql\nSELECT department_id,COUNT(DISTINCT department_phone) AS phone_versions\nFROM directory GROUP BY department_id\nHAVING COUNT(DISTINCT department_phone)>1\nORDER BY department_id;\n```\n\nCOUNT(DISTINCT column) ignores null values. A department containing one known phone and one missing phone therefore needs an additional completeness check if the rule requires every copy to agree and be present. Use explicit known versus missing counts rather than substituting an arbitrary sentinel that might collide with a real phone value. Detection rules should state how missing information is treated.\n\n## Normalize ownership of the department fact\n\nSeparate departments from employees. Store each department identifier and current phone once in departments, and keep a department_id reference in employees. Changing the phone then targets one department row. A join reconstructs the directory display without storing another authoritative phone copy in every employee record. This aligns the storage grain with the fact's owner.\n\n```sql\nCREATE TABLE departments(id INT PRIMARY KEY,phone VARCHAR(20));\nCREATE TABLE employees(\n id INT PRIMARY KEY,name VARCHAR(30),department_id INT NOT NULL,\n FOREIGN KEY(department_id) REFERENCES departments(id)\n);\n```\n\nThe foreign key protects references to existing departments. It does not independently prove that a department's phone is correct, nor does it decide which conflicting legacy value to migrate. A real approved migration must resolve source conflicts, preserve identities, and validate the reconstructed reports. The schema example teaches the ownership pattern without authorizing a production schema change.\n\n## Related anomalies explain the same mismatch\n\nAn insertion anomaly appears when a department's phone cannot be recorded until some employee row exists. A deletion anomaly appears when deleting the last employee also removes the only stored department phone. These are related consequences of combining department facts with employee membership. Separating the relations lets a department exist with zero employees and preserves its phone when staffing changes.\n\nNot every repeated value is an anomaly. Two employees may legitimately have the same personal phone, or several historical records may intentionally preserve the phone in effect when an event occurred. The distinction is whether the repeated values claim to represent one current fact that must change together. Historical snapshots and independent equal values have different semantics from redundant current authoritative copies.\n\n## Worked exercise: find conflicting offices\n\nReplace phone with office_code and use department 10 rows East and West plus department 20 rows North and North. A grouped COUNT(DISTINCT office_code) diagnostic should return only department 10. Add another North employee to department 20; it should remain absent from the conflict result. This test distinguishes conflicting values from merely having several employees.\n\nNow add a null office for department 20. If missing office assignments are permitted, the known values still agree. If every directory row must contain the current office, report department 20 as incomplete using a separate null condition. Do not silently change the definition of conflict between fixtures. Clearly distinguish disagreement, incompleteness, and a valid single value.\n\n## Worked exercise: reconstruct an employee directory\n\nUsing normalized departments and employees, join each employee to its department and return employee identifier, name, and current phone. With department 10 phone 2000 and two linked employees, both displayed rows show 2000 because they derive from the same department row. Updating that department once changes both derived displays without rewriting employee records.\n\nIf a report must include departments without employees, begin from departments with a left join and choose a department grain. If it must include every employee even when department assignment is optional, the nullability and join direction need an explicit contract. Normalization improves fact ownership but does not remove the need to choose correct report cardinality and missing relationship behavior.\n\n## Beyond a simple decomposition\n\nA decomposition should preserve information and support the required dependencies. Joining the separated relations on the department key should reconstruct the intended current directory without spurious combinations. Retaining a stable department key matters more than joining on a label that can change or be shared. Evaluate candidate keys and dependencies instead of mechanically splitting every pair of columns into separate tables.\n\nDenormalized caches can be appropriate for measured workloads, but they require a declared authority, refresh mechanism, and recovery plan. A cached phone in a search document should be treated as derived data with controlled staleness, not as a competing source of truth. More write coordination can reduce inconsistency risk, while a normalized authoritative model often makes the basic invariant easier to enforce.\n\nAn audit log can help establish how a disagreement arose, but it does not automatically identify the correct current value. A legitimate department move may require a new contact number while older event records retain the former number. Reconcile according to the fact's effective time and owner. A data cleanup that overwrites historical snapshots with today's value can destroy valid information while appearing to remove inconsistency.\n\n## Review and related study\n\nBefore a real change, inventory all readers and writers across mobile, website, administrative tools, and database routines. Determine which value is authoritative, how legacy conflicts will be resolved, and what rollback preserves existing contracts. Do not use an arbitrary MIN or MAX to choose a phone unless that selection rule has domain approval; deterministic output is not the same as a correct fact.\n\nContinue with [Join Cardinality](/learning/dbms-sql-tutorial/join-cardinality) to reconstruct normalized relations correctly, [Complex Views](/learning/dbms-sql-tutorial/complex-views) to expose reusable derived directories, and [View Limitations](/learning/dbms-sql-tutorial/view-limitations) to understand their write boundaries. The practical test is whether one logical fact has one clear authoritative owner and whether every update path preserves that ownership.\n\n\n## Compare a compact enrollment fixture\n\nFor the retained assessment example, StudentCourse uses the complete StudentID, CourseID pair as its enrollment key. Assume StudentID determines StudentName, CourseID determines CourseName and InstructorID, and InstructorID determines InstructorOffice. Instructor I1 teaches C1; the three rows S1/C1, S2/C1 and S3/C1 each copy the current office Room204. Changing only two copied offices to Room210 leaves contradictory claims about the same instructor. EnrollmentDate instead depends on the whole student-course pair under these assumptions, so different enrollment dates are legitimate relationship facts. An insertion anomaly would prevent recording an independent instructor before an enrollment exists; it is distinct from partially updating existing copies.\n",
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "One department fact disagrees across employee rows",
+      "description": "Department 10 has two phone copies with different values; department 20 has one consistent value.",
+      "columns": [
+        "Employee",
+        "Department",
+        "Stored phone",
+        "Interpretation"
+      ],
+      "rows": [
+        [
+          "1",
+          "10",
+          "2000",
+          "Changed copy"
+        ],
+        [
+          "2",
+          "10",
+          "1000",
+          "Stale copy"
+        ],
+        [
+          "3",
+          "20",
+          "3000",
+          "Consistent department"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "technical_review": "Independent manual diagram/content consistency review passed;actual static/browser rendering tracked separately.",
+    "server_rendering": "pending",
+    "browser_rendering": "unverified",
+    "independent_review": "passed"
+  },
+  "sql_verification": {
+    "scope": "not executed; concurrency/recovery/provider verification separate",
+    "all_passed": false,
+    "cases": []
+  }
+}

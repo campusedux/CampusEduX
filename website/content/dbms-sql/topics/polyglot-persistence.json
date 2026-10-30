@@ -1,0 +1,628 @@
+{
+  "source_ref": "chapter-3-data-models/polyglot-persistence",
+  "slug": "polyglot-persistence",
+  "title": "Polyglot Persistence",
+  "description": "Use multiple stores only for demonstrated needs, with explicit authority, projection versions, delivery and retry rules, reconciliation, and operational ownership across database boundaries.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Introducing another store for a demonstrated need\n\nPolyglot persistence uses more than one database or data model within a system, with each chosen for a specific responsibility. An application might keep authoritative enrollment facts in a relational database, expose a precomputed document catalog, and maintain a search or relationship projection. The design is useful only when the added responsibility justifies the extra consistency and operational work.\n\nMultiple stores are not automatically better than one versatile engine. A small application can often meet its requirements using established tables, indexes, supported JSON values, and well-defined queries. Start with the existing system and a measured unmet need rather than adding services because their model names sound appropriate to different features.\n\nConsider a course catalog whose authoritative title and version live in one source. A secondary projection supports a particular read pattern. That projection can be a useful separate representation, but it is not a second independent authority allowed to redefine the course identity or title whenever synchronization becomes inconvenient.\n\n## Assigning ownership of each fact\n\nIdentify which system owns each fact and who may change it. The authoritative course record can own the stable identifier, current title, and source version. A projection can derive a read-optimized representation. The reader needs to know whether it is receiving authoritative current state or a potentially delayed view under a documented freshness policy.\n\nAvoid allowing both stores to accept unrelated writes to the same logical fact without a conflict rule. If one source calls a course SQL Basics and another independently calls it Advanced SQL, a later sync cannot infer which meaning is intended merely by comparing strings. Ownership and version semantics must exist before conflict handling can be correct.\n\nPreserve identifiers across representations. A copied title is a display value, not a reliable join key when labels repeat or change. The projection should retain the authoritative course identity or an explicit stable mapping. Regenerating unrelated IDs in each store can make reconciliation and saved references unnecessarily fragile.\n\n## Choosing representations without stereotypes\n\nA relational source can support shared constraints and transactional updates where its actual engine and operation provide them. A document projection can group varied fields for a selected read. A graph projection can expose relationship queries. A key-value cache can accelerate known-key access. Each benefit needs evidence from the real requirement and implementation.\n\nDo not claim that only relational products have transactions or that every graph traversal is automatically fast. Some non-relational engines support multi-record transactions, and graph queries can expand into large path sets. Compare the specific access contract and failure behavior rather than assigning universal capabilities from a category label.\n\nA local transaction also does not automatically include an external payment provider. Even if an order and inventory adjustment share one database boundary, a remote charge has its own authority and outcome. Polyglot design must not be taught as a shortcut for replacing payment verification or assuming unrelated systems participate in one commit.\n\n## Understanding the dual-write failure\n\nA naive workflow writes the source and then updates the projection. If the first succeeds and the second fails, readers can observe divergence. Reversing the order does not remove the problem; it changes which representation can become inconsistent. A caller's sequence of API calls is not automatically a transaction across both systems.\n\nFor example, the source advances course 11 to version three while the catalog projection remains at version two. That can be an expected temporary lag under a defined policy or an operational defect requiring repair. The version mismatch is evidence to interpret, not permission to overwrite either side blindly.\n\nCross-system atomic coordination is possible in some supported environments, but it is not automatic and can introduce availability and operational trade-offs. Avoid the absolute claim that no transaction can ever span different engines. The correct question is which verified mechanism, if any, supplies the required boundary for this workflow.\n\n## Using an outbox or change stream deliberately\n\nAn outbox pattern can record an event alongside the authoritative change in the same supported local transaction. A separate publisher then delivers that event to the projection process. The local commit can preserve the source-and-event relationship without pretending that the remote projection already completed at the same instant.\n\nThe publisher can fail after delivery but before recording progress, so an event may be delivered again. Consumers need an appropriate deduplication or idempotent application rule. A retry mechanism is not a universal exactly-once guarantee. Event identity, source version, and supported update conditions help define what repeated delivery should do.\n\nChange-data-capture can also feed projections from an authoritative change stream. Its event shape, ordering, retention, replay, and failure behavior depend on the product and configuration. Merely naming CDC does not prove deleted rows or incompatible schema changes propagate correctly. Verify the actual stream and consumer contract.\n\n## Preserving order and deletion meaning\n\nTwo updates to one entity can arrive out of order. If version three is applied and an older version two event arrives later, an unconditional replacement can regress the projection. A supported version check can reject stale events under the defined policy. Versions must have a clear ordering and authority domain; arbitrary timestamps are not always an equivalent sequence.\n\nDeletion needs an explicit event or reconciliation rule too. Removing a source row without a corresponding projection policy can leave a stale public catalog entry. An orphan projection might represent a deletion not yet propagated, an invalid reference, or an intentionally retained historical record. The system must state which interpretation applies.\n\nA partial snapshot adds another complication. A row absent from an incomplete export is not necessarily deleted from the authoritative database. Reconciliation should use a complete snapshot or another defined completeness boundary before interpreting every unmatched projection as obsolete. A convenient SQL anti-join cannot invent that missing guarantee.\n\n## Defining freshness and user-visible behavior\n\nA projection can be behind the source while still serving an allowed task, but the acceptable lag must be defined. A public descriptive catalog can have different freshness needs from a protected enrollment decision. The trusted write path should use its actual authoritative checks rather than accept a stale projection as payment or permission authority.\n\nExpose useful loading, unavailable, or stale-state behavior where required without leaking internal credentials or private records. A projection outage should not become a false success message. Nor should an application silently broaden access by falling back to a more privileged unfiltered source when its normal read path is unavailable.\n\nMeasure lag and errors with bounded diagnostics. Event identifiers, version gaps, and aggregate counts can support investigation without logging secrets or private payloads. Monitoring is evidence of operational behavior, not a replacement for the trusted rules determining who may request or modify each entity.\n\n## Reconciling source and projection state\n\nA useful audit compares entity identity, source version, projection version, and relevant payload meaning. A missing projection differs from a stale version. An ahead projection is also suspicious if only the source assigns versions. Equal versions with different titles can reveal corruption or an inconsistent update policy rather than ordinary delivery lag.\n\nThe coding exercise uses ordinary SQL tables to make those states explicit. It reports missing, stale, ahead, conflict, current, and orphan states under a defined complete-fixture assumption. It does not replay events, modify external stores, or prove any hosted pipeline is repaired. An audit finding should lead to a reviewed operational decision rather than an automatic broad retry.\n\nAn outbox listing exercise likewise identifies pending fixture events by the recorded publication field. A NULL timestamp is a state in the teaching model, not a real authorization to send messages or contact another service. The query remains read-only and its results are not interpreted as commands to publish or retry production jobs.\n\n## Accounting for the operational footprint\n\nEach additional store needs monitoring, access controls, backup, recovery, upgrades, and ownership. A source backup and a projection backup taken at different times may need replay or reconciliation to establish a coherent state. Recovery planning must account for retained events and the source of truth rather than assuming independent successful restores are automatically consistent.\n\nTeams also need to manage client libraries, schema evolution, capacity, and failure paths across systems. A specialized read benefit can justify those costs, but only when the requirement is real and the operational contract is reviewable. An unnecessary second store creates more states to diagnose without necessarily improving the product.\n\nPolyglot persistence works best when each representation has a clear purpose and authority boundary. Preserve stable identity, define delivery and version rules, and make reconciliation and recovery explicit. That yields a manageable multi-store design without claiming that separate databases automatically share transactions, prevent drift, or eliminate the need for trusted enforcement.\n",
+  "references": [],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-3-polyglot-persistence",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-3-polyglot-persistence-1",
+          "test_id": "pt-dbms-sql-3-polyglot-persistence",
+          "question_text": "What does the term 'polyglot persistence' describe?",
+          "options": [
+            "Using a single database that supports multiple query languages",
+            "Using multiple different databases/data models within one application, each chosen for its best-fit workload",
+            "Translating a database's stored data into multiple human languages",
+            "Storing all data as plain text files"
+          ],
+          "correct_index": 1,
+          "explanation": "Polyglot persistence means deliberately using several different databases/data models in one system, each matched to the part of the workload it handles best.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-3-polyglot-persistence-2",
+          "test_id": "pt-dbms-sql-3-polyglot-persistence",
+          "question_text": "Why might a supported relational engine fit authoritative order or enrollment facts?",
+          "options": [
+            "Because relational databases are always the cheapest option",
+            "Its verified local integrity and transaction facilities can fit those facts, without automatically including external provider effects",
+            "Because PostgreSQL has the fastest raw key lookups of any database",
+            "Because orders cannot be represented as rows and columns"
+          ],
+          "correct_index": 1,
+          "explanation": "A local database commit does not itself atomically complete a remote charge.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-3-polyglot-persistence-3",
+          "test_id": "pt-dbms-sql-3-polyglot-persistence",
+          "question_text": "When might a document projection help a varied catalog?",
+          "options": [
+            "Because document databases cannot store text",
+            "When its aggregate structure and verified access pattern justify the added representation and consistency work",
+            "Because relational tables cannot store product names",
+            "Because document databases automatically translate currencies"
+          ],
+          "correct_index": 1,
+          "explanation": "A relational design can also support varied attributes; a document store is not automatically required.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-3-polyglot-persistence-4",
+          "test_id": "pt-dbms-sql-3-polyglot-persistence",
+          "question_text": "Why consider a graph projection for a relationship feature?",
+          "options": [
+            "Because graph databases are the fastest at simple key lookups",
+            "Its supported relationship queries may fit the required workload, subject to actual semantics and performance evidence",
+            "Because graph databases enforce the strictest schema of any model",
+            "Because recommendations require full-text search capability only"
+          ],
+          "correct_index": 1,
+          "explanation": "Multi-hop traversal is not universally constant time or automatically superior.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-3-polyglot-persistence-5",
+          "test_id": "pt-dbms-sql-3-polyglot-persistence",
+          "question_text": "What consistency risk does using separate stores introduce?",
+          "options": [
+            "Databases becoming too fast for applications to handle",
+            "Independent writes can diverge unless a verified coordination or propagation policy handles the boundary",
+            "The complete inability to use SQL anywhere in the system",
+            "Every database in the architecture must use the same query language"
+          ],
+          "correct_index": 1,
+          "explanation": "Cross-engine atomic coordination can exist, but it is not automatic.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-3-polyglot-persistence-6",
+          "test_id": "pt-dbms-sql-3-polyglot-persistence",
+          "question_text": "What is a common technique used to mitigate cross-database consistency drift in a polyglot persistence architecture?",
+          "options": [
+            "Disabling transactions entirely in all databases",
+            "Change-data-capture (CDC) pipelines or the outbox pattern to asynchronously synchronize data across stores",
+            "Storing all data redundantly in every database at all times",
+            "Only allowing reads, never writes, in secondary databases"
+          ],
+          "correct_index": 1,
+          "explanation": "CDC pipelines (e.g., Debezium) and the outbox pattern are standard patterns for asynchronously propagating changes across separate databases, accepting eventual consistency.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-3-polyglot-persistence-7",
+          "test_id": "pt-dbms-sql-3-polyglot-persistence",
+          "question_text": "What operational cost does polyglot persistence introduce compared to using a single database?",
+          "options": [
+            "None; it is always operationally simpler",
+            "Multiple systems to back up, monitor, secure, and scale, each requiring its own specialized expertise",
+            "The complete elimination of the need for monitoring",
+            "A guaranteed reduction in team headcount"
+          ],
+          "correct_index": 1,
+          "explanation": "Each additional database in a polyglot architecture adds its own operational burden: backups, monitoring, security, scaling, and specialized team knowledge.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-3-polyglot-persistence-8",
+          "test_id": "pt-dbms-sql-3-polyglot-persistence",
+          "question_text": "When is polyglot persistence generally NOT justified?",
+          "options": [
+            "When an application has massive, clearly distinct workloads like search, graph traversal, and high-volume logging",
+            "For a small application with modest scale needs, where a single well-chosen database is usually simpler and sufficient",
+            "When a company has dedicated database administration teams for each system",
+            "When the application already needs ACID transactions"
+          ],
+          "correct_index": 1,
+          "explanation": "For small or simple applications, the operational overhead of multiple databases usually outweighs the fit-for-purpose benefits; a single well-chosen database is typically the better trade-off.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-3-polyglot-persistence-new-9",
+          "test_id": "pt-dbms-sql-3-polyglot-persistence",
+          "question_text": "What should identify the owner of an authoritative course title?",
+          "options": [
+            "Whichever store responds fastest",
+            "An explicit source-of-truth contract",
+            "The latest screenshot",
+            "The most nested representation"
+          ],
+          "correct_index": 1,
+          "explanation": "Representations need clear fact ownership before synchronization.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-3-polyglot-persistence-new-10",
+          "test_id": "pt-dbms-sql-3-polyglot-persistence",
+          "question_text": "Does an outbox local commit mean the remote projection is already updated?",
+          "options": [
+            "Yes; all remote writes are automatic participants",
+            "Only if the event ID is numeric",
+            "No",
+            "Only if the title is short"
+          ],
+          "correct_index": 2,
+          "explanation": "The local source/event boundary differs from remote delivery completion.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-3-polyglot-persistence-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-3-polyglot-persistence-application-new-1",
+          "test_id": "pt-dbms-sql-3-polyglot-persistence-application",
+          "question_text": "Source version 3 exists while the projection remains at 2. What does the audit observe?",
+          "options": [
+            "A guaranteed source rollback",
+            "A missing source identity",
+            "A stale projection under the version policy",
+            "A native graph constraint failure"
+          ],
+          "correct_index": 2,
+          "explanation": "The mismatch is concrete evidence to interpret under the freshness contract.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-3-polyglot-persistence-application-new-2",
+          "test_id": "pt-dbms-sql-3-polyglot-persistence-application",
+          "question_text": "A publisher delivers an event and crashes before recording progress. What must the consumer handle?",
+          "options": [
+            "Guaranteed exactly-once receipt",
+            "Automatic deletion of all prior events",
+            "A requirement to reset source versions",
+            "Possible repeated delivery"
+          ],
+          "correct_index": 3,
+          "explanation": "Deduplication or idempotent application needs a defined policy.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-3-polyglot-persistence-application-new-3",
+          "test_id": "pt-dbms-sql-3-polyglot-persistence-application",
+          "question_text": "Version 3 is applied, then a version 2 event arrives. What should a suitable version rule prevent?",
+          "options": [
+            "Regression to stale projection state",
+            "Every future valid update",
+            "Only name changes",
+            "Only event logging"
+          ],
+          "correct_index": 0,
+          "explanation": "Ordering and conditional application protect the current projection.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-3-polyglot-persistence-application-new-4",
+          "test_id": "pt-dbms-sql-3-polyglot-persistence-application",
+          "question_text": "Source and projection have equal versions but different titles. What does the fixture classify?",
+          "options": [
+            "Current solely because versions match",
+            "Conflict",
+            "Missing because strings differ",
+            "A successful deletion"
+          ],
+          "correct_index": 1,
+          "explanation": "Equal versions do not excuse incompatible payload meaning.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-3-polyglot-persistence-application-new-5",
+          "test_id": "pt-dbms-sql-3-polyglot-persistence-application",
+          "question_text": "A projection exists without a source row in a complete fixture snapshot. What state is reported?",
+          "options": [
+            "Current by default",
+            "A newly authoritative entity",
+            "Orphan",
+            "A transaction commit"
+          ],
+          "correct_index": 2,
+          "explanation": "The classification relies on the stated complete-source assumption.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-3-polyglot-persistence-application-new-6",
+          "test_id": "pt-dbms-sql-3-polyglot-persistence-application",
+          "question_text": "The source export is incomplete. What cannot safely be inferred for every unmatched projection?",
+          "options": [
+            "That some source rows were read",
+            "That completeness matters",
+            "That a reconciliation query can run",
+            "That its entity was deleted"
+          ],
+          "correct_index": 3,
+          "explanation": "Absence from a partial snapshot does not prove source deletion.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-3-polyglot-persistence-application-new-7",
+          "test_id": "pt-dbms-sql-3-polyglot-persistence-application",
+          "question_text": "A pending outbox query returns rows. Does that authorize publishing production events?",
+          "options": [
+            "No",
+            "Yes; every SELECT result is an action request",
+            "Only if published_at is NULL",
+            "Only if events are ordered"
+          ],
+          "correct_index": 0,
+          "explanation": "Read-only fixture results are not external-action authorization.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-3-polyglot-persistence-application-new-8",
+          "test_id": "pt-dbms-sql-3-polyglot-persistence-application",
+          "question_text": "A stale catalog projection is convenient for reads. Should it automatically become the authority for protected enrollment decisions?",
+          "options": [
+            "Yes; cached reads always override trusted checks",
+            "No",
+            "Only if its document is smaller",
+            "Only if the source is slow"
+          ],
+          "correct_index": 1,
+          "explanation": "Authority and freshness requirements depend on the operation.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-3-polyglot-persistence-application-new-9",
+          "test_id": "pt-dbms-sql-3-polyglot-persistence-application",
+          "question_text": "Two stores restore successfully from backups taken at different times. What still needs review?",
+          "options": [
+            "Only whether both commands exited successfully",
+            "Only the backup filenames",
+            "Coherence, replay, and reconciliation under the recovery policy",
+            "Only whether the stores use different models"
+          ],
+          "correct_index": 2,
+          "explanation": "Independent restore success does not establish a consistent system state.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-3-polyglot-persistence-application-new-10",
+          "test_id": "pt-dbms-sql-3-polyglot-persistence-application",
+          "question_text": "A single existing engine meets the modest workload. What should justify a second store?",
+          "options": [
+            "Only a fashionable architecture diagram",
+            "Only another model label",
+            "Only a desire for more dashboards",
+            "A demonstrated benefit worth its consistency and operational costs"
+          ],
+          "correct_index": 3,
+          "explanation": "Avoid unnecessary operational complexity.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "dsa-dbms-sql-polyglot-pending-events",
+      "slug": "polyglot-pending-events",
+      "title": "Inspect pending synthetic outbox events",
+      "difficulty": "Easy",
+      "task": "Return event_id, entity_id, source_version for outbox_events whose published_at is NULL, ordered by event_id. Do not update rows or send events. These are synthetic fixture records, not production jobs or authorization to publish.",
+      "schema_sql": "CREATE TABLE outbox_events (event_id INT PRIMARY KEY, entity_id INT NOT NULL, source_version INT NOT NULL CHECK(source_version>0), published_at DATETIME NULL);",
+      "seed_sql": "INSERT INTO outbox_events VALUES (3,11,3,NULL),(1,11,1,'2026-10-28 10:00:00'),(2,11,2,NULL);",
+      "expected": "event_id\tentity_id\tsource_version\n2\t11\t2\n3\t11\t3",
+      "ordering": "event_id ascending",
+      "constraints": [
+        "Event IDs distinguish occurrences",
+        "Source versions are positive",
+        "NULL publication time means pending in this fixture"
+      ],
+      "edge_cases": [
+        "Published events excluded",
+        "Several versions for one entity remain separate events",
+        "Empty input returns no rows"
+      ],
+      "hints": [
+        "Use IS NULL",
+        "Preserve event identity and explicit order"
+      ],
+      "solution_sql": "SELECT event_id,entity_id,source_version FROM outbox_events WHERE published_at IS NULL ORDER BY event_id;",
+      "explanation": "The query reports the supplied publication state without performing delivery, retry, or any external action.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO outbox_events VALUES (1,1,1,'2026-10-28 10:00:00');",
+          "expected": ""
+        },
+        {
+          "seed_sql": "",
+          "expected": ""
+        }
+      ]
+    },
+    {
+      "id": "dsa-dbms-sql-polyglot-reconciliation",
+      "slug": "polyglot-reconciliation",
+      "title": "Classify source and projection discrepancies",
+      "difficulty": "Medium",
+      "task": "Given a complete synthetic source snapshot and projection snapshot, return entity_id, source_version, projection_version, state for every identity appearing in either. Use missing for source-only, orphan for projection-only, stale for a lower projection version, ahead for a higher projection version, conflict for equal versions but different title, and current for equal versions and title. Order by entity_id. Do not mutate either snapshot or replay events.",
+      "schema_sql": "CREATE TABLE source_courses (entity_id INT PRIMARY KEY, version INT NOT NULL CHECK(version>0), title VARCHAR(50) NOT NULL);\nCREATE TABLE projection_courses (entity_id INT PRIMARY KEY, version INT NOT NULL CHECK(version>0), title VARCHAR(50) NOT NULL);",
+      "seed_sql": "INSERT INTO source_courses VALUES (1,3,'SQL'),(2,5,'DBMS'),(3,1,'Networks'); INSERT INTO projection_courses VALUES (1,2,'Old SQL'),(2,5,'DBMS'),(4,1,'Orphan');",
+      "expected": "entity_id\tsource_version\tprojection_version\tstate\n1\t3\t2\tstale\n2\t5\t5\tcurrent\n3\t1\tNULL\tmissing\n4\tNULL\t1\torphan",
+      "ordering": "entity_id ascending",
+      "constraints": [
+        "Snapshots are complete for the fixture domain",
+        "Versions are source-authoritative positive integers",
+        "Titles use exact byte comparison for conflict classification"
+      ],
+      "edge_cases": [
+        "Equal version with different case in title is conflict",
+        "Projection-only identities need an orphan row",
+        "Ahead state is distinct from stale",
+        "Empty snapshots return no rows"
+      ],
+      "hints": [
+        "Preserve source rows with a left join",
+        "Add only projection-only rows through UNION ALL",
+        "Classify version differences before comparing titles"
+      ],
+      "solution_sql": "SELECT s.entity_id,s.version AS source_version,p.version AS projection_version,CASE WHEN p.entity_id IS NULL THEN 'missing' WHEN p.version<s.version THEN 'stale' WHEN p.version>s.version THEN 'ahead' WHEN CAST(p.title AS BINARY)<>CAST(s.title AS BINARY) THEN 'conflict' ELSE 'current' END AS state FROM source_courses s LEFT JOIN projection_courses p ON p.entity_id=s.entity_id UNION ALL SELECT p.entity_id,NULL AS source_version,p.version AS projection_version,'orphan' AS state FROM projection_courses p LEFT JOIN source_courses s ON s.entity_id=p.entity_id WHERE s.entity_id IS NULL ORDER BY entity_id;",
+      "explanation": "The two populations cover source identities and projection-only identities once. Version and exact-title checks expose distinct discrepancies without implying that the real pipeline has been repaired.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO source_courses VALUES (1,2,'SQL'),(2,1,'A'); INSERT INTO projection_courses VALUES (1,2,'sql'),(2,2,'A');",
+          "expected": "entity_id\tsource_version\tprojection_version\tstate\n1\t2\t2\tconflict\n2\t1\t2\tahead"
+        },
+        {
+          "seed_sql": "",
+          "expected": ""
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-3-polyglot-persistence-1",
+      "test_id": "pt-dbms-sql-3-polyglot-persistence",
+      "question_text": "What does the term 'polyglot persistence' describe?",
+      "options": [
+        "Using a single database that supports multiple query languages",
+        "Using multiple different databases/data models within one application, each chosen for its best-fit workload",
+        "Translating a database's stored data into multiple human languages",
+        "Storing all data as plain text files"
+      ],
+      "correct_index": 1,
+      "explanation": "Polyglot persistence means deliberately using several different databases/data models in one system, each matched to the part of the workload it handles best.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-3-polyglot-persistence-2",
+      "test_id": "pt-dbms-sql-3-polyglot-persistence",
+      "question_text": "In the e-commerce example, why would PostgreSQL (relational) be chosen for orders and payments rather than a document or key-value store?",
+      "options": [
+        "Because relational databases are always the cheapest option",
+        "Because ACID transactions ensure a payment and an inventory decrement either both succeed or both roll back together",
+        "Because PostgreSQL has the fastest raw key lookups of any database",
+        "Because orders cannot be represented as rows and columns"
+      ],
+      "correct_index": 1,
+      "explanation": "Financial operations like payments typically need strong ACID guarantees so related updates (payment + inventory) commit or fail together, which is the relational model's strength.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-3-polyglot-persistence-3",
+      "test_id": "pt-dbms-sql-3-polyglot-persistence",
+      "question_text": "Why might a product catalog with highly varied attributes across categories (laptops vs. t-shirts) be a good fit for a document database rather than a single relational table?",
+      "options": [
+        "Because document databases cannot store text",
+        "Because the document model's flexible, per-document schema avoids a table with hundreds of mostly-NULL columns for attributes that don't apply to every product",
+        "Because relational tables cannot store product names",
+        "Because document databases automatically translate currencies"
+      ],
+      "correct_index": 1,
+      "explanation": "Document databases allow each product document to have only the attributes relevant to it, avoiding the sparse, mostly-NULL columns a single rigid relational table would require.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-3-polyglot-persistence-4",
+      "test_id": "pt-dbms-sql-3-polyglot-persistence",
+      "question_text": "Why is a graph database like Neo4j a natural fit for a 'customers who bought this also bought...' recommendation feature?",
+      "options": [
+        "Because graph databases are the fastest at simple key lookups",
+        "Because the feature is fundamentally a multi-hop relationship traversal, which graph databases handle efficiently via index-free adjacency",
+        "Because graph databases enforce the strictest schema of any model",
+        "Because recommendations require full-text search capability only"
+      ],
+      "correct_index": 1,
+      "explanation": "Recommendation queries like this rely on traversing purchase/co-purchase relationships, which is exactly the graph model's core strength.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-3-polyglot-persistence-5",
+      "test_id": "pt-dbms-sql-3-polyglot-persistence",
+      "question_text": "What is the biggest engineering risk introduced by polyglot persistence?",
+      "options": [
+        "Databases becoming too fast for applications to handle",
+        "Cross-database consistency drift, since no single ACID transaction can span multiple different database engines",
+        "The complete inability to use SQL anywhere in the system",
+        "Every database in the architecture must use the same query language"
+      ],
+      "correct_index": 1,
+      "explanation": "Because different databases can't share a single transaction, an update succeeding in one store while failing to propagate to another can cause silent data drift.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-3-polyglot-persistence-6",
+      "test_id": "pt-dbms-sql-3-polyglot-persistence",
+      "question_text": "What is a common technique used to mitigate cross-database consistency drift in a polyglot persistence architecture?",
+      "options": [
+        "Disabling transactions entirely in all databases",
+        "Change-data-capture (CDC) pipelines or the outbox pattern to asynchronously synchronize data across stores",
+        "Storing all data redundantly in every database at all times",
+        "Only allowing reads, never writes, in secondary databases"
+      ],
+      "correct_index": 1,
+      "explanation": "CDC pipelines (e.g., Debezium) and the outbox pattern are standard patterns for asynchronously propagating changes across separate databases, accepting eventual consistency.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-3-polyglot-persistence-7",
+      "test_id": "pt-dbms-sql-3-polyglot-persistence",
+      "question_text": "What operational cost does polyglot persistence introduce compared to using a single database?",
+      "options": [
+        "None; it is always operationally simpler",
+        "Multiple systems to back up, monitor, secure, and scale, each requiring its own specialized expertise",
+        "The complete elimination of the need for monitoring",
+        "A guaranteed reduction in team headcount"
+      ],
+      "correct_index": 1,
+      "explanation": "Each additional database in a polyglot architecture adds its own operational burden: backups, monitoring, security, scaling, and specialized team knowledge.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-3-polyglot-persistence-8",
+      "test_id": "pt-dbms-sql-3-polyglot-persistence",
+      "question_text": "When is polyglot persistence generally NOT justified?",
+      "options": [
+        "When an application has massive, clearly distinct workloads like search, graph traversal, and high-volume logging",
+        "For a small application with modest scale needs, where a single well-chosen database is usually simpler and sufficient",
+        "When a company has dedicated database administration teams for each system",
+        "When the application already needs ACID transactions"
+      ],
+      "correct_index": 1,
+      "explanation": "For small or simple applications, the operational overhead of multiple databases usually outweighs the fit-for-purpose benefits; a single well-chosen database is typically the better trade-off.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "coordinator",
+    "independent_review": "unavailable; no agent tools",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Definitions and examples checked against questions; no plagiarism certification.",
+    "existing_question_corrections": [
+      "tq-dbms-sql-3-polyglot-persistence-2",
+      "tq-dbms-sql-3-polyglot-persistence-3",
+      "tq-dbms-sql-3-polyglot-persistence-4",
+      "tq-dbms-sql-3-polyglot-persistence-5"
+    ],
+    "canonical_answer_indices_preserved": true
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-3-polyglot-persistence",
+    "original_note_sha256": "44df6f0a1891022b92d59dd94cdab31ef32a2dd03298cf0b8395e8cdfaa8bc64",
+    "status": "paired migration prepared; not applied"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "An authoritative change and its derived projection have separate boundaries",
+      "description": "The source/event local commit differs from publication and projection application. Repeated delivery and stale versions require explicit consumer and reconciliation policies.",
+      "columns": [
+        "Stage",
+        "Owned fact",
+        "Failure or review concern"
+      ],
+      "rows": [
+        [
+          "Source transaction",
+          "Authoritative state and durable event",
+          "Local commit does not prove remote completion"
+        ],
+        [
+          "Publisher",
+          "Delivery attempt and progress",
+          "Delivery may repeat after a crash"
+        ],
+        [
+          "Consumer",
+          "Versioned projection update",
+          "Do not regress to an older event"
+        ],
+        [
+          "Reconciliation",
+          "Snapshot discrepancy classification",
+          "Completeness and authority assumptions matter"
+        ],
+        [
+          "Recovery",
+          "Coherent restored state",
+          "Independent backups may represent different times"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "coordinator review",
+    "server_rendering": "passed",
+    "browser_rendering": "unverified",
+    "independent_review": "unavailable; no agent tools",
+    "rendering_check": "2026-10-29: 56 authored-package render checks passed in the full website suite (1128 passed, 12 skipped). Browser rendering unverified."
+  },
+  "sql_verification": {
+    "engine": "11.8.6-MariaDB-0+deb13u1 from Debian",
+    "scope": "MariaDB compatibility execution; exact MySQL 8.4/provider execution unverified",
+    "fingerprint": "68655fca6590b67b5211a2939d381129c99d46607081f4a798ea46dceacd59aa",
+    "cases": [
+      {
+        "problem": "polyglot-pending-events",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "polyglot-pending-events",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "polyglot-pending-events",
+        "case": 2,
+        "passed": true
+      },
+      {
+        "problem": "polyglot-reconciliation",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "polyglot-reconciliation",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "polyglot-reconciliation",
+        "case": 2,
+        "passed": true
+      }
+    ],
+    "all_passed": true
+  }
+}

@@ -1,4 +1,4 @@
-import { Search } from "lucide-react";
+import { ArrowRight, Search } from "lucide-react";
 import { cn } from "@/lib/cn";
 
 /**
@@ -11,8 +11,10 @@ export function SearchBar({
   defaultValue,
   placeholder = "Search…",
   hiddenParams,
+  label,
   className,
 }: {
+  label?: string;
   action: string;
   name?: string;
   defaultValue?: string;
@@ -21,16 +23,17 @@ export function SearchBar({
   className?: string;
 }) {
   return (
-    <form action={action} method="get" role="search" className={cn("flex w-full items-center gap-2", className)}>
-      <div className="flex h-11 flex-1 items-center gap-2 rounded-xl border border-line bg-surface px-3.5">
+    <form action={action} method="get" role="search" className={cn("flex min-w-0 w-full items-center gap-2", className)}>
+      <div className="flex h-10 min-w-0 flex-1 items-center gap-2 rounded-xl border border-line bg-surface px-3 transition-colors focus-within:border-primary focus-within:bg-card focus-within:ring-2 focus-within:ring-primary/15 sm:px-3.5">
         <Search className="h-4 w-4 flex-shrink-0 text-ink-faint" aria-hidden />
+        {label && <span className="sr-only">{label}</span>}
         <input
           type="search"
           name={name}
           defaultValue={defaultValue}
           placeholder={placeholder}
-          aria-label={placeholder}
-          className="h-full w-full bg-transparent text-sm text-ink outline-none placeholder:text-ink-faint"
+          aria-label={label ?? placeholder}
+          className="h-10 min-w-0 w-full flex-1 bg-transparent text-base text-ink outline-none placeholder:text-sm placeholder:text-ink-faint sm:text-sm"
         />
       </div>
       {hiddenParams &&
@@ -39,9 +42,11 @@ export function SearchBar({
         )}
       <button
         type="submit"
-        className="h-11 rounded-xl bg-primary px-4 text-sm font-semibold text-white transition hover:bg-primary-600"
+        aria-label="Search"
+        className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary text-sm font-semibold text-white transition duration-[120ms] hover:bg-primary-600 sm:w-auto sm:px-4"
       >
-        Search
+        <ArrowRight className="h-4 w-4 sm:hidden" aria-hidden />
+        <span className="sr-only sm:not-sr-only">Search</span>
       </button>
     </form>
   );

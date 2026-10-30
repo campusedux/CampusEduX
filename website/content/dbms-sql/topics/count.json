@@ -1,0 +1,598 @@
+{
+  "source_ref": "chapter-14-sql-functions/count",
+  "slug": "count",
+  "title": "COUNT",
+  "description": "Count SQL rows, known values, distinct identities and conditional matches correctly, including empty inputs and zero-inclusive parent-child reports.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Count the right kind of thing\n\nCOUNT answers how many inputs satisfy a specified counting rule. It can count rows, known expression values or distinct known values. A campus attendance report might need all registration records, registrations with a submitted score or distinct students represented. Those are three different measures, even when a convenient sample makes their answers equal.\n\nBegin by stating what one input row represents. A registration row is not necessarily a student, and a joined registration-and-tag row may be only one fragment of a registration. Understand [aggregate functions](/learning/dbms-sql-tutorial/aggregate-functions) and [null semantics](/learning/dbms-sql-tutorial/null-semantics) before interpreting counts as facts about people or activities.\n\n## Count rows with COUNT star\n\nCOUNT(*) counts every qualifying input row, including rows that contain nulls in some columns. The star does not mean add every numeric column, inspect only primary keys or exclude incomplete records. It specifies a row count. WHERE still controls which rows enter the input population before the ordinary aggregate is calculated.\n\n```sql\nSELECT COUNT(*) AS registration_count\nFROM registrations\nWHERE active = 1;\n```\n\nThis query returns one summary row even when no registration qualifies; the count is zero. Its result is not the number of rows displayed by the summary query, which is one. Distinguish input cardinality from output cardinality when explaining a count report to someone reading a dashboard.\n\n## Count known expression values\n\nCOUNT(score) counts rows where score is not null. A recorded zero score still contributes one counted value. A missing score contributes none. COUNT(0) also counts every input row because the constant zero is a known expression value; COUNT(NULL) counts none because the expression is missing for every row.\n\nMore complicated expressions can become null even when the row exists. COUNT(price * quantity) counts known products, so a missing operand can remove a row from that measure. Specify the expression and its null behavior. Do not describe COUNT(column) as counting complete records unless completeness is actually defined by that exact expression.\n\n## Count distinct values deliberately\n\nCOUNT(DISTINCT student_id) counts different nonnull student identifiers represented in the input. Multiple registrations for one known student contribute one distinct identity. Registrations whose student identity is unknown do not create a special additional distinct-student bucket. COUNT(*) and COUNT(DISTINCT student_id) therefore answer different questions about the same rows.\n\nMySQL also supports a multi-expression COUNT(DISTINCT a,b) form. It counts distinct combinations whose expressions are all nonnull. Other dialects use different forms, so label this syntax clearly. Concatenating values with an arbitrary separator is not a general substitute: different tuples can collide, missing-value behavior can change and collation can affect equality.\n\n## Count a condition without counting false\n\nA common mistake is COUNT(status = 'passed'). For a known status, both a true comparison and a false comparison produce known values, so both are counted. The query counts nonnull comparison results rather than just passed rows. Null status introduces another complication because its comparison can be unknown.\n\nExpress the matching subset as a CASE that yields a nonnull value only when the condition is true:\n\n```sql\nSELECT COUNT(*) AS all_rows,\n       COUNT(CASE WHEN status = 'passed' THEN 1 END) AS passed_rows\nFROM attempts;\n```\n\nThe omitted ELSE produces null for nonmatching rows, which COUNT ignores. Alternatively a carefully specified SUM CASE expression can count matches, but empty-input behavior differs unless handled explicitly. Prefer the expression whose meaning and empty result match the requested report.\n\n## Keep row filters distinct from conditional measures\n\nWHERE status = 'passed' followed by COUNT(*) produces a passed-only population. A conditional count can retain all rows while reporting passed rows alongside other measures. Both can return the same passed count, yet the rest of the report may differ because one query discarded nonpassed input entirely.\n\nUse this distinction when calculating rates. A pass rate may require passed attempts over all eligible attempts, not over all students or only scored attempts. Define both numerator and denominator before division, and guard a zero denominator. A correctly computed count can still be the wrong denominator if its fact grain or eligibility differs from the question.\n\n## Count children safely after an outer join\n\nA catalogue of rooms may need a booking count including rooms with no bookings. Start from rooms and left join bookings. The unmatched room produces one null-extended joined row, so COUNT(*) would report one rather than zero. Count a nonnull booking identity to distinguish a real child from that placeholder.\n\n```sql\nSELECT r.room_id,\n       COUNT(b.booking_id) AS confirmed_count\nFROM rooms AS r\nLEFT JOIN bookings AS b\n  ON b.room_id = r.room_id\n AND b.status = 'confirmed'\nGROUP BY r.room_id\nORDER BY r.room_id ASC;\n```\n\nPut the confirmed-booking restriction in the join condition when the report must retain rooms with none. A WHERE condition on the child status can remove the unmatched room and defeat the intended zero-inclusive output. The intermediate exercise verifies both child membership and preservation of the complete room catalogue.\n\n## Avoid counting multiplied facts\n\nAn additional join to booking attendees can produce several rows for one booking. COUNT(booking_id) then counts those appearances, not unique bookings. COUNT(DISTINCT booking_id) may express the desired identity count, or pre-aggregating the child relationship may establish the correct grain before joining. Choose based on the report's whole contract.\n\nDistinct student names do not necessarily count students: different people can share a name and one person can change names. Use a stable identity when the measure is about identities. Similarly, a distinct monetary amount counts different values, not different orders. Match the distinct expression to the thing the requirement actually asks to count.\n\n## Distinguish empty groups from zero counts\n\nAn ungrouped COUNT returns zero over empty input. An ordinary grouped query has no output row for a group that is absent from the input entirely. Displaying every possible group requires an authoritative group catalogue or another explicit population source. COUNT does not invent missing departments, rooms or categories on its own.\n\nWithin a represented group, COUNT(nullable_value) can be zero while COUNT(*) is positive. That means rows exist but none has a known value for that expression. Keep those measures separate when missing data is meaningful. Replacing a missing group with a zero without stating the catalogue can make a report appear more complete than its observed population supports.\n\n## Treat counts as observations with cost\n\nInnoDB counts are evaluated according to the rows visible to the query's transaction semantics, rather than a universal timeless total. Concurrent inserts, deletes or access restrictions can change what another observation counts. A cached count needs an explicit freshness contract; an estimate should not be labeled an exact live count.\n\nReturning one count row can still involve substantial scanning, filtering, joins or distinct tracking. Indexes and optimizer choices matter, but no blanket claim that COUNT(1) is always faster than COUNT(*) is justified by syntax alone. Inspect the actual plan and workload when needed. Keep approximate performance diagnostics separate from learner-facing exact result examples.\n\n## Test each counting rule separately\n\nThe beginner exercise uses repeated and missing student identities, a real zero score and missing scores. Its measures count rows, known scores, distinct known students and passing scores. The room exercise verifies zero-inclusive confirmed child counts. Check the expected values by listing the contributing identities for each expression.\n\nAdd an entirely empty input, an all-missing expression population, repeated legitimate identities and a parent with only nonmatching children. Explain why each measure changes or stays constant. Recap the question in one sentence: count which rows or values, after which eligibility and at what grain? That sentence is the most useful safeguard against a plausible but misleading number.\n\n## Reconcile counts without changing their meaning\n\nCompare a total row count with the sum of counts from disjoint exhaustive groups when both use the same eligibility. Equality can reveal that the grouping partitions the observed population, but it does not prove the population matches the business request. Overlapping groups can make their sum exceed the total, while excluded groups can make it smaller. Distinct counts generally cannot be added across groups when one identity can appear in several groups.\n\nFor a dashboard that counts students by club, one student can belong to several clubs. Summing each club's distinct-student count therefore counts memberships across clubs rather than distinct students in the whole campus. State whether the report asks for memberships or people before reconciling the numbers. This example makes a useful interview discussion because every individual SQL count can be correct while the proposed addition remains misleading.\n",
+  "references": [
+    {
+      "title": "MySQL 8.4 COUNT and aggregate functions",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/aggregate-functions.html"
+    },
+    {
+      "title": "MySQL 8.4 counting rows",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/counting-rows.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-14-count",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-14-count-1",
+          "test_id": "pt-dbms-sql-14-count",
+          "question_text": "What does COUNT(*) count?",
+          "options": [
+            "Only rows whose every column is known",
+            "All qualifying input rows",
+            "The number of columns",
+            "The sum of identity values"
+          ],
+          "correct_index": 1,
+          "explanation": "Null fields do not remove input rows from COUNT(*).",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-14-count-2",
+          "test_id": "pt-dbms-sql-14-count",
+          "question_text": "What does COUNT(score) exclude?",
+          "options": [
+            "Rows whose score is zero",
+            "Rows where score is NULL",
+            "Repeated scores automatically",
+            "Negative scores automatically"
+          ],
+          "correct_index": 1,
+          "explanation": "COUNT(expression) counts known expression values.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-14-count-3",
+          "test_id": "pt-dbms-sql-14-count",
+          "question_text": "How does a known zero score affect COUNT(score)?",
+          "options": [
+            "It contributes zero",
+            "It makes the result NULL",
+            "It contributes one",
+            "It removes the whole group"
+          ],
+          "correct_index": 2,
+          "explanation": "Zero is a known measured value.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-14-count-4",
+          "test_id": "pt-dbms-sql-14-count",
+          "question_text": "What does COUNT(*) return over empty ungrouped input?",
+          "options": [
+            "No row necessarily",
+            "One result row containing zero",
+            "NULL",
+            "One"
+          ],
+          "correct_index": 1,
+          "explanation": "The summary exists even when its input population is empty.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-14-count-5",
+          "test_id": "pt-dbms-sql-14-count",
+          "question_text": "What does COUNT(DISTINCT student_id) measure?",
+          "options": [
+            "All registrations including repeats",
+            "Different nonnull student identities represented",
+            "A separate identity for each NULL",
+            "All distinct student names necessarily"
+          ],
+          "correct_index": 1,
+          "explanation": "Distinct values and row counts differ.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-14-count-6",
+          "test_id": "pt-dbms-sql-14-count",
+          "question_text": "Does COUNT(0) ignore every input row?",
+          "options": [
+            "Yes, zero always means missing",
+            "Only negative rows contribute",
+            "No, zero is a known expression and every row contributes",
+            "Only the first row contributes"
+          ],
+          "correct_index": 2,
+          "explanation": "COUNT ignores NULL rather than false or zero.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-14-count-7",
+          "test_id": "pt-dbms-sql-14-count",
+          "question_text": "How many inputs contribute to COUNT(NULL)?",
+          "options": [
+            "Every input row",
+            "None",
+            "Only rows with primary keys",
+            "The first ten"
+          ],
+          "correct_index": 1,
+          "explanation": "The expression is unknown on every row.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-14-count-8",
+          "test_id": "pt-dbms-sql-14-count",
+          "question_text": "What should precede choosing the counted expression?",
+          "options": [
+            "A random alias",
+            "A statement of the intended fact grain and population",
+            "A larger output font",
+            "An assumption that names are identities"
+          ],
+          "correct_index": 1,
+          "explanation": "Meaning depends on what one input row represents.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-14-count-new-9",
+          "test_id": "pt-dbms-sql-14-count",
+          "question_text": "Why is COUNT(status='passed') generally not a passed-only count?",
+          "options": [
+            "Both true and false known comparisons are counted",
+            "SQL cannot compare text",
+            "COUNT ignores every true result",
+            "It deletes failed attempts"
+          ],
+          "correct_index": 0,
+          "explanation": "NonNULL is not the same predicate as true.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-14-count-new-10",
+          "test_id": "pt-dbms-sql-14-count",
+          "question_text": "Which expression counts only matching passed rows?",
+          "options": [
+            "COUNT(status='passed') for every possible input",
+            "COUNT(CASE WHEN status='passed' THEN 1 END)",
+            "COUNT(*) without eligibility",
+            "COUNT('passed')"
+          ],
+          "correct_index": 1,
+          "explanation": "Nonmatching CASE outcomes are NULL.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-14-count-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-14-count-application-new-1",
+          "test_id": "pt-dbms-sql-14-count-application",
+          "question_text": "What can an unmatched parent contribute to COUNT(*) after LEFT JOIN?",
+          "options": [
+            "No row ever",
+            "One null-extended joined row",
+            "A real child identity automatically",
+            "Every possible child"
+          ],
+          "correct_index": 1,
+          "explanation": "Count the child identity to distinguish an absent child.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-14-count-application-new-2",
+          "test_id": "pt-dbms-sql-14-count-application",
+          "question_text": "How should a zero-inclusive room report restrict confirmed children?",
+          "options": [
+            "Only in a child WHERE filter that discards unmatched parents",
+            "By deleting unconfirmed data",
+            "In the LEFT JOIN condition",
+            "By removing all rooms with no match"
+          ],
+          "correct_index": 2,
+          "explanation": "The catalogue remains represented even when no confirmed booking exists.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-14-count-application-new-3",
+          "test_id": "pt-dbms-sql-14-count-application",
+          "question_text": "Which expression counts actual matched bookings in that report?",
+          "options": [
+            "COUNT(*) always",
+            "COUNT(r.room_id) always",
+            "COUNT(0) always",
+            "COUNT(b.booking_id) when booking_id is nonnull for real children"
+          ],
+          "correct_index": 3,
+          "explanation": "The unmatched placeholder has a NULL child identity.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-14-count-application-new-4",
+          "test_id": "pt-dbms-sql-14-count-application",
+          "question_text": "What can an attendee join do to COUNT(booking_id)?",
+          "options": [
+            "Multiply appearances of the same booking",
+            "Guarantee unique bookings automatically",
+            "Make every result zero",
+            "Remove every child row"
+          ],
+          "correct_index": 0,
+          "explanation": "Recheck grain after another one-to-many relationship.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-14-count-application-new-5",
+          "test_id": "pt-dbms-sql-14-count-application",
+          "question_text": "Can COUNT(DISTINCT name) safely count all people by identity?",
+          "options": [
+            "Yes, every name is unique by SQL definition",
+            "Not generally, because people can share names",
+            "Only if names contain letters",
+            "Only if COUNT(*) is even"
+          ],
+          "correct_index": 1,
+          "explanation": "Use the actual stable person identity.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-14-count-application-new-6",
+          "test_id": "pt-dbms-sql-14-count-application",
+          "question_text": "What does MySQL COUNT(DISTINCT a,b) omit?",
+          "options": [
+            "All repeated a values regardless of b",
+            "Only combinations where both are numeric",
+            "Combinations where either expression is NULL",
+            "Every row with a primary key"
+          ],
+          "correct_index": 2,
+          "explanation": "This is MySQL-specific multi-expression distinct-count behavior.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-14-count-application-new-7",
+          "test_id": "pt-dbms-sql-14-count-application",
+          "question_text": "Does an ordinary GROUP BY create a missing department row with count zero?",
+          "options": [
+            "Yes, every possible text key is created",
+            "Only if an index exists",
+            "Only for empty strings",
+            "No, absent groups need a defined catalogue to appear"
+          ],
+          "correct_index": 3,
+          "explanation": "Aggregates do not invent group identities.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-14-count-application-new-8",
+          "test_id": "pt-dbms-sql-14-count-application",
+          "question_text": "Can COUNT(nullable_value)=0 coexist with COUNT(*)>0?",
+          "options": [
+            "Yes, rows exist but all expression values are missing",
+            "No, counts must agree",
+            "Only after corrupting the table",
+            "Only when the SQL fails"
+          ],
+          "correct_index": 0,
+          "explanation": "Row existence and known-value existence are distinct.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-14-count-application-new-9",
+          "test_id": "pt-dbms-sql-14-count-application",
+          "question_text": "Is a cached count necessarily an exact current count?",
+          "options": [
+            "Yes, all counts are immutable",
+            "No, it needs a freshness and accuracy contract",
+            "Only if the label says total",
+            "Only if no columns are selected"
+          ],
+          "correct_index": 1,
+          "explanation": "Visibility and time affect observations.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-14-count-application-new-10",
+          "test_id": "pt-dbms-sql-14-count-application",
+          "question_text": "Does COUNT(1) always run faster than COUNT(*)?",
+          "options": [
+            "Yes, by a guaranteed factor of two",
+            "Only for tables with no index",
+            "No universal speed claim follows from those forms alone",
+            "Only when names are distinct"
+          ],
+          "correct_index": 2,
+          "explanation": "Measure the actual plan and workload.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cx-count-registration-measures",
+      "slug": "count-registration-measures",
+      "title": "Count rows, known scores and distinct students",
+      "difficulty": "Easy",
+      "task": "Return total_rows,known_scores,distinct_students,passing_scores over registrations. Passing means score>=50. Unknown student identities do not count as distinct students.",
+      "schema_sql": "CREATE TABLE registrations(registration_id INT PRIMARY KEY,student_id INT NULL,score INT NULL);",
+      "seed_sql": "INSERT INTO registrations VALUES (1,10,80),(2,10,NULL),(3,20,0),(4,NULL,60),(5,NULL,NULL);",
+      "expected": "total_rows\tknown_scores\tdistinct_students\tpassing_scores\n5\t3\t2\t2",
+      "ordering": "As explicitly required by the task and solution query.",
+      "constraints": [
+        "Use only supplied synthetic data.",
+        "Preserve unrelated rows."
+      ],
+      "edge_cases": [
+        "Repeated student ids count once only in the distinct measure.",
+        "Empty input still produces one count row."
+      ],
+      "hints": [
+        "A known zero is still counted by COUNT(score).",
+        "Use a conditional CASE that returns NULL for nonmatches."
+      ],
+      "solution_sql": "SELECT COUNT(*) AS total_rows,COUNT(score) AS known_scores,COUNT(DISTINCT student_id) AS distinct_students,COUNT(CASE WHEN score>=50 THEN 1 END) AS passing_scores FROM registrations;",
+      "explanation": "Five rows exist, three scores are known, known student identities are 10 and 20, and scores 80 and 60 pass.",
+      "validation_cases": [
+        {
+          "seed_sql": "",
+          "expected": "total_rows\tknown_scores\tdistinct_students\tpassing_scores\n0\t0\t0\t0"
+        },
+        {
+          "seed_sql": "INSERT INTO registrations VALUES (1,7,NULL),(2,7,NULL);",
+          "expected": "total_rows\tknown_scores\tdistinct_students\tpassing_scores\n2\t0\t1\t0"
+        },
+        {
+          "seed_sql": "INSERT INTO registrations VALUES (1,9,0),(2,9,50),(3,8,50);",
+          "expected": "total_rows\tknown_scores\tdistinct_students\tpassing_scores\n3\t3\t2\t2"
+        }
+      ]
+    },
+    {
+      "id": "cx-count-confirmed-room-bookings",
+      "slug": "count-confirmed-room-bookings",
+      "title": "Keep rooms with no confirmed bookings",
+      "difficulty": "Medium",
+      "task": "Return room_id,confirmed_count for every room, including zero when no confirmed booking matches. Only bookings whose status equals confirmed count. Order by room_id ascending.",
+      "schema_sql": "CREATE TABLE rooms(room_id INT PRIMARY KEY); CREATE TABLE bookings(booking_id INT PRIMARY KEY,room_id INT NOT NULL,status VARCHAR(20) NOT NULL);",
+      "seed_sql": "INSERT INTO rooms VALUES (1),(2),(3); INSERT INTO bookings VALUES (10,1,'confirmed'),(11,1,'cancelled'),(12,1,'confirmed'),(13,2,'cancelled');",
+      "expected": "room_id\tconfirmed_count\n1\t2\n2\t0\n3\t0",
+      "ordering": "As explicitly required by the task and solution query.",
+      "constraints": [
+        "Use only supplied synthetic data.",
+        "Preserve unrelated rows."
+      ],
+      "edge_cases": [
+        "No child at all differs from nonmatching children but both yield zero.",
+        "An empty room catalogue yields no groups."
+      ],
+      "hints": [
+        "Retain the room catalogue with LEFT JOIN.",
+        "Filter child status inside ON and count the child identity."
+      ],
+      "solution_sql": "SELECT r.room_id,COUNT(b.booking_id) AS confirmed_count FROM rooms AS r LEFT JOIN bookings AS b ON b.room_id=r.room_id AND b.status='confirmed' GROUP BY r.room_id ORDER BY r.room_id ASC;",
+      "explanation": "Rooms 2 and 3 remain represented with no matched child identity; COUNT(*) would incorrectly count the null-extended row.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO rooms VALUES (8),(2); INSERT INTO bookings VALUES (1,8,'cancelled');",
+          "expected": "room_id\tconfirmed_count\n2\t0\n8\t0"
+        },
+        {
+          "seed_sql": "INSERT INTO rooms VALUES (1); INSERT INTO bookings VALUES (3,1,'confirmed'),(4,1,'confirmed');",
+          "expected": "room_id\tconfirmed_count\n1\t2"
+        },
+        {
+          "seed_sql": "",
+          "expected": ""
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-14-count-1",
+      "test_id": "pt-dbms-sql-14-count",
+      "question_text": "Given the orders table (5 rows, 1 with amount = NULL), what does COUNT(*) return?",
+      "options": [
+        "4",
+        "5",
+        "NULL",
+        "1"
+      ],
+      "correct_index": 1,
+      "explanation": "COUNT(*) counts every row regardless of NULLs in any column, so it returns 5.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-14-count-2",
+      "test_id": "pt-dbms-sql-14-count",
+      "question_text": "Given the orders table (5 rows, Bob's amount is NULL, the other 4 amounts are non-NULL), what does COUNT(amount) return?",
+      "options": [
+        "5",
+        "4",
+        "0",
+        "NULL"
+      ],
+      "correct_index": 1,
+      "explanation": "COUNT(column) only counts non-NULL values in that column. One row has a NULL amount, so 4 of the 5 rows are counted.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-14-count-3",
+      "test_id": "pt-dbms-sql-14-count",
+      "question_text": "What does COUNT(DISTINCT customer_name) return for orders placed by Alice, Bob, Alice, Charlie, Bob?",
+      "options": [
+        "5",
+        "2",
+        "3",
+        "0"
+      ],
+      "correct_index": 2,
+      "explanation": "There are 3 distinct customer names (Alice, Bob, Charlie); duplicates are counted once each.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-14-count-4",
+      "test_id": "pt-dbms-sql-14-count",
+      "question_text": "What does COUNT(*) return when run against a completely empty table?",
+      "options": [
+        "NULL",
+        "0",
+        "An error",
+        "-1"
+      ],
+      "correct_index": 1,
+      "explanation": "COUNT(*) always returns a number, 0 for an empty table — unlike SUM/AVG/MIN/MAX which return NULL when there's nothing to aggregate.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-14-count-5",
+      "test_id": "pt-dbms-sql-14-count",
+      "question_text": "A report needs 'how many customer orders have a recorded amount value?'. Which query answers that correctly?",
+      "options": [
+        "SELECT COUNT(*) FROM orders;",
+        "SELECT COUNT(amount) FROM orders;",
+        "SELECT COUNT(DISTINCT amount) FROM orders;",
+        "SELECT SUM(amount) FROM orders;"
+      ],
+      "correct_index": 1,
+      "explanation": "COUNT(amount) counts rows where amount is not NULL, which is exactly 'orders with a recorded amount'.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-14-count-6",
+      "test_id": "pt-dbms-sql-14-count",
+      "question_text": "What is the practical difference between COUNT(1) and COUNT(*) in modern SQL engines?",
+      "options": [
+        "COUNT(1) is significantly faster because it avoids reading columns",
+        "COUNT(1) counts only rows where the first column is non-NULL",
+        "They behave identically — both count all rows regardless of NULLs",
+        "COUNT(1) is invalid syntax in standard SQL"
+      ],
+      "correct_index": 2,
+      "explanation": "COUNT(1) and COUNT(*) are functionally identical in every modern query engine; there is no meaningful difference.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-14-count-7",
+      "test_id": "pt-dbms-sql-14-count",
+      "question_text": "What does COUNT(DISTINCT status) return for the statuses: completed, pending, completed, cancelled, completed?",
+      "options": [
+        "5",
+        "3",
+        "1",
+        "4"
+      ],
+      "correct_index": 1,
+      "explanation": "There are 3 distinct status values (completed, pending, cancelled) among the 5 rows.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-14-count-8",
+      "test_id": "pt-dbms-sql-14-count",
+      "question_text": "What does the literal expression COUNT(NULL) evaluate to?",
+      "options": [
+        "NULL",
+        "0",
+        "1",
+        "An error"
+      ],
+      "correct_index": 1,
+      "explanation": "COUNT(NULL) counts occurrences of a constant NULL expression per row; since NULL is never counted, the result is always 0.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "content_author",
+    "independent_review": "passed",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "drafted; verification pending",
+    "canonical_answer_indices_preserved": true,
+    "editorial_record": "Original seeded MCQ snapshots and canonical answer identities preserved. Newly authored prose, exercises and diagram; third-party references verify facts only.",
+    "independent_review_scope": "2026-10-29 /root/technical_qa: Full notes, all 20 MCQs including every option/explanation, two reference queries and all eight manually traced fixture outputs, and counting diagram reviewed. SQL execution, browser QA and migration integration remain unverified."
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-14-count",
+    "original_note_sha256": "cd8bb6d5c0f98103cf930243b8141e0ccacb53b85d67199e55e4d100ef80a111",
+    "status": "drafted; not included in prepared paired migrations"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Four counts over the same registrations",
+      "description": "Repeated student identity, known zero scores and unknown values contribute differently to each counting rule.",
+      "columns": [
+        "Measure",
+        "Count",
+        "Contributors"
+      ],
+      "rows": [
+        [
+          "COUNT(*)",
+          "5",
+          "All five registration rows"
+        ],
+        [
+          "COUNT(score)",
+          "3",
+          "Scores 80, 0, 60"
+        ],
+        [
+          "COUNT(DISTINCT student_id)",
+          "2",
+          "Known identities 10, 20"
+        ],
+        [
+          "Conditional passing count",
+          "2",
+          "Scores 80, 60"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "author review; independent review pending",
+    "server_rendering": "pending",
+    "browser_rendering": "unverified",
+    "independent_review": "pending"
+  },
+  "authoring_status": "drafted; verification pending",
+  "sql_verification": {
+    "scope": "not executed; native interpreter blocked by command policy; exact MySQL/provider execution pending",
+    "all_passed": false,
+    "cases": []
+  }
+}
+

@@ -5,7 +5,7 @@ import { cn } from "@/lib/cn";
  * Filter / tag chip — mirrors `mobile-app/src/components/ui/Chip.tsx`.
  * Active = solid indigo; inactive = bordered. Renders a link when `href` is set.
  */
-const base = "inline-flex items-center rounded-full border px-3.5 py-1.5 text-sm font-medium transition max-sm:min-h-11";
+const base = "inline-flex min-h-11 min-w-11 max-w-full shrink-0 items-center justify-center rounded-full border px-3.5 py-1.5 text-sm font-medium transition [overflow-wrap:anywhere]";
 const state = (active: boolean) =>
   active ? "border-primary bg-primary text-white" : "border-line bg-card text-ink-muted hover:border-primary/40";
 

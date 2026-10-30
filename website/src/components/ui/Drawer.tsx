@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
+import { useDialog } from "@/lib/useDialog";
 import { cn } from "@/lib/cn";
 
 /**
@@ -20,6 +21,7 @@ export function Drawer({
   onClose,
   side = "right",
   title,
+  ariaLabel,
   children,
   className,
 }: {
@@ -27,23 +29,14 @@ export function Drawer({
   onClose: () => void;
   side?: "left" | "right" | "bottom";
   title?: string;
+  ariaLabel?: string;
   children: React.ReactNode;
   className?: string;
 }) {
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
 
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
-    document.addEventListener("keydown", onKey);
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.removeEventListener("keydown", onKey);
-      document.body.style.overflow = prev;
-    };
-  }, [open, onClose]);
+  const dialogRef = useDialog(open && mounted, onClose);
 
   if (!mounted) return null;
 
@@ -57,7 +50,7 @@ export function Drawer({
   return createPortal(
     <div
       className={cn(
-        "fixed inset-0 z-[100]",
+        "fixed inset-0 z-modal",
         // Closed: invisible (after the slide-out finishes) so nothing inside is focusable.
         open ? "pointer-events-auto visible" : "pointer-events-none invisible transition-[visibility] duration-200",
       )}
@@ -71,9 +64,11 @@ export function Drawer({
         onClick={onClose}
       />
       <div
+        ref={dialogRef}
+        tabIndex={-1}
         role="dialog"
         aria-modal="true"
-        aria-label={title}
+        aria-label={title ?? ariaLabel}
         className={cn(
           "absolute flex flex-col bg-card shadow-card-lg transition-transform duration-200 ease-out motion-reduce:transition-none",
           panelPos,

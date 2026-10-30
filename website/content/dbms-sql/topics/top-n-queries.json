@@ -1,0 +1,621 @@
+{
+  "source_ref": "chapter-13-sorting-and-pagination/top-n-queries",
+  "slug": "top-n-queries",
+  "title": "Top N Queries",
+  "description": "Choose SQL top-N semantics deliberately: fixed row counts, cutoff ties, distinct value levels and per-group ranking with deterministic ordering.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Specify what top means\n\nA top-N query chooses the leading rows under an explicit ranking rule. A campus shop might need its three most expensive products; an adviser might need two highest-scoring applications in each programme. Both requests sound simple, but eligibility, ordering, tie policy and output grain determine the actual answer. Write these decisions down before choosing SQL syntax.\n\nN is a requested maximum or ranking threshold, depending on the contract. It is not automatically the number of distinct prices, the number of categories or the number of rows stored. Understand [ORDER BY](/learning/dbms-sql-tutorial/order-by), [LIMIT](/learning/dbms-sql-tutorial/limit) and [WHERE](/learning/dbms-sql-tutorial/where) first. Per-group solutions additionally require window functions, introduced later in this explanation.\n\n## Retrieve a bounded global result\n\nFor a fixed maximum of three products, order the eligible population by price descending and then by unique identity ascending. The retained exercise uses this query:\n\n```sql\nSELECT id, name, price\nFROM products\nORDER BY price DESC, id ASC\nLIMIT 3;\n```\n\nPrice defines the business ranking. Identity resolves equal-price choices reproducibly for one visible dataset. LIMIT admits at most three result rows, so a table containing only two products returns two. With no qualifying products, the result is empty. The operation reads the data; it does not delete rows outside the returned set or mark them as lower priority permanently.\n\nBottom-N reverses the relevant business measure direction. For the cheapest products use ascending price while keeping the required tiebreaker policy explicit. Changing all directions blindly may reverse the tie preference too. The terms top and bottom describe a requested order rather than a separate MySQL TOP keyword. SQL Server and other databases have different limiting forms; do not mix them into MySQL examples.\n\n## Filter before deciding the winners\n\nIf the request asks for the three most expensive active products, inactive products should not consume any winning positions. Apply eligibility in the same query before its ordering and limit. Taking three from all products and filtering those afterwards answers a different question and can return too few active products despite enough eligible candidates existing.\n\nKeep access scope in that eligibility contract. A department leaderboard should rank only rows the request may expose. A top-N clause is not an authorization check, and a user-controlled maximum does not justify broadening filters. Validate the accepted N range at the trusted boundary, use the client's supported parameter mechanism and preserve failure handling separately from a valid empty result.\n\n## Distinguish fixed rows from cutoff ties\n\nConsider five eligible prices ordered as one hundred, ninety, ninety, ninety and eighty. A fixed top-three request returns three rows, selecting two of the price-ninety identities according to its tiebreaker. A request to include every row tied with the third position returns four rows. Both are defensible requirements, but they need different query semantics.\n\nDo not promise exactly N rows without checking population size. Do not promise all ties with ordinary LIMIT either. Some databases provide FETCH FIRST or TOP variants with ties, but MySQL 8.4 SELECT does not offer those forms. Express the chosen policy with supported ranking or a carefully derived boundary query, and label dialect differences accurately when discussing alternatives.\n\n## Use ranking values for tie-aware selection\n\nA window function computes a ranking value for each row while retaining individual rows. ROW_NUMBER assigns separate sequential positions. RANK assigns equal values to peers and leaves gaps after ties. DENSE_RANK also groups peers but advances without gaps. These distinctions matter when N means positions versus distinct measure levels.\n\nFor the five prices above, RANK produces one, two, two, two and five. Filtering ranks up to three includes all four rows through the third position's tie. DENSE_RANK produces one, two, two, two and three; filtering it up to three includes the eighty-price row as well. That query means the top three distinct price levels, which is a different promise.\n\nUse only the intended business measure inside a tie-aware ranking order. Adding a unique identity there makes every tuple distinct and destroys price-peer grouping. Add identity to the final display ORDER BY instead. For fixed row positions with ROW_NUMBER, include identity inside its window order to make the selected identities deterministic. The placement of the tiebreaker carries meaning.\n\n## Rank independently inside each group\n\nA global LIMIT cannot select two winners for every programme. Use PARTITION BY to restart numbering within each programme, then filter the numbered result in an outer query. This MySQL 8.4 example implements a maximum of two applications per programme, breaking equal scores by ascending application identity:\n\n```sql\nWITH numbered AS (\n  SELECT application_id, programme, score,\n         ROW_NUMBER() OVER (\n           PARTITION BY programme\n           ORDER BY score DESC, application_id ASC\n         ) AS position_in_programme\n  FROM applications\n  WHERE eligible = 1\n)\nSELECT application_id, programme, score\nFROM numbered\nWHERE position_in_programme <= 2\nORDER BY programme ASC, score DESC, application_id ASC;\n```\n\nThe outer query filters a computed value from the inner result. A same-level WHERE cannot filter that window result as though it were an input column. The final ordering makes the display predictable across programmes; the ordering inside the window defines numbering and does not replace the outer display contract.\n\n## Decide the row grain before ranking\n\nA join can multiply an application into several rows, such as one per attached document. Ranking those joined rows can let one application occupy several winning positions. Determine whether the request ranks applications, documents or an aggregate per programme. Use an appropriate pre-aggregation or existence filter when the output should contain one row per application.\n\nSimilarly, a top programme by total applications query must first calculate one count per programme and then rank those counts. Sorting individual application scores answers a different question. Explain which fact each row represents before and after aggregation. Include a fixture with several child rows for one parent when reviewing a query that combines ranking with one-to-many relationships.\n\n## Make missing values and changing data explicit\n\nA missing score may mean ungraded rather than a genuine low score. Decide whether to exclude it, place it in a separate bucket or apply an explicitly documented replacement. Never silently convert an unknown score to zero merely because it simplifies sorting. A tiebreaker completes an order but does not decide the business meaning of absent measurements.\n\nA fixed order also does not freeze a leaderboard over time. New candidates and score updates can change membership between requests. If results are used to make an award or produce an audit record, define the dataset version and decision moment separately. A SELECT with LIMIT establishes a result for its observation, not a permanent ranking or cross-request snapshot.\n\n## Review performance without assuming a shortcut\n\nA small returned result can still require substantial work identifying eligible candidates, aggregating them or sorting. A suitable access path may reduce that work for a simple ordered query, while per-group window calculations can involve many candidates. Inspect representative plans and measure against realistic group sizes instead of inferring cheap execution from a small N alone.\n\nKeep indexes aligned with actual filters and ranking needs, balancing read benefits against storage and write cost. Test the query form the application really issues, including selected columns and joins. The retained exercise verifies fixed global membership; the new exercise checks per-group membership. Neither static fixture constitutes a benchmark, and SQL outputs remain execution-pending until the relevant runner passes.\n\n## Test ranking boundaries deliberately\n\nUse more candidates at the cutoff than the requested row count can admit. A fixture containing three tied candidates and a two-row allocation reveals whether a solution uses fixed positions or peer inclusion. Give those candidates identifiers that are not insertion ordered, so physical insertion order cannot accidentally satisfy the expected tiebreaker. Add a second group whose best score is lower than every score in the first group; a mistaken global limit will then exclude that group entirely.\n\nKeep selection and presentation assertions separate during review. The correct winners can still arrive in an unspecified display order when the outer ORDER BY is absent. Conversely, neatly sorted rows can contain the wrong winning identities. Verify both membership and the requested sequence, and explain the empty result for an entirely ineligible population rather than changing the eligibility rule to make examples visually fuller.\n\n## Recap with contrasting cases\n\nFor each query, state whether the requirement is a fixed number of rows, all peers at a positional cutoff or a number of distinct value levels. Then identify eligibility, grain, ranking terms, tie handling and final display order. This short explanation exposes many mistakes before implementation.\n\nPractise with a population smaller than N, a tie across the boundary, one group with no eligible rows and another with many equal scores. Predict which identities survive and why, then execute the supplied fixtures. Continue to [window functions, ranking and frames](/learning/dbms-sql-tutorial/window-functions-ranking-and-frames) for broader analytic patterns once these selection contracts are clear.\n",
+  "references": [
+    {
+      "title": "MySQL 8.4 SELECT statement",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/select.html"
+    },
+    {
+      "title": "MySQL 8.4 window function descriptions",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/window-function-descriptions.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-13-top-n-queries",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-13-top-n-queries-1",
+          "test_id": "pt-dbms-sql-13-top-n-queries",
+          "question_text": "Which MySQL pattern returns a bounded global set of highest measures?",
+          "options": [
+            "GROUP BY measure LIMIT n alone",
+            "ORDER BY measure DESC with a complete tie order and LIMIT n",
+            "WHERE measure = MAX(measure) without aggregation scope",
+            "SELECT DISTINCT measure without an order"
+          ],
+          "correct_index": 1,
+          "explanation": "The order defines winners; the limit caps rows. MySQL syntax should not be called universal SQL syntax.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-13-top-n-queries-2",
+          "test_id": "pt-dbms-sql-13-top-n-queries",
+          "question_text": "How does a lowest-price query change the business measure order?",
+          "options": [
+            "Remove every filter",
+            "Use price ASC rather than price DESC",
+            "Replace ORDER BY with GROUP BY",
+            "Delete expensive rows first"
+          ],
+          "correct_index": 1,
+          "explanation": "Ascending price places lower known prices first while tie policy remains explicit.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-13-top-n-queries-3",
+          "test_id": "pt-dbms-sql-13-top-n-queries",
+          "question_text": "With enough rows, what does ORDER BY price DESC LIMIT 3 do when a price tie crosses the boundary?",
+          "options": [
+            "Always includes every tied row",
+            "Always raises an exception",
+            "Returns three rows without guaranteeing which tied identities survive",
+            "Returns only two rows"
+          ],
+          "correct_index": 2,
+          "explanation": "Plain LIMIT caps rows and incomplete ordering leaves peer selection unspecified.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-13-top-n-queries-4",
+          "test_id": "pt-dbms-sql-13-top-n-queries",
+          "question_text": "Which MySQL 8.4 design includes all price peers through the third positional cutoff?",
+          "options": [
+            "RANK over price descending, filtered to rank <= 3 in an outer query",
+            "LIMIT 3 automatically",
+            "MySQL SELECT TOP 3 WITH TIES",
+            "DISTINCT price LIMIT 3 without an order"
+          ],
+          "correct_index": 0,
+          "explanation": "RANK preserves price peers and positional gaps; MySQL's SELECT grammar does not provide TOP WITH TIES.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-13-top-n-queries-5",
+          "test_id": "pt-dbms-sql-13-top-n-queries",
+          "question_text": "What does a fixed top two per programme request mean?",
+          "options": [
+            "Two rows across the entire table",
+            "Up to two selected rows independently within every programme",
+            "Exactly two programmes",
+            "Delete all other applications"
+          ],
+          "correct_index": 1,
+          "explanation": "The ranking restarts inside each group.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-13-top-n-queries-6",
+          "test_id": "pt-dbms-sql-13-top-n-queries",
+          "question_text": "Does a global ORDER BY score DESC LIMIT 2 select two applications per programme?",
+          "options": [
+            "Yes, programme columns imply partitioning",
+            "No, the limit applies to the complete result",
+            "Only if programme names are unique",
+            "Only if an index exists"
+          ],
+          "correct_index": 1,
+          "explanation": "Per-group selection requires explicit group-aware logic.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-13-top-n-queries-7",
+          "test_id": "pt-dbms-sql-13-top-n-queries",
+          "question_text": "Which tool directly expresses separate fixed row positions within each programme?",
+          "options": [
+            "DISTINCT alone",
+            "ROW_NUMBER with PARTITION BY programme and a complete order",
+            "An unordered global LIMIT",
+            "A table rename"
+          ],
+          "correct_index": 1,
+          "explanation": "Window numbering is a direct solution; other logically equivalent techniques can exist.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-13-top-n-queries-8",
+          "test_id": "pt-dbms-sql-13-top-n-queries",
+          "question_text": "Two products share the highest price. What does ORDER BY price DESC LIMIT 1 specify?",
+          "options": [
+            "Both products must return",
+            "One row returns, with identity unspecified unless ordering is completed",
+            "No rows may return",
+            "The server must reject the query"
+          ],
+          "correct_index": 1,
+          "explanation": "The row cap and peer inclusion policy are separate.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-13-top-n-queries-new-9",
+          "test_id": "pt-dbms-sql-13-top-n-queries",
+          "question_text": "Only two eligible rows exist and LIMIT 5 is used. How many return?",
+          "options": [
+            "Two",
+            "Five padded rows",
+            "Zero necessarily",
+            "An exception necessarily"
+          ],
+          "correct_index": 0,
+          "explanation": "The limit is a maximum, not a required result size.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-13-top-n-queries-new-10",
+          "test_id": "pt-dbms-sql-13-top-n-queries",
+          "question_text": "When should active-only eligibility be applied for top active products?",
+          "options": [
+            "Only after taking winners from all rows",
+            "Before selecting the requested winners",
+            "Only in a presentation label",
+            "Only after returning the result to the browser"
+          ],
+          "correct_index": 1,
+          "explanation": "The eligible population determines which positions compete.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-13-top-n-queries-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-13-top-n-queries-application-new-1",
+          "test_id": "pt-dbms-sql-13-top-n-queries-application",
+          "question_text": "Prices are 100,90,90,90,80. Which ranks does RANK by descending price assign?",
+          "options": [
+            "1,2,3,4,5",
+            "1,2,2,2,5",
+            "1,2,2,2,3",
+            "1,1,1,1,1"
+          ],
+          "correct_index": 1,
+          "explanation": "Peers share rank and occupy positions that create later gaps.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-13-top-n-queries-application-new-2",
+          "test_id": "pt-dbms-sql-13-top-n-queries-application",
+          "question_text": "For those five prices, how many rows satisfy RANK <= 3?",
+          "options": [
+            "Two",
+            "Three",
+            "Four",
+            "Five"
+          ],
+          "correct_index": 2,
+          "explanation": "The three price-90 peers all share rank two, following the price-100 row.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-13-top-n-queries-application-new-3",
+          "test_id": "pt-dbms-sql-13-top-n-queries-application",
+          "question_text": "What does DENSE_RANK <= 3 by descending price select?",
+          "options": [
+            "Exactly three identities regardless of ties",
+            "Only unique product identities",
+            "The third inserted product only",
+            "Rows belonging to the top three distinct price levels"
+          ],
+          "correct_index": 3,
+          "explanation": "Dense rank advances once per peer group without positional gaps.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-13-top-n-queries-application-new-4",
+          "test_id": "pt-dbms-sql-13-top-n-queries-application",
+          "question_text": "Why exclude unique id from a price-tie RANK window order?",
+          "options": [
+            "Including it makes each ordering tuple distinct and breaks price peers",
+            "RANK cannot order integers",
+            "Identifiers must never be displayed",
+            "MySQL forbids several ordering terms"
+          ],
+          "correct_index": 0,
+          "explanation": "Use identity in the outer display order while defining price peers by price alone.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-13-top-n-queries-application-new-5",
+          "test_id": "pt-dbms-sql-13-top-n-queries-application",
+          "question_text": "Where can a computed ROW_NUMBER be filtered in the shown MySQL design?",
+          "options": [
+            "Only inside its own OVER clause",
+            "In an outer query reading the numbered result",
+            "In the same input WHERE as an ordinary source column",
+            "Only after deleting rows"
+          ],
+          "correct_index": 1,
+          "explanation": "The outer query sees the inner computed window value as a result column.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-13-top-n-queries-application-new-6",
+          "test_id": "pt-dbms-sql-13-top-n-queries-application",
+          "question_text": "Does the window's order guarantee final display order?",
+          "options": [
+            "Yes, always",
+            "Only with character group names",
+            "No, specify the outer ORDER BY",
+            "Only when scores are tied"
+          ],
+          "correct_index": 2,
+          "explanation": "Window ordering controls calculation rather than the final result order contract.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-13-top-n-queries-application-new-7",
+          "test_id": "pt-dbms-sql-13-top-n-queries-application",
+          "question_text": "Why inspect a one-to-many join before ranking applications?",
+          "options": [
+            "Joins make score comparisons impossible",
+            "Every join supplies one row per parent automatically",
+            "All joins remove tied scores",
+            "One application may occupy several joined result rows"
+          ],
+          "correct_index": 3,
+          "explanation": "Ranking the wrong row grain can allocate several positions to one intended entity.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-13-top-n-queries-application-new-8",
+          "test_id": "pt-dbms-sql-13-top-n-queries-application",
+          "question_text": "How should an ungraded NULL score be treated?",
+          "options": [
+            "According to an explicit eligibility and missing-value policy",
+            "Always replace it with zero silently",
+            "Always award it first place",
+            "Ignore its meaning and trust a random order"
+          ],
+          "correct_index": 0,
+          "explanation": "Missing measurement and genuine zero can have different business meanings.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-13-top-n-queries-application-new-9",
+          "test_id": "pt-dbms-sql-13-top-n-queries-application",
+          "question_text": "Does LIMIT 2 guarantee cheap execution for a large grouped ranking?",
+          "options": [
+            "Yes, only two input rows can be examined",
+            "No, identifying winners can still require substantial input work",
+            "Only if the group column is text",
+            "Only if the table has no primary key"
+          ],
+          "correct_index": 1,
+          "explanation": "Output cardinality is distinct from filtering, aggregation and sorting cost.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-13-top-n-queries-application-new-10",
+          "test_id": "pt-dbms-sql-13-top-n-queries-application",
+          "question_text": "What extra contract is needed for a permanent award decision based on a leaderboard?",
+          "options": [
+            "Only a larger LIMIT",
+            "Only a unique id tiebreaker",
+            "A defined dataset version and decision moment",
+            "No contract; every SELECT freezes future updates"
+          ],
+          "correct_index": 2,
+          "explanation": "Deterministic selection for one observation does not establish a permanent snapshot.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cp-dbms-sql-top-3-most-expensive-products",
+      "slug": "top-3-most-expensive-products",
+      "title": "Top 3 Most Expensive Products",
+      "difficulty": "Easy",
+      "existing_problem": true,
+      "original_description_md5": "b9a1d5da34c2723b4473996951eb3f8f",
+      "task": "Return id,name,price for the three most expensive products, highest price first. Break ties by id ascending. Return fewer rows if fewer products exist.",
+      "schema_sql": "CREATE TABLE products (\n  id INTEGER PRIMARY KEY,\n  name TEXT NOT NULL,\n  category TEXT NOT NULL,\n  price INTEGER NOT NULL\n);",
+      "seed_sql": "INSERT INTO products (id, name, category, price) VALUES\n(1, 'ProLaptop', 'Electronics', 85000),\n(2, 'Desk Lamp', 'Home', 900),\n(3, 'ProPhone', 'Electronics', 45000),\n(4, 'Python Basics', 'Books', 350),\n(5, 'Novel', 'Books', 220),\n(6, 'Headphones', 'Electronics', 3000),\n(7, 'Rug', 'Home', 4500);",
+      "expected": "id\tname\tprice\n1\tProLaptop\t85000\n3\tProPhone\t45000\n7\tRug\t4500",
+      "ordering": "price descending, id ascending",
+      "constraints": [
+        "Return at most three rows.",
+        "Preserve source data."
+      ],
+      "edge_cases": [
+        "Complete ties with identity.",
+        "A short population returns fewer rows."
+      ],
+      "hints": [
+        "Sort highest price first.",
+        "Apply the row cap after defining a complete order."
+      ],
+      "solution_sql": "SELECT id,name,price FROM products ORDER BY price DESC,id ASC LIMIT 3;",
+      "explanation": "The sample's leading prices belong to identities 1,3,7. A fixed row cap does not include extra peers beyond the third row.",
+      "check_sql": "",
+      "original_check_sql": "",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO products (id, name, category, price) VALUES\n(1, 'Tablet', 'Electronics', 20000),\n(2, 'Sofa', 'Home', 30000),\n(3, 'Speaker', 'Electronics', 5000),\n(4, 'Cookbook', 'Books', 400),\n(5, 'Chair', 'Home', 2500),\n(6, 'Mouse', 'Electronics', 900);",
+          "expected": "id\tname\tprice\n2\tSofa\t30000\n1\tTablet\t20000\n3\tSpeaker\t5000"
+        },
+        {
+          "seed_sql": "INSERT INTO products VALUES (9,'Nine','Lab',5),(2,'Two','Lab',5),(7,'Seven','Lab',5),(1,'One','Lab',5);",
+          "expected": "id\tname\tprice\n1\tOne\t5\n2\tTwo\t5\n7\tSeven\t5"
+        },
+        {
+          "seed_sql": "INSERT INTO products VALUES (6,'Only','Lab',2);",
+          "expected": "id\tname\tprice\n6\tOnly\t2"
+        }
+      ]
+    },
+    {
+      "id": "cx-top-two-applications-per-programme",
+      "slug": "top-two-applications-per-programme",
+      "title": "Choose two eligible applications per programme",
+      "difficulty": "Medium",
+      "task": "Return application_id,programme,score for up to two eligible applications in each programme. Rank by score descending and application_id ascending within each programme. Order the final result by programme ascending, score descending, application_id ascending.",
+      "schema_sql": "CREATE TABLE applications(application_id INT PRIMARY KEY,programme VARCHAR(20) NOT NULL,score INT NOT NULL,eligible INT NOT NULL);",
+      "seed_sql": "INSERT INTO applications VALUES (8,'AI',90,1),(2,'AI',90,1),(4,'AI',80,1),(1,'AI',100,0),(7,'DB',75,1),(3,'DB',85,1),(9,'Web',60,1);",
+      "expected": "application_id\tprogramme\tscore\n2\tAI\t90\n8\tAI\t90\n3\tDB\t85\n7\tDB\t75\n9\tWeb\t60",
+      "ordering": "programme ascending, score descending, application_id ascending",
+      "constraints": [
+        "Each eligible application competes only inside its programme.",
+        "Use MySQL 8.4 window functions and preserve source rows."
+      ],
+      "edge_cases": [
+        "An ineligible highest score consumes no position.",
+        "A group with fewer than two eligible rows returns fewer."
+      ],
+      "hints": [
+        "Number eligible rows with PARTITION BY programme.",
+        "Filter the computed position in an outer query."
+      ],
+      "solution_sql": "WITH numbered AS (SELECT application_id,programme,score,ROW_NUMBER() OVER (PARTITION BY programme ORDER BY score DESC,application_id ASC) AS position_in_programme FROM applications WHERE eligible=1) SELECT application_id,programme,score FROM numbered WHERE position_in_programme<=2 ORDER BY programme ASC,score DESC,application_id ASC;",
+      "explanation": "The two tied AI winners are chosen by ascending identity. DB supplies both eligible candidates and Web supplies its sole candidate. The inactive AI leader never competes.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO applications VALUES (9,'AI',5,1),(1,'AI',5,1),(7,'AI',5,1),(3,'DB',99,0);",
+          "expected": "application_id\tprogramme\tscore\n1\tAI\t5\n7\tAI\t5"
+        },
+        {
+          "seed_sql": "INSERT INTO applications VALUES (4,'AI',90,0),(2,'DB',60,0);",
+          "expected": ""
+        },
+        {
+          "seed_sql": "INSERT INTO applications VALUES (4,'AI',-2,1),(3,'AI',-1,1),(8,'AI',-3,1);",
+          "expected": "application_id\tprogramme\tscore\n3\tAI\t-1\n4\tAI\t-2"
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-13-top-n-queries-1",
+      "test_id": "pt-dbms-sql-13-top-n-queries",
+      "question_text": "What is the standard SQL pattern for a global 'Top N' query?",
+      "options": [
+        "GROUP BY measure_column LIMIT n",
+        "ORDER BY measure_column DESC LIMIT n",
+        "WHERE measure_column = MAX(measure_column)",
+        "SELECT DISTINCT measure_column LIMIT n"
+      ],
+      "correct_index": 1,
+      "explanation": "Ordering by the measure column descending and then limiting to N rows is the standard way to get the top N rows.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-13-top-n-queries-2",
+      "test_id": "pt-dbms-sql-13-top-n-queries",
+      "question_text": "How would you modify a Top N query to instead return the N lowest values (Bottom N)?",
+      "options": [
+        "Add a WHERE clause filtering out high values",
+        "Change ORDER BY ... DESC to ORDER BY ... ASC",
+        "Use GROUP BY instead of ORDER BY",
+        "Bottom N queries are not possible in SQL"
+      ],
+      "correct_index": 1,
+      "explanation": "Switching the sort direction to ASC returns the lowest values first, so LIMIT N then captures the Bottom N.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-13-top-n-queries-3",
+      "test_id": "pt-dbms-sql-13-top-n-queries",
+      "question_text": "If the 3rd and 4th ranked rows are tied on the sort column, what does plain `ORDER BY col DESC LIMIT 3` do?",
+      "options": [
+        "Automatically includes both tied rows, returning 4 total",
+        "Returns an error due to the ambiguous tie",
+        "Returns exactly 3 rows, arbitrarily including one of the tied rows and excluding the other",
+        "Averages the two tied rows into one result"
+      ],
+      "correct_index": 2,
+      "explanation": "Plain LIMIT always cuts off at exactly N rows; when a tie straddles the cutoff, which tied row is kept is not guaranteed.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-13-top-n-queries-4",
+      "test_id": "pt-dbms-sql-13-top-n-queries",
+      "question_text": "Which SQL feature is designed to include ALL rows tied with the Nth value, even if that means returning more than N rows?",
+      "options": [
+        "LIMIT WITH TIES / FETCH FIRST N ROWS WITH TIES",
+        "GROUP BY HAVING",
+        "DISTINCT ON",
+        "OFFSET 0"
+      ],
+      "correct_index": 0,
+      "explanation": "WITH TIES (available in SQL Server and newer standard SQL) explicitly extends the result to include all rows tied with the cutoff value.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-13-top-n-queries-5",
+      "test_id": "pt-dbms-sql-13-top-n-queries",
+      "question_text": "What does 'Top N per group' mean, e.g. 'top 2 highest-rated products per category'?",
+      "options": [
+        "The same thing as a global Top N query",
+        "Finding the N highest-ranked rows within EACH distinct group/category, not just N rows overall",
+        "A query that only works with exactly 2 categories",
+        "A query that requires deleting all but the top N rows"
+      ],
+      "correct_index": 1,
+      "explanation": "Top N per group asks for N top rows independently within every group, which is a fundamentally different (and harder) question than a single global Top N.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-13-top-n-queries-6",
+      "test_id": "pt-dbms-sql-13-top-n-queries",
+      "question_text": "Does `SELECT name, category, rating FROM products ORDER BY rating DESC LIMIT 2;` correctly return the top 2 rated products in EACH category?",
+      "options": [
+        "Yes, LIMIT automatically applies per category",
+        "No — it returns only 2 rows total across the whole table, not 2 per category",
+        "Yes, but only if the table has exactly 2 categories",
+        "No, because ORDER BY cannot be combined with category columns"
+      ],
+      "correct_index": 1,
+      "explanation": "Without partitioning logic, LIMIT applies globally to the whole result set, so this returns just the single overall top 2 rows, not 2 per group.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-13-top-n-queries-7",
+      "test_id": "pt-dbms-sql-13-top-n-queries",
+      "question_text": "What SQL feature is generally required to correctly solve a 'Top N per group' problem?",
+      "options": [
+        "Plain ORDER BY and LIMIT only",
+        "Window functions such as ROW_NUMBER() or RANK() partitioned by the group column",
+        "The DISTINCT keyword alone",
+        "Nested LIMIT clauses"
+      ],
+      "correct_index": 1,
+      "explanation": "Window functions like ROW_NUMBER()/RANK() with PARTITION BY the group column can rank rows within each group, enabling correct Top-N-per-group filtering.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-13-top-n-queries-8",
+      "test_id": "pt-dbms-sql-13-top-n-queries",
+      "question_text": "A query returns the single most expensive product using `ORDER BY price DESC LIMIT 1`. What happens if two products are tied for the highest price?",
+      "options": [
+        "The query returns both tied products",
+        "The query returns exactly one of the tied products, chosen arbitrarily by the engine unless a tiebreaker or WITH TIES is used",
+        "The query throws a runtime error",
+        "The query returns zero rows"
+      ],
+      "correct_index": 1,
+      "explanation": "Plain LIMIT 1 returns exactly one row even when there's a tie for that position; which tied row is returned is not guaranteed without an additional tiebreaker or a WITH TIES clause.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "content_author",
+    "independent_review": "passed",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Independent manual review passed; native MySQL fixture evidence recorded separately; provider/browser/Supabase release gates remain separate.",
+    "canonical_answer_indices_preserved": true,
+    "editorial_record": "Original seed snapshots retained. Live questions correct MySQL dialect and tie semantics while preserving answer identities. All new prose, fixtures and illustration independently authored; reference facts checked against MySQL documentation.",
+    "independent_reviewer": "Codex reviewer, current 2026-10-30 session",
+    "independent_review_scope": "Read full notes, all 640 MCQ stems/options/canonical answers/explanations, 64 exercise contracts/solutions/fixtures, and all 32 diagrams. Verified retained identities/answers through source-continuity tests; SQL execution evidence is recorded separately. No external originality, provider, live application or Supabase authorization clearance.",
+    "independent_review_record": "reports/independent-review-2026-10-30.json",
+    "content_sha256": "d90ceac8a73c62d8cb21381f777b2750bd2d39df90b28c74d0815587a8a5a5b6"
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-13-top-n-queries",
+    "original_note_sha256": "7e2850adff0c996a82af63c64a87a2a47c227a8c5bbcf9fa696093e6b1b633b1",
+    "status": "drafted; not included in prepared paired migrations"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Three top-N contracts select different results",
+      "description": "For prices 100,90,90,90,80, ROW_NUMBER uses price DESC and identity ASC; RANK and DENSE_RANK use price DESC alone. Fixed rows, positional cutoff ties and distinct value levels differ.",
+      "columns": [
+        "Identity",
+        "Price",
+        "ROW_NUMBER",
+        "RANK",
+        "DENSE_RANK"
+      ],
+      "rows": [
+        [
+          "1",
+          "100",
+          "1",
+          "1",
+          "1"
+        ],
+        [
+          "2",
+          "90",
+          "2",
+          "2",
+          "2"
+        ],
+        [
+          "3",
+          "90",
+          "3",
+          "2",
+          "2"
+        ],
+        [
+          "4",
+          "90",
+          "4",
+          "2",
+          "2"
+        ],
+        [
+          "5",
+          "80",
+          "5",
+          "5",
+          "3"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "author traced peer and row-position distinctions; independent review pending",
+    "server_rendering": "pending",
+    "browser_rendering": "unverified",
+    "independent_review": "pending"
+  },
+  "authoring_status": "drafted; verification pending",
+  "sql_verification": {
+    "scope": "not executed; command policy blocks native interpreter execution; MySQL/provider pending",
+    "all_passed": false,
+    "cases": []
+  }
+}

@@ -1,0 +1,627 @@
+{
+  "source_ref": "chapter-14-sql-functions/numeric-functions",
+  "slug": "numeric-functions",
+  "title": "Numeric Functions",
+  "description": "Use MySQL ROUND, TRUNCATE, CEILING, FLOOR, ABS, MOD and DIV; understand decimal precision, negative values, and safe denominator handling.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Numeric functions express different measurement decisions\n\nNumeric functions transform quantities according to an explicit rule: round a measured cost, count the whole containers needed for a shipment, or calculate the magnitude of a difference. These are ordinary scalar operations when used per row. They do not aggregate a whole table merely because their output is numeric.\n\nBefore using them, understand [numeric data types](/learning/dbms-sql-tutorial/data-types), basic SELECT expressions, and missing values. State the units and accepted domain. Rounding a currency amount to two decimal places and rounding a number of containers to an integer answer different questions. A plausible number is insufficient if the operation expresses the wrong rule.\n\n## Round to the precision the requirement actually names\n\nROUND accepts a value and an optional number of decimal places. With an exact decimal input, rounding twelve and three hundred forty-five thousandths to two places produces twelve and thirty-five hundredths. The discarded part determines the boundary decision; the function does not simply remove every extra digit.\n\n```sql\nSELECT ROUND(CAST('12.345' AS DECIMAL(8,3)), 2) AS rounded_cost;\n```\n\nThat is a manually anticipated result to execute during validation. Choosing two places for every domain is not automatically correct. A measurement, tax calculation, or unit price can require a different scale. Document where rounding occurs and retain sufficient intermediate precision for the accepted calculation.\n\n## Exact and approximate inputs can round differently\n\nMySQL distinguishes exact decimal arguments from approximate floating-point arguments. Exact-value rounding uses its documented half-away-from-zero rule. A positive halfway value moves upward in magnitude, while a negative halfway value moves downward in numeric order. Approximate rounding can depend on the platform library, so spelling a literal differently can change the argument category.\n\nUse a declared DECIMAL input when an exercise depends on exact decimal halves. Do not promise that every floating-point representation contains the mathematical decimal fraction a reader sees on screen. ROUND can format a calculated boundary according to its rules, but it cannot reconstruct precision already lost during import or earlier arithmetic.\n\n## Negative precision rounds larger units\n\nA negative decimal-place argument requests rounding to the left of the decimal point. Rounding twelve hundred thirty-four to a precision of negative two selects the nearest hundred, twelve hundred. This is useful for intentionally coarse reporting, but it should not replace the exact stored figure unless the storage contract calls for that loss of detail.\n\nDistinguish numeric rounding from display formatting. A rounded value remains a numeric result; an interface may still choose how many trailing zeros to display. Converting every number to text for visual consistency can make later sorting or arithmetic follow the wrong domain. Keep computation and presentation responsibilities clear.\n\n## Ceiling and floor move in opposite numeric directions\n\nCEILING returns the least integer not smaller than its input. FLOOR returns the greatest integer not larger than its input. For positive two and one tenth, those boundaries are three and two. For negative two and one tenth, they are negative two and negative three. Up and down refer to numeric order, not simply removing or adding a minus sign.\n\nMySQL also accepts CEIL as a synonym for CEILING. Already integral values remain unchanged. These functions are useful when partial units must be treated according to a physical rule, such as requiring a whole additional container for any remaining items. Validate the quantity domain before interpreting the resulting integer as an operational instruction.\n\n## Truncation discards digits rather than choosing a neighbor\n\nTRUNCATE removes digits beyond a requested decimal precision. For a negative fractional value, truncating to zero decimal places moves toward zero, whereas FLOOR moves toward negative infinity. Neither rule is a universal replacement for ROUND. A report requiring discarded fractions should say so rather than use the vague phrase round down.\n\nThe distinction is especially useful in interviews because positive examples can conceal it. Negative two and nine tenths truncates to negative two but floors to negative three. Include a negative nonintegral fixture whenever comparing these operations. An unchanged whole-number fixture separately proves that a solution should not always adjust the input.\n\n## Absolute value measures magnitude without direction\n\nABS returns a number's magnitude. It is useful for the distance between a measured quantity and an expected quantity. An error of negative five and an error of positive five both have magnitude five. If the report must distinguish shortages from surpluses, preserve the signed difference alongside its magnitude.\n\nThe result must fit the applicable numeric representation. Taking the absolute value of the most negative signed BIGINT can overflow because its positive counterpart does not fit that same signed range. Avoid teaching ABS as an operation that can never fail. Choose appropriate types and test the actual accepted bounds.\n\n## Division and integer quotient are separate in MySQL\n\nThe slash operator in MySQL does not become integer division merely because both operands are integer literals. Seven divided by two with slash retains a fractional result. DIV is MySQL's integer-quotient operator and discards the fractional part toward zero for supported inputs. These differences correct a common portability mistake.\n\n```sql\nSELECT 7 / 2 AS fractional_result,\n       7 DIV 2 AS whole_quotient,\n       MOD(7, 2) AS remainder;\n```\n\nThe anticipated mathematical values are three and one half, three, and one. Exact printed scale can depend on the expression types and division precision settings. Do not describe one formatted string as universal across engine configurations. Label cross-dialect examples separately when their integer division rules differ.\n\nInteger packaging counts can avoid fractional-division precision entirely. Add one to the integer quotient when the remainder is positive. This is equivalent to rounding the exact nonnegative quotient upward, but it does not risk losing a tiny fractional remainder when slash division rounds to its configured scale. The packaging exercise uses this exact integer construction.\n\n## Remainder needs its own sign policy\n\nMOD returns the remainder, and MySQL supports percent as an equivalent operator spelling for this purpose. With positive seventeen and five, the remainder is two. With a negative dividend, the remainder can be negative. A generic claim that modulo always returns a nonnegative bucket number is therefore unsafe for unrestricted signed input.\n\nA scheduling rule assigning positive identifiers to a fixed number of buckets can use a remainder deliberately. If identifiers may be negative, define normalization under an explicit rule. Remainder is not division rounded down, and it is not a cryptographic distribution mechanism. Match the arithmetic interpretation to the actual domain rather than borrowing a convenient operator name.\n\n## Zero and missing denominators require deliberate handling\n\nDivision or remainder with zero is not a portable always-throws rule. In MySQL, expression context, SQL mode, and statement type affect diagnostics and whether invalid arithmetic produces NULL or an error. A lesson should not rely on a warning to communicate a business validation failure.\n\nFor a permitted ratio report, [NULLIF](/learning/dbms-sql-tutorial/nullif) can turn a zero denominator into NULL so the expression has no known ratio. That is different from declaring the input acceptable or inventing a zero result. A trusted write path should reject forbidden zero denominators under its own explicit input contract.\n\n## Rounding before aggregation changes the calculation\n\nAdding rounded line amounts can differ from rounding a final total. A report needs an explicit policy for when each value reaches its final precision. Preserve the unrounded input when later reconciliation requires it, and compare totals computed under the accepted policy rather than hide a discrepancy with another unexplained rounding step.\n\nFor example, two line amounts of four thousandths each round separately to zero, but their total rounds to one hundredth. Neither sequence is universally correct for every accounting or measurement domain. The requirement must establish the accepted stage, precision, and reconciliation rule before implementation or testing.\n\n## Apply arithmetic only within its stated contract\n\nThe beginner exercise compares exact rounding with truncation on synthetic decimal adjustments. The intermediate exercise computes full containers, loose units, and required containers only for nonnegative quantities with positive capacities. Invalid capacities remain visibly uncomputed rather than becoming plausible shipping instructions.\n\nRead each expression in terms of units, rounding direction, missingness, and representable range. Check negative boundaries, exact halves, zero, and invalid denominators. Once those cases match the stated meaning, inspect performance when relevant; wrapping indexed columns in functions can affect access plans, and no arithmetic rewrite should silently change which source rows qualify.\n",
+  "references": [
+    {
+      "title": "MySQL 8.4 mathematical functions",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/mathematical-functions.html"
+    },
+    {
+      "title": "MySQL 8.4 arithmetic operators",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/arithmetic-functions.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-14-numeric-functions",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-14-numeric-functions-1",
+          "test_id": "pt-dbms-sql-14-numeric-functions",
+          "question_text": "What does ROUND(CAST('28.376' AS DECIMAL(8,3)),2) return mathematically?",
+          "options": [
+            "28.37",
+            "28.38",
+            "29",
+            "28.376"
+          ],
+          "correct_index": 1,
+          "explanation": "The third decimal digit causes the hundredths place to increase.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-14-numeric-functions-2",
+          "test_id": "pt-dbms-sql-14-numeric-functions",
+          "question_text": "What is CEILING(8.2)?",
+          "options": [
+            "8",
+            "9",
+            "8.2",
+            "0"
+          ],
+          "correct_index": 1,
+          "explanation": "Ceiling is the least integer not smaller than the value.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-14-numeric-functions-3",
+          "test_id": "pt-dbms-sql-14-numeric-functions",
+          "question_text": "What is FLOOR(8.9)?",
+          "options": [
+            "9",
+            "8",
+            "8.9",
+            "7"
+          ],
+          "correct_index": 1,
+          "explanation": "Floor is the greatest integer not larger than the value.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-14-numeric-functions-4",
+          "test_id": "pt-dbms-sql-14-numeric-functions",
+          "question_text": "What is ABS(-18)?",
+          "options": [
+            "-18",
+            "18",
+            "0",
+            "NULL"
+          ],
+          "correct_index": 1,
+          "explanation": "Absolute value gives magnitude without the original sign.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-14-numeric-functions-5",
+          "test_id": "pt-dbms-sql-14-numeric-functions",
+          "question_text": "What is MOD(23,6)?",
+          "options": [
+            "3",
+            "5",
+            "6",
+            "3.8333"
+          ],
+          "correct_index": 1,
+          "explanation": "Three complete sixes account for eighteen, leaving five.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-14-numeric-functions-6",
+          "test_id": "pt-dbms-sql-14-numeric-functions",
+          "question_text": "In MySQL, how do 7 DIV 2 and MOD(7,2) differ?",
+          "options": [
+            "Both return 3.5",
+            "DIV returns the integer quotient 3; MOD returns the remainder 1",
+            "DIV returns 1 while MOD returns 3",
+            "The slash operator must replace DIV to obtain an integer quotient"
+          ],
+          "correct_index": 1,
+          "explanation": "MySQL DIV is explicit integer division; slash preserves a fractional result.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-14-numeric-functions-7",
+          "test_id": "pt-dbms-sql-14-numeric-functions",
+          "question_text": "What is FLOOR(-8.2)?",
+          "options": [
+            "-8",
+            "-9",
+            "8",
+            "-8.2"
+          ],
+          "correct_index": 1,
+          "explanation": "Floor moves toward negative infinity rather than toward zero.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-14-numeric-functions-8",
+          "test_id": "pt-dbms-sql-14-numeric-functions",
+          "question_text": "What is ROUND(1476,-2)?",
+          "options": [
+            "1476",
+            "1500",
+            "1400",
+            "1480"
+          ],
+          "correct_index": 1,
+          "explanation": "Negative precision rounds to larger units; the nearest hundred is fifteen hundred.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-14-numeric-functions-new-9",
+          "test_id": "pt-dbms-sql-14-numeric-functions",
+          "question_text": "What does MySQL 7 / 2 produce conceptually?",
+          "options": [
+            "A fractional quotient of three and one half",
+            "The integer quotient 3 solely because literals are integers",
+            "The remainder 1",
+            "An unsupported-operator error"
+          ],
+          "correct_index": 0,
+          "explanation": "Do not import another dialect's integer slash behavior into MySQL.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-14-numeric-functions-new-10",
+          "test_id": "pt-dbms-sql-14-numeric-functions",
+          "question_text": "For negative 8.9, how do TRUNCATE(x,0) and FLOOR(x) differ?",
+          "options": [
+            "Both give -9",
+            "TRUNCATE gives -8, while FLOOR gives -9",
+            "TRUNCATE gives -9, while FLOOR gives -8",
+            "Both give 9"
+          ],
+          "correct_index": 1,
+          "explanation": "Truncation discards the fractional digits toward zero.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-14-numeric-functions-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-14-numeric-functions-application-new-1",
+          "test_id": "pt-dbms-sql-14-numeric-functions-application",
+          "question_text": "How does exact DECIMAL halfway rounding behave in MySQL?",
+          "options": [
+            "Every halfway case rounds toward zero",
+            "Every halfway case rounds toward positive infinity",
+            "Halfway cases round away from zero",
+            "It always uses string ordering"
+          ],
+          "correct_index": 2,
+          "explanation": "Exact decimal arguments follow the documented exact-value rounding rule.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-14-numeric-functions-application-new-2",
+          "test_id": "pt-dbms-sql-14-numeric-functions-application",
+          "question_text": "Why avoid assuming one universal result for approximate halfway rounding?",
+          "options": [
+            "ROUND cannot accept approximate values",
+            "All decimals are stored exactly in FLOAT",
+            "Approximate values always become text",
+            "Approximate arguments and platform rounding behavior can differ"
+          ],
+          "correct_index": 3,
+          "explanation": "Input representation and documented implementation behavior matter.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-14-numeric-functions-application-new-3",
+          "test_id": "pt-dbms-sql-14-numeric-functions-application",
+          "question_text": "Can ABS fail for the most negative signed BIGINT?",
+          "options": [
+            "Yes, its positive magnitude can exceed the signed range",
+            "No, magnitude never needs additional range",
+            "Only if the value is zero",
+            "It must always return the same negative integer"
+          ],
+          "correct_index": 0,
+          "explanation": "Representability limits still apply to arithmetic transformations.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-14-numeric-functions-application-new-4",
+          "test_id": "pt-dbms-sql-14-numeric-functions-application",
+          "question_text": "Is MySQL MOD of a negative dividend guaranteed nonnegative?",
+          "options": [
+            "Yes, it is always a nonnegative bucket",
+            "No, the remainder can be negative",
+            "Yes, it always rounds to zero",
+            "MOD rejects every negative input"
+          ],
+          "correct_index": 1,
+          "explanation": "A nonnegative bucket policy needs explicit normalization if negative ids are allowed.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-14-numeric-functions-application-new-5",
+          "test_id": "pt-dbms-sql-14-numeric-functions-application",
+          "question_text": "Why is divide-by-zero behavior not described as always throwing in MySQL?",
+          "options": [
+            "Zero automatically becomes one",
+            "MySQL never detects invalid arithmetic",
+            "Context, SQL mode, and statement type affect diagnostics and results",
+            "Every division is integer division"
+          ],
+          "correct_index": 2,
+          "explanation": "Use deliberate validation rather than a portable always-errors assumption.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-14-numeric-functions-application-new-6",
+          "test_id": "pt-dbms-sql-14-numeric-functions-application",
+          "question_text": "What does NULLIF(capacity,0) achieve as a report denominator?",
+          "options": [
+            "It proves the original capacity was valid",
+            "It changes the stored capacity to one",
+            "It guarantees a numerical zero result",
+            "It turns zero capacity into NULL for an unknown ratio"
+          ],
+          "correct_index": 3,
+          "explanation": "Expression-level handling preserves an undefined result without inventing valid input.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-14-numeric-functions-application-new-7",
+          "test_id": "pt-dbms-sql-14-numeric-functions-application",
+          "question_text": "Two exact amounts are 0.004 each. What distinguishes their rounded sum policies at two places?",
+          "options": [
+            "Rounding each gives a total 0.00; rounding their total gives 0.01",
+            "Both must always give 0.01",
+            "Rounding each gives 0.01 per line",
+            "The total becomes 0.80"
+          ],
+          "correct_index": 0,
+          "explanation": "Rounding stage is part of the calculation contract.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-14-numeric-functions-application-new-8",
+          "test_id": "pt-dbms-sql-14-numeric-functions-application",
+          "question_text": "A shipment has ten units and capacity four. How many containers are needed when partial containers count?",
+          "options": [
+            "2",
+            "3",
+            "2.5",
+            "1"
+          ],
+          "correct_index": 1,
+          "explanation": "Ceiling of the positive fractional quotient counts the final partially filled container.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-14-numeric-functions-application-new-9",
+          "test_id": "pt-dbms-sql-14-numeric-functions-application",
+          "question_text": "Does ROUND automatically determine how many trailing zeros an interface displays?",
+          "options": [
+            "Yes, every client must print the same text",
+            "Only when input is negative",
+            "No, numeric rounding and display formatting are separate concerns",
+            "It sorts all numbers as strings"
+          ],
+          "correct_index": 2,
+          "explanation": "A numerical result and its rendered textual form are distinct.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-14-numeric-functions-application-new-10",
+          "test_id": "pt-dbms-sql-14-numeric-functions-application",
+          "question_text": "What should the packaging report do with nonpositive capacity under its stated contract?",
+          "options": [
+            "Treat capacity as one without a rule",
+            "Emit a plausible zero-container instruction",
+            "Drop every valid row as well",
+            "Return uncomputed NULL metrics for that invalid row"
+          ],
+          "correct_index": 3,
+          "explanation": "Invalid denominator input must not silently become an accepted shipping instruction.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cx-numeric-exact-rounding",
+      "slug": "numeric-exact-rounding",
+      "title": "Compare rounding with decimal truncation",
+      "difficulty": "Easy",
+      "task": "Return adjustment_id,rounded_value,truncated_value from adjustments ordered by adjustment_id. Round exact amount to two decimal places with ROUND and truncate to two places with TRUNCATE. Retain NULL outputs for missing amounts and preserve source data.",
+      "schema_sql": "CREATE TABLE adjustments(adjustment_id INT PRIMARY KEY,amount DECIMAL(8,3));",
+      "seed_sql": "INSERT INTO adjustments VALUES (1,12.345),(2,-12.345),(3,0.009),(4,NULL);",
+      "expected": "adjustment_id\trounded_value\ttruncated_value\n1\t12.35\t12.34\n2\t-12.35\t-12.34\n3\t0.01\t0.00\n4\tNULL\tNULL",
+      "ordering": "adjustment_id ASC.",
+      "constraints": [
+        "Use the supplied exact DECIMAL expression.",
+        "Preserve signed values and missingness."
+      ],
+      "edge_cases": [
+        "Negative exact halves round away from zero.",
+        "Truncation discards digits instead of selecting the nearest value.",
+        "NULL remains NULL."
+      ],
+      "hints": [
+        "Both functions accept the requested precision as their second argument.",
+        "Do not replace TRUNCATE with FLOOR."
+      ],
+      "solution_sql": "SELECT adjustment_id,ROUND(amount,2) AS rounded_value,TRUNCATE(amount,2) AS truncated_value FROM adjustments ORDER BY adjustment_id;",
+      "explanation": "The exact decimal halfway values round away from zero, while truncation discards the third decimal digit toward zero. Both expressions preserve NULL rather than introduce a numerical default.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO adjustments VALUES (8,-0.004),(2,9.999),(5,4.000);",
+          "expected": "adjustment_id\trounded_value\ttruncated_value\n2\t10.00\t9.99\n5\t4.00\t4.00\n8\t0.00\t0.00"
+        },
+        {
+          "seed_sql": "INSERT INTO adjustments VALUES (1,NULL);",
+          "expected": "adjustment_id\trounded_value\ttruncated_value\n1\tNULL\tNULL"
+        },
+        {
+          "seed_sql": "",
+          "expected": ""
+        }
+      ]
+    },
+    {
+      "id": "cx-numeric-packaging-metrics",
+      "slug": "numeric-packaging-metrics",
+      "title": "Calculate containers with an explicit validity rule",
+      "difficulty": "Medium",
+      "task": "Return shipment_id,complete_boxes,loose_units,boxes_needed for every shipments row ordered by shipment_id. For quantity>=0 and capacity>0, compute the integer quotient, remainder, and number of whole boxes needed including one for a nonzero remainder. For every invalid row, including NULL capacity, return NULL in all three metrics. Preserve input data.",
+      "schema_sql": "CREATE TABLE shipments(shipment_id INT PRIMARY KEY,quantity INT NOT NULL,capacity INT);",
+      "seed_sql": "INSERT INTO shipments VALUES (1,10,4),(2,8,4),(3,0,5),(4,5,0),(5,-1,4),(6,4,NULL);",
+      "expected": "shipment_id\tcomplete_boxes\tloose_units\tboxes_needed\n1\t2\t2\t3\n2\t2\t0\t2\n3\t0\t0\t0\n4\tNULL\tNULL\tNULL\n5\tNULL\tNULL\tNULL\n6\tNULL\tNULL\tNULL",
+      "ordering": "shipment_id ASC.",
+      "constraints": [
+        "Valid quantity is nonnegative and valid capacity is positive.",
+        "Keep invalid rows visible with uncomputed metrics.",
+        "Do not treat zero capacity as one."
+      ],
+      "edge_cases": [
+        "Exact multiples need no extra box.",
+        "Zero units need zero boxes.",
+        "Negative or missing capacity must not generate an instruction."
+      ],
+      "hints": [
+        "Use CASE to enforce the domain for each computed result.",
+        "Use DIV for the integer quotient and MOD for the remainder; add one to the quotient when a positive remainder needs a final box."
+      ],
+      "solution_sql": "SELECT shipment_id,CASE WHEN quantity>=0 AND capacity>0 THEN quantity DIV NULLIF(capacity,0) END AS complete_boxes,CASE WHEN quantity>=0 AND capacity>0 THEN MOD(quantity,NULLIF(capacity,0)) END AS loose_units,CASE WHEN quantity>=0 AND capacity>0 THEN (quantity DIV NULLIF(capacity,0))+(MOD(quantity,NULLIF(capacity,0))>0) END AS boxes_needed FROM shipments ORDER BY shipment_id;",
+      "explanation": "The validity condition separates calculations from rejected denominator or quantity states. DIV counts complete boxes and MOD identifies loose units. Adding one when the remainder is positive counts a partial box without rounding a fractional quotient first. Invalid rows remain visible with NULL metrics.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO shipments VALUES (9,1,3),(2,0,0),(6,7,-2),(3,12,3);",
+          "expected": "shipment_id\tcomplete_boxes\tloose_units\tboxes_needed\n2\tNULL\tNULL\tNULL\n3\t4\t0\t4\n6\tNULL\tNULL\tNULL\n9\t0\t1\t1"
+        },
+        {
+          "seed_sql": "INSERT INTO shipments VALUES (1,0,NULL);",
+          "expected": "shipment_id\tcomplete_boxes\tloose_units\tboxes_needed\n1\tNULL\tNULL\tNULL"
+        },
+        {
+          "seed_sql": "",
+          "expected": ""
+        },
+        {
+          "seed_sql": "INSERT INTO shipments VALUES (1,100001,100000),(2,1,100000);",
+          "expected": "shipment_id\tcomplete_boxes\tloose_units\tboxes_needed\n1\t1\t1\t2\n2\t0\t1\t1"
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-14-numeric-functions-1",
+      "test_id": "pt-dbms-sql-14-numeric-functions",
+      "question_text": "What does ROUND(316.6666, 2) return?",
+      "options": [
+        "316.66",
+        "316.67",
+        "317.00",
+        "316.6666"
+      ],
+      "correct_index": 1,
+      "explanation": "Rounding 316.6666 to 2 decimal places gives 316.67 (the third decimal digit, 6, rounds the second digit up from 6 to 7).",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-14-numeric-functions-2",
+      "test_id": "pt-dbms-sql-14-numeric-functions",
+      "question_text": "What does CEILING(150.10) return?",
+      "options": [
+        "150",
+        "151",
+        "150.10",
+        "150.1"
+      ],
+      "correct_index": 1,
+      "explanation": "CEILING rounds up to the next whole number, so 150.10 becomes 151.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-14-numeric-functions-3",
+      "test_id": "pt-dbms-sql-14-numeric-functions",
+      "question_text": "What does FLOOR(150.90) return?",
+      "options": [
+        "151",
+        "150",
+        "150.9",
+        "149"
+      ],
+      "correct_index": 1,
+      "explanation": "FLOOR rounds down toward negative infinity, so 150.90 becomes 150.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-14-numeric-functions-4",
+      "test_id": "pt-dbms-sql-14-numeric-functions",
+      "question_text": "What does ABS(-250.00) return?",
+      "options": [
+        "-250.00",
+        "250.00",
+        "0",
+        "NULL"
+      ],
+      "correct_index": 1,
+      "explanation": "ABS returns the absolute (non-negative) value of a number, so -250.00 becomes 250.00.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-14-numeric-functions-5",
+      "test_id": "pt-dbms-sql-14-numeric-functions",
+      "question_text": "What does MOD(17, 5) (equivalently 17 % 5) return?",
+      "options": [
+        "3",
+        "2",
+        "3.4",
+        "12"
+      ],
+      "correct_index": 1,
+      "explanation": "17 divided by 5 is 3 with a remainder of 2; MOD returns just the remainder, 2.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-14-numeric-functions-6",
+      "test_id": "pt-dbms-sql-14-numeric-functions",
+      "question_text": "What is the key difference between integer division (7 / 2 in an all-integer context) and MOD (7 % 2)?",
+      "options": [
+        "They always return the same value",
+        "Integer division returns the truncated quotient (3), while MOD returns the remainder (1)",
+        "MOD always returns 0",
+        "Integer division is not supported in any SQL dialect"
+      ],
+      "correct_index": 1,
+      "explanation": "7 / 2 with integer operands truncates to 3 (discarding the remainder), while 7 % 2 = 1 returns exactly that discarded remainder.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-14-numeric-functions-7",
+      "test_id": "pt-dbms-sql-14-numeric-functions",
+      "question_text": "What does FLOOR(-150.10) return?",
+      "options": [
+        "-150",
+        "-151",
+        "-150.10",
+        "150"
+      ],
+      "correct_index": 1,
+      "explanation": "FLOOR always rounds toward negative infinity, so for a negative number like -150.10, it rounds further down to -151, not up to -150.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-14-numeric-functions-8",
+      "test_id": "pt-dbms-sql-14-numeric-functions",
+      "question_text": "What does ROUND(1234, -2) return?",
+      "options": [
+        "1234.00",
+        "1200",
+        "1230",
+        "1300"
+      ],
+      "correct_index": 1,
+      "explanation": "A negative decimal-places argument rounds to the left of the decimal point; rounding 1234 to the nearest hundred gives 1200.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "/root/integration_seo author",
+    "independent_review": "passed",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Independent manual review passed; native MySQL fixture evidence recorded separately; provider/browser/Supabase release gates remain separate.",
+    "existing_question_corrections": [
+      "tq-dbms-sql-14-numeric-functions-1",
+      "tq-dbms-sql-14-numeric-functions-2",
+      "tq-dbms-sql-14-numeric-functions-3",
+      "tq-dbms-sql-14-numeric-functions-4",
+      "tq-dbms-sql-14-numeric-functions-5",
+      "tq-dbms-sql-14-numeric-functions-6",
+      "tq-dbms-sql-14-numeric-functions-7",
+      "tq-dbms-sql-14-numeric-functions-8"
+    ],
+    "canonical_answer_indices_preserved": true,
+    "editorial_record": "Original seed snapshots retained. Rewritten questions preserve IDs and answer positions, including correction of seed MCQ6 to distinguish MySQL DIV integer quotient from slash fractional division. No existing numeric-functions coding exercise found in the inspected seed.",
+    "independent_reviewer": "Codex reviewer, current 2026-10-30 session",
+    "independent_review_scope": "Read full notes, all 640 MCQ stems/options/canonical answers/explanations, 64 exercise contracts/solutions/fixtures, and all 32 diagrams. Verified retained identities/answers through source-continuity tests; SQL execution evidence is recorded separately. No external originality, provider, live application or Supabase authorization clearance.",
+    "independent_review_record": "reports/independent-review-2026-10-30.json",
+    "content_sha256": "04da1b7c1c7680c641b166b99bf6f18844f6dfd602263733eb44deb758a5292f"
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-14-numeric-functions",
+    "original_note_sha256": "d35b1413fdb76eff4ee9be5e40e9d9cb74ff1286fbfd140bb36083c51812b807",
+    "status": "drafted; not included in prepared paired migrations"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Rounding direction changes negative values",
+      "description": "For exact decimal input, nearest rounding, truncation, ceiling, and floor represent different numeric rules rather than interchangeable versions of rounding.",
+      "columns": [
+        "Exact input",
+        "ROUND to 0 places",
+        "TRUNCATE to 0 places",
+        "CEILING",
+        "FLOOR"
+      ],
+      "rows": [
+        [
+          "2.5",
+          "3",
+          "2",
+          "3",
+          "2"
+        ],
+        [
+          "-2.5",
+          "-3",
+          "-2",
+          "-2",
+          "-3"
+        ],
+        [
+          "-2.9",
+          "-3",
+          "-2",
+          "-2",
+          "-3"
+        ],
+        [
+          "2.0",
+          "2",
+          "2",
+          "2",
+          "2"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required; original comparison table",
+    "technical_review": "authored draft; independent check pending",
+    "server_rendering": "pending",
+    "browser_rendering": "unverified",
+    "independent_review": "pending"
+  },
+  "authoring_status": "drafted; verification pending",
+  "sql_verification": {
+    "scope": "not executed; exact MySQL 8.4/provider and compatibility execution pending",
+    "all_passed": false,
+    "cases": []
+  }
+}

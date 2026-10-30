@@ -1,0 +1,625 @@
+{
+  "source_ref": "chapter-14-sql-functions/avg",
+  "slug": "avg",
+  "title": "AVG",
+  "description": "Learn SQL AVG with NULL-aware denominators, weighted averages, join pitfalls, MySQL numeric types, worked examples and practice exercises.",
+  "dialect": "MySQL 8.4",
+  "notes": "## An average describes a chosen population\n\nAVG calculates the arithmetic mean of the known numeric values supplied to it. Imagine a campus repair desk measuring how many minutes completed repairs take. A supervisor wants one number that summarizes observed repair duration. Add the recorded durations and divide by how many durations were recorded. SQL performs this calculation over an expression, after the query determines which records qualify.\n\nThe hard question is often what belongs in that population. Completed repairs, open repairs and cancelled requests describe different events. A correct arithmetic calculation over the wrong records can still produce a misleading report. Before writing a query, state the entity being measured, the eligible records, the unit and the treatment of missing observations. An average without these definitions is difficult to interpret or compare.\n\n## Know the prerequisites and measurement scale\n\nYou should understand SELECT, WHERE and NULL before using this function. Grouped examples also use GROUP BY, which divides qualifying rows into separate populations. A numeric duration measured consistently in minutes is suitable input. A character label such as urgent is not a duration, and averaging its implicit numeric conversion would not create a meaningful measure.\n\nUse a numeric type that matches the data. Exact DECIMAL values suit fixed precision amounts. Approximate floating point types represent measurements with their own rounding behavior. MySQL returns a DECIMAL result for exact numeric arguments and a DOUBLE result for approximate numeric arguments. Do not assume every database engine returns the same type or formats the result with the same number of decimal places.\n\n## Follow a small dataset by hand\n\nCreate this synthetic setup in a disposable practice database. The identifier distinguishes individual repair observations; it is not part of the measured value.\n\n```sql\nCREATE TABLE repair_observations (\n  observation_id INT PRIMARY KEY,\n  minutes DECIMAL(8,2)\n);\nINSERT INTO repair_observations VALUES\n  (1, 10.00), (2, 20.00), (3, NULL), (4, 30.00);\nSELECT COUNT(*) AS rows_seen,\n       COUNT(minutes) AS known_durations,\n       ROUND(AVG(minutes), 2) AS mean_minutes\nFROM repair_observations;\n```\n\nThere are four records but only three known durations. Their sum is sixty minutes, so the predicted mean is twenty minutes. This prediction follows the arithmetic; the current package does not claim that a database executed the example. The additional count columns let a reader distinguish sample size from average value. A missing measurement remains missing rather than silently becoming a zero minute repair.\n\n## NULL changes the denominator\n\nAVG ignores NULL expression values. This means the ordinary mean corresponds to the sum of known values divided by their count, provided at least one value is known. Counting every row instead changes the denominator whenever measurements are absent. Dividing sixty by four would answer a different question from averaging the three observed durations.\n\nReplacing NULL before averaging also changes the population. AVG(COALESCE(minutes, 0)) assigns a zero to each missing observation. COALESCE(AVG(minutes), 0) instead changes only a missing final result. These operations are not interchangeable. Neither should be chosen simply to make a dashboard display a number. A genuine zero duration contributes to both sum and count; an unknown duration contributes to neither.\n\n## Empty input differs from a zero mean\n\nAn ungrouped aggregate query still returns one aggregate row when no records qualify. Its AVG result is NULL. An all NULL input has the same average result because it also contains no known values. Return a count alongside the average when the consumer must distinguish no observations from a known mean of zero.\n\nGrouping introduces another distinction. If no qualifying rows remain, a grouped query has no groups to output. It does not automatically create every department with a NULL average. Showing departments without observations requires a separate population of departments and a suitable outer join. Explain the reporting requirement before deciding whether absent groups should disappear, display unknown or receive another explicit presentation.\n\n## Filter observations before averaging\n\nA report for completed repairs should filter completion status before calculating duration. Restricting the displayed average afterward does not remove open repairs from the underlying population. Similarly, a date predicate should refer to the event date the business question actually names, such as completion date rather than request creation date.\n\nConditional expressions can define several populations in one aggregate query. For example, AVG(CASE WHEN priority = 'urgent' THEN minutes END) measures known urgent durations. The omitted ELSE produces NULL for other records, excluding them from this mean. Adding ELSE zero would include every other record as a zero and usually dilute the intended statistic. Document the denominator whenever a conditional average appears in a report.\n\n## Repeated values are still separate observations\n\nTwo repairs taking ten minutes each represent two observations. Ordinary AVG includes both. AVG(DISTINCT minutes) instead averages distinct numeric values, discarding their frequencies. That can answer a question about a set of unique values, but it usually does not answer the average duration per repair.\n\nFor durations ten, ten and forty, the ordinary mean is twenty. Removing the repeated ten produces twenty five. This difference is intentional mathematical behavior rather than an optimization choice. DISTINCT should not be used to repair a join that accidentally repeated observations. Fix the relationship or the query grain so that each intended observation contributes the correct number of times.\n\n## Join multiplication can silently reweight a mean\n\nSuppose repair records are joined to their replacement parts. A repair with three parts appears three times while a repair with one part appears once. Averaging repair duration over these joined rows weights repairs by part count. Even though the SQL executes and returns a plausible number, it no longer measures the mean per repair.\n\nAggregate at the intended observation grain before joining, or select the eligible repairs without multiplying them. Equal durations from different repairs must remain separate observations, so DISTINCT duration is an unreliable workaround. Test with unequal numbers of child records and repeated duration values. These fixtures expose a weighting mistake that a tiny dataset with one child per repair would hide.\n\n## Combine summaries using their observation counts\n\nThe mean of several group averages generally differs from the mean of all observations. A lab with two known durations and a lab with eight known durations should not receive equal weight when the question asks for the overall average per observation. Retain each group's sum and count of known values.\n\nCombine those sums and counts, then divide the total sum by the total known count. A zero count needs explicit handling; NULLIF can make the denominator NULL instead of zero. Do not reconstruct a precise global mean from already rounded group means when exact group totals are available. Rounding has discarded information, and multiplying rounded means by counts cannot reliably recover it.\n\n## Division and rounding require dialect awareness\n\nIn MySQL, slash division and DIV express different operations. DIV performs integer division. Do not describe slash as integer division merely because its inputs look like integers. Other engines can have different expression typing rules, so check their documented behavior when porting a hand written average.\n\nRound the final mean for display when the requirement specifies that precision. Rounding every observation first can change the aggregate. Neither display rounding nor casting fixes an incorrect denominator. Numeric strings, temporal values and mixed units need a deliberate conversion or cleaning policy before aggregation. Such transformations belong in the measurement definition rather than being left to implicit conversion.\n\n## Interpret results and practise the boundaries\n\nThe mean is sensitive to unusually large or small observations and does not report a median or a typical individual outcome by itself. Pair it with sample size and inspect the distribution when the decision depends on variation. A faster average computed from a smaller eligible population may reflect changed selection rather than improved repair performance.\n\nPractise empty input, all missing values, genuine zeros, repeated values and unequal group sizes. The exercises use predicted outputs derived from their fixtures, with SQL execution still pending. Explain the population and denominator before calculating the number. For related foundations, review [COUNT](/learning/dbms-sql-tutorial/count), [SUM](/learning/dbms-sql-tutorial/sum) and [NULL handling](/learning/dbms-sql-tutorial/null-semantics). A reliable average has a clear grain, consistent units and an honest account of what was measured.\n",
+  "references": [
+    {
+      "title": "MySQL 8.4 aggregate functions",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/aggregate-functions.html"
+    },
+    {
+      "title": "MySQL 8.4 precision math expression handling",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/precision-math-expressions.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-14-avg",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-14-avg-1",
+          "test_id": "pt-dbms-sql-14-avg",
+          "question_text": "For amounts 250, NULL, 400, 150 and 300, what is AVG(amount)?",
+          "options": [
+            "220",
+            "275",
+            "250",
+            "1100"
+          ],
+          "correct_index": 1,
+          "explanation": "The four known amounts sum to 1100; divide by four, not five.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-14-avg-2",
+          "test_id": "pt-dbms-sql-14-avg",
+          "question_text": "With at least one known value, which expression describes the mean of x?",
+          "options": [
+            "SUM(x) / COUNT(*) regardless of NULLs",
+            "SUM(x) / COUNT(x)",
+            "MAX(x) - MIN(x)",
+            "COUNT(x) / SUM(x)"
+          ],
+          "correct_index": 1,
+          "explanation": "The denominator counts the same known expression values included in the sum.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-14-avg-3",
+          "test_id": "pt-dbms-sql-14-avg",
+          "question_text": "Completed orders have amounts 250, 400 and 300. What is their mean, rounded to two decimal places?",
+          "options": [
+            "316.67",
+            "950.00",
+            "300.00",
+            "250.00"
+          ],
+          "correct_index": 0,
+          "explanation": "Their total is 950 across three observations; final rounding gives 316.67.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-14-avg-4",
+          "test_id": "pt-dbms-sql-14-avg",
+          "question_text": "For values 100, NULL, NULL, 200 and 300, what is AVG(amount)?",
+          "options": [
+            "120",
+            "200",
+            "600",
+            "150"
+          ],
+          "correct_index": 1,
+          "explanation": "Only three known values contribute: 600 divided by three.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-14-avg-5",
+          "test_id": "pt-dbms-sql-14-avg",
+          "question_text": "An ungrouped AVG query matches no rows. What is its aggregate value?",
+          "options": [
+            "0",
+            "NULL",
+            "1",
+            "An obligatory error"
+          ],
+          "correct_index": 1,
+          "explanation": "There is no known value from which to calculate a mean.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-14-avg-6",
+          "test_id": "pt-dbms-sql-14-avg",
+          "question_text": "Which MySQL operator explicitly performs integer division and can discard a fractional mean?",
+          "options": [
+            "AVG",
+            "DIV",
+            "COUNT",
+            "DISTINCT"
+          ],
+          "correct_index": 1,
+          "explanation": "MySQL DIV performs integer division. Do not transfer another engine's slash-division typing rules to MySQL.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-14-avg-7",
+          "test_id": "pt-dbms-sql-14-avg",
+          "question_text": "For 250, 250 and 400, what does AVG(DISTINCT amount) average?",
+          "options": [
+            "250 and 400 once each, giving 325",
+            "All three observations, giving 300",
+            "Only the repeated value, giving 250",
+            "Only the maximum value, giving 400"
+          ],
+          "correct_index": 0,
+          "explanation": "DISTINCT removes duplicate expression values, changing the weighting.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-14-avg-8",
+          "test_id": "pt-dbms-sql-14-avg",
+          "question_text": "Which description of AVG and outliers is correct?",
+          "options": [
+            "AVG always returns the median",
+            "AVG computes an arithmetic mean and does not automatically trim extreme values",
+            "AVG ignores the highest and lowest values",
+            "AVG requires GROUP BY in every query"
+          ],
+          "correct_index": 1,
+          "explanation": "Extreme values remain part of the mean unless the query explicitly excludes them.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-14-avg-new-9",
+          "test_id": "pt-dbms-sql-14-avg",
+          "question_text": "Which count is useful alongside AVG(minutes) to show its denominator?",
+          "options": [
+            "COUNT(minutes)",
+            "COUNT(*) even when minutes is NULL",
+            "COUNT(DISTINCT minutes) for all means",
+            "The largest observation identifier"
+          ],
+          "correct_index": 0,
+          "explanation": "COUNT(minutes) reports how many known durations contributed.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-14-avg-new-10",
+          "test_id": "pt-dbms-sql-14-avg",
+          "question_text": "For one known zero duration, what does AVG(minutes) return?",
+          "options": [
+            "NULL",
+            "Zero",
+            "No aggregate row",
+            "An automatic division error"
+          ],
+          "correct_index": 1,
+          "explanation": "A measured zero is a known observation; it contributes zero to the sum and one to the count.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-14-avg-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-14-avg-application-new-1",
+          "test_id": "pt-dbms-sql-14-avg-application",
+          "question_text": "Two labs have means 10 and 30 with known counts 2 and 8. What is the overall observation mean?",
+          "options": [
+            "20",
+            "26",
+            "40",
+            "10"
+          ],
+          "correct_index": 1,
+          "explanation": "Weight by counts: (10*2 + 30*8) / 10 = 26.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-14-avg-application-new-2",
+          "test_id": "pt-dbms-sql-14-avg-application",
+          "question_text": "What is the effect of AVG(COALESCE(minutes,0)) when durations are missing?",
+          "options": [
+            "It ignores every missing duration exactly like AVG(minutes)",
+            "It changes only the final display of an empty mean",
+            "It includes missing durations as zero-valued observations",
+            "It removes known zeros"
+          ],
+          "correct_index": 2,
+          "explanation": "The transformation happens before averaging, so those rows now enter the denominator.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-14-avg-application-new-3",
+          "test_id": "pt-dbms-sql-14-avg-application",
+          "question_text": "Why is AVG(DISTINCT repair_minutes) usually a poor fix for a parts join that repeats repairs?",
+          "options": [
+            "DISTINCT always adds every repeated duration",
+            "MySQL forbids every DISTINCT aggregate",
+            "Repairs with multiple parts necessarily have identical durations",
+            "Different repairs can have equal durations and must remain separate observations"
+          ],
+          "correct_index": 3,
+          "explanation": "Repair grain and numeric-value uniqueness are different properties.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-14-avg-application-new-4",
+          "test_id": "pt-dbms-sql-14-avg-application",
+          "question_text": "An ungrouped all-NULL input and an ungrouped empty input produce which AVG values?",
+          "options": [
+            "Both produce NULL",
+            "Both produce zero",
+            "Only the empty input produces zero",
+            "Only the all-NULL input produces an error"
+          ],
+          "correct_index": 0,
+          "explanation": "Neither input supplies a known numeric expression value.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-14-avg-application-new-5",
+          "test_id": "pt-dbms-sql-14-avg-application",
+          "question_text": "What happens when a GROUP BY query has no qualifying rows at all?",
+          "options": [
+            "It manufactures a row for each possible department",
+            "It has no groups to return",
+            "It always returns one zero-valued group",
+            "It ignores the WHERE predicate"
+          ],
+          "correct_index": 1,
+          "explanation": "An ungrouped aggregate's single summary row should not be confused with grouped output.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-14-avg-application-new-6",
+          "test_id": "pt-dbms-sql-14-avg-application",
+          "question_text": "In AVG(CASE WHEN priority='urgent' THEN minutes END), which values contribute?",
+          "options": [
+            "Zero for every nonurgent row",
+            "Every known duration regardless of priority",
+            "Known minutes from urgent rows",
+            "Only rows whose priority is NULL"
+          ],
+          "correct_index": 2,
+          "explanation": "The implicit ELSE NULL excludes nonurgent rows from this mean.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-14-avg-application-new-7",
+          "test_id": "pt-dbms-sql-14-avg-application",
+          "question_text": "Where should completed status be filtered when calculating mean completed-repair duration?",
+          "options": [
+            "Only after averaging every status together",
+            "By replacing incomplete statuses with zero minutes",
+            "By sorting completed repairs first without filtering",
+            "In the qualifying population before aggregation"
+          ],
+          "correct_index": 3,
+          "explanation": "Changing display order does not change the population entering AVG.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-14-avg-application-new-8",
+          "test_id": "pt-dbms-sql-14-avg-application",
+          "question_text": "Why retain group sums and known counts rather than only rounded group means?",
+          "options": [
+            "They allow a correctly weighted combined mean without reconstructing discarded precision",
+            "They guarantee every group has the same size",
+            "They make all missing observations become zeros",
+            "They make every aggregate constant time"
+          ],
+          "correct_index": 0,
+          "explanation": "Combine total known amounts and total known observations.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-14-avg-application-new-9",
+          "test_id": "pt-dbms-sql-14-avg-application",
+          "question_text": "For exact numeric arguments, what MySQL AVG result category is documented?",
+          "options": [
+            "Always an integer",
+            "DECIMAL",
+            "Always a character string",
+            "Always a timestamp"
+          ],
+          "correct_index": 1,
+          "explanation": "MySQL uses DECIMAL for exact numeric arguments and DOUBLE for approximate numeric arguments.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-14-avg-application-new-10",
+          "test_id": "pt-dbms-sql-14-avg-application",
+          "question_text": "Which test most directly exposes a join-induced weighting error in mean repair duration?",
+          "options": [
+            "Only one repair with exactly one part",
+            "Only an empty parts table with no repairs",
+            "Repairs with unequal numbers of parts and repeated duration values",
+            "Only checking the output column alias"
+          ],
+          "correct_index": 2,
+          "explanation": "Unequal child multiplicity exposes weighting; equal durations prevent DISTINCT from appearing to be a general fix.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cx-avg-known-repair-duration",
+      "slug": "avg-known-repair-duration",
+      "title": "Average known repair duration",
+      "difficulty": "Easy",
+      "task": "Return one row containing known_count and mean_minutes for the known durations in repair_samples. Round the final mean to two decimal places. Missing durations do not represent zero. With no known durations, return known_count 0 and mean_minutes NULL.",
+      "schema_sql": "CREATE TABLE repair_samples (sample_id INT PRIMARY KEY, minutes DECIMAL(8,2));",
+      "seed_sql": "INSERT INTO repair_samples VALUES (1,10.00),(2,NULL),(3,20.00),(4,30.00);",
+      "expected": "known_count\tmean_minutes\n3\t20.00",
+      "ordering": "Exactly one aggregate row; column order known_count, mean_minutes.",
+      "constraints": [
+        "minutes contains nonnegative measured durations or NULL.",
+        "Preserve the source rows; use a SELECT query."
+      ],
+      "edge_cases": [
+        "Empty input returns count zero and a NULL mean.",
+        "A known zero must contribute to the count.",
+        "Repeated durations remain separate observations."
+      ],
+      "hints": [
+        "COUNT(expression) ignores NULL values.",
+        "Round AVG(minutes) only after aggregation."
+      ],
+      "solution_sql": "SELECT COUNT(minutes) AS known_count, ROUND(AVG(minutes),2) AS mean_minutes FROM repair_samples;",
+      "explanation": "The predicted output follows 60 divided by three known observations. COUNT(minutes) exposes the mean's denominator. These expected fixtures are arithmetically derived; database execution remains pending.",
+      "validation_cases": [
+        {
+          "seed_sql": "",
+          "expected": "known_count\tmean_minutes\n0\tNULL"
+        },
+        {
+          "seed_sql": "INSERT INTO repair_samples VALUES (1,NULL),(2,NULL);",
+          "expected": "known_count\tmean_minutes\n0\tNULL"
+        },
+        {
+          "seed_sql": "INSERT INTO repair_samples VALUES (1,0.00),(2,10.00),(3,10.00),(4,NULL);",
+          "expected": "known_count\tmean_minutes\n3\t6.67"
+        }
+      ]
+    },
+    {
+      "id": "cx-avg-weighted-lab-summary",
+      "slug": "avg-weighted-lab-summary",
+      "title": "Combine lab observation summaries",
+      "difficulty": "Medium",
+      "task": "Each lab_totals row stores the exact sum and count of known repair-duration observations for one lab. Return one overall mean_minutes, rounded to two decimal places, weighting individual observations equally. A lab with zero known_count has total_minutes zero. If the combined known count is zero, return NULL. Do not average the lab means equally.",
+      "schema_sql": "CREATE TABLE lab_totals (lab_id INT PRIMARY KEY, known_count INT NOT NULL, total_minutes DECIMAL(12,2) NOT NULL);",
+      "seed_sql": "INSERT INTO lab_totals VALUES (1,2,20.00),(2,8,240.00),(3,0,0.00);",
+      "expected": "mean_minutes\n26.00",
+      "ordering": "Exactly one aggregate row named mean_minutes.",
+      "constraints": [
+        "known_count is nonnegative; total_minutes is an exact nonnegative sum.",
+        "A zero known_count always has zero total_minutes.",
+        "Each observation belongs to exactly one lab summary."
+      ],
+      "edge_cases": [
+        "Unequal lab sizes require weighting.",
+        "A zero-count lab contributes neither observations nor duration.",
+        "Empty input and zero combined observations return NULL."
+      ],
+      "hints": [
+        "Add exact totals and known counts separately.",
+        "Use NULLIF on the combined denominator to handle zero observations."
+      ],
+      "solution_sql": "SELECT ROUND(SUM(total_minutes)/NULLIF(SUM(known_count),0),2) AS mean_minutes FROM lab_totals;",
+      "explanation": "The predicted combined mean is (20+240)/(2+8)=26. A plain average of the nonempty lab means would be (10+30)/2=20, which weights labs instead of observations. SQL execution is pending.",
+      "validation_cases": [
+        {
+          "seed_sql": "",
+          "expected": "mean_minutes\nNULL"
+        },
+        {
+          "seed_sql": "INSERT INTO lab_totals VALUES (1,0,0.00),(2,0,0.00);",
+          "expected": "mean_minutes\nNULL"
+        },
+        {
+          "seed_sql": "INSERT INTO lab_totals VALUES (1,3,20.00),(2,0,0.00);",
+          "expected": "mean_minutes\n6.67"
+        },
+        {
+          "seed_sql": "INSERT INTO lab_totals VALUES (1,1,10.00),(2,1,30.00);",
+          "expected": "mean_minutes\n20.00"
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-14-avg-1",
+      "test_id": "pt-dbms-sql-14-avg",
+      "question_text": "Given order amounts 250.00, NULL, 400.00, 150.00, 300.00, what does AVG(amount) return?",
+      "options": [
+        "220.00",
+        "275.00",
+        "250.00",
+        "1100.00"
+      ],
+      "correct_index": 1,
+      "explanation": "AVG divides the sum of non-NULL values (1100) by the count of non-NULL values (4), giving 275.00 — not by the total row count of 5.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-14-avg-2",
+      "test_id": "pt-dbms-sql-14-avg",
+      "question_text": "What is the correct identity for how AVG(x) is computed?",
+      "options": [
+        "AVG(x) = SUM(x) / COUNT(*)",
+        "AVG(x) = SUM(x) / COUNT(x)",
+        "AVG(x) = MAX(x) - MIN(x)",
+        "AVG(x) = COUNT(x) / SUM(x)"
+      ],
+      "correct_index": 1,
+      "explanation": "AVG divides the sum of non-NULL values by the count of non-NULL values in that same column, not by the total row count.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-14-avg-3",
+      "test_id": "pt-dbms-sql-14-avg",
+      "question_text": "What does AVG(amount) return for the completed orders only, with amounts 250.00, 400.00, and 300.00?",
+      "options": [
+        "316.67 (approximately)",
+        "950.00",
+        "300.00",
+        "250.00"
+      ],
+      "correct_index": 0,
+      "explanation": "(250 + 400 + 300) / 3 = 950 / 3 = 316.666..., which rounds to about 316.67.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-14-avg-4",
+      "test_id": "pt-dbms-sql-14-avg",
+      "question_text": "A table has 5 amount values: 100, NULL, NULL, 200, 300. What does AVG(amount) return?",
+      "options": [
+        "120.00",
+        "200.00",
+        "600.00",
+        "150.00"
+      ],
+      "correct_index": 1,
+      "explanation": "Sum of non-NULL values = 100+200+300 = 600, count of non-NULL values = 3, so 600/3 = 200.00.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-14-avg-5",
+      "test_id": "pt-dbms-sql-14-avg",
+      "question_text": "What does AVG(amount) return over a filtered query that matches zero rows?",
+      "options": [
+        "0",
+        "NULL",
+        "1",
+        "An error"
+      ],
+      "correct_index": 1,
+      "explanation": "With no rows (and therefore no non-NULL values), AVG returns NULL, just like SUM.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-14-avg-6",
+      "test_id": "pt-dbms-sql-14-avg",
+      "question_text": "Why is manually computing SUM(int_col) / COUNT(int_col) sometimes riskier than just using AVG(int_col)?",
+      "options": [
+        "SUM and COUNT can never be combined in one expression",
+        "If both operands remain integer types, some dialects perform integer division and truncate the decimal part, unlike AVG which is designed to avoid this",
+        "COUNT always returns a decimal, causing a type mismatch",
+        "SUM(int_col) always returns NULL for integer columns"
+      ],
+      "correct_index": 1,
+      "explanation": "AVG is built to return a proper fractional result, but a manual division of two integer-typed expressions can trigger integer division truncation in some dialects — the same nuance covered for the / operator in Chapter 8.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-14-avg-7",
+      "test_id": "pt-dbms-sql-14-avg",
+      "question_text": "Given amounts 250.00, 250.00, and 400.00, what would AVG(DISTINCT amount) return (compared to a plain AVG)?",
+      "options": [
+        "325.00 (average of 250 and 400 only, duplicate removed)",
+        "300.00 (average of all three values including the duplicate)",
+        "The same value as AVG(amount) always",
+        "An error, since DISTINCT cannot be used with AVG"
+      ],
+      "correct_index": 0,
+      "explanation": "AVG(DISTINCT amount) removes the duplicate 250.00 first, leaving 250 and 400, so the average is (250+400)/2 = 325.00 — different from the plain AVG of 300.00.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-14-avg-8",
+      "test_id": "pt-dbms-sql-14-avg",
+      "question_text": "Which statement about AVG() and outliers/median is TRUE in standard SQL?",
+      "options": [
+        "AVG() automatically excludes the highest and lowest values like a trimmed mean",
+        "AVG() computes the ordinary arithmetic mean and has no built-in awareness of medians or outlier trimming",
+        "AVG() always returns the median value of the column",
+        "AVG() requires a GROUP BY clause to function at all"
+      ],
+      "correct_index": 1,
+      "explanation": "AVG is a plain arithmetic mean; it is sensitive to outliers and standard SQL has no separate built-in median function among the core five aggregates (some dialects add specialized functions like PERCENTILE_CONT for that).",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "coordinator",
+    "independent_review": "passed",
+    "independent_review_scope": "2026-10-29 /root/technical_qa: Full notes, all 20 questions including distractors and explanations, all 9 fixture outputs manually calculated, and table diagram inspected. SQL execution, browser QA and migration integration remain unverified.",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "drafted; verification pending",
+    "existing_question_corrections": [
+      "tq-dbms-sql-14-avg-1",
+      "tq-dbms-sql-14-avg-2",
+      "tq-dbms-sql-14-avg-3",
+      "tq-dbms-sql-14-avg-4",
+      "tq-dbms-sql-14-avg-5",
+      "tq-dbms-sql-14-avg-6",
+      "tq-dbms-sql-14-avg-7",
+      "tq-dbms-sql-14-avg-8"
+    ],
+    "canonical_answer_indices_preserved": true,
+    "editorial_record": "All eight source snapshots retained; wording rewritten while preserving IDs and answer positions. Source question 6 and notes used a vague integer-division warning and PostgreSQL-style cast in MySQL material. The new question explicitly distinguishes MySQL DIV from slash; the notes use MySQL syntax. Authoritative references checked 2026-10-29. Original prose and synthetic fixtures; outputs mathematically predicted, not executed."
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-14-avg",
+    "original_note_sha256": "43609be952547a8596c61b0ba5af97fc6cf47db932d576ddc20b03b085f242a5",
+    "status": "drafted; not yet included in prepared paired migrations"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "The mean follows known observations, not every row",
+      "description": "Four sample records contain durations ten, twenty, unknown and thirty minutes. Only the three known durations enter the denominator, giving sixty divided by three equals twenty minutes.",
+      "columns": [
+        "Observation",
+        "Minutes",
+        "Contribution to sum",
+        "Contribution to count"
+      ],
+      "rows": [
+        [
+          "1",
+          "10",
+          "10",
+          "1"
+        ],
+        [
+          "2",
+          "20",
+          "20",
+          "1"
+        ],
+        [
+          "3",
+          "NULL",
+          "0",
+          "0"
+        ],
+        [
+          "4",
+          "30",
+          "30",
+          "1"
+        ],
+        [
+          "Summary",
+          "Mean 20",
+          "Sum 60",
+          "Known count 3"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "author arithmetic and NULL interpretation checked; independent review pending",
+    "server_rendering": "pending",
+    "browser_rendering": "unverified",
+    "independent_review": "pending"
+  },
+  "authoring_status": "drafted; verification pending",
+  "sql_verification": {
+    "scope": "Not executed; fixture outputs are arithmetic predictions. Exact MySQL/provider verification pending.",
+    "all_passed": false,
+    "cases": []
+  }
+}

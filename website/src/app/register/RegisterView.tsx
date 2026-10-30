@@ -49,27 +49,32 @@ function RegisterForm() {
     setError(null);
     setGoogleLoading(true);
 
-    const supabase = createBrowserSupabase();
-    // Same pattern as LoginView.handleGoogleSignIn — the referral code rides
-    // along as a plain query param on the callback URL (Google round-trips it
-    // unchanged) so /auth/callback can apply it once the session exists,
-    // since signInWithOAuth has no raw_user_meta_data-style channel the way
-    // signUp's options.data does.
-    const redirectTo = new URL("/auth/callback", window.location.origin);
-    redirectTo.searchParams.set("next", safeInternalPath(searchParams.get("next")));
-    if (referralCode) redirectTo.searchParams.set("ref", referralCode);
+    try {
+      const supabase = createBrowserSupabase();
+      // Same pattern as LoginView.handleGoogleSignIn — the referral code rides
+      // along as a plain query param on the callback URL (Google round-trips it
+      // unchanged) so /auth/callback can apply it once the session exists,
+      // since signInWithOAuth has no raw_user_meta_data-style channel the way
+      // signUp's options.data does.
+      const redirectTo = new URL("/auth/callback", window.location.origin);
+      redirectTo.searchParams.set("next", safeInternalPath(searchParams.get("next")));
+      if (referralCode) redirectTo.searchParams.set("ref", referralCode);
 
-    const { error: oauthError } = await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: { redirectTo: redirectTo.toString() },
-    });
+      const { error: oauthError } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: { redirectTo: redirectTo.toString() },
+      });
 
-    if (oauthError) {
-      setError(oauthError.message ?? "Could not start Google sign-in.");
+      if (oauthError) {
+        setError(oauthError.message ?? "Could not start Google sign-in.");
+        setGoogleLoading(false);
+        return;
+      }
+      // Success leaves googleLoading true — the browser is already navigating away.
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
       setGoogleLoading(false);
-      return;
     }
-    // Success leaves googleLoading true — the browser is already navigating away.
   }
 
   async function handleSubmit(e: React.FormEvent) {

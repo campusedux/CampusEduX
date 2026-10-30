@@ -1,0 +1,616 @@
+{
+  "source_ref": "chapter-6-er-and-eer-modeling/composite-attribute",
+  "slug": "composite-attribute",
+  "title": "Composite Attribute",
+  "description": "Model meaningful property components without confusing them with multiple occurrences, and map structured addresses to explicit relational columns and queries.",
+  "dialect": "MySQL 8.4",
+  "notes": "## One property can have meaningful components\n\nA composite attribute is a property represented through smaller modeled components that have useful independent meanings. A campus contact Address might contain street_line, city, region, and postal_code. Together they describe one address value for a student. The model exposes components because the application needs to manage or query their roles separately, rather than treating the whole mailing label as an opaque string.\n\nComposition is a modeling decision tied to requirements. A system that merely prints a supplied mailing label may preserve it as one simple value. A delivery tool that filters by city and validates postal information can benefit from a structured address. The number of spaces or commas in a sample string does not by itself define the component boundaries or prove that a particular parser is correct.\n\n## Components belong to a coherent whole\n\nSuppose student seventeen has an address with street_line Cedar Lane, city Lakeside, region West, and postal_code 00120. Student twenty-four has street_line Market Road, city Lakeside, region East, and postal_code 00840. Each student has one address in this example, and each address has four separately meaningful component roles.\n\nCity alone does not identify the complete address. Two cities in different regions can share a name, and several street addresses can occur within the same city. Likewise, the postal code is an identifier-like component whose leading zeros may matter. Do not convert it to an integer merely because the fixture contains digits. The component's domain follows the intended address system and accepted formatting policy.\n\n## Structure differs from multiplicity\n\nOne address with four components is not four addresses. Composite describes internal modeled structure, while single-valued describes how many simultaneous complete address values belong to a student. Under the current policy, Address is composite and single-valued. The mapping can place its component columns alongside the student identifier in one relation.\n\nIf students can maintain several addresses, the property becomes multivalued as well as composite. A separate relation can identify each address occurrence and contain its components. Simply adding city2 and postal_code2 fields imposes a fixed slot design that may not match the intended number or lifecycle of addresses. Decide occurrence multiplicity before choosing a physical representation.\n\n## Nested composition is possible\n\nA composite attribute can contain another composite component. Address might contain a Location component that itself has city and region, alongside a separate street component. The ultimate leaves can be simple values, even though the immediate children of the top-level property are not all simple. It is inaccurate to state that every composite attribute's direct components must already be indivisible leaves.\n\nA nested conceptual diagram and a flat relational mapping can still describe the same intended roles. Flattening exposes the needed leaf components as columns under clear names. The diagram's grouping may no longer appear as a separate SQL column, but the meaning should remain documented in the content and consistent in callers. Do not infer extra values or occurrence identities merely because a conceptual grouping is represented differently.\n\n## Diagram conventions communicate components\n\nIn a common Chen-style diagram, the composite attribute oval connects to ovals for its components. Other notations can represent structured properties differently. The important information is which components belong to the same property and which roles each component has. A shape alone does not tell you the exact string length, nullability, comparison collation, or postal validation contract.\n\nA composite attribute is also different from a composite key. Address can be structured without identifying a student. A multi-column primary key can identify a fact without being modeled as one composite descriptive property. The shared word composite refers to a combination, but the two concepts have different purposes. Avoid treating every group of address columns as an identifying constraint.\n\n## Map one structured address to leaf columns\n\nA simple single-address Student mapping can use student_id, street_line, city, region, and postal_code. Use descriptive component names and required-value policies that reflect the stated domain. If postal_code is optional, a permitted NULL can represent its absence. That does not remove the Address property or make the other known components disappear.\n\n```sql\nSELECT student_id, street_line, city, region, postal_code\nFROM students\nWHERE city = 'Lakeside' AND region = 'West'\nORDER BY student_id;\n```\n\nThe query can filter by meaningful components without guessing where a comma appears in an unstructured label. It preserves the complete requested address components and student identity. A city-only filter would select a broader population, including the example's other region. The predicate should follow the actual task rather than assuming city names are globally unique.\n\n## Missing components need a consistent policy\n\nA model can permit an optional postal code while requiring city and region. Another address system can require all components. State which absence patterns are legal. One missing component does not necessarily mean the entire address is absent, and a complete-address marker can be useful when the domain distinguishes partial information from no supplied address.\n\nSQL NULL and empty strings remain different representations. A result-only fallback can label an absent postal code without changing its stored value. Concatenating components can also need explicit absence handling; blindly combining a NULL input can produce a missing result under the selected SQL function's rules. Choose the output contract before turning a structured address into a display label.\n\n## Display formatting is not identity reconstruction\n\nA formatted label can be useful for a screen or mailing output. It is a derived presentation of the components, not automatically a reliable reverse encoding. A city name or street line can itself contain punctuation. Splitting a formatted label later by its commas may not reconstruct the original components safely. Preserve authoritative component values when callers need independent updates.\n\nSimilarly, a Name attribute should not be forced into a universal first-name and last-name structure merely because one sample has two words. Requirements and accepted cultural naming patterns determine whether component roles are meaningful. Structured representation can be helpful, but the design must respect the domain rather than treating every natural-language string as a fixed-position tuple waiting to be split.\n\n## Update the intended components deliberately\n\nChanging a postal code can leave student identity and the other address components unchanged. That does not create a second address occurrence in this single-valued model. If a whole-address move changes city and region together, the accepted operation should preserve any cross-component rules the domain requires. Independent column updates must not imply that every intermediate combination is meaningful.\n\nA row-local CHECK can express some supported combinations, while catalogue membership or more complex geographic validation may need another trusted mechanism. The component mapping does not automatically validate that city, region, and postal code refer to one real place. SQL representation, domain enforcement, and external factual correctness remain separate concerns with different verification needs.\n\n## Review data at the complete occurrence grain\n\nA report counting structured addresses should identify address occurrences rather than count the number of populated components. One student with four supplied components still has one address under this policy. If several students share the same complete address, they remain different students. DISTINCT over address components answers a different question about distinct represented address values.\n\nFixtures should include shared city names across regions, different students sharing a full address, a postal code with leading zeros, and a missing optional component. These cases challenge assumptions that components are global keys or that blank-looking values can be freely substituted. An empty result should still have the requested output structure even if a command-line formatter suppresses headers for no rows.\n\n## Connect conceptual structure to query evidence\n\nThe exercises demonstrate one single-address mapping with explicit component roles and an optional postal code. They verify component-aware filtering and defined display completeness labels on isolated SQL data. They do not establish real-world postal deliverability, a universal address parser, or production authorization. Those limits should remain visible when interpreting the returned rows.\n\nA useful composite-attribute explanation states the meaningful components, any nesting, the number of complete values per entity, and the chosen mapping. It then keeps component domains and absence patterns consistent across diagrams, tables, and queries. With that discipline, composition helps preserve and retrieve structured facts instead of becoming an arbitrary instruction to split every string or confuse one property with several independent occurrences.\n",
+  "references": [],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-6-composite-attribute",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-6-composite-attribute-1",
+          "test_id": "pt-dbms-sql-6-composite-attribute",
+          "question_text": "What is a composite attribute?",
+          "options": [
+            "An attribute computed from other attributes",
+            "An attribute that can be divided into smaller, independently meaningful sub-attributes",
+            "An attribute that holds multiple independent values",
+            "An attribute shared by two entity sets"
+          ],
+          "correct_index": 1,
+          "explanation": "A composite attribute breaks down into meaningful component simple attributes, like Address into Street/City/State/Pincode.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-6-composite-attribute-2",
+          "test_id": "pt-dbms-sql-6-composite-attribute",
+          "question_text": "Which Student attribute is the clearest example of a composite attribute?",
+          "options": [
+            "Roll_No",
+            "Address, decomposing into Street, City, State, Pincode",
+            "CGPA",
+            "Gender"
+          ],
+          "correct_index": 1,
+          "explanation": "Address naturally splits into independently useful sub-parts, the hallmark of a composite attribute.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-6-composite-attribute-3",
+          "test_id": "pt-dbms-sql-6-composite-attribute",
+          "question_text": "What can the components of a composite attribute include before recursive decomposition reaches its leaves?",
+          "options": [
+            "Other entity sets",
+            "Simple attributes or further composite components, with simple leaf roles at the end of the chosen decomposition",
+            "Relationships",
+            "Derived attributes only"
+          ],
+          "correct_index": 1,
+          "explanation": "Composite structure can be nested; immediate components need not all be simple.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-6-composite-attribute-4",
+          "test_id": "pt-dbms-sql-6-composite-attribute",
+          "question_text": "In a basic single-valued relational mapping, how are the required leaf roles of a composite attribute commonly represented?",
+          "options": [
+            "It becomes its own separate table always",
+            "It is flattened — each component becomes its own column, and the composite grouping disappears at the table level",
+            "It is dropped entirely and not stored",
+            "It becomes a foreign key"
+          ],
+          "correct_index": 1,
+          "explanation": "The mapping commonly uses component columns; more complex object, multiplicity or lifecycle mappings need their own explicit contract.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-6-composite-attribute-5",
+          "test_id": "pt-dbms-sql-6-composite-attribute",
+          "question_text": "A student has exactly one Address, which is composed of Street/City/State/Pincode. Is this attribute multi-valued?",
+          "options": [
+            "Yes, because it has multiple sub-parts",
+            "No — having multiple internal sub-parts (composite) is different from having multiple separate values (multi-valued); here there is only one address value per student",
+            "Yes, all composite attributes are automatically multi-valued",
+            "It cannot be determined"
+          ],
+          "correct_index": 1,
+          "explanation": "Composite (internal structure) and multi-valued (number of occurrences) are independent properties; one address with sub-parts is composite but single-valued.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-6-composite-attribute-6",
+          "test_id": "pt-dbms-sql-6-composite-attribute",
+          "question_text": "Which of the following combinations is valid for an attribute?",
+          "options": [
+            "Only simple attributes can be single-valued",
+            "An attribute can be composite AND multi-valued at the same time (e.g., multiple structured addresses per student)",
+            "Composite and derived are the same category and cannot be separated",
+            "Multi-valued attributes can never be composite"
+          ],
+          "correct_index": 1,
+          "explanation": "The composite/simple axis and single/multi-valued axis are independent, so all four combinations, including composite+multi-valued, are possible.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-6-composite-attribute-7",
+          "test_id": "pt-dbms-sql-6-composite-attribute",
+          "question_text": "In the common Chen-style convention, how can a composite attribute and its components be drawn?",
+          "options": [
+            "As a rectangle with a double border",
+            "As an oval connected to smaller ovals representing its component simple attributes",
+            "As a diamond linked to two rectangles",
+            "As a dashed oval"
+          ],
+          "correct_index": 1,
+          "explanation": "An attribute oval connects to its component ovals, including nested components when modeled.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-6-composite-attribute-8",
+          "test_id": "pt-dbms-sql-6-composite-attribute",
+          "question_text": "Why might a designer choose NOT to decompose Name into First_Name and Last_Name?",
+          "options": [
+            "Because decomposition is impossible for names",
+            "Because if the application never needs to query/sort by the sub-parts separately, treating Name as simple avoids unnecessary design complexity",
+            "Because composite attributes are illegal in ER diagrams",
+            "Because Name must always be derived"
+          ],
+          "correct_index": 1,
+          "explanation": "Composite decomposition is a design choice justified only when sub-parts are independently useful.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-6-composite-attribute-new-9",
+          "test_id": "pt-dbms-sql-6-composite-attribute",
+          "question_text": "A student has one address with four components. How many complete addresses does that imply?",
+          "options": [
+            "Four",
+            "One",
+            "Zero if one component is optional",
+            "One per character"
+          ],
+          "correct_index": 1,
+          "explanation": "Internal components do not multiply occurrence count.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-6-composite-attribute-new-10",
+          "test_id": "pt-dbms-sql-6-composite-attribute",
+          "question_text": "Does a composite descriptive Address automatically form a composite student key?",
+          "options": [
+            "Yes; all address components identify students",
+            "Only if city is short",
+            "No; structure and identifying uniqueness are different roles",
+            "Only if the address is stored"
+          ],
+          "correct_index": 2,
+          "explanation": "Composite attribute and composite key are distinct concepts.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-6-composite-attribute-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-6-composite-attribute-application-new-1",
+          "test_id": "pt-dbms-sql-6-composite-attribute-application",
+          "question_text": "Why store postal_code as an appropriate string in this example?",
+          "options": [
+            "All postal codes are amounts",
+            "It proves deliverability",
+            "Leading zeros are meaningful identifier representation",
+            "It makes every address unique"
+          ],
+          "correct_index": 2,
+          "explanation": "A code is not automatically a numeric quantity.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-6-composite-attribute-application-new-2",
+          "test_id": "pt-dbms-sql-6-composite-attribute-application",
+          "question_text": "Why filter by both city and region when the report specifies both?",
+          "options": [
+            "All city names are globally unique",
+            "Region is always a primary key",
+            "It changes entity identity",
+            "City labels can repeat across regions"
+          ],
+          "correct_index": 3,
+          "explanation": "The predicate must match the requested component scope.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-6-composite-attribute-application-new-3",
+          "test_id": "pt-dbms-sql-6-composite-attribute-application",
+          "question_text": "Can a composite property contain nested composite components?",
+          "options": [
+            "Yes",
+            "No; every direct child must be a simple leaf",
+            "Only if it is a primary key",
+            "Only if no values exist"
+          ],
+          "correct_index": 0,
+          "explanation": "Recursive decomposition can reach simple leaves through intermediate groups.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-6-composite-attribute-application-new-4",
+          "test_id": "pt-dbms-sql-6-composite-attribute-application",
+          "question_text": "What does a missing optional postal code imply by itself?",
+          "options": [
+            "The student is absent",
+            "One component is absent under the stated policy",
+            "The address always has no known components",
+            "Every other component must become zero"
+          ],
+          "correct_index": 1,
+          "explanation": "Partial information is different from missing the whole entity.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-6-composite-attribute-application-new-5",
+          "test_id": "pt-dbms-sql-6-composite-attribute-application",
+          "question_text": "Why is a formatted address label not always safely reversible by commas?",
+          "options": [
+            "SQL strings cannot contain commas",
+            "Every address is globally unique",
+            "Components can contain punctuation and formatting is a presentation policy",
+            "A label always creates a new primary key"
+          ],
+          "correct_index": 2,
+          "explanation": "Keep authoritative structured values when independent components matter.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-6-composite-attribute-application-new-6",
+          "test_id": "pt-dbms-sql-6-composite-attribute-application",
+          "question_text": "What changes when a student can maintain several structured addresses?",
+          "options": [
+            "Every component becomes the same value",
+            "The student loses identity",
+            "All addresses must be stored in one comma list",
+            "Multiplicity as well as structural composition must be modeled"
+          ],
+          "correct_index": 3,
+          "explanation": "Several complete property occurrences need a deliberate mapping.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-6-composite-attribute-application-new-7",
+          "test_id": "pt-dbms-sql-6-composite-attribute-application",
+          "question_text": "Does flattening components into columns validate a real geographic combination?",
+          "options": [
+            "No; relevant validity and external facts need their own checks",
+            "Yes; columns prove locations exist",
+            "Only if ordered alphabetically",
+            "Only if components are required"
+          ],
+          "correct_index": 0,
+          "explanation": "Representation is distinct from factual correctness.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-6-composite-attribute-application-new-8",
+          "test_id": "pt-dbms-sql-6-composite-attribute-application",
+          "question_text": "Which report counts distinct address values rather than student identities?",
+          "options": [
+            "A listing retaining every student_id",
+            "DISTINCT over the address components alone",
+            "A student primary-key lookup",
+            "COUNT of unique student ids"
+          ],
+          "correct_index": 1,
+          "explanation": "The selected grain determines what repetitions are collapsed.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-6-composite-attribute-application-new-9",
+          "test_id": "pt-dbms-sql-6-composite-attribute-application",
+          "question_text": "Why avoid a universal two-part Name decomposition?",
+          "options": [
+            "Names cannot be attributes",
+            "Every name is a key",
+            "Accepted naming patterns and independent query needs vary",
+            "All strings are multivalued"
+          ],
+          "correct_index": 2,
+          "explanation": "Component policies must respect the actual domain.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-6-composite-attribute-application-new-10",
+          "test_id": "pt-dbms-sql-6-composite-attribute-application",
+          "question_text": "Which fixture reveals a mistaken city-as-global-identifier assumption?",
+          "options": [
+            "Only one city row",
+            "An empty table alone",
+            "A different font",
+            "The same city label in two regions"
+          ],
+          "correct_index": 3,
+          "explanation": "Scope-sensitive counterexamples test the intended component predicates.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cx-composite-attribute-region",
+      "slug": "composite-attribute-region",
+      "title": "Filter a structured address using city and region",
+      "difficulty": "Easy",
+      "task": "Return student_id, street_line and postal_code for students with city Lakeside and region West. Preserve the stored postal string, including leading zeros.",
+      "schema_sql": "CREATE TABLE students (student_id INT PRIMARY KEY, street_line VARCHAR(80) NOT NULL, city VARCHAR(50) NOT NULL, region VARCHAR(50) NOT NULL, postal_code VARCHAR(20) NULL);",
+      "seed_sql": "INSERT INTO students VALUES (17,'Cedar Lane','Lakeside','West','00120'),(24,'Market Road','Lakeside','East','00840'),(30,'Lake Road','Hillview','West',NULL);",
+      "expected": "student_id\tstreet_line\tpostal_code\n17\tCedar Lane\t00120",
+      "ordering": "Ascending student_id.",
+      "constraints": [
+        "One address value is modeled per student; the required components are street_line, city and region.",
+        "postal_code is optional; fixture spellings avoid collation ambiguity."
+      ],
+      "edge_cases": [
+        "City names can repeat across regions.",
+        "Leading zeros and missing optional components need deliberate handling."
+      ],
+      "hints": [
+        "Select and filter the explicit component roles.",
+        "Use the documented missing-component contract."
+      ],
+      "solution_sql": "SELECT student_id, street_line, postal_code FROM students WHERE city = 'Lakeside' AND region = 'West' ORDER BY student_id;",
+      "explanation": "The query works with the chosen structured representation rather than parsing an arbitrary display label.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO students VALUES (1,'A','Lakeside','East','00120');",
+          "expected": ""
+        },
+        {
+          "seed_sql": "INSERT INTO students VALUES (2,'B','Lakeside','West',NULL);",
+          "expected": "student_id\tstreet_line\tpostal_code\n2\tB\tNULL"
+        }
+      ]
+    },
+    {
+      "id": "cx-composite-attribute-completeness",
+      "slug": "composite-attribute-completeness",
+      "title": "Classify postal component completeness without changing stored data",
+      "difficulty": "Medium",
+      "task": "Return student_id and postal_state: missing for NULL postal_code, empty for the empty string, otherwise recorded. This describes component presence, not real-world postal validity.",
+      "schema_sql": "CREATE TABLE students (student_id INT PRIMARY KEY, street_line VARCHAR(80) NOT NULL, city VARCHAR(50) NOT NULL, region VARCHAR(50) NOT NULL, postal_code VARCHAR(20) NULL);",
+      "seed_sql": "INSERT INTO students VALUES (1,'A','Lakeside','West',NULL),(2,'B','Lakeside','East',''),(3,'C','Hillview','West','00120');",
+      "expected": "student_id\tpostal_state\n1\tmissing\n2\tempty\n3\trecorded",
+      "ordering": "Ascending student_id.",
+      "constraints": [
+        "One address value is modeled per student; the required components are street_line, city and region.",
+        "postal_code is optional; fixture spellings avoid collation ambiguity."
+      ],
+      "edge_cases": [
+        "City names can repeat across regions.",
+        "Leading zeros and missing optional components need deliberate handling."
+      ],
+      "hints": [
+        "Select and filter the explicit component roles.",
+        "Use the documented missing-component contract."
+      ],
+      "solution_sql": "SELECT student_id, CASE WHEN postal_code IS NULL THEN 'missing' WHEN postal_code = '' THEN 'empty' ELSE 'recorded' END AS postal_state FROM students ORDER BY student_id;",
+      "explanation": "The query works with the chosen structured representation rather than parsing an arbitrary display label.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO students VALUES (2,'A','Lakeside','West','00000'),(1,'A','Lakeside','West',NULL);",
+          "expected": "student_id\tpostal_state\n1\tmissing\n2\trecorded"
+        },
+        {
+          "seed_sql": "",
+          "expected": ""
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-6-composite-attribute-1",
+      "test_id": "pt-dbms-sql-6-composite-attribute",
+      "question_text": "What is a composite attribute?",
+      "options": [
+        "An attribute computed from other attributes",
+        "An attribute that can be divided into smaller, independently meaningful sub-attributes",
+        "An attribute that holds multiple independent values",
+        "An attribute shared by two entity sets"
+      ],
+      "correct_index": 1,
+      "explanation": "A composite attribute breaks down into meaningful component simple attributes, like Address into Street/City/State/Pincode.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-6-composite-attribute-2",
+      "test_id": "pt-dbms-sql-6-composite-attribute",
+      "question_text": "Which Student attribute is the clearest example of a composite attribute?",
+      "options": [
+        "Roll_No",
+        "Address, decomposing into Street, City, State, Pincode",
+        "CGPA",
+        "Gender"
+      ],
+      "correct_index": 1,
+      "explanation": "Address naturally splits into independently useful sub-parts, the hallmark of a composite attribute.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-6-composite-attribute-3",
+      "test_id": "pt-dbms-sql-6-composite-attribute",
+      "question_text": "What are the immediate components of a composite attribute made up of?",
+      "options": [
+        "Other entity sets",
+        "Simple (atomic) attributes",
+        "Relationships",
+        "Derived attributes only"
+      ],
+      "correct_index": 1,
+      "explanation": "A composite attribute decomposes into simple attributes as its building blocks.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-6-composite-attribute-4",
+      "test_id": "pt-dbms-sql-6-composite-attribute",
+      "question_text": "When an ER diagram is converted into relational tables, what typically happens to a composite attribute?",
+      "options": [
+        "It becomes its own separate table always",
+        "It is flattened — each component becomes its own column, and the composite grouping disappears at the table level",
+        "It is dropped entirely and not stored",
+        "It becomes a foreign key"
+      ],
+      "correct_index": 1,
+      "explanation": "Composite attributes are a conceptual grouping; in the relational schema each sub-part becomes an ordinary column.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-6-composite-attribute-5",
+      "test_id": "pt-dbms-sql-6-composite-attribute",
+      "question_text": "A student has exactly one Address, which is composed of Street/City/State/Pincode. Is this attribute multi-valued?",
+      "options": [
+        "Yes, because it has multiple sub-parts",
+        "No — having multiple internal sub-parts (composite) is different from having multiple separate values (multi-valued); here there is only one address value per student",
+        "Yes, all composite attributes are automatically multi-valued",
+        "It cannot be determined"
+      ],
+      "correct_index": 1,
+      "explanation": "Composite (internal structure) and multi-valued (number of occurrences) are independent properties; one address with sub-parts is composite but single-valued.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-6-composite-attribute-6",
+      "test_id": "pt-dbms-sql-6-composite-attribute",
+      "question_text": "Which of the following combinations is valid for an attribute?",
+      "options": [
+        "Only simple attributes can be single-valued",
+        "An attribute can be composite AND multi-valued at the same time (e.g., multiple structured addresses per student)",
+        "Composite and derived are the same category and cannot be separated",
+        "Multi-valued attributes can never be composite"
+      ],
+      "correct_index": 1,
+      "explanation": "The composite/simple axis and single/multi-valued axis are independent, so all four combinations, including composite+multi-valued, are possible.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-6-composite-attribute-7",
+      "test_id": "pt-dbms-sql-6-composite-attribute",
+      "question_text": "How is a composite attribute typically drawn in an ER diagram?",
+      "options": [
+        "As a rectangle with a double border",
+        "As an oval connected to smaller ovals representing its component simple attributes",
+        "As a diamond linked to two rectangles",
+        "As a dashed oval"
+      ],
+      "correct_index": 1,
+      "explanation": "The composite attribute oval branches into ovals for each of its simple sub-attributes.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-6-composite-attribute-8",
+      "test_id": "pt-dbms-sql-6-composite-attribute",
+      "question_text": "Why might a designer choose NOT to decompose Name into First_Name and Last_Name?",
+      "options": [
+        "Because decomposition is impossible for names",
+        "Because if the application never needs to query/sort by the sub-parts separately, treating Name as simple avoids unnecessary design complexity",
+        "Because composite attributes are illegal in ER diagrams",
+        "Because Name must always be derived"
+      ],
+      "correct_index": 1,
+      "explanation": "Composite decomposition is a design choice justified only when sub-parts are independently useful.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "coordinator",
+    "independent_review": "unavailable; no agent tools",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Definitions and examples checked against questions; no plagiarism certification.",
+    "existing_question_corrections": [
+      "tq-dbms-sql-6-composite-attribute-3",
+      "tq-dbms-sql-6-composite-attribute-4",
+      "tq-dbms-sql-6-composite-attribute-7"
+    ],
+    "canonical_answer_indices_preserved": true
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-6-composite-attribute",
+    "original_note_sha256": "ece603e40c9e24ee3480ff2b293cda188e801a4e85a230760f6ed2e5193041d7",
+    "status": "paired migration prepared; not applied"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "One structured Address maps to distinct leaf roles",
+      "description": "Each row describes one component role within a single address, not a separate address occurrence. A nested Location grouping can still flatten to city and region columns.",
+      "columns": [
+        "Conceptual property",
+        "Leaf component",
+        "Example for student 17"
+      ],
+      "rows": [
+        [
+          "Address",
+          "street_line",
+          "Cedar Lane"
+        ],
+        [
+          "Address → Location",
+          "city",
+          "Lakeside"
+        ],
+        [
+          "Address → Location",
+          "region",
+          "West"
+        ],
+        [
+          "Address",
+          "postal_code",
+          "00120; stored as a code string"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "coordinator checked nested components versus multiplicity and consistent component-column mapping",
+    "server_rendering": "passed",
+    "browser_rendering": "unverified",
+    "independent_review": "unavailable; no agent tools",
+    "server_rendering_evidence": "2026-10-29: 101 focused Vitest checks passed; all 92 authored packages rendered through actual LessonBlock."
+  },
+  "sql_verification": {
+    "engine": "11.8.6-MariaDB-0+deb13u1 from Debian",
+    "scope": "MariaDB compatibility execution; exact MySQL 8.4/provider execution unverified",
+    "fingerprint": "652fb18942f6e0166449dbd73913994c0cad9e59c9c69de1e43f08aa9b344c38",
+    "cases": [
+      {
+        "problem": "composite-attribute-region",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "composite-attribute-region",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "composite-attribute-region",
+        "case": 2,
+        "passed": true
+      },
+      {
+        "problem": "composite-attribute-completeness",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "composite-attribute-completeness",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "composite-attribute-completeness",
+        "case": 2,
+        "passed": true
+      }
+    ],
+    "all_passed": true
+  }
+}

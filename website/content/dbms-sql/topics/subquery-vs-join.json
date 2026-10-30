@@ -1,0 +1,570 @@
+{
+  "source_ref": "chapter-17-subqueries/subquery-vs-join",
+  "slug": "subquery-vs-join",
+  "title": "Subquery vs Join",
+  "description": "Compare SQL subqueries and joins by result grain, duplicates, NULLs, scalar cardinality and measured optimizer behavior, with equivalent and unsafe rewrites.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Choose the result you mean before choosing syntax\n\nA subquery is a query nested inside another SQL statement. A join combines rows from table expressions according to a relationship or condition. They often express related tasks, but replacing one with the other is correct only when the required rows, duplicates, null handling and missing-match behavior remain the same. A shorter query is not automatically a better query, and a familiar join is not automatically faster.\n\nImagine a training center listing instructors who have at least one confirmed session. The result should contain one row per instructor, regardless of how many sessions that instructor teaches. That is an existence question. Another report needs every instructor-session pair, including the session date. That is a matching-row question. These reports start from the same tables while asking for different result grains.\n\n## Compare an existence filter with a matching join\n\nUse this small fixture to make the difference visible. Instructor one has two confirmed sessions, instructor two has one cancelled session, and instructor three has none. Assume instructor_id is the instructors primary key and session_id identifies each session. A nullable foreign key in the session table would not match an instructor under ordinary equality.\n\n```sql\nCREATE TABLE instructors(instructor_id INT PRIMARY KEY, name VARCHAR(40));\nCREATE TABLE sessions(session_id INT PRIMARY KEY, instructor_id INT, status VARCHAR(12));\nINSERT INTO instructors VALUES (1,'Mira'),(2,'Jon'),(3,'Asha');\nINSERT INTO sessions VALUES (10,1,'confirmed'),(11,1,'confirmed'),(12,2,'cancelled');\nSELECT i.instructor_id, i.name\nFROM instructors i\nWHERE EXISTS (SELECT 1 FROM sessions s\n              WHERE s.instructor_id=i.instructor_id AND s.status='confirmed')\nORDER BY i.instructor_id;\n```\n\nThe result is one row for Mira. EXISTS asks whether the correlated query returns any qualifying row; it does not append the session rows to the output. Selecting the constant one communicates that the payload is irrelevant. It does not mean only one session is examined, nor does it promise a specific physical loop or access method.\n\nAn inner join with the same matching condition produces two Mira rows when only instructor columns are projected. Those are separate matching pairs, even though the displayed values look identical. DISTINCT can collapse the projected duplicates, but that additional instruction should reflect the report's intended semantics. Selecting session_id would make the two rows distinct again. Do not apply DISTINCT as a universal repair for an incorrectly chosen result grain.\n\n## Preserve the right identity when deduplicating\n\nSuppose two instructors share the name Mira. Projecting only name and adding DISTINCT merges different people into one displayed row. An EXISTS filter preserves the number of outer rows; it does not repair a nonunique outer input or prevent a later projection from concealing identities. Include the stable identifier when the requirement distinguishes people rather than names.\n\nA join rewrite can also change aggregate results. Counting instructor rows after joining sessions counts pairs, while counting instructors before that multiplication counts instructors. COUNT(DISTINCT instructor_id) can express the latter on a joined relation when appropriate, but its null and grouping behavior still needs inspection. Write expected output on a fixture containing multiple matches and repeated display names before deciding that two forms are equivalent.\n\n## Express absence with an explicit missing-match contract\n\nNOT EXISTS returns an outer instructor when no qualifying confirmed session exists. A left anti-join can express the same result by putting the complete qualifying condition in ON and testing a guaranteed nonnull right-side identifier for null afterward. Testing a nullable descriptive attribute can wrongly classify a real matched row as missing.\n\n```sql\nSELECT i.instructor_id\nFROM instructors i\nLEFT JOIN sessions s\n  ON s.instructor_id=i.instructor_id AND s.status='confirmed'\nWHERE s.session_id IS NULL\nORDER BY i.instructor_id;\n```\n\nThis returns instructors two and three. Moving the confirmed-status condition from ON into WHERE changes what happens to null-extended rows and can remove the very missing matches the report intends to keep. NOT IN introduces another issue when its subquery can return null: an unknown comparison can prevent expected rows from passing. Prove nullability or use the absence form whose meaning matches the requirement.\n\n## Treat scalar subqueries as a different shape\n\nA scalar subquery supplies one value rather than a collection of joined rows. It must return at most one row; zero rows yield null, and more than one row is an error in MySQL. Rewriting it as an unrestricted join can silently multiply rows instead of preserving that error contract. A unique constraint can make a one-row relationship explicit; current sample uniqueness cannot substitute for that constraint.\n\nAn aggregate scalar subquery without GROUP BY returns one aggregate row even when no input matches. COUNT then gives zero, whereas SUM normally gives null. A grouped derived table left joined to instructors has no group for an instructor with no sessions, so its count column becomes null after null extension. COALESCE may be required to preserve the original zero, but only where zero is the intended business meaning.\n\n## Preaggregate at the required comparison level\n\nFor a report of sessions longer than their instructor's average duration, a correlated aggregate can state the comparison directly. A second form groups sessions by instructor once as a logical table expression, then joins the averages to individual sessions. Both must use the same population, status filter and null handling. Filtering cancelled sessions in only one form changes the denominator and invalidates the comparison.\n\nThe grouped form makes the intermediate grain explicit: one average per instructor. However, saying it is computed once describes the relational formulation, not a guarantee about execution. An optimizer may merge, materialize, decorrelate or otherwise transform eligible expressions. Keep the readable logical explanation distinct from claims about how many physical scans occurred.\n\n## Measure plans on representative data\n\nMySQL can transform eligible subqueries using semijoin, materialization and other strategies. Joins and subqueries can therefore converge on similar execution work. Conversely, a correlated expression that cannot be transformed may perform repeated work. Neither observation establishes that every correlated subquery is slow or that every join is optimal.\n\nUse EXPLAIN to inspect a plan and an appropriate measured execution facility in a controlled environment when actual timings are needed. Include realistic row counts, value distribution, indexes and parameters. A plan on twelve warm-cache rows cannot establish production behavior on skewed millions. Separate query correctness from tuning evidence; a fast query with the wrong duplicate behavior still fails the task.\n\n## Keep qualification and projection separate\n\nA derived table in FROM can expose several columns and rows, unlike a scalar expression. Give it an alias and inspect whether its grouping keys are unique before joining. If the derived relation contains two rows per instructor, joining it restores the same multiplication that an existence filter avoided. Parentheses alone do not create uniqueness, and an ORDER BY inside a derived expression does not promise final report ordering.\n\nApply the same care to null-safe equality. Replacing ordinary equality with a null-safe comparison changes whether two unknown keys are considered a match. That can be useful under an explicitly chosen rule, but it is not a harmless performance rewrite. Check collation and type conversion too when one form introduces casts or differently typed comparison columns. A defensible rewrite keeps these comparison semantics visible instead of relying on convenient test values.\n\n## Solve two rewrites and challenge the boundaries\n\nFor a beginner exercise, return instructor identifiers having any session, using EXISTS. The solution retains instructors one and two exactly once. Add a second session for instructor two and verify that the result cardinality stays two. Then write the equivalent join-and-distinct form retaining the identifier, and explain why the raw join has extra rows.\n\nFor an intermediate exercise, return instructors with no confirmed sessions using both NOT EXISTS and the left anti-join above. Add a session with a null instructor key and another cancelled session for instructor one. The result remains instructors two and three because neither addition creates a confirmed relationship for them. An empty instructor table must produce an empty result, while an empty session table includes every instructor.\n\nA useful final comparison records output columns, one-row identity, duplicate rules, null rules and missing-match rules before considering execution cost. Continue with [EXISTS](/learning/dbms-sql-tutorial/exists), [semi joins](/learning/dbms-sql-tutorial/semi-join), [scalar subqueries](/learning/dbms-sql-tutorial/scalar-subquery) and [join cardinality](/learning/dbms-sql-tutorial/join-cardinality). Choose the clearest correct expression, then measure the implementation that will actually run it.",
+  "references": [
+    {
+      "title": "MySQL subquery optimization",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/subquery-optimization.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-17-subquery-vs-join",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-17-subquery-vs-join-1",
+          "test_id": "pt-dbms-sql-17-subquery-vs-join",
+          "question_text": "Which principle avoids a misleading blanket speed claim about joins and subqueries?",
+          "options": [
+            "Joins are always faster, no exceptions",
+            "Equivalent forms can share optimizer strategies; compare measured plans and correct results.",
+            "Subqueries are always faster",
+            "They can never produce the same result"
+          ],
+          "correct_index": 1,
+          "explanation": "Syntax alone does not determine the execution strategy.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-17-subquery-vs-join-2",
+          "test_id": "pt-dbms-sql-17-subquery-vs-join",
+          "question_text": "Why can a JOIN+DISTINCT version of \"which departments have employees\" be less ideal than EXISTS?",
+          "options": [
+            "JOIN cannot be used with the departments/employees tables",
+            "The join can produce one row per matching employee, requiring DISTINCT to clean up duplicates that EXISTS never creates",
+            "EXISTS is always a syntax error",
+            "JOIN always returns fewer rows than EXISTS"
+          ],
+          "correct_index": 1,
+          "explanation": "A join multiplies rows per match, needing DISTINCT to dedupe, whereas EXISTS is a pure yes/no test.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-17-subquery-vs-join-3",
+          "test_id": "pt-dbms-sql-17-subquery-vs-join",
+          "question_text": "What is the JOIN-only equivalent trick for NOT EXISTS?",
+          "options": [
+            "INNER JOIN with DISTINCT",
+            "LEFT JOIN ... WHERE right_table.key IS NULL",
+            "CROSS JOIN",
+            "A subquery in ORDER BY"
+          ],
+          "correct_index": 1,
+          "explanation": "The classic anti-join pattern finds unmatched left rows via a LEFT JOIN plus an IS NULL filter.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-17-subquery-vs-join-4",
+          "test_id": "pt-dbms-sql-17-subquery-vs-join",
+          "question_text": "What is a \"hidden performance trap at scale\" mentioned for subqueries in SELECT?",
+          "options": [
+            "They can never be indexed",
+            "A correlated scalar subquery in SELECT can force per-row re-evaluation, unlike a window function or joined pre-aggregate",
+            "They always return NULL",
+            "They cannot be combined with WHERE"
+          ],
+          "correct_index": 1,
+          "explanation": "This callback to 17.9 highlights the per-row cost of correlated SELECT subqueries at scale.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-17-subquery-vs-join-5",
+          "test_id": "pt-dbms-sql-17-subquery-vs-join",
+          "question_text": "At the logical query level, what does the joined preaggregate for above-department-average comparisons make explicit?",
+          "options": [
+            "Nothing, it's identical execution always",
+            "A derived relation with one grouped average per department, joined to employee rows; actual physical work remains optimizer-dependent",
+            "It ignores department boundaries",
+            "It requires a scalar subquery still"
+          ],
+          "correct_index": 1,
+          "explanation": "The grouped formulation exposes the intermediate grain. It does not guarantee one physical computation or prove that a correlated form cannot be transformed.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-17-subquery-vs-join-6",
+          "test_id": "pt-dbms-sql-17-subquery-vs-join",
+          "question_text": "Which subquery type is often considered clearer than an equivalent join for \"does a match exist\" questions?",
+          "options": [
+            "Scalar subquery in SELECT",
+            "EXISTS / NOT EXISTS",
+            "Subquery in FROM",
+            "ALL"
+          ],
+          "correct_index": 1,
+          "explanation": "EXISTS directly expresses \"does a related row exist\" without needing a join plus DISTINCT.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-17-subquery-vs-join-7",
+          "test_id": "pt-dbms-sql-17-subquery-vs-join",
+          "question_text": "Which statement about row counts is accurate?",
+          "options": [
+            "A WHERE-clause subquery can multiply outer rows just like a JOIN can",
+            "A WHERE-clause subquery only filters the outer row set; it never multiplies rows the way a JOIN can",
+            "JOINs never change row counts",
+            "Subqueries and joins always produce identical row counts"
+          ],
+          "correct_index": 1,
+          "explanation": "Subqueries used as WHERE filters can only include or exclude outer rows, never duplicate them.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-17-subquery-vs-join-8",
+          "test_id": "pt-dbms-sql-17-subquery-vs-join",
+          "question_text": "What is the recommended general approach when deciding between a subquery and a join?",
+          "options": [
+            "Always prefer subqueries for correctness",
+            "Always prefer joins for readability",
+            "Consider the specific question, likely optimizer behavior, and readability — measure rather than assume one is universally better",
+            "Never use EXISTS in production"
+          ],
+          "correct_index": 2,
+          "explanation": "There's no universal winner; the right choice depends on the query's intent, the optimizer, and clarity.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-17-subquery-vs-join-c-new-1",
+          "test_id": "pt-dbms-sql-17-subquery-vs-join",
+          "question_text": "An instructor has three matching sessions. How many outer rows does EXISTS retain for that instructor?",
+          "options": [
+            "One when the outer input contains one row for that identity",
+            "Three",
+            "Zero",
+            "Always twelve"
+          ],
+          "correct_index": 0,
+          "explanation": "EXISTS filters an outer row without producing one result per child match.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-17-subquery-vs-join-c-new-2",
+          "test_id": "pt-dbms-sql-17-subquery-vs-join",
+          "question_text": "Why can SELECT DISTINCT name merge two different instructors?",
+          "options": [
+            "DISTINCT always corrupts identifiers",
+            "Names can repeat across distinct identities",
+            "EXISTS deletes names",
+            "Names are numeric keys"
+          ],
+          "correct_index": 1,
+          "explanation": "Deduplicating a projection loses distinctions omitted from that projection.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-17-subquery-vs-join-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-17-subquery-vs-join-c-new-3",
+          "test_id": "pt-dbms-sql-17-subquery-vs-join-application",
+          "question_text": "Which right-side column is suitable for the anti-join IS NULL test here?",
+          "options": [
+            "A nullable comment",
+            "The instructor name",
+            "The nonnull session primary key",
+            "Any nullable status description"
+          ],
+          "correct_index": 2,
+          "explanation": "A matched session cannot have a null primary key.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-17-subquery-vs-join-c-new-4",
+          "test_id": "pt-dbms-sql-17-subquery-vs-join-application",
+          "question_text": "Where does the confirmed-status condition belong in the displayed anti-join?",
+          "options": [
+            "After ORDER BY",
+            "In an unrelated aggregate",
+            "Only in the projection",
+            "Inside the ON condition"
+          ],
+          "correct_index": 3,
+          "explanation": "ON determines which qualifying matches prevent null extension.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-17-subquery-vs-join-c-new-5",
+          "test_id": "pt-dbms-sql-17-subquery-vs-join-application",
+          "question_text": "What does a zero-row scalar subquery yield?",
+          "options": [
+            "NULL",
+            "Zero automatically",
+            "Two rows",
+            "An empty table column definition"
+          ],
+          "correct_index": 0,
+          "explanation": "The scalar expression has no value row and evaluates to null.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-17-subquery-vs-join-c-new-6",
+          "test_id": "pt-dbms-sql-17-subquery-vs-join-application",
+          "question_text": "What does a multirow scalar subquery cause in MySQL?",
+          "options": [
+            "Implicit choice of the first row",
+            "An error",
+            "Automatic DISTINCT of all columns",
+            "A guaranteed average"
+          ],
+          "correct_index": 1,
+          "explanation": "A scalar expression cannot supply several rows.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-17-subquery-vs-join-c-new-7",
+          "test_id": "pt-dbms-sql-17-subquery-vs-join-application",
+          "question_text": "What can a join rewrite accidentally change?",
+          "options": [
+            "Only whitespace",
+            "The database password",
+            "Result multiplicity and missing-match behavior",
+            "The definition of equality"
+          ],
+          "correct_index": 2,
+          "explanation": "Logical equivalence requires more than similar-looking predicates.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-17-subquery-vs-join-c-new-8",
+          "test_id": "pt-dbms-sql-17-subquery-vs-join-application",
+          "question_text": "An aggregate COUNT subquery gives zero for no sessions. A left joined grouped count gives NULL. What should the rewrite consider?",
+          "options": [
+            "Dropping the instructor",
+            "Multiplying by NULL",
+            "Replacing every missing value with one",
+            "COALESCE to zero when zero preserves the intended meaning"
+          ],
+          "correct_index": 3,
+          "explanation": "No grouped child row differs from an aggregate row containing zero.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-17-subquery-vs-join-c-new-9",
+          "test_id": "pt-dbms-sql-17-subquery-vs-join-application",
+          "question_text": "Does a correlated SQL spelling prove per-row physical execution?",
+          "options": [
+            "No; eligible expressions can be transformed",
+            "Yes, in every engine",
+            "Only for empty tables",
+            "Only when aliases have one character"
+          ],
+          "correct_index": 0,
+          "explanation": "Optimizer transformations separate logical syntax from physical execution.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-17-subquery-vs-join-c-new-10",
+          "test_id": "pt-dbms-sql-17-subquery-vs-join-application",
+          "question_text": "What is needed before comparing the speed of two forms?",
+          "options": [
+            "Identical line counts",
+            "Equivalent results on representative cases",
+            "Different business meanings",
+            "A screenshot alone"
+          ],
+          "correct_index": 1,
+          "explanation": "A faster answer to a different question is not a valid optimization.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-17-subquery-vs-join-c-new-11",
+          "test_id": "pt-dbms-sql-17-subquery-vs-join-application",
+          "question_text": "What happens to NOT IN when nullable subquery values introduce UNKNOWN?",
+          "options": [
+            "NULL is always ignored",
+            "The query becomes a left join automatically",
+            "Expected nonmatches can fail the WHERE filter",
+            "All outer rows are guaranteed to pass"
+          ],
+          "correct_index": 2,
+          "explanation": "WHERE retains true, not unknown.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-17-subquery-vs-join-c-new-12",
+          "test_id": "pt-dbms-sql-17-subquery-vs-join-application",
+          "question_text": "Which evidence best supports a performance conclusion?",
+          "options": [
+            "The word JOIN alone",
+            "A single tiny fixture",
+            "The shortest query text",
+            "Representative plans and measured execution under documented conditions"
+          ],
+          "correct_index": 3,
+          "explanation": "Workload, indexes, distributions and runtime conditions affect the result.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cx-c-exists-instructors",
+      "slug": "c-exists-instructors",
+      "title": "List instructors with a session",
+      "difficulty": "Easy",
+      "task": "Return instructor_id for instructors having any session, once per instructor, ordered by instructor_id.",
+      "schema_sql": "CREATE TABLE instructors(instructor_id INT PRIMARY KEY); CREATE TABLE sessions(session_id INT PRIMARY KEY,instructor_id INT NULL,status VARCHAR(12));",
+      "seed_sql": "INSERT INTO instructors VALUES(1),(2),(3); INSERT INTO sessions VALUES(10,1,'confirmed'),(11,1,'confirmed'),(12,2,'cancelled');",
+      "solution_sql": "SELECT i.instructor_id FROM instructors i WHERE EXISTS(SELECT 1 FROM sessions s WHERE s.instructor_id=i.instructor_id) ORDER BY i.instructor_id;",
+      "expected": "instructor_id\n1\n2",
+      "ordering": "Order exactly as requested by the task; row order is otherwise unspecified.",
+      "edge_cases": [
+        "Empty tables.",
+        "NULL values where the schema permits them.",
+        "Repeated matching values when keys permit them."
+      ],
+      "hints": [
+        "EXISTS retains each qualifying outer identity once regardless of child count."
+      ],
+      "explanation": "EXISTS retains each qualifying outer identity once regardless of child count.",
+      "validation_cases": [
+        {
+          "name": "no sessions",
+          "seed_sql": "INSERT INTO instructors VALUES(1),(2);",
+          "expected": ""
+        },
+        {
+          "name": "duplicate child",
+          "seed_sql": "INSERT INTO instructors VALUES(1); INSERT INTO sessions VALUES(1,1,'confirmed'),(2,1,'cancelled');",
+          "expected": "instructor_id\n1"
+        }
+      ]
+    },
+    {
+      "id": "cx-c-absence-confirmed",
+      "slug": "c-absence-confirmed",
+      "title": "Find instructors without confirmed sessions",
+      "difficulty": "Medium",
+      "task": "Return instructor_id having no confirmed session, ordered by instructor_id. Cancelled sessions do not exclude an instructor.",
+      "schema_sql": "CREATE TABLE instructors(instructor_id INT PRIMARY KEY); CREATE TABLE sessions(session_id INT PRIMARY KEY,instructor_id INT NULL,status VARCHAR(12));",
+      "seed_sql": "INSERT INTO instructors VALUES(1),(2),(3); INSERT INTO sessions VALUES(10,1,'confirmed'),(11,1,'confirmed'),(12,2,'cancelled');",
+      "solution_sql": "SELECT i.instructor_id FROM instructors i LEFT JOIN sessions s ON s.instructor_id=i.instructor_id AND s.status='confirmed' WHERE s.session_id IS NULL ORDER BY i.instructor_id;",
+      "expected": "instructor_id\n2\n3",
+      "ordering": "Order exactly as requested by the task; row order is otherwise unspecified.",
+      "edge_cases": [
+        "Empty tables.",
+        "NULL values where the schema permits them.",
+        "Repeated matching values when keys permit them."
+      ],
+      "hints": [
+        "The qualifying predicate belongs in ON; a nonnull child identity distinguishes real matches from null extension."
+      ],
+      "explanation": "The qualifying predicate belongs in ON; a nonnull child identity distinguishes real matches from null extension.",
+      "validation_cases": [
+        {
+          "name": "no sessions",
+          "seed_sql": "INSERT INTO instructors VALUES(1),(2);",
+          "expected": "instructor_id\n1\n2"
+        },
+        {
+          "name": "null child",
+          "seed_sql": "INSERT INTO instructors VALUES(1); INSERT INTO sessions VALUES(1,NULL,'confirmed');",
+          "expected": "instructor_id\n1"
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": null,
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-17-subquery-vs-join-1",
+      "test_id": "pt-dbms-sql-17-subquery-vs-join",
+      "question_text": "Which is generally true about joins vs subqueries?",
+      "options": [
+        "Joins are always faster, no exceptions",
+        "Joins are often, but not always, more efficient thanks to mature optimizer support",
+        "Subqueries are always faster",
+        "They can never produce the same result"
+      ],
+      "correct_index": 1,
+      "explanation": "Optimizers are heavily tuned for joins, but this is a tendency, not an absolute rule.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-17-subquery-vs-join-2",
+      "test_id": "pt-dbms-sql-17-subquery-vs-join",
+      "question_text": "Why can a JOIN+DISTINCT version of \"which departments have employees\" be less ideal than EXISTS?",
+      "options": [
+        "JOIN cannot be used with the departments/employees tables",
+        "The join can produce one row per matching employee, requiring DISTINCT to clean up duplicates that EXISTS never creates",
+        "EXISTS is always a syntax error",
+        "JOIN always returns fewer rows than EXISTS"
+      ],
+      "correct_index": 1,
+      "explanation": "A join multiplies rows per match, needing DISTINCT to dedupe, whereas EXISTS is a pure yes/no test.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-17-subquery-vs-join-3",
+      "test_id": "pt-dbms-sql-17-subquery-vs-join",
+      "question_text": "What is the JOIN-only equivalent trick for NOT EXISTS?",
+      "options": [
+        "INNER JOIN with DISTINCT",
+        "LEFT JOIN ... WHERE right_table.key IS NULL",
+        "CROSS JOIN",
+        "A subquery in ORDER BY"
+      ],
+      "correct_index": 1,
+      "explanation": "The classic anti-join pattern finds unmatched left rows via a LEFT JOIN plus an IS NULL filter.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-17-subquery-vs-join-4",
+      "test_id": "pt-dbms-sql-17-subquery-vs-join",
+      "question_text": "What is a \"hidden performance trap at scale\" mentioned for subqueries in SELECT?",
+      "options": [
+        "They can never be indexed",
+        "A correlated scalar subquery in SELECT can force per-row re-evaluation, unlike a window function or joined pre-aggregate",
+        "They always return NULL",
+        "They cannot be combined with WHERE"
+      ],
+      "correct_index": 1,
+      "explanation": "This callback to 17.9 highlights the per-row cost of correlated SELECT subqueries at scale.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-17-subquery-vs-join-5",
+      "test_id": "pt-dbms-sql-17-subquery-vs-join",
+      "question_text": "In the correlated-subquery-vs-join rewrite for \"above department average,\" what does the JOIN version compute differently?",
+      "options": [
+        "Nothing, it's identical execution always",
+        "It computes each department's average once via GROUP BY, then joins it back, versus a naive per-row re-evaluation in the subquery version",
+        "It ignores department boundaries",
+        "It requires a scalar subquery still"
+      ],
+      "correct_index": 1,
+      "explanation": "The join pre-aggregates averages once, avoiding repeated per-row computation in the naive subquery approach.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-17-subquery-vs-join-6",
+      "test_id": "pt-dbms-sql-17-subquery-vs-join",
+      "question_text": "Which subquery type is often considered clearer than an equivalent join for \"does a match exist\" questions?",
+      "options": [
+        "Scalar subquery in SELECT",
+        "EXISTS / NOT EXISTS",
+        "Subquery in FROM",
+        "ALL"
+      ],
+      "correct_index": 1,
+      "explanation": "EXISTS directly expresses \"does a related row exist\" without needing a join plus DISTINCT.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-17-subquery-vs-join-7",
+      "test_id": "pt-dbms-sql-17-subquery-vs-join",
+      "question_text": "Which statement about row counts is accurate?",
+      "options": [
+        "A WHERE-clause subquery can multiply outer rows just like a JOIN can",
+        "A WHERE-clause subquery only filters the outer row set; it never multiplies rows the way a JOIN can",
+        "JOINs never change row counts",
+        "Subqueries and joins always produce identical row counts"
+      ],
+      "correct_index": 1,
+      "explanation": "Subqueries used as WHERE filters can only include or exclude outer rows, never duplicate them.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-17-subquery-vs-join-8",
+      "test_id": "pt-dbms-sql-17-subquery-vs-join",
+      "question_text": "What is the recommended general approach when deciding between a subquery and a join?",
+      "options": [
+        "Always prefer subqueries for correctness",
+        "Always prefer joins for readability",
+        "Consider the specific question, likely optimizer behavior, and readability — measure rather than assume one is universally better",
+        "Never use EXISTS in production"
+      ],
+      "correct_index": 2,
+      "explanation": "There's no universal winner; the right choice depends on the query's intent, the optimizer, and clarity.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "/root/content_c",
+    "independent_review": "passed",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Independent manual content review passed within independent_review_scope; engine/browser/release gates separate.",
+    "canonical_answer_indices_preserved": true,
+    "editorial_record": "Original explanations, examples and scenarios; external originality clearance and AdSense review unperformed.",
+    "independent_reviewer": "/root",
+    "independent_review_scope": "Full notes,20MCQs/options/explanations,both SQL problems and six fixtures,diagram,metadata and links. Existence versus matching grain,NULL/missing-match/scalar cardinality,preaggregation and optimizer qualifications sound. Inherited blanket speed/computation claims corrected. Six MariaDB fixtures separately passed. Manual editorial review only; exact MySQL/provider,browser,originality and AdSense gates separate."
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-17-subquery-vs-join",
+    "original_note_sha256": "cd30f21352579e33fd03f7658b89ee5bbae4196fe566d80958dc886eacc9e6d3",
+    "status": "drafted; not included in prepared paired migrations"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "One instructor, several matches",
+      "description": "An existence filter retains an identity; a join retains matching pairs.",
+      "columns": [
+        "Input relationship",
+        "EXISTS output",
+        "Raw inner join output"
+      ],
+      "rows": [
+        [
+          "Instructor 1: two matches",
+          "1 row",
+          "2 rows"
+        ],
+        [
+          "Instructor 2: cancelled only",
+          "0 confirmed-match rows",
+          "0 confirmed pairs"
+        ],
+        [
+          "Instructor 3: no matches",
+          "0 rows",
+          "0 rows"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "technical_review": "author self-review",
+    "server_rendering": "unverified",
+    "browser_rendering": "unverified"
+  },
+  "authoring_status": "drafted; verification pending"
+}

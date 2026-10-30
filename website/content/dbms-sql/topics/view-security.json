@@ -1,0 +1,515 @@
+{
+  "source_ref": "chapter-19-views/view-security",
+  "slug": "view-security",
+  "title": "View Security",
+  "description": "Review SQL views as access interfaces: explicit projections, trusted identity, definer or invoker authority, write checks and actor-specific denied-access tests.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Treat a view as an interface with an access contract\n\nA view can expose selected rows and columns through a named query. That makes it useful for a catalogue, a reporting interface or a restricted operational projection. Its safety depends on more than the SELECT text: who can reference it, whose underlying privileges apply, whether callers can read base tables directly and whether writes can cross its intended boundary all matter.\n\nReview [simple views](/learning/dbms-sql-tutorial/simple-views), [updatable views](/learning/dbms-sql-tutorial/updatable-views) and [view limitations](/learning/dbms-sql-tutorial/view-limitations). This topic uses MySQL 8.4 terminology. Security properties differ across database engines, so a MySQL view example is not a replacement for PostgreSQL row-level security or another platform's trusted access design.\n\n## Begin with the information a caller should receive\n\nSuppose an internal course table contains course_id, public_title, is_listed and an instructor-only comment. A public catalogue needs the identity and public title of listed courses. An explicit projection avoids exposing the private comment. A row predicate excludes unlisted courses. These are two separate restrictions: field minimization and population selection.\n\n```sql\nSELECT course_id, public_title\nFROM course_catalogue\nWHERE is_listed = 1;\n```\n\nThis query describes a useful view body. It does not itself grant access, remove existing base-table privileges or establish that an application route uses the view. Trace the actual caller path before concluding that a hidden field is protected. A well-designed view is irrelevant to a client that still queries the unrestricted base relation.\n\n## Review view access and underlying authority separately\n\nA caller needs appropriate permission to use a view. MySQL's SQL SECURITY characteristic also determines whether underlying operations use the invoker's authority or the designated definer's authority. INVOKER uses the caller's relevant privileges; DEFINER uses the designated account's context. Omitting SQL SECURITY defaults to definer context in MySQL, so inspect rather than assume.\n\nA definer view can support intentionally limited access to underlying information, but its authority must be narrow. A highly privileged account can make a small-looking interface more consequential than expected. Conversely, invoker security does not magically grant missing base permissions. Decide the intended model, then test with real restricted actors in an isolated authorized environment.\n\n## Prefer an explicit stable projection\n\nSELECT * obscures which fields belong to the interface. Explicitly naming public columns makes reviews easier and prevents a reader from assuming that every base field is safe. Existing view definitions also need deliberate lifecycle management when the base schema changes; do not assume a stored view automatically becomes the desired new public contract after a table alteration.\n\nA new harmless-looking field can become sensitive when combined with another field. For instance, a room identifier and an exact attendance time may identify an individual's schedule. Field minimization therefore involves the meaning of the projection, not merely the absence of obvious password or payment columns. Review the downstream use and intended audience as well as the schema names.\n\n## Keep tenant identity on a trusted path\n\nA row predicate for one tenant is only safe if the tenant identity used by that predicate is trustworthy. An arbitrary request parameter or caller-controlled session variable is not an authenticated ownership boundary. A client that can choose another tenant's identifier can ask for another tenant's data unless trusted enforcement prevents it.\n\nA fixed educational view body can demonstrate row selection without demonstrating dynamic per-user isolation. For real multitenant access, trace the authenticated identity and enforcement mechanism that the chosen database and application actually use. Avoid copying a simplistic current-tenant expression into production because its name sounds security-related. Its source and mutability determine whether it can be trusted.\n\n## Restrict writes independently of reads\n\nA view that exposes only certain rows may still be updatable under the engine's rules. A write through it can affect underlying data, subject to privileges and view behavior. If readers should only read, grant only the required read capability. Do not assume that a SELECT-shaped definition inherently means read-only access for every actor.\n\nWITH CHECK OPTION adds a write-boundary rule for an updatable filtered view. It can reject inserted or updated rows that would fail the relevant view predicate. LOCAL and CASCADED control checking through nested views, with CASCADED as the default when neither is specified. The choice requires understanding the complete view chain rather than judging one visible predicate.\n\n## Understand what a check option does not cover\n\nA check option is not a replacement for permissions, constraints or input validation. It does not grant ownership of a row, prove the caller's identity or make every complex view updatable. It concerns whether applicable writes satisfy view predicates. A table constraint can still reject a write that passes the view predicate, and the converse should be tested where relevant.\n\nDirect writes to a base table may bypass a boundary expressed only through a view. A caller who can use another writable view may have a different path as well. Review all authorized write paths, not merely the one shown by a user interface. UI hiding or a disabled button cannot establish a database guarantee against a crafted request.\n\n## Test allowed actors and denied actors\n\nAn appropriate security test uses a restricted account that can perform the intended operation and another actor or operation that must fail. Check permitted view reads, denied private-column access, denied base-table reads and denied writes. For a filtered writable view, include a valid change and one that would move a row outside the allowed predicate.\n\nDo not run these tests as an administrator and infer that a normal caller has the same boundary. Administrative success often demonstrates only that broad privileges work. Keep the actor, operation, expected outcome and actual outcome together. A read query returning the right rows is useful functional evidence but cannot prove denied-access enforcement by itself.\n\n## Review aggregates and indirect disclosures\n\nRemoving a private column does not necessarily eliminate information leakage. A count over a very small group can reveal whether a particular person has a record. Repeated narrowly filtered queries can reveal more than a broad summary suggests. Consider who can choose predicates and whether the permitted interface exposes information beyond its intended educational or business purpose.\n\nAn expression that calls another stored object also adds a dependency to review. The view's visible columns may look simple while a referenced function or nested view uses a different context. Trace trusted dependencies and avoid presenting a view as a universal security barrier. Engine-specific behavior matters whenever an implementation relies on how expressions and predicates are evaluated.\n\n## Manage the defining account deliberately\n\nA stored view's definer is an operational dependency. If that account is removed or renamed without handling dependent objects, availability or security behavior can change. Record ownership and review account lifecycle alongside view lifecycle. Never embed a real credential in a view definition, a lesson fixture or a migration comment.\n\nUse a dedicated least-privileged ownership design where definer authority is appropriate. A convenient administrator account is not an educational default worth copying. Account creation, grants and ownership changes belong in a separately approved operational change with rollback and actor-specific tests. Understanding their purpose does not authorize running them against a shared learning database.\n\n## Explain the boundary as a complete chain\n\nA complete review connects authenticated caller, route or service, permitted view operation, view definition, security context and underlying objects. If one link is unverified, state exactly what remains unknown. A correct public catalogue projection can be approved as a query while the broader permission model still requires testing.\n\nThe original comparison diagram below summarizes distinct safeguards rather than ranking one keyword as universally safe. Practice by identifying which safeguard addresses a stated defect: excess columns, unrestricted rows, excessive authority or an escaping write. That reasoning prepares learners to design a coherent access interface instead of treating a view name as proof that private data is protected. Always connect the query interface to its actual permitted caller.\n",
+  "references": [
+    {
+      "title": "Primary reference",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/stored-objects-security.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-19-view-security",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-19-view-security-1",
+          "test_id": "pt-dbms-sql-19-view-security",
+          "question_text": "What does an explicit view projection limit?",
+          "options": [
+            "All caller privileges automatically",
+            "Exposed columns",
+            "Every write path",
+            "Authentication requirements"
+          ],
+          "correct_index": 1,
+          "explanation": "Naming permitted fields defines the visible interface but not the whole access chain.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-19-view-security-2",
+          "test_id": "pt-dbms-sql-19-view-security",
+          "question_text": "What does a view row predicate limit?",
+          "options": [
+            "The caller's password",
+            "The selected population",
+            "Every base-table grant",
+            "All nested function behavior"
+          ],
+          "correct_index": 1,
+          "explanation": "The predicate chooses rows under the query's execution context.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-19-view-security-3",
+          "test_id": "pt-dbms-sql-19-view-security",
+          "question_text": "Does a correct view protect callers still using unrestricted base tables?",
+          "options": [
+            "Always",
+            "No",
+            "Only if the view name says public",
+            "Only if sorted"
+          ],
+          "correct_index": 1,
+          "explanation": "The actual access path must enforce the intended interface.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-19-view-security-4",
+          "test_id": "pt-dbms-sql-19-view-security",
+          "question_text": "What does SQL SECURITY INVOKER use?",
+          "options": [
+            "Any administrator automatically",
+            "The caller's relevant authority",
+            "No privileges",
+            "Only the view caption"
+          ],
+          "correct_index": 1,
+          "explanation": "Invoker context does not supply missing underlying privileges.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-19-view-security-5",
+          "test_id": "pt-dbms-sql-19-view-security",
+          "question_text": "What does SQL SECURITY DEFINER use?",
+          "options": [
+            "Only the caller's base grants",
+            "The designated account's authority",
+            "A random owner",
+            "No trusted identity"
+          ],
+          "correct_index": 1,
+          "explanation": "The definer context can differ substantially from the caller's authority.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-19-view-security-6",
+          "test_id": "pt-dbms-sql-19-view-security",
+          "question_text": "What is MySQL's default when SQL SECURITY is omitted?",
+          "options": [
+            "INVOKER",
+            "DEFINER",
+            "READ ONLY",
+            "PUBLIC"
+          ],
+          "correct_index": 1,
+          "explanation": "Inspect omitted settings because defaults are engine-specific.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-19-view-security-7",
+          "test_id": "pt-dbms-sql-19-view-security",
+          "question_text": "Is an arbitrary client-controlled tenant variable an ownership boundary?",
+          "options": [
+            "Yes",
+            "No",
+            "Only for views",
+            "Only for numeric tenant IDs"
+          ],
+          "correct_index": 1,
+          "explanation": "A caller who can choose the identity can attempt to select another tenant's rows.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-19-view-security-8",
+          "test_id": "pt-dbms-sql-19-view-security",
+          "question_text": "Does a SELECT-shaped view always mean no writes are possible?",
+          "options": [
+            "Yes",
+            "No",
+            "Only with aliases",
+            "Only with a filter"
+          ],
+          "correct_index": 1,
+          "explanation": "Some views are updatable when the engine rules and privileges permit it.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-19-view-security-new-9",
+          "test_id": "pt-dbms-sql-19-view-security",
+          "question_text": "What does WITH CHECK OPTION address?",
+          "options": [
+            "Applicable writes violating view predicates",
+            "All authentication",
+            "Every possible information leak",
+            "All base-table access"
+          ],
+          "correct_index": 0,
+          "explanation": "The clause constrains writes through a qualifying updatable view.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-19-view-security-new-10",
+          "test_id": "pt-dbms-sql-19-view-security",
+          "question_text": "When WITH CHECK OPTION is specified without LOCAL or CASCADED, which scope applies in MySQL?",
+          "options": [
+            "LOCAL",
+            "CASCADED",
+            "NONE",
+            "PUBLIC"
+          ],
+          "correct_index": 1,
+          "explanation": "Nested-view checking needs an explicit understanding of its inherited scope.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-19-view-security-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-19-view-security-application-new-1",
+          "test_id": "pt-dbms-sql-19-view-security-application",
+          "question_text": "Can direct base writes bypass a view-only write predicate?",
+          "options": [
+            "No",
+            "Only if sorted",
+            "Yes",
+            "Only for null rows"
+          ],
+          "correct_index": 2,
+          "explanation": "The view is not the sole enforcement point when another write path remains authorized.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-19-view-security-application-new-2",
+          "test_id": "pt-dbms-sql-19-view-security-application",
+          "question_text": "What actor should test a restricted interface?",
+          "options": [
+            "Only an administrator",
+            "Only a deployment owner",
+            "Only the UI designer",
+            "The actual restricted role"
+          ],
+          "correct_index": 3,
+          "explanation": "Broad administrative privileges do not demonstrate denied behavior for ordinary users.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-19-view-security-application-new-3",
+          "test_id": "pt-dbms-sql-19-view-security-application",
+          "question_text": "What should a security test include?",
+          "options": [
+            "Allowed and denied operations",
+            "Only one successful query",
+            "Only a screenshot",
+            "Only a row count"
+          ],
+          "correct_index": 0,
+          "explanation": "Both directions are necessary to demonstrate the intended boundary.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-19-view-security-application-new-4",
+          "test_id": "pt-dbms-sql-19-view-security-application",
+          "question_text": "Does hiding a UI button enforce database access?",
+          "options": [
+            "Yes",
+            "No",
+            "Only on mobile",
+            "Only with a view"
+          ],
+          "correct_index": 1,
+          "explanation": "A crafted request can bypass presentation rules unless the trusted boundary enforces access.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-19-view-security-application-new-5",
+          "test_id": "pt-dbms-sql-19-view-security-application",
+          "question_text": "Can a small aggregate reveal sensitive existence?",
+          "options": [
+            "No because counts have no names",
+            "Only if negative",
+            "Yes",
+            "Only with SELECT*"
+          ],
+          "correct_index": 2,
+          "explanation": "A narrowly scoped count can reveal whether a protected record is present.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-19-view-security-application-new-6",
+          "test_id": "pt-dbms-sql-19-view-security-application",
+          "question_text": "Why trace referenced stored functions?",
+          "options": [
+            "They always remove access restrictions",
+            "They guarantee read-only execution",
+            "They eliminate account ownership",
+            "They add authority and behavior dependencies"
+          ],
+          "correct_index": 3,
+          "explanation": "A view's visible projection does not describe every dependency's security context.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-19-view-security-application-new-7",
+          "test_id": "pt-dbms-sql-19-view-security-application",
+          "question_text": "Why review the definer account lifecycle?",
+          "options": [
+            "Ownership affects availability and authority",
+            "Account names sort output",
+            "It determines row order",
+            "It replaces a primary key"
+          ],
+          "correct_index": 0,
+          "explanation": "Stored-object behavior can depend on the designated account continuing to exist appropriately.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-19-view-security-application-new-8",
+          "test_id": "pt-dbms-sql-19-view-security-application",
+          "question_text": "What ownership design is preferable to a broad administrator by convenience?",
+          "options": [
+            "The most powerful account available",
+            "A dedicated least-privileged context",
+            "A copied real credential",
+            "An anonymous global account"
+          ],
+          "correct_index": 1,
+          "explanation": "Narrow authority reduces the impact of an unintended interface capability.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-19-view-security-application-new-9",
+          "test_id": "pt-dbms-sql-19-view-security-application",
+          "question_text": "Does a view check option replace table constraints?",
+          "options": [
+            "Yes",
+            "Only for integers",
+            "No",
+            "Only with CASCADED"
+          ],
+          "correct_index": 2,
+          "explanation": "Predicates and integrity constraints enforce different requirements.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-19-view-security-application-new-10",
+          "test_id": "pt-dbms-sql-19-view-security-application",
+          "question_text": "What proves the full view access contract?",
+          "options": [
+            "Only the view name",
+            "Only correct sample rows",
+            "Only a field caption",
+            "Tracing caller authority operations and dependencies"
+          ],
+          "correct_index": 3,
+          "explanation": "The security result depends on the complete path rather than one query fragment.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [],
+  "coding_not_applicable": "This topic evaluates permission and security-context design. Meaningful executable exercises require approved isolated accounts, grants, writable-view fixtures and denied-access checks; read-only row queries would not prove the security boundary.",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-19-view-security-1",
+      "test_id": "pt-dbms-sql-19-view-security",
+      "question_text": "How can a view be used to hide the salary column from general staff while allowing HR full access?",
+      "options": [
+        "Encrypt the salary column so only HR has the decryption key",
+        "Create a view that omits salary, grant staff SELECT only on that view, and grant HR direct SELECT on the base table",
+        "Rename the salary column so staff can't find it",
+        "Set salary to NULL for all staff logins"
+      ],
+      "correct_index": 1,
+      "explanation": "The standard pattern is a restricted view (excluding salary) granted to staff, with the base table's full access reserved for HR/DBA roles.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-19-view-security-2",
+      "test_id": "pt-dbms-sql-19-view-security",
+      "question_text": "Why is it critical that staff_role NOT also be granted SELECT directly on the employees table?",
+      "options": [
+        "Because views cannot coexist with table grants",
+        "Because a direct grant on employees would let staff bypass the view and see the hidden salary column",
+        "Because it would slow down queries",
+        "Because it violates SQL standard syntax"
+      ],
+      "correct_index": 1,
+      "explanation": "If a role has direct access to the base table in addition to the restrictive view, they can simply query the table directly and see everything the view was meant to hide — the view provides no protection.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-19-view-security-3",
+      "test_id": "pt-dbms-sql-19-view-security",
+      "question_text": "What allows a user with no privileges on employees to successfully query a view built on top of it?",
+      "options": [
+        "SQL always grants implicit access to tables referenced in any view",
+        "The view typically executes with the privileges of its owner/definer, not the querying user",
+        "Views ignore all privilege checks",
+        "The user must always be a superuser"
+      ],
+      "correct_index": 1,
+      "explanation": "Views commonly run under 'definer's rights' — the owner's privileges are used to resolve the underlying table access, which is precisely what lets a lower-privileged user query the view.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-19-view-security-4",
+      "test_id": "pt-dbms-sql-19-view-security",
+      "question_text": "What kind of restriction does `WHERE department = 'Engineering'` add to a security view?",
+      "options": [
+        "Column-level security",
+        "Row-level security, limiting which rows are visible",
+        "Index-level security",
+        "It has no security effect"
+      ],
+      "correct_index": 1,
+      "explanation": "Filtering rows in the view's WHERE clause restricts which rows a grantee can see — a form of row-level security implemented via a view.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-19-view-security-5",
+      "test_id": "pt-dbms-sql-19-view-security",
+      "question_text": "Which combination correctly describes the two-layer model of view-based security?",
+      "options": [
+        "Views define who can log in; GRANT defines what tables exist",
+        "Views define what slice of data exists; GRANT/REVOKE defines who may access that slice",
+        "GRANT creates the view; views issue the GRANT",
+        "Both layers are handled entirely by encryption"
+      ],
+      "correct_index": 1,
+      "explanation": "A view shapes the data (which columns/rows are exposed), while GRANT/REVOKE controls which roles/users may query that shaped object.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-19-view-security-6",
+      "test_id": "pt-dbms-sql-19-view-security",
+      "question_text": "What is a limitation of column-level GRANT (e.g., GRANT SELECT (id, name) ON employees TO role) compared to a security view?",
+      "options": [
+        "Column-level GRANT cannot exist in SQL at all",
+        "Column-level GRANT alone cannot restrict which rows are visible, unlike a view with a WHERE clause",
+        "Column-level GRANT is faster in all engines",
+        "Column-level GRANT requires materialized views"
+      ],
+      "correct_index": 1,
+      "explanation": "Column-level GRANT restricts visible columns but not rows; a view can restrict both columns and rows in one object.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-19-view-security-7",
+      "test_id": "pt-dbms-sql-19-view-security",
+      "question_text": "A view exposes a computed column `salary_band` (e.g., 'Low'/'Medium'/'High') instead of the raw salary. What is a realistic security caveat here?",
+      "options": [
+        "There is none — computed columns are always fully safe",
+        "A determined user could still infer salary bounds from the band value, so view design must be careful about indirect leakage",
+        "salary_band cannot be computed in a view",
+        "This automatically encrypts the value"
+      ],
+      "correct_index": 1,
+      "explanation": "Even indirect exposure like a coarse band can leak information about the underlying sensitive value if not designed carefully; view-based security is not automatically airtight.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-19-view-security-8",
+      "test_id": "pt-dbms-sql-19-view-security",
+      "question_text": "How does row-level security (RLS), as offered natively by some engines, differ from using multiple hand-built views for the same purpose?",
+      "options": [
+        "RLS requires no privileges at all",
+        "RLS attaches filtering policies directly to the base table so a single table auto-filters rows per user/role, without needing a separate view per access pattern",
+        "RLS and views are functionally identical with no differences",
+        "RLS only works on materialized views"
+      ],
+      "correct_index": 1,
+      "explanation": "RLS policies (e.g., PostgreSQL row security policies, Oracle VPD) filter rows automatically at the table level based on the current user/role, reducing the need to maintain many separate views for different audiences.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "/root/worker_2",
+    "independent_review": "passed",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "authored; independent review pending",
+    "canonical_answer_indices_preserved": true,
+    "editorial_record": "Original prose and assessments. Seed snapshots and canonical answer indices retained; external originality clearance pending.",
+    "independent_reviewer": "/root",
+    "independent_review_scope": "Full notes,20 MCQs/options/reasoning,original safeguard diagram,links and no-judged-exercise rationale reviewed. MySQL DEFINER/INVOKER defaults and nested check-option scope checked against official docs. Read projection, trusted tenant identity, least privilege, direct-write bypass and denied-actor evidence correctly distinguished. Clarified that CASCADED default applies when WITH CHECK OPTION is present without a modifier. No permission changes or denied-actor execution performed. Exact MySQL/provider, browser and release validation remain separate."
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-19-view-security",
+    "original_note_sha256": "56589282e0131ec07f38032f76c93d01038c24bd903a85a452b202a9e9196cf1",
+    "status": "drafted; not included in prepared paired migrations"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Different safeguards address different defects",
+      "description": "A safe interface requires the relevant safeguards to work together.",
+      "columns": [
+        "Defect",
+        "Relevant safeguard",
+        "Insufficient substitute"
+      ],
+      "rows": [
+        [
+          "Private field exposed",
+          "Explicit permitted projection",
+          "Hide field in UI"
+        ],
+        [
+          "Wrong tenant visible",
+          "Trusted row access enforcement",
+          "Caller-chosen tenant variable"
+        ],
+        [
+          "Excess authority",
+          "Least privilege and security-context review",
+          "Friendly view name"
+        ],
+        [
+          "Escaping view write",
+          "Applicable check option plus write permissions",
+          "Read filter alone"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "technical_review": "coordinator independent manual review passed",
+    "browser_rendering": "unverified",
+    "independent_review": "passed",
+    "server_rendering": "passed",
+    "server_rendering_evidence": "2026-10-29 full Vitest:1310 passed/12 skipped; actual LessonBlock/TopicDiagrams render over230 packages. Browser visual QA remains unverified."
+  },
+  "authoring_status": "drafted; verification pending",
+  "sql_verification": {
+    "scope": "not executed; exact MySQL/provider execution pending",
+    "all_passed": false,
+    "cases": []
+  }
+}

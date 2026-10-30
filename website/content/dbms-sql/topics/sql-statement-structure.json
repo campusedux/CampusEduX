@@ -1,0 +1,642 @@
+{
+  "source_ref": "chapter-8-sql-fundamentals/sql-statement-structure",
+  "slug": "sql-statement-structure",
+  "title": "SQL Statement Structure",
+  "description": "Build SELECT statements in the correct written clause order, distinguish row and group filters, and reason about projection, aliases, ordering, limits, and statement boundaries.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Reading a query as a structured statement\n\nAn SQL statement is a complete instruction with a defined grammar, not an arbitrary collection of keywords. A SELECT query describes the result an application requests from its sources. Its clauses have a required written order and distinct responsibilities. Understanding those responsibilities makes it easier to construct a correct query and diagnose a failure without randomly moving fragments until the parser accepts them.\n\nFor a common MySQL query, the written sequence starts with SELECT, then FROM and any joins, followed by WHERE, GROUP BY, HAVING, ORDER BY, and LIMIT when those clauses are needed. Not every query needs every clause. A literal expression can be selected without a table in MySQL, and a simple row lookup need not contain grouping at all.\n\nWritten order differs from a logical explanation of how a result is formed. We often reason about sources and row filtering before the final projection. That does not mean FROM is the first keyword written in the statement. Nor is the logical explanation a literal performance trace: the optimizer can choose a supported physical strategy that preserves the specified meaning.\n\n## Starting with the promised result\n\nSuppose a campus inventory report needs item_id, item_name, and price for items available in a particular category. The SELECT list states the expressions and labels promised to the consumer. Explicit columns make the output contract clearer than a star that depends on the current table shape. An output alias can name a calculation without renaming the stored schema.\n\nFROM identifies the input relation or derived source. Joins combine related inputs according to their conditions. Before adding filters, ask what one intermediate row represents. Joining items to sales can produce several rows per item, so counting joined rows differs from counting distinct items. Clause order cannot rescue a join whose grain does not match the report's meaning.\n\nFor a straightforward item listing, one row can correspond to one item. Preserve the identifier even when names repeat. If the report later aggregates by category, its output grain changes to one row per category. State that change deliberately so consumers do not interpret a category summary as an individual item record.\n\n## Filtering individual rows with WHERE\n\nWHERE applies a condition to input rows before their aggregation in the query's logical meaning. A condition such as active equals one can exclude inactive inventory rows. A price threshold can retain values at or above the required boundary. Each predicate should reflect a stated requirement, including how missing values are treated.\n\n```sql\nSELECT item_id, item_name, price\nFROM inventory\nWHERE active = 1 AND price >= 100\nORDER BY price DESC, item_id ASC;\n```\n\nThis MySQL example orders qualifying items by highest price and then identifier. An item priced exactly one hundred qualifies, while a missing price does not satisfy that comparison. The explicit tie-breaker makes the sequence stable for equal prices. A visible filter in a report still does not establish actor authorization; the trusted access path must enforce any required record scope.\n\nBoolean grouping matters within the clause. Parentheses can express whether a category choice combines with both conditions or only one alternative. Indentation helps a reader see the intended grouping but does not change precedence. Test a row that satisfies only one side of an OR so an incorrect condition does not hide behind ordinary examples.\n\n## Forming groups with GROUP BY\n\nGROUP BY gathers qualifying rows according to specified grouping expressions. Aggregates such as COUNT and SUM then describe each group. A category summary might count active items and total their stock quantities. The result now represents categories rather than individual inventory records, so selecting an arbitrary item name would not express a well-defined category fact.\n\nUse grouping expressions and aggregates consistently with the target engine's rules. MySQL's grouping behavior is affected by relevant mode and dependency rules. For clear beginner queries, select grouped keys and aggregates rather than relying on permissive behavior for unrelated columns. Successful execution under one relaxed configuration does not make an arbitrary selected value meaningful.\n\nCOUNT star counts rows, while COUNT of a column counts its non-NULL values. SUM ignores missing inputs and can remain NULL when no non-missing value exists in a group. These are distinct questions. Decide whether a missing quantity means an unknown amount, a prohibited state, or a value to handle under another explicit policy before interpreting the summary.\n\n## Filtering completed groups with HAVING\n\nHAVING expresses a condition on groups, commonly using aggregate values. If the report needs only categories with at least two active items, that test belongs after the grouping logically. WHERE can exclude inactive rows before they contribute to a group, while HAVING can exclude groups whose resulting counts are too small.\n\n```sql\nSELECT category, COUNT(*) AS active_items\nFROM inventory\nWHERE active = 1\nGROUP BY category\nHAVING COUNT(*) >= 2\nORDER BY category;\n```\n\nThis is different from counting every item and then trying to remove inactive rows after aggregation. The individual active flag belongs to the input row; the count belongs to the group. A condition written as WHERE COUNT star greater than a threshold at the same query level misplaces the aggregate because that row-filtering stage has not produced the grouped value.\n\nA separate subquery can expose an aggregate as a column for an outer query to filter, but that is a different query level. It does not mean aggregate functions can be inserted anywhere in the original WHERE clause. Distinguish scopes before treating a copied example as a contradiction of the basic row-versus-group rule.\n\n## Ordering and limiting the final result\n\nORDER BY specifies the sequence the consumer requests. Neither grouping nor insertion order should be treated as an implicit display contract. Sort by the intended result values and add a deterministic tie-breaker when needed. A category report can use category ascending; a ranking can order by total descending and then a stable category key.\n\nMySQL LIMIT bounds the number of returned rows after the requested ordering is considered. Limiting an unordered query does not define which rows are the best or earliest. If a report asks for the three highest totals, write that ranking explicitly rather than assuming the engine's present access path happens to visit those groups first.\n\nOutput aliases can be useful in supported positions such as ordering, but their visibility is not universal across all clauses. Do not assume a label created in SELECT is available in an earlier row predicate at the same level. Use the underlying expression or an appropriate query boundary according to the established dialect and the task.\n\n## Respecting statement boundaries\n\nA semicolon is the usual statement delimiter in SQL scripts and clients. A missing delimiter can make a client accumulate text intended as two instructions and submit it as one malformed statement. The exact outcome depends on the client and driver; it is inaccurate to promise that the merge is always silent or that it necessarily executes a changed successful operation.\n\nApplications often submit one statement through a driver API without requiring a trailing delimiter. Support for multiple statements is a separate configuration and security concern. Do not enable it simply to make an example batch run. Distinguish the server's SQL grammar from a particular client's input-collection and delimiter behavior.\n\nComments and quoted strings also affect how script readers recognize boundaries. A semicolon inside a properly quoted string is data rather than the end of the statement. Use the existing driver or script runner instead of inventing a naive split-on-semicolon parser for arbitrary SQL. The clause structure belongs to the actual parsed statement.\n\n## Checking structure through meaningful examples\n\nTest the query against the required population, grain, values, and ordering. Include an empty input, a threshold item, inactive rows, repeated names, and a category that has rows but fails the group condition. These cases reveal incorrect placement of filters and mistaken aggregate interpretations more effectively than checking only for a syntax error.\n\nA reliable statement starts with a clear result contract, uses sources and predicates that express it, aggregates only when the requested grain requires it, and requests the intended final order. Keep written clause order, logical reasoning order, and physical execution strategy distinct. That separation makes SQL easier to read while preventing grammar rules from being mistaken for performance or authorization guarantees.\n",
+  "references": [
+    {
+      "title": "MySQL SELECT clause grammar",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/select.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-8-sql-statement-structure",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-8-sql-statement-structure-1",
+          "test_id": "pt-dbms-sql-8-sql-statement-structure",
+          "question_text": "In the written order of a SELECT statement, which clause comes first?",
+          "options": [
+            "WHERE",
+            "SELECT",
+            "HAVING",
+            "FROM"
+          ],
+          "correct_index": 1,
+          "explanation": "SELECT is written first in a normal SELECT statement. FROM is considered earlier in a conceptual account of result formation, which is a different ordering.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-8-sql-statement-structure-2",
+          "test_id": "pt-dbms-sql-8-sql-statement-structure",
+          "question_text": "Which clause filters individual rows BEFORE any grouping happens?",
+          "options": [
+            "HAVING",
+            "WHERE",
+            "ORDER BY",
+            "GROUP BY"
+          ],
+          "correct_index": 1,
+          "explanation": "WHERE filters rows before GROUP BY collapses them into groups.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-8-sql-statement-structure-3",
+          "test_id": "pt-dbms-sql-8-sql-statement-structure",
+          "question_text": "Which clause is used to filter GROUPS after GROUP BY has run?",
+          "options": [
+            "WHERE",
+            "HAVING",
+            "LIMIT",
+            "FROM"
+          ],
+          "correct_index": 1,
+          "explanation": "HAVING filters aggregated groups, which is why it can reference aggregate functions like COUNT(*).",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-8-sql-statement-structure-4",
+          "test_id": "pt-dbms-sql-8-sql-statement-structure",
+          "question_text": "Why does `WHERE COUNT(*) > 5` fail, while `HAVING COUNT(*) > 5` works?",
+          "options": [
+            "WHERE and HAVING are exact synonyms, so this shouldn't matter, and both should work",
+            "WHERE runs before grouping/aggregation happens, so aggregate values like COUNT(*) don't exist yet at that stage",
+            "COUNT(*) is not a valid function in any clause",
+            "HAVING can only be used without GROUP BY"
+          ],
+          "correct_index": 1,
+          "explanation": "Aggregates are computed during/after GROUP BY, so only HAVING (which runs after grouping) can filter on them.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-8-sql-statement-structure-5",
+          "test_id": "pt-dbms-sql-8-sql-statement-structure",
+          "question_text": "What terminates one SQL statement and separates it from the next in a multi-statement script?",
+          "options": [
+            "A comma",
+            "A semicolon",
+            "A colon",
+            "Two blank lines"
+          ],
+          "correct_index": 1,
+          "explanation": "The semicolon is the standard statement terminator.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-8-sql-statement-structure-6",
+          "test_id": "pt-dbms-sql-8-sql-statement-structure",
+          "question_text": "Can a WHERE clause be written after a GROUP BY clause in the same statement?",
+          "options": [
+            "Yes, clause order is completely free-form",
+            "No — the required written order places WHERE before GROUP BY; writing it after is a syntax error",
+            "Only in SQLite",
+            "Only if no JOIN is present"
+          ],
+          "correct_index": 1,
+          "explanation": "The written clause order is fixed by the SQL grammar; WHERE must precede GROUP BY.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-8-sql-statement-structure-7",
+          "test_id": "pt-dbms-sql-8-sql-statement-structure",
+          "question_text": "What risk does omitting a semicolon between two statements in a batch script create?",
+          "options": [
+            "No risk at all — SQL always infers statement boundaries perfectly",
+            "The client may combine text into one malformed statement or fail to recognize the intended boundary; behavior depends on the runner",
+            "The database refuses to start",
+            "Only the second statement will ever run"
+          ],
+          "correct_index": 1,
+          "explanation": "Missing delimiters often produce a syntax error or continued input collection. A silently changed successful operation is not guaranteed.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-8-sql-statement-structure-8",
+          "test_id": "pt-dbms-sql-8-sql-statement-structure",
+          "question_text": "A query needs to: read from two joined tables, keep only rows from this year, group by department, keep only groups with more than 10 employees, and sort by department name. In what written order must these clauses appear?",
+          "options": [
+            "ORDER BY, HAVING, GROUP BY, WHERE, FROM/JOIN",
+            "FROM/JOIN, WHERE, GROUP BY, HAVING, ORDER BY",
+            "WHERE, FROM/JOIN, HAVING, GROUP BY, ORDER BY",
+            "GROUP BY, WHERE, FROM/JOIN, ORDER BY, HAVING"
+          ],
+          "correct_index": 1,
+          "explanation": "This is exactly the canonical written order: FROM/JOIN, WHERE, GROUP BY, HAVING, ORDER BY.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-8-sql-statement-structure-new-9",
+          "test_id": "pt-dbms-sql-8-sql-statement-structure",
+          "question_text": "What does a change from one row per item to one row per category describe?",
+          "options": [
+            "A new network protocol",
+            "A change in result grain",
+            "A required schema rename",
+            "A physical page split"
+          ],
+          "correct_index": 1,
+          "explanation": "Grouping changes what one output row represents.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-8-sql-statement-structure-new-10",
+          "test_id": "pt-dbms-sql-8-sql-statement-structure",
+          "question_text": "Is the logical explanation of a query necessarily its exact physical execution trace?",
+          "options": [
+            "Yes; each written clause runs as a separate physical scan",
+            "Only when the table has no rows",
+            "No; the optimizer can choose a supported equivalent strategy",
+            "Only when SELECT is uppercase"
+          ],
+          "correct_index": 2,
+          "explanation": "Written order, logical interpretation, and physical strategy are different concepts.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-8-sql-statement-structure-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-8-sql-statement-structure-application-new-1",
+          "test_id": "pt-dbms-sql-8-sql-statement-structure-application",
+          "question_text": "An active item costs exactly 100. Does active = 1 AND price >= 100 retain it?",
+          "options": [
+            "No; the boundary is excluded",
+            "Only if it was inserted first",
+            "Yes",
+            "Only if its name is unique"
+          ],
+          "correct_index": 2,
+          "explanation": "The numeric comparison is inclusive and the active condition is satisfied.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-8-sql-statement-structure-application-new-2",
+          "test_id": "pt-dbms-sql-8-sql-statement-structure-application",
+          "question_text": "A category has three items but only one is active. The query filters active rows then requires COUNT(*) >= 2. Does it appear?",
+          "options": [
+            "Yes; all three original rows count",
+            "Yes; GROUP BY ignores WHERE",
+            "Only if its name is quoted",
+            "No; only one qualifying row contributes"
+          ],
+          "correct_index": 3,
+          "explanation": "WHERE determines the input population before the grouped count.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-8-sql-statement-structure-application-new-3",
+          "test_id": "pt-dbms-sql-8-sql-statement-structure-application",
+          "question_text": "Which condition belongs in HAVING for a per-category report?",
+          "options": [
+            "COUNT(*) >= 2",
+            "An individual row's active = 1 before grouping",
+            "The table alias declaration",
+            "The connection password"
+          ],
+          "correct_index": 0,
+          "explanation": "The grouped count is an aggregate property.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-8-sql-statement-structure-application-new-4",
+          "test_id": "pt-dbms-sql-8-sql-statement-structure-application",
+          "question_text": "A grouped query selects category, COUNT(*), and an arbitrary unrelated item_name. What should be reviewed?",
+          "options": [
+            "Only the number of commas",
+            "Whether every selected expression is defined for the intended group",
+            "Only the indentation",
+            "Only the result table color"
+          ],
+          "correct_index": 1,
+          "explanation": "A group does not inherently have one meaningful unrelated item name.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-8-sql-statement-structure-application-new-5",
+          "test_id": "pt-dbms-sql-8-sql-statement-structure-application",
+          "question_text": "A ranking uses LIMIT 3 with no ORDER BY. What is missing?",
+          "options": [
+            "The existence of SELECT",
+            "The ability to return rows",
+            "The sequence that defines which three are requested",
+            "The requirement that a table has columns"
+          ],
+          "correct_index": 2,
+          "explanation": "A row bound does not specify a ranking.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-8-sql-statement-structure-application-new-6",
+          "test_id": "pt-dbms-sql-8-sql-statement-structure-application",
+          "question_text": "Two items have the same price. What makes their price-ranked sequence deterministic?",
+          "options": [
+            "ORDER BY price DESC alone always breaks ties",
+            "Relying on insertion order",
+            "Removing both item identifiers",
+            "ORDER BY price DESC, item_id ASC when item_id is unique"
+          ],
+          "correct_index": 3,
+          "explanation": "An explicit unique tie-breaker defines relative order.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-8-sql-statement-structure-application-new-7",
+          "test_id": "pt-dbms-sql-8-sql-statement-structure-application",
+          "question_text": "A query uses WHERE COUNT(*) > 5 at the same aggregation level. What is misplaced?",
+          "options": [
+            "A group aggregate in the row-filtering clause",
+            "The statement delimiter only",
+            "The use of an identifier",
+            "The database connection itself"
+          ],
+          "correct_index": 0,
+          "explanation": "The grouped aggregate is not an input-row property at that level.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-8-sql-statement-structure-application-new-8",
+          "test_id": "pt-dbms-sql-8-sql-statement-structure-application",
+          "question_text": "A semicolon appears inside a quoted string. Is it necessarily a statement boundary?",
+          "options": [
+            "Yes; every semicolon ends execution",
+            "No; it can be part of the string value",
+            "Only if it has no spaces",
+            "Only if the table is empty"
+          ],
+          "correct_index": 1,
+          "explanation": "Parsing must respect quoting rather than naively split every semicolon.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-8-sql-statement-structure-application-new-9",
+          "test_id": "pt-dbms-sql-8-sql-statement-structure-application",
+          "question_text": "The driver executes one statement without a trailing semicolon. Does that prove SQL has no statement boundaries?",
+          "options": [
+            "Yes; all scripts must concatenate statements",
+            "Yes; commas replace every semicolon",
+            "No; API submission and interactive script delimiters differ",
+            "Only if ORDER BY is absent"
+          ],
+          "correct_index": 2,
+          "explanation": "One API call can supply a complete statement independently of client-side script collection.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-8-sql-statement-structure-application-new-10",
+          "test_id": "pt-dbms-sql-8-sql-statement-structure-application",
+          "question_text": "A new join multiplies each item into several sales rows before COUNT(*). What must the report revisit?",
+          "options": [
+            "Only the FROM keyword spelling",
+            "Only whether SELECT is written first",
+            "Only the client font",
+            "The population and grain that the count measures"
+          ],
+          "correct_index": 3,
+          "explanation": "A syntactically correct aggregate can count joined combinations rather than items.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "dsa-dbms-sql-structure-filter-order",
+      "slug": "structure-filter-order",
+      "title": "Arrange a filtered inventory statement",
+      "difficulty": "Easy",
+      "task": "Return item_id, item_name, price for active inventory items with price >= 100. Order price descending, then item_id ascending. Use explicit columns and the correct SELECT clause order.",
+      "schema_sql": "CREATE TABLE inventory (item_id INT PRIMARY KEY, item_name VARCHAR(40) NOT NULL, category VARCHAR(20) NOT NULL, price DECIMAL(8,2) NULL CHECK (price >= 0), active INT NOT NULL CHECK (active IN (0,1)), stock_qty INT NULL CHECK (stock_qty >= 0));",
+      "seed_sql": "INSERT INTO inventory VALUES (3,'Pad','stationery',125.00,1,5),(1,'Book','stationery',100.00,1,2),(2,'Pen','stationery',200.00,0,8),(4,'Pad','stationery',125.00,1,0),(5,'Box','storage',NULL,1,NULL);",
+      "expected": "item_id\titem_name\tprice\n3\tPad\t125.00\n4\tPad\t125.00\n1\tBook\t100.00",
+      "ordering": "price descending, item_id ascending",
+      "constraints": [
+        "Unique item_id",
+        "active is 0 or 1",
+        "price and stock_qty can be NULL"
+      ],
+      "edge_cases": [
+        "Exactly 100 qualifies",
+        "Inactive expensive items are excluded",
+        "Missing prices do not pass",
+        "Repeated names do not merge rows"
+      ],
+      "hints": [
+        "WHERE filters before presentation ordering",
+        "Use both sort keys"
+      ],
+      "solution_sql": "SELECT item_id, item_name, price FROM inventory WHERE active = 1 AND price >= 100 ORDER BY price DESC, item_id ASC;",
+      "explanation": "The predicates define qualifying rows and the explicit two-key sort gives the promised deterministic order.",
+      "validation_cases": [
+        {
+          "seed_sql": "",
+          "expected": ""
+        },
+        {
+          "seed_sql": "INSERT INTO inventory VALUES (1,'Book','stationery',99.99,1,1),(2,'Pad','stationery',100.00,1,0);",
+          "expected": "item_id\titem_name\tprice\n2\tPad\t100.00"
+        }
+      ]
+    },
+    {
+      "id": "dsa-dbms-sql-structure-row-group-filters",
+      "slug": "structure-row-group-filters",
+      "title": "Separate row filters from group filters",
+      "difficulty": "Medium",
+      "task": "For active items only, group by category and return category, active_items, known_stock, total_stock. Count all active rows, count non-NULL stock_qty, and sum stock_qty without replacing an all-missing total. Keep only categories with at least two active items. Order by category.",
+      "schema_sql": "CREATE TABLE inventory (item_id INT PRIMARY KEY, item_name VARCHAR(40) NOT NULL, category VARCHAR(20) NOT NULL, price DECIMAL(8,2) NULL CHECK (price >= 0), active INT NOT NULL CHECK (active IN (0,1)), stock_qty INT NULL CHECK (stock_qty >= 0));",
+      "seed_sql": "INSERT INTO inventory VALUES (1,'Book','stationery',100.00,1,2),(2,'Pad','stationery',90.00,1,NULL),(3,'Pen','stationery',20.00,0,8),(4,'Box','storage',50.00,1,0),(5,'Crate','storage',70.00,1,5),(6,'Cable','electronics',80.00,1,9);",
+      "expected": "category\tactive_items\tknown_stock\ttotal_stock\nstationery\t2\t1\t2\nstorage\t2\t2\t5",
+      "ordering": "category ascending",
+      "constraints": [
+        "One inventory item per row",
+        "Only active rows contribute",
+        "Stock quantities can be missing"
+      ],
+      "edge_cases": [
+        "Inactive rows must not raise the group count",
+        "A group with one active item is excluded",
+        "Known zero stock counts as recorded",
+        "An all-missing sum remains NULL"
+      ],
+      "hints": [
+        "Place active filtering in WHERE",
+        "Place the count threshold in HAVING",
+        "COUNT(*) and COUNT(stock_qty) measure different things"
+      ],
+      "solution_sql": "SELECT category, COUNT(*) AS active_items, COUNT(stock_qty) AS known_stock, SUM(stock_qty) AS total_stock FROM inventory WHERE active = 1 GROUP BY category HAVING COUNT(*) >= 2 ORDER BY category;",
+      "explanation": "WHERE defines the active input population before aggregation. HAVING tests the resulting group size, while the separate count and sum preserve stock missingness.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO inventory VALUES (1,'A','tools',1.00,1,NULL),(2,'B','tools',1.00,1,NULL),(3,'C','other',1.00,1,2),(4,'D','other',1.00,0,3);",
+          "expected": "category\tactive_items\tknown_stock\ttotal_stock\ntools\t2\t0\tNULL"
+        },
+        {
+          "seed_sql": "",
+          "expected": ""
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-8-sql-statement-structure-1",
+      "test_id": "pt-dbms-sql-8-sql-statement-structure",
+      "question_text": "In the written order of a SELECT statement, which clause comes first?",
+      "options": [
+        "SELECT",
+        "FROM",
+        "ORDER BY",
+        "WHERE"
+      ],
+      "correct_index": 1,
+      "explanation": "Even though SELECT is spoken first in English, the statement is written SELECT ... FROM ... — but FROM/JOIN are logically processed before WHERE/GROUP BY/SELECT.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-8-sql-statement-structure-2",
+      "test_id": "pt-dbms-sql-8-sql-statement-structure",
+      "question_text": "Which clause filters individual rows BEFORE any grouping happens?",
+      "options": [
+        "HAVING",
+        "WHERE",
+        "ORDER BY",
+        "GROUP BY"
+      ],
+      "correct_index": 1,
+      "explanation": "WHERE filters rows before GROUP BY collapses them into groups.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-8-sql-statement-structure-3",
+      "test_id": "pt-dbms-sql-8-sql-statement-structure",
+      "question_text": "Which clause is used to filter GROUPS after GROUP BY has run?",
+      "options": [
+        "WHERE",
+        "HAVING",
+        "LIMIT",
+        "FROM"
+      ],
+      "correct_index": 1,
+      "explanation": "HAVING filters aggregated groups, which is why it can reference aggregate functions like COUNT(*).",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-8-sql-statement-structure-4",
+      "test_id": "pt-dbms-sql-8-sql-statement-structure",
+      "question_text": "Why does `WHERE COUNT(*) > 5` fail, while `HAVING COUNT(*) > 5` works?",
+      "options": [
+        "WHERE and HAVING are exact synonyms, so this shouldn't matter, and both should work",
+        "WHERE runs before grouping/aggregation happens, so aggregate values like COUNT(*) don't exist yet at that stage",
+        "COUNT(*) is not a valid function in any clause",
+        "HAVING can only be used without GROUP BY"
+      ],
+      "correct_index": 1,
+      "explanation": "Aggregates are computed during/after GROUP BY, so only HAVING (which runs after grouping) can filter on them.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-8-sql-statement-structure-5",
+      "test_id": "pt-dbms-sql-8-sql-statement-structure",
+      "question_text": "What terminates one SQL statement and separates it from the next in a multi-statement script?",
+      "options": [
+        "A comma",
+        "A semicolon",
+        "A colon",
+        "Two blank lines"
+      ],
+      "correct_index": 1,
+      "explanation": "The semicolon is the standard statement terminator.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-8-sql-statement-structure-6",
+      "test_id": "pt-dbms-sql-8-sql-statement-structure",
+      "question_text": "Can a WHERE clause be written after a GROUP BY clause in the same statement?",
+      "options": [
+        "Yes, clause order is completely free-form",
+        "No — the required written order places WHERE before GROUP BY; writing it after is a syntax error",
+        "Only in SQLite",
+        "Only if no JOIN is present"
+      ],
+      "correct_index": 1,
+      "explanation": "The written clause order is fixed by the SQL grammar; WHERE must precede GROUP BY.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-8-sql-statement-structure-7",
+      "test_id": "pt-dbms-sql-8-sql-statement-structure",
+      "question_text": "What risk does omitting a semicolon between two statements in a batch script create?",
+      "options": [
+        "No risk at all — SQL always infers statement boundaries perfectly",
+        "The two statements may be silently concatenated, changing what actually executes",
+        "The database refuses to start",
+        "Only the second statement will ever run"
+      ],
+      "correct_index": 1,
+      "explanation": "A missing terminator can cause two statements to run together as one, changing meaning without necessarily throwing an obvious error.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-8-sql-statement-structure-8",
+      "test_id": "pt-dbms-sql-8-sql-statement-structure",
+      "question_text": "A query needs to: read from two joined tables, keep only rows from this year, group by department, keep only groups with more than 10 employees, and sort by department name. In what written order must these clauses appear?",
+      "options": [
+        "ORDER BY, HAVING, GROUP BY, WHERE, FROM/JOIN",
+        "FROM/JOIN, WHERE, GROUP BY, HAVING, ORDER BY",
+        "WHERE, FROM/JOIN, HAVING, GROUP BY, ORDER BY",
+        "GROUP BY, WHERE, FROM/JOIN, ORDER BY, HAVING"
+      ],
+      "correct_index": 1,
+      "explanation": "This is exactly the canonical written order: FROM/JOIN, WHERE, GROUP BY, HAVING, ORDER BY.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "coordinator",
+    "independent_review": "unavailable; no agent tools",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Definitions and examples checked against questions; no plagiarism certification.",
+    "existing_question_corrections": [
+      "tq-dbms-sql-8-sql-statement-structure-1",
+      "tq-dbms-sql-8-sql-statement-structure-7"
+    ],
+    "canonical_answer_indices_preserved": true
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-8-sql-statement-structure",
+    "original_note_sha256": "05e2a0f27e7fe324599db69f91b7620da037ffa49a4a50539a08a0408e6d9b8b",
+    "status": "paired migration prepared; not applied"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Written clauses and their logical responsibilities",
+      "description": "The written statement starts with SELECT. The responsibility descriptions are a way to reason about meaning and are not a fixed physical execution trace.",
+      "columns": [
+        "Written position",
+        "Clause",
+        "Responsibility"
+      ],
+      "rows": [
+        [
+          "1",
+          "SELECT",
+          "Promised result expressions and labels"
+        ],
+        [
+          "2",
+          "FROM / JOIN",
+          "Input sources and matching combinations"
+        ],
+        [
+          "3",
+          "WHERE",
+          "Qualifying input rows"
+        ],
+        [
+          "4",
+          "GROUP BY",
+          "Result grouping keys"
+        ],
+        [
+          "5",
+          "HAVING",
+          "Qualifying groups"
+        ],
+        [
+          "6",
+          "ORDER BY",
+          "Requested result sequence"
+        ],
+        [
+          "7",
+          "LIMIT",
+          "MySQL result-size bound"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "coordinator review",
+    "server_rendering": "passed",
+    "browser_rendering": "unverified",
+    "independent_review": "unavailable; no agent tools",
+    "rendering_check": "2026-10-28: actual LessonBlock/TopicDiagrams server rendering; 38 authored-package checks passed. Desktop/mobile browser rendering unverified."
+  },
+  "sql_verification": {
+    "engine": "11.8.6-MariaDB-0+deb13u1 from Debian",
+    "scope": "MariaDB compatibility execution; exact MySQL 8.4/provider execution unverified",
+    "fingerprint": "462bb90bebbffb31643b034d55694a303cb7d0407f2d99d0d30a0415a4b4d873",
+    "cases": [
+      {
+        "problem": "structure-filter-order",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "structure-filter-order",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "structure-filter-order",
+        "case": 2,
+        "passed": true
+      },
+      {
+        "problem": "structure-row-group-filters",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "structure-row-group-filters",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "structure-row-group-filters",
+        "case": 2,
+        "passed": true
+      }
+    ],
+    "all_passed": true
+  }
+}

@@ -1,0 +1,512 @@
+{
+  "slug": "recoverable-schedule",
+  "source_ref": "chapter-23-concurrency-control/recoverable-schedule",
+  "title": "Recoverable Schedule",
+  "description": "Classify recoverable schedules using reads-from dependencies, commit order, cascading rollback examples, and comparisons with strictness and serializability.",
+  "dialect": "MySQL 8.4; engine-specific behavior labeled",
+  "references": [
+    {
+      "title": "Database System Concepts: transaction management slides",
+      "url": "https://www.db-book.com/slides-dir/index.html"
+    },
+    {
+      "title": "MySQL InnoDB transaction model",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/innodb-transaction-model.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-23-recoverable-schedule",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-23-recoverable-schedule-1",
+          "test_id": "pt-dbms-sql-23-recoverable-schedule",
+          "question_text": "What is the defining condition for a schedule to be 'recoverable'?",
+          "options": [
+            "No transaction is ever allowed to abort",
+            "If Tj reads a data item written by Ti, then Ti must commit before Tj commits",
+            "All transactions must commit at the same instant",
+            "Tj must never read any data written by Ti"
+          ],
+          "correct_index": 1,
+          "explanation": "Recoverability requires that a transaction's commit never depends on the outcome of another transaction that hasn't yet committed — Ti must commit first.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-23-recoverable-schedule-2",
+          "test_id": "pt-dbms-sql-23-recoverable-schedule",
+          "question_text": "In the 'NOT Recoverable' worked example, what specifically makes the schedule irrecoverable?",
+          "options": [
+            "T2 read a value from T1 before T1 committed, and then T2 committed before T1's eventual abort — leaving T2's commit based on data that was rolled back",
+            "T1 never wrote any data",
+            "T2 aborted before T1",
+            "Both transactions committed at the same time"
+          ],
+          "correct_index": 0,
+          "explanation": "T2 committed (step 3) based on T1's uncommitted write, and T1 then aborted (step 4); since T2 already committed, it cannot be undone, even though the data it relied on turned out to be rolled back.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-23-recoverable-schedule-3",
+          "test_id": "pt-dbms-sql-23-recoverable-schedule",
+          "question_text": "Why is w1(X), r2(X), c2, a1 unsafe when r2 reads w1?",
+          "options": [
+            "It uses too much disk space",
+            "T2 has committed a result based on an aborted source, which ordinary rollback cannot simply retract",
+            "It always causes a deadlock",
+            "It is slower than a recoverable schedule"
+          ],
+          "correct_index": 1,
+          "explanation": "A separate compensating business action may be possible, but ordinary abort recovery cannot treat an already committed dependent transaction as though it never committed.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-23-recoverable-schedule-4",
+          "test_id": "pt-dbms-sql-23-recoverable-schedule",
+          "question_text": "For w1(X), r2(X), c1, c2 with r2 reading w1, why is the schedule recoverable despite the dirty read?",
+          "options": [
+            "Because T2 never actually committed",
+            "The source T1 commits before its dependent reader T2 commits",
+            "Because T2's read happened after T1's commit",
+            "Because recoverability doesn't care about reads at all"
+          ],
+          "correct_index": 1,
+          "explanation": "Recoverability constrains dependent commit order; it does not require c1 to precede r2.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-23-recoverable-schedule-5",
+          "test_id": "pt-dbms-sql-23-recoverable-schedule",
+          "question_text": "Does recoverability restrict WHEN Tj is allowed to read data written by an uncommitted Ti?",
+          "options": [
+            "Yes, Tj can never read uncommitted data under a recoverable schedule",
+            "No — recoverability only constrains the relative order of COMMITS (Ti before Tj), not when the read itself occurs",
+            "Yes, Tj must always wait for Ti to abort",
+            "Recoverability only applies to write operations, never reads"
+          ],
+          "correct_index": 1,
+          "explanation": "Recoverability is a commit-ordering constraint; it permits Tj to read Ti's uncommitted (dirty) data, as long as Ti commits before Tj does. This is what separates it from the stricter cascadeless property.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-23-recoverable-schedule-6",
+          "test_id": "pt-dbms-sql-23-recoverable-schedule",
+          "question_text": "A completed schedule contains only Ti and Tj, and neither reads the other’s writes. Does Ti aborting alone make it unrecoverable?",
+          "options": [
+            "No, any abort automatically makes a schedule irrecoverable",
+            "No, there is no intertransaction read dependency imposing a source-before-reader commit requirement",
+            "Only if Tj also aborts",
+            "Only if Ti aborts before Tj starts"
+          ],
+          "correct_index": 1,
+          "explanation": "With no cross-transaction reads in this two-transaction history, the recoverability condition is satisfied vacuously, though other properties still require analysis.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-23-recoverable-schedule-7",
+          "test_id": "pt-dbms-sql-23-recoverable-schedule",
+          "question_text": "Is it possible for a schedule to be conflict-serializable but irrecoverable?",
+          "options": [
+            "No, serializability guarantees recoverability",
+            "Yes — serializability and recoverability are independent properties; a schedule can satisfy one without the other",
+            "No, they are the exact same concept",
+            "Only view-serializable schedules can be irrecoverable"
+          ],
+          "correct_index": 1,
+          "explanation": "Serializability is about the equivalence of the schedule's result to a serial order; recoverability is about safe handling of commits/aborts. A schedule can pass one test and fail the other.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-23-recoverable-schedule-8",
+          "test_id": "pt-dbms-sql-23-recoverable-schedule",
+          "question_text": "Which mechanism can produce recoverable histories without allowing readers to consume pending writes?",
+          "options": [
+            "They forbid all transactions from ever reading data another transaction wrote",
+            "Locking that withholds uncommitted values or MVCC that supplies suitable committed versions",
+            "They only run one transaction at a time",
+            "They disable rollback entirely"
+          ],
+          "correct_index": 1,
+          "explanation": "Preventing dirty read dependencies is a stronger route to recoverability. The definition also permits dirty reads if dependent commits wait for their source commits, but that is not every engine’s typical implementation.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "cx-recoverable-schedule-fundamentals-9",
+          "test_id": "pt-dbms-sql-23-recoverable-schedule",
+          "question_text": "Which ordering is required when T2 reads T1’s write and T2 commits?",
+          "options": [
+            "T1 commits before T2",
+            "T2 must commit first",
+            "The reads must have identical timestamps",
+            "T1 must always abort"
+          ],
+          "correct_index": 0,
+          "explanation": "Recoverability requires source commit before dependent commit.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "cx-recoverable-schedule-fundamentals-10",
+          "test_id": "pt-dbms-sql-23-recoverable-schedule",
+          "question_text": "For w1(X), r2(X), c1, c2, where T2 reads T1, which classification holds?",
+          "options": [
+            "Unrecoverable and strict",
+            "Recoverable but not cascadeless",
+            "Cascadeless but unrecoverable",
+            "Strict and dirty read free"
+          ],
+          "correct_index": 1,
+          "explanation": "The read is dirty but the commit dependency is respected.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "cx-recoverable-schedule-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "cx-recoverable-schedule-application-1",
+          "test_id": "cx-recoverable-schedule-application",
+          "question_text": "Why is w1(X), r2(X), c2, c1 unrecoverable?",
+          "options": [
+            "Both transactions eventually commit",
+            "The dependent reader commits before its source",
+            "There is only one item",
+            "T1 wrote before T2 read"
+          ],
+          "correct_index": 1,
+          "explanation": "A later source commit does not satisfy the required earlier commit order.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "cx-recoverable-schedule-application-2",
+          "test_id": "cx-recoverable-schedule-application",
+          "question_text": "If T2 reads T1 and T3 reads T2, what direct dependency edges apply?",
+          "options": [
+            "Only T3 to T1",
+            "Only T1 to T3",
+            "T1 to T2 and T2 to T3",
+            "No edges because values differ"
+          ],
+          "correct_index": 2,
+          "explanation": "Read dependencies form a chain through the producing transactions.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "cx-recoverable-schedule-application-3",
+          "test_id": "cx-recoverable-schedule-application",
+          "question_text": "Does recoverability forbid dirty reads?",
+          "options": [
+            "Yes, all reads must be serial",
+            "Only for primary keys",
+            "Only for two transactions",
+            "No, it constrains dependent commit order"
+          ],
+          "correct_index": 3,
+          "explanation": "A recoverable schedule can require cascading aborts after dirty reads.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "cx-recoverable-schedule-application-4",
+          "test_id": "cx-recoverable-schedule-application",
+          "question_text": "Which implication is valid in the standard hierarchy?",
+          "options": [
+            "Strict implies cascadeless implies recoverable",
+            "Recoverable implies strict",
+            "Cascadeless implies serial",
+            "Serializable implies strict"
+          ],
+          "correct_index": 0,
+          "explanation": "Each stronger recovery condition includes the weaker one.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "cx-recoverable-schedule-application-5",
+          "test_id": "cx-recoverable-schedule-application",
+          "question_text": "Why can w1(X), w2(X), c1, c2 be cascadeless but nonstrict?",
+          "options": [
+            "It contains a dirty read",
+            "It has no reads but overwrites an uncommitted item",
+            "T2 reads a committed value",
+            "It has no writes"
+          ],
+          "correct_index": 1,
+          "explanation": "Cascadelessness constrains reads, while strictness also constrains dirty overwrites.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "cx-recoverable-schedule-application-6",
+          "test_id": "cx-recoverable-schedule-application",
+          "question_text": "Can a conflict serializable schedule be unrecoverable?",
+          "options": [
+            "No, the properties are identical",
+            "Only if no transaction reads",
+            "Yes, commit order can violate a read dependency",
+            "Only if every transaction aborts"
+          ],
+          "correct_index": 2,
+          "explanation": "An acyclic conflict graph does not enforce the required commit order.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "cx-recoverable-schedule-application-7",
+          "test_id": "cx-recoverable-schedule-application",
+          "question_text": "What must be known to identify a read dependency accurately?",
+          "options": [
+            "Only the final table row count",
+            "Only the transaction names",
+            "Only the number of commits",
+            "The version or write consumed by the read"
+          ],
+          "correct_index": 3,
+          "explanation": "Recovery dependencies follow the actual read source.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "cx-recoverable-schedule-application-8",
+          "test_id": "cx-recoverable-schedule-application",
+          "question_text": "T2 reads an uncommitted T1 value and then T2 aborts. Does that alone violate recoverability?",
+          "options": [
+            "No, T2 did not commit a dependent result",
+            "Yes, every dirty read violates it",
+            "Only if T1 later commits",
+            "Yes, aborts are forbidden"
+          ],
+          "correct_index": 0,
+          "explanation": "Recoverability constrains committed readers, though cascadelessness is already violated.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "cx-recoverable-schedule-application-9",
+          "test_id": "cx-recoverable-schedule-application",
+          "question_text": "Why use separate graphs for recoverability and conflict serializability?",
+          "options": [
+            "Graph labels never matter",
+            "They encode different dependency rules",
+            "Both graphs always contain the same edges",
+            "Only write conflicts matter to recovery"
+          ],
+          "correct_index": 1,
+          "explanation": "Reads from edges and all conflict edges answer different questions.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "cx-recoverable-schedule-application-10",
+          "test_id": "cx-recoverable-schedule-application",
+          "question_text": "Moving only c2 after c1 in w1(X), r2(X), c2, c1 repairs what?",
+          "options": [
+            "Strictness and every anomaly",
+            "The schema normal form",
+            "Recoverability while leaving the dirty read",
+            "A foreign key violation"
+          ],
+          "correct_index": 2,
+          "explanation": "The commit order is corrected but r2 still precedes c1.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-23-recoverable-schedule-1",
+      "test_id": "pt-dbms-sql-23-recoverable-schedule",
+      "question_text": "What is the defining condition for a schedule to be 'recoverable'?",
+      "options": [
+        "No transaction is ever allowed to abort",
+        "If Tj reads a data item written by Ti, then Ti must commit before Tj commits",
+        "All transactions must commit at the same instant",
+        "Tj must never read any data written by Ti"
+      ],
+      "correct_index": 1,
+      "explanation": "Recoverability requires that a transaction's commit never depends on the outcome of another transaction that hasn't yet committed — Ti must commit first.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-23-recoverable-schedule-2",
+      "test_id": "pt-dbms-sql-23-recoverable-schedule",
+      "question_text": "In the 'NOT Recoverable' worked example, what specifically makes the schedule irrecoverable?",
+      "options": [
+        "T2 read a value from T1 before T1 committed, and then T2 committed before T1's eventual abort — leaving T2's commit based on data that was rolled back",
+        "T1 never wrote any data",
+        "T2 aborted before T1",
+        "Both transactions committed at the same time"
+      ],
+      "correct_index": 0,
+      "explanation": "T2 committed (step 3) based on T1's uncommitted write, and T1 then aborted (step 4); since T2 already committed, it cannot be undone, even though the data it relied on turned out to be rolled back.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-23-recoverable-schedule-3",
+      "test_id": "pt-dbms-sql-23-recoverable-schedule",
+      "question_text": "Why is an irrecoverable schedule considered unacceptable in a real DBMS?",
+      "options": [
+        "It uses too much disk space",
+        "Once a transaction commits, durability requires its effects to be permanent, but an irrecoverable schedule can leave a committed transaction's result based on data that never truly existed, with no way to fix it",
+        "It always causes a deadlock",
+        "It is slower than a recoverable schedule"
+      ],
+      "correct_index": 1,
+      "explanation": "Durability guarantees a commit is permanent; if the committed value is discovered to have come from an aborted source transaction, there is no valid way to reconcile this without breaking that guarantee.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-23-recoverable-schedule-4",
+      "test_id": "pt-dbms-sql-23-recoverable-schedule",
+      "question_text": "In the 'Recoverable' worked example, T2 read T1's uncommitted write at step 4, yet the schedule is still recoverable. Why?",
+      "options": [
+        "Because T2 never actually committed",
+        "Because T1 committed at step 5, BEFORE T2 committed at step 6 — satisfying the requirement that Ti commits before Tj commits",
+        "Because T2's read happened after T1's commit",
+        "Because recoverability doesn't care about reads at all"
+      ],
+      "correct_index": 1,
+      "explanation": "Recoverability only requires the correct ORDER OF COMMITS (Ti before Tj), regardless of when the read itself happened relative to Ti's commit.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-23-recoverable-schedule-5",
+      "test_id": "pt-dbms-sql-23-recoverable-schedule",
+      "question_text": "Does recoverability restrict WHEN Tj is allowed to read data written by an uncommitted Ti?",
+      "options": [
+        "Yes, Tj can never read uncommitted data under a recoverable schedule",
+        "No — recoverability only constrains the relative order of COMMITS (Ti before Tj), not when the read itself occurs",
+        "Yes, Tj must always wait for Ti to abort",
+        "Recoverability only applies to write operations, never reads"
+      ],
+      "correct_index": 1,
+      "explanation": "Recoverability is a commit-ordering constraint; it permits Tj to read Ti's uncommitted (dirty) data, as long as Ti commits before Tj does. This is what separates it from the stricter cascadeless property.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-23-recoverable-schedule-6",
+      "test_id": "pt-dbms-sql-23-recoverable-schedule",
+      "question_text": "Is a schedule where Ti eventually aborts, and Tj never reads any data Ti wrote, automatically recoverable?",
+      "options": [
+        "No, any abort automatically makes a schedule irrecoverable",
+        "Yes — recoverability constraints only apply when an actual read-from dependency exists between transactions",
+        "Only if Tj also aborts",
+        "Only if Ti aborts before Tj starts"
+      ],
+      "correct_index": 1,
+      "explanation": "With no read-from dependency, there's nothing for recoverability to enforce — the schedule is trivially recoverable regardless of Ti's outcome.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-23-recoverable-schedule-7",
+      "test_id": "pt-dbms-sql-23-recoverable-schedule",
+      "question_text": "Is it possible for a schedule to be conflict-serializable but irrecoverable?",
+      "options": [
+        "No, serializability guarantees recoverability",
+        "Yes — serializability and recoverability are independent properties; a schedule can satisfy one without the other",
+        "No, they are the exact same concept",
+        "Only view-serializable schedules can be irrecoverable"
+      ],
+      "correct_index": 1,
+      "explanation": "Serializability is about the equivalence of the schedule's result to a serial order; recoverability is about safe handling of commits/aborts. A schedule can pass one test and fail the other.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-23-recoverable-schedule-8",
+      "test_id": "pt-dbms-sql-23-recoverable-schedule",
+      "question_text": "What mechanism do real DBMSs typically use to enforce recoverability?",
+      "options": [
+        "They forbid all transactions from ever reading data another transaction wrote",
+        "Concurrency control (often via locking) delays a transaction's commit until the transactions it depends on (read dirty data from) have already committed",
+        "They only run one transaction at a time",
+        "They disable rollback entirely"
+      ],
+      "correct_index": 1,
+      "explanation": "By holding a transaction's commit until its dependencies resolve (commit), the DBMS guarantees the recoverability ordering requirement is never violated.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "coding_problems": [],
+  "coding_not_applicable": "Schedule recoverability is a proof over reads-from relationships and commit or abort ordering; a SQL result judge cannot verify it. Multiple classified traces and solved repair exercises are included.",
+  "review": {
+    "reviewer": "/root/finish_e_transactions",
+    "independent_review": "passed",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Independent manual content review passed within independent_review_scope; engine/browser/release gates separate.",
+    "editorial_record": "Original scenario-led prose and assessments. External originality and AdSense review unperformed.",
+    "canonical_answer_indices_preserved": true,
+    "independent_reviewer": "/root/review_e_and_gaps",
+    "independent_review_scope": "Full notes,20MCQs with every option,canonical answer position and explanation,original diagrams,and all exercise contracts/fixtures or solved conceptual labs. Original identities/indices checked against public seed cache where applicable. Reported substantive findings corrected by coordinator and filtered recheck accepted;identified learner-facing spacing polished. Manual technical/editorial reasoning only;engine,provider,browser,external originality and AdSense evidence separate."
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-23-recoverable-schedule",
+    "original_note_sha256": "0111808ff2c6118ec79456e74e16c7c282a2f7b22965ef8067e875aa3b7c1a90",
+    "status": "drafted; not included in prepared paired migrations"
+  },
+  "notes": "## Recovery follows read dependencies\n\nA recoverable schedule prevents a transaction from committing before transactions whose uncommitted writes it consumed have committed. Suppose a scholarship calculation reads an award amount written by a funding transaction. If the calculation commits first and the funding transaction later aborts, the database has accepted a result based on a value that never became valid. Ordinary rollback of the funding transaction cannot safely retract an already committed dependent calculation. Recoverability rules out that unsafe commit order.\n\nThis is a schedule property about recovery dependencies, not a synonym for serial execution or freedom from every concurrency anomaly. A schedule can be recoverable while permitting dirty reads, lost updates, or cascading rollbacks. Conversely, a conflict serializable read and write order can still be unrecoverable if commits occur in the wrong order. Analyze the read dependency and the commit order explicitly rather than treating a familiar concurrency label as proof of every correctness property.\n\n## Define the notation and rule\n\nWrite ri(X) for a read of X by transaction Ti, wi(X) for a write, ci for commit, and ai for abort. Each schedule preserves the internal order of its transactions. A read from relationship exists when a read consumes a particular write's value. In a simple single version schedule, identify the latest applicable preceding write, while respecting any intervening overwrite. If the problem supplies explicit versions or a reads from relation, use that information instead of guessing from timestamps alone.\n\nThe recoverability condition is: whenever Tj reads a value written by Ti and Tj commits, Ti must commit before Tj. The relationship matters even when Ti wrote a different value earlier in the same transaction or other transactions touch unrelated items. A reader that aborts does not create a completed dependent result requiring preservation. For an unfinished prefix, distinguish a schedule that can still be extended safely from a completed history that already contains an illegal dependent commit.\n\n## Compare two nearly identical schedules\n\n```text\nS1: w1(X), r2(X), c1, c2\nS2: w1(X), r2(X), c2, a1\n```\n\nAssume r2(X) reads the value from w1(X). In S1 the reader consumes an uncommitted value, but T1 commits before T2. The schedule is recoverable because the dependency's commit order is respected. It is not cascadeless because the dirty read already happened. If T1 had aborted before committing, T2 would have needed to abort rather than publish a result derived from that value. Recoverability allows this risk while constraining the final commit decision.\n\nIn S2, T2 commits first. T1 then aborts, leaving T2's committed result dependent on an invalid source. The schedule is unrecoverable. Even replacing a1 with c1 would not satisfy the formal recoverable order: c2 already preceded c1. The danger is not cured by a fortunate later source commit, because the schedule allowed the reader to become irreversible before the source's outcome was known. Move the dependent commit after the source commit to repair this specific violation.\n\n## Chains create transitive obligations\n\n```text\nw1(X), r2(X), w2(Y), r3(Y), c1, c2, c3\n```\n\nHere T2 depends on T1, and T3 depends on T2. The direct dependency edges are T1 → T2 and T2 → T3. Their commit order must follow the chain. T3 need not read X directly to be affected by T1's failure: if T1 aborts before its commit, T2's derived work becomes invalid and T3's derived work can become invalid in turn. This is a cascading rollback scenario when dependent transactions remain uncommitted and can still be aborted.\n\nRepresenting dependencies as a graph is useful, but label what the graph means. A reads from dependency graph supports this recovery analysis. A conflict precedence graph includes conflicting reads and writes and is used for conflict serializability. These are not interchangeable graphs. An edge caused by two writes is relevant to conflict ordering but is not a reads from dependency merely because both transactions touched the same item. State the graph's construction rule before drawing conclusions from it.\n\n## Recoverable, cascadeless, and strict\n\nA cascadeless schedule permits a transaction to read another transaction's written value only after that writer commits. This avoids dirty read chains and therefore implies recoverability. A strict schedule goes further: after a transaction writes an item, other transactions cannot read or overwrite that item until the writer commits or aborts. Strictness makes recovery simpler by preventing exposure and overwriting of uncommitted changes. In the standard hierarchy, strict schedules are cascadeless, and cascadeless schedules are recoverable.\n\nThe reverse implications fail. S1 is recoverable but not cascadeless. For a cascadeless but nonstrict example, consider w1(X), w2(X), c1, c2 with no reads. There is no dirty read, so the read based cascadeless condition holds, but T2 overwrote X while T1 was uncommitted, violating strictness. This distinction shows why an absence of read dependencies is not enough to guarantee easy physical rollback. The definitions address different classes of interaction.\n\n## Separate recovery from serializability\n\nConsider w1(X), r2(X), c2, c1. Ignoring commit operations, the conflict graph has only the ordering T1 before T2, so it is acyclic and conflict serializable. Nevertheless, the schedule is unrecoverable because T2 read T1's value and committed before T1. Serializability constrains equivalence of read and write behavior; recoverability constrains whether committed outcomes can be maintained safely when transactions fail. A system needs an appropriate combination of properties rather than choosing only one dimension.\n\nLikewise, a recoverable schedule need not be conflict serializable. For example r1(X), r2(Y), w1(Y), w2(X), c1, c2 reads only initial committed values, so it has no intertransaction dirty read dependency. Its conflicts create edges in both directions, forming a cycle. It satisfies the recovery condition but fails conflict serializability. This example is deliberately abstract; an actual database protocol may block or abort operations rather than allow the whole history to complete.\n\n## How to solve schedule questions\n\nFirst enumerate all transactions and mark each commit or abort. Next identify each read's source version. Record a direct writer to reader edge for every intertransaction reads from relationship. For each committed reader, verify that every source writer committed earlier. Then classify dirty reads, overwrites of uncommitted values, and conflict edges separately if the question asks for cascadelessness, strictness, or serializability. This sequence avoids confusing an early read with an early commit.\n\nDo not infer recoverability from the final values alone. Two histories can leave the same values yet differ in whether a committed result depended on an aborted source. Similarly, a log containing commits in chronological order says little unless the read sources are known. In multiversion settings, a read may consume an older committed version even when another writer is active. Apply the definition to the version actually read, not merely the latest transaction that began editing the item.\n\n## Exercises with complete classifications\n\nExercise one: classify w1(A), r2(A), a2, a1. T2 read a dirty value, but it aborted and did not publish a committed dependent result. The recoverability condition is not violated. The schedule is not cascadeless because the dirty read occurred. This example explains why abort markers matter and why checking only whether a read preceded its writer's commit is the wrong recoverability test.\n\nExercise two: classify w1(A), c1, r2(A), w2(B), c2. It is strict under the displayed operations because the writer finished before another transaction accessed its written item. It is therefore cascadeless and recoverable. Exercise three: repair w1(A), r2(A), c2, c1 by moving c2 after c1. That repairs recoverability, but the read remains dirty. Moving r2 after c1 instead also removes that dirty read. Compare [cascadeless schedules](/learning/dbms-sql-tutorial/cascadeless-schedule) and [serial schedules](/learning/dbms-sql-tutorial/serial-schedule) to keep these classifications distinct.\n",
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Commit order follows consumed writes",
+      "description": "The reader may consume a dirty value in a recoverable schedule, but cannot commit before its source transaction commits.",
+      "columns": [
+        "History",
+        "Read dependency",
+        "Classification"
+      ],
+      "rows": [
+        [
+          "w1(X), r2(X), c1, c2",
+          "T1 → T2",
+          "Recoverable; dirty read"
+        ],
+        [
+          "w1(X), r2(X), c2, c1",
+          "T1 → T2",
+          "Unrecoverable"
+        ],
+        [
+          "w1(X), c1, r2(X), c2",
+          "T1 → T2",
+          "Strict for displayed operations"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "technical_review": "Independent manual diagram/content consistency review passed;actual static/browser rendering tracked separately.",
+    "server_rendering": "pending",
+    "browser_rendering": "unverified",
+    "independent_review": "passed"
+  },
+  "sql_verification": {
+    "scope": "not executed; concurrency/recovery/provider verification separate",
+    "all_passed": false,
+    "cases": []
+  }
+}

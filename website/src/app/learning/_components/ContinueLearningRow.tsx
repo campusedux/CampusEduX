@@ -31,26 +31,26 @@ export function ContinueLearningRow({ courses }: { courses: ContinueCourse[] }) 
   if (started.length === 0) return null;
 
   return (
-    <section className="mt-10 animate-fade-in-up" aria-labelledby="continue-title">
+    <section className="mt-6 sm:mt-8" aria-labelledby="continue-title">
       <h2 id="continue-title" className="h-section">
         Continue learning
       </h2>
-      <div className="mt-4 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+      <div className="mt-3 grid min-w-0 gap-3 md:grid-cols-2 lg:grid-cols-3 lg:gap-4">
         {started.map(({ c, p }) => {
           const href = p.lastVisited ? `/learning/${c.slug}/${p.lastVisited.topicSlug}` : `/learning/${c.slug}`;
           return (
-            <Link key={c.slug} href={href} className="card card-hover group flex flex-col p-5">
-              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-ink-faint">{c.name}</p>
-              <p className="mt-1.5 line-clamp-2 font-display text-lg font-bold leading-snug text-ink group-hover:text-primary">
+            <Link key={c.slug} href={href} className="card card-hover group flex min-w-0 flex-col border-primary/20 p-4 [overflow-wrap:anywhere] sm:p-5">
+              <p className="text-xs font-medium leading-5 text-ink-muted">{c.name}</p>
+              <p className="mt-1 line-clamp-2 font-display text-base font-bold leading-6 text-ink group-hover:text-primary">
                 {p.lastVisited?.topicTitle ?? "Pick up where you left off"}
               </p>
-              <div className="mt-4">
-                <ProgressBar value={p.completed} max={p.total || 1} label={`${c.name} progress`} size="sm" />
-                <p className="mt-1.5 text-xs text-ink-muted">
+              <div className="mt-auto pt-3">
+                <p className="mb-2 text-xs tabular-nums text-ink-muted">
                   {p.completed} of {p.total} lessons · {p.percent}%
                 </p>
+                <ProgressBar value={p.completed} max={p.total || 1} label={`${c.name} progress`} size="sm" />
               </div>
-              <span className="mt-4 inline-flex items-center gap-1.5 text-sm font-semibold text-primary">
+              <span className="mt-3 inline-flex items-center gap-1.5 text-sm font-semibold text-primary">
                 <PlayCircle className="h-4 w-4" aria-hidden /> Resume
                 <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5 motion-reduce:transform-none" aria-hidden />
               </span>

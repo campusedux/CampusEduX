@@ -1,0 +1,575 @@
+{
+  "source_ref": "chapter-19-views/create-view",
+  "slug": "create-view",
+  "title": "CREATE VIEW",
+  "description": "Define clear MySQL view contracts with explicit columns, understand live query behavior and replacement risks, and distinguish reusable SQL presentation from trusted authorization.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Give a reusable query a database name\n\nA view is a named query that can be used as a row source. An advising team might repeatedly need the identifiers and names of active workshops, while several reports need the same definition of a confirmed registration. A view gives that query a stable name and a projected column contract. It can make caller SQL easier to read when the shared definition is useful and maintained deliberately.\n\nA normal MySQL view stores a query definition, not a separately refreshed copy of its result rows. Reading the view evaluates its meaning against the relevant underlying data under the transaction's visibility rules. Review [simple views](/learning/dbms-sql-tutorial/simple-views), [complex views](/learning/dbms-sql-tutorial/complex-views) and [view limitations](/learning/dbms-sql-tutorial/view-limitations) for the distinction between query shape, update support and engine constraints.\n\n## Define an explicit projection\n\nUse CREATE VIEW followed by a SELECT statement. A helpful definition names the output columns explicitly and projects only the information callers need. The examples are educational scratch-schema definitions; creating or changing a view in a shared application database is a reviewed database operation, not something to run casually against production.\n\n```sql\nCREATE VIEW active_workshops AS\nSELECT workshop_id, workshop_name, department_id\nFROM workshops\nWHERE status = 'active';\n```\n\nThe view exposes three columns. It does not expose status merely because the underlying table has that column. A caller can filter department_id or join the view to departments, but cannot refer to an unprojected base column through the view name. Naming calculated columns is equally important: aliases such as confirmed_count provide a usable contract for later queries.\n\nAvoid SELECT star in a maintained view definition. MySQL freezes the view's selected columns when the view is created rather than automatically adopting every later base-table addition. More broadly, an explicit projection makes the intended contract reviewable and reduces surprises when source tables evolve. A caller needing a new field should receive it through a deliberate definition change rather than an assumption about hidden expansion.\n\n## Query a view like a row source\n\nA SELECT from a view can add its own filtering, joins and final ordering. The view does not inherently provide a display sequence. Even if the stored definition contains an ordering clause, callers should specify their required output order explicitly. A reusable view is usually easier to compose when presentation choices remain with the caller.\n\n```sql\nSELECT workshop_id, workshop_name\nFROM active_workshops\nWHERE department_id = 7\nORDER BY workshop_name, workshop_id;\n```\n\nThe department filter further narrows the view's active population. It does not allow a caller to retrieve inactive workshops through that view. However, whether the caller can read the base table directly is a separate privilege question. A filtered view alone is not a complete application authorization system, and hiding a column in one UI query does not establish a trusted access boundary.\n\n## Understand live data and snapshot expectations\n\nIf a workshop changes from active to archived, future reads of the view can stop showing it according to the reader's transaction snapshot and isolation behavior. There is no independent refresh command for this ordinary view result. A report that must preserve yesterday's exact population needs an explicit historical or snapshot design; a named query over mutable current tables does not create that history.\n\nA view also does not make a multi-step report immune to concurrent changes. The transaction and isolation policy still determine which committed versions are visible across statements. Describe whether a report needs one consistent snapshot, current committed values at each statement or a persisted historical extract. The view name cannot supply a consistency contract missing from the underlying workflow.\n\n## Reuse business calculations without hiding their grain\n\nA summary view can expose one row per workshop with a confirmed-registration count. This can centralize a frequently reused population definition. Its output grain must still be explicit: grouping by workshop and academic year yields several possible rows per workshop. Joining it only on workshop can multiply a caller's rows or mix years.\n\n```sql\nCREATE VIEW confirmed_workshop_counts AS\nSELECT workshop_id, COUNT(*) AS confirmed_count\nFROM registrations\nWHERE status = 'confirmed'\nGROUP BY workshop_id;\n```\n\nA workshop with no confirmed registration is absent from this grouped view. A caller needing every workshop must preserve the workshop list with an outer join and choose how to display a missing count. The view does not automatically produce zero-count groups. Similarly, a financial aggregate over missing amounts remains subject to the original aggregate's NULL and completeness semantics.\n\nDo not use a view to conceal a join that already multiplies authoritative facts. Encapsulation can spread a defect to every caller. Review the base identities, joins, eligibility filters and units before treating the definition as a shared source. A short caller query can still return incorrect totals if the view underneath has the wrong grain.\n\n## Treat view changes as contract changes\n\nCREATE OR REPLACE VIEW can replace an existing definition when the caller has the required privileges. ALTER VIEW is another definition-changing operation. These are not harmless formatting edits: removing a column, changing its type, broadening eligibility or changing a calculation can break callers and alter observable behavior. Inspect direct and indirect dependencies before changing a shared view.\n\nPreserve compatible names and meanings whenever callers rely on them. A rollback plan should retain the previous reviewed definition and account for dependent objects and permissions. Replacing a view should not be used as an unreviewed shortcut around the repository's migration workflow. The educational syntax illustrates what an operation means; it does not authorize executing it on a shared database.\n\nChained views can improve reuse but also hide dependency depth. A change near the base can affect several layers, and performance problems can become harder to diagnose if each layer adds joins or aggregation. Keep boundaries purposeful and document the grain and filters in existing approved code or schema review records rather than building a parallel source of truth.\n\n## Separate update support from read convenience\n\nSome views are updatable, but many aggregate, distinct or otherwise complex views are not. A view that is easy to select from is not necessarily a safe target for INSERT, UPDATE or DELETE. Understand how each exposed row maps to underlying rows and which required base columns are unavailable. Do not infer update support from the presence of a single familiar table name.\n\nWITH CHECK OPTION can restrict permitted changes through an applicable updatable view so that affected rows satisfy its condition. It does not replace general privileges, row-level access requirements or application validation, and it does not make an aggregate view updatable. The separate topic [updatable views](/learning/dbms-sql-tutorial/updatable-views) examines that behavior in more detail.\n\n## Review privileges and execution context deliberately\n\nMySQL views have security-context options involving the definer and invoker. Their choice affects whose privileges are used for underlying access. A tutorial definition must not imply that every view automatically enforces the viewer's intended tenant or role boundaries. Privilege design belongs to a trusted, reviewed database boundary, with allowed and denied actor checks.\n\nNever embed credentials or secret values in view definitions. A view is also not a safe place to manufacture authorization from a user-controlled text parameter. Inspect existing application access patterns before introducing privileged views, and preserve the database's established permissions. Continue with [view security](/learning/dbms-sql-tutorial/view-security) for the relevant distinctions.\n\nInclude the prior definition in the reviewed rollback evidence so that recovery preserves the expected caller interface and permission assumptions.\n\n## Verify the definition and its callers\n\nIn a local scratch environment, test active and inactive facts, missing registrations and several registrations for one workshop. Confirm output column names, types and grain, then add and update base rows and observe the expected read behavior. Check that callers specify final ordering and that an absent summary group is handled according to policy.\n\nFor a proposed replacement, compare old and new results on representative fixtures and inspect every known caller. Record which changes are intentional and which contracts must remain stable. A successful CREATE VIEW statement proves only that the database accepted the definition; it does not prove correct business semantics, safe authorization, efficient plans or production readiness.",
+  "references": [
+    {
+      "title": "MySQL 8.4 CREATE VIEW statement",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/create-view.html"
+    },
+    {
+      "title": "PostgreSQL CREATE VIEW replacement contract",
+      "url": "https://www.postgresql.org/docs/current/sql-createview.html"
+    },
+    {
+      "title": "PostgreSQL DROP VIEW dependency rules",
+      "url": "https://www.postgresql.org/docs/current/sql-dropview.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-19-create-view",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-19-create-view-1",
+          "test_id": "pt-dbms-sql-19-create-view",
+          "question_text": "What does CREATE VIEW actually store?",
+          "options": [
+            "A physical copy of the query's result rows",
+            "The defining query and its column metadata, rather than a separate stored copy of the result rows",
+            "An index over the base table",
+            "A compressed snapshot refreshed nightly"
+          ],
+          "correct_index": 1,
+          "explanation": "An ordinary view catalogs a query definition. Reads obey the underlying data visibility rules and optimizer execution strategy.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-19-create-view-2",
+          "test_id": "pt-dbms-sql-19-create-view",
+          "question_text": "In PostgreSQL, what permission-related benefit does CREATE OR REPLACE VIEW have compared with dropping and recreating a view?",
+          "options": [
+            "It runs faster on large tables",
+            "It generally preserves existing GRANT permissions attached to the view object",
+            "It allows removing columns freely",
+            "It converts the view into a materialized view"
+          ],
+          "correct_index": 1,
+          "explanation": "PostgreSQL replacement retains the existing view object and its ownership and permissions. A definition change still requires dependency and security review; do not transfer this drop/grant claim blindly to MySQL.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-19-create-view-3",
+          "test_id": "pt-dbms-sql-19-create-view",
+          "question_text": "In PostgreSQL, which change is typically REJECTED when using CREATE OR REPLACE VIEW?",
+          "options": [
+            "Changing the WHERE clause's filter value",
+            "Adding a new column at the end of the SELECT list",
+            "Removing or reordering existing output columns",
+            "Renaming the view's internal query comment"
+          ],
+          "correct_index": 2,
+          "explanation": "PostgreSQL replacement requires existing columns to keep their names, order and types, while permitting new columns at the end. Other defining-query changes can be possible if that interface is preserved.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-19-create-view-4",
+          "test_id": "pt-dbms-sql-19-create-view",
+          "question_text": "What does DROP VIEW high_earners; do to the employees table?",
+          "options": [
+            "Deletes all rows matching the view's WHERE clause",
+            "Deletes the employees table entirely",
+            "Nothing — the base table and its data are untouched",
+            "Locks the employees table for writes"
+          ],
+          "correct_index": 2,
+          "explanation": "Dropping an ordinary view removes its definition rather than deleting base-table rows. Dependencies and concurrent locking behavior are separate engine concerns.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-19-create-view-5",
+          "test_id": "pt-dbms-sql-19-create-view",
+          "question_text": "What is the purpose of the optional column-alias list in `CREATE VIEW dept_headcount (dept_name, num_employees) AS ...`?",
+          "options": [
+            "It restricts which rows are visible",
+            "It renames the view's output columns independently of the underlying SELECT's own expressions/aliases",
+            "It creates an index on those columns",
+            "It is required syntax with no functional effect"
+          ],
+          "correct_index": 1,
+          "explanation": "The column-alias list lets you give clean, explicit names to the view's output columns, which is especially useful when the underlying SELECT includes expressions like COUNT(e.id) that don't have natural names.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-19-create-view-6",
+          "test_id": "pt-dbms-sql-19-create-view",
+          "question_text": "In PostgreSQL, what happens when DROP VIEW dept_summary uses default RESTRICT behavior while another view depends on dept_summary?",
+          "options": [
+            "Both views are dropped automatically",
+            "The drop fails unless CASCADE is specified",
+            "Only dept_summary's data is dropped, not its dependents",
+            "The dependent view is automatically rewritten to bypass dept_summary"
+          ],
+          "correct_index": 1,
+          "explanation": "PostgreSQL rejects the drop under RESTRICT when dependent objects require the view. CASCADE has destructive dependency consequences and needs separate explicit authorization.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-19-create-view-7",
+          "test_id": "pt-dbms-sql-19-create-view",
+          "question_text": "Can a view's defining query reference another view?",
+          "options": [
+            "No, only base tables can be referenced",
+            "Yes, as long as the referenced view already exists at creation time",
+            "Yes, but only materialized views can be referenced",
+            "Only in Oracle"
+          ],
+          "correct_index": 1,
+          "explanation": "A view's SELECT can reference other views (nested views), but the referenced view must already exist, since view creation validates the query against the current catalog.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-19-create-view-8",
+          "test_id": "pt-dbms-sql-19-create-view",
+          "question_text": "Which statement correctly contrasts an ordinary view with a materialized view in terms of CREATE VIEW semantics?",
+          "options": [
+            "Both store the result physically and require REFRESH",
+            "An ordinary view defines a query over visible source data; a materialized view stores result data maintained under its engine-specific refresh policy",
+            "An ordinary view is faster in every case",
+            "A materialized view cannot be created with CREATE VIEW syntax variants at all"
+          ],
+          "correct_index": 1,
+          "explanation": "Materialized results can become stale until their configured refresh or maintenance occurs. Refresh can be explicit or automated depending on engine and design; stored results are not universally faster for every workload.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-19-create-view-new-9",
+          "test_id": "pt-dbms-sql-19-create-view",
+          "question_text": "Why should a maintained MySQL view avoid relying on SELECT star to expose future added base columns?",
+          "options": [
+            "The star always creates a syntax error",
+            "The selected column list is fixed at view creation rather than automatically adopting later additions",
+            "Views can expose only one column",
+            "The star automatically grants base-table access"
+          ],
+          "correct_index": 1,
+          "explanation": "Use explicit projected columns and review any interface additions deliberately.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-19-create-view-new-10",
+          "test_id": "pt-dbms-sql-19-create-view",
+          "question_text": "Can a caller directly reference a base-table column omitted from a view projection?",
+          "options": [
+            "Yes, every base column is implicitly exposed",
+            "Only through ORDER BY",
+            "No, it is outside that view output contract",
+            "Only if the name is short"
+          ],
+          "correct_index": 2,
+          "explanation": "The projected columns define the row-source interface.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-19-create-view-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-19-create-view-application-new-1",
+          "test_id": "pt-dbms-sql-19-create-view-application",
+          "question_text": "Does an active-workshops view create a historical snapshot of yesterday?",
+          "options": [
+            "Yes, automatically",
+            "Only when workshop_id is selected",
+            "Only when ordered",
+            "No"
+          ],
+          "correct_index": 3,
+          "explanation": "A live named query does not preserve past mutable state.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-19-create-view-application-new-2",
+          "test_id": "pt-dbms-sql-19-create-view-application",
+          "question_text": "Where should a caller specify a guaranteed final display order?",
+          "options": [
+            "In its outer ORDER BY",
+            "Only in the view alias",
+            "In a column comment",
+            "By relying on current storage order"
+          ],
+          "correct_index": 0,
+          "explanation": "A view row source does not establish a portable caller display sequence.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-19-create-view-application-new-3",
+          "test_id": "pt-dbms-sql-19-create-view-application",
+          "question_text": "What happens to a zero-registration workshop in a grouped registration-count view?",
+          "options": [
+            "It automatically has count zero",
+            "It has no group unless the population is constructed to preserve it",
+            "It becomes a NULL workshop ID",
+            "It receives the global count"
+          ],
+          "correct_index": 1,
+          "explanation": "Grouping existing registration facts does not invent missing workshops.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-19-create-view-application-new-4",
+          "test_id": "pt-dbms-sql-19-create-view-application",
+          "question_text": "Does a filtered view alone prove a caller cannot read excluded data elsewhere?",
+          "options": [
+            "Yes, always",
+            "Only if SELECT star is avoided",
+            "No, underlying privileges and access paths also matter",
+            "Only if the view is named active"
+          ],
+          "correct_index": 2,
+          "explanation": "Authorization depends on trusted access boundaries, not one query projection.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-19-create-view-application-new-5",
+          "test_id": "pt-dbms-sql-19-create-view-application",
+          "question_text": "Why inspect callers before replacing a view?",
+          "options": [
+            "Replacement can never change results",
+            "Aliases are always cosmetic",
+            "Only the creator can query a view",
+            "Column meanings, types and row eligibility are shared contracts"
+          ],
+          "correct_index": 3,
+          "explanation": "Definition changes can break dependent queries or alter behavior.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-19-create-view-application-new-6",
+          "test_id": "pt-dbms-sql-19-create-view-application",
+          "question_text": "Does an aggregate view necessarily support UPDATE?",
+          "options": [
+            "No",
+            "Yes, every view is updatable",
+            "Only when COUNT is selected",
+            "Only when it has a short name"
+          ],
+          "correct_index": 0,
+          "explanation": "Update mapping depends on view shape and engine rules.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-19-create-view-application-new-7",
+          "test_id": "pt-dbms-sql-19-create-view-application",
+          "question_text": "What does WITH CHECK OPTION avoid replacing?",
+          "options": [
+            "The view condition",
+            "General privileges and application validation",
+            "A database identifier",
+            "Every SELECT statement"
+          ],
+          "correct_index": 1,
+          "explanation": "It is a specific rule for applicable writes through an updatable view.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-19-create-view-application-new-8",
+          "test_id": "pt-dbms-sql-19-create-view-application",
+          "question_text": "What can a summary view grouped by workshop and year require in later joins?",
+          "options": [
+            "Only the count value",
+            "No predicate",
+            "Both workshop and year keys",
+            "Only a workshop display name"
+          ],
+          "correct_index": 2,
+          "explanation": "The summary grain includes both dimensions.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-19-create-view-application-new-9",
+          "test_id": "pt-dbms-sql-19-create-view-application",
+          "question_text": "Which property needs review for a MySQL privileged view?",
+          "options": [
+            "Only its alphabetical name",
+            "The number of spaces in SELECT",
+            "Only its output ordering",
+            "Its definer/invoker security context"
+          ],
+          "correct_index": 3,
+          "explanation": "Security context affects whose underlying privileges are used.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-19-create-view-application-new-10",
+          "test_id": "pt-dbms-sql-19-create-view-application",
+          "question_text": "What does successful CREATE VIEW execution alone prove?",
+          "options": [
+            "The engine accepted the definition",
+            "Authorization and business semantics are fully verified",
+            "All callers remain compatible",
+            "The view is production-ready"
+          ],
+          "correct_index": 0,
+          "explanation": "Syntax acceptance is only one verification layer.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cx-create-view-active-selection",
+      "slug": "create-view-active-selection",
+      "title": "Read a filtered workshop view",
+      "difficulty": "Easy",
+      "task": "Return workshop_id,name from active_workshops ordered by workshop_id. The scratch schema already defines the view.",
+      "schema_sql": "CREATE TABLE workshops(workshop_id INT PRIMARY KEY,name VARCHAR(20) NOT NULL,status VARCHAR(10) NOT NULL); CREATE VIEW active_workshops AS SELECT workshop_id,name FROM workshops WHERE status='active';",
+      "seed_sql": "INSERT INTO workshops VALUES (1,'SQL','active'),(2,'DBMS','archived'),(3,'Joins','active');",
+      "solution_sql": "SELECT workshop_id,name FROM active_workshops ORDER BY workshop_id;",
+      "expected": "workshop_id\tname\n1\tSQL\n3\tJoins",
+      "explanation": "The view exposes only active workshop facts.",
+      "ordering": "Apply the ORDER BY explicitly required by the task; scalar results contain one row.",
+      "constraints": [
+        "Only synthetic fixture tables are in scope."
+      ],
+      "edge_cases": [
+        "Check empty input and the supplied contrasting fixtures."
+      ],
+      "hints": [
+        "The view exposes only active workshop facts."
+      ],
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO workshops VALUES (5,'SQL','archived');",
+          "expected": ""
+        },
+        {
+          "seed_sql": "",
+          "expected": ""
+        }
+      ]
+    },
+    {
+      "id": "cx-create-view-summary-read",
+      "slug": "create-view-summary-read",
+      "title": "Preserve workshops missing from a summary view",
+      "difficulty": "Medium",
+      "task": "Return workshop_id,confirmed_count for every workshop using confirmed_counts; replace a missing count with zero and order by workshop_id.",
+      "schema_sql": "CREATE TABLE workshops(workshop_id INT PRIMARY KEY); CREATE TABLE registrations(id INT PRIMARY KEY,workshop_id INT NOT NULL,status VARCHAR(10) NOT NULL); CREATE VIEW confirmed_counts AS SELECT workshop_id,COUNT(*) AS confirmed_count FROM registrations WHERE status='confirmed' GROUP BY workshop_id;",
+      "seed_sql": "INSERT INTO workshops VALUES (1),(2); INSERT INTO registrations VALUES (10,1,'confirmed'),(11,1,'confirmed'),(12,2,'pending');",
+      "solution_sql": "SELECT w.workshop_id,COALESCE(c.confirmed_count,0) AS confirmed_count FROM workshops AS w LEFT JOIN confirmed_counts AS c ON c.workshop_id=w.workshop_id ORDER BY w.workshop_id;",
+      "expected": "workshop_id\tconfirmed_count\n1\t2\n2\t0",
+      "explanation": "The workshop source preserves absent summary keys; zero is the stated count policy.",
+      "ordering": "Apply the ORDER BY explicitly required by the task; scalar results contain one row.",
+      "constraints": [
+        "Only synthetic fixture tables are in scope."
+      ],
+      "edge_cases": [
+        "Check empty input and the supplied contrasting fixtures."
+      ],
+      "hints": [
+        "The workshop source preserves absent summary keys; zero is the stated count policy."
+      ],
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO workshops VALUES (7);",
+          "expected": "workshop_id\tconfirmed_count\n7\t0"
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-19-create-view-1",
+      "test_id": "pt-dbms-sql-19-create-view",
+      "question_text": "What does CREATE VIEW actually store?",
+      "options": [
+        "A physical copy of the query's result rows",
+        "The text/plan of the defining SELECT statement, re-executed on each access",
+        "An index over the base table",
+        "A compressed snapshot refreshed nightly"
+      ],
+      "correct_index": 1,
+      "explanation": "CREATE VIEW catalogs the query definition; it does not execute and persist the result. Each access re-runs the query (unless the view is materialized).",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-19-create-view-2",
+      "test_id": "pt-dbms-sql-19-create-view",
+      "question_text": "What is a key practical advantage of CREATE OR REPLACE VIEW over DROP VIEW followed by CREATE VIEW?",
+      "options": [
+        "It runs faster on large tables",
+        "It generally preserves existing GRANT permissions attached to the view object",
+        "It allows removing columns freely",
+        "It converts the view into a materialized view"
+      ],
+      "correct_index": 1,
+      "explanation": "Dropping a view can also drop its associated grants; CREATE OR REPLACE VIEW updates the definition in place, typically preserving permissions granted on the view.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-19-create-view-3",
+      "test_id": "pt-dbms-sql-19-create-view",
+      "question_text": "In PostgreSQL, which change is typically REJECTED when using CREATE OR REPLACE VIEW?",
+      "options": [
+        "Changing the WHERE clause's filter value",
+        "Adding a new column at the end of the SELECT list",
+        "Removing or reordering existing output columns",
+        "Renaming the view's internal query comment"
+      ],
+      "correct_index": 2,
+      "explanation": "PostgreSQL (and similar engines) disallow removing or reordering existing output columns via CREATE OR REPLACE VIEW; only appending new columns at the end is allowed. Removing a column requires DROP and recreate.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-19-create-view-4",
+      "test_id": "pt-dbms-sql-19-create-view",
+      "question_text": "What does DROP VIEW high_earners; do to the employees table?",
+      "options": [
+        "Deletes all rows matching the view's WHERE clause",
+        "Deletes the employees table entirely",
+        "Nothing — the base table and its data are untouched",
+        "Locks the employees table for writes"
+      ],
+      "correct_index": 2,
+      "explanation": "A view never holds data, so dropping it only removes the stored query definition; the underlying employees table is completely unaffected.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-19-create-view-5",
+      "test_id": "pt-dbms-sql-19-create-view",
+      "question_text": "What is the purpose of the optional column-alias list in `CREATE VIEW dept_headcount (dept_name, num_employees) AS ...`?",
+      "options": [
+        "It restricts which rows are visible",
+        "It renames the view's output columns independently of the underlying SELECT's own expressions/aliases",
+        "It creates an index on those columns",
+        "It is required syntax with no functional effect"
+      ],
+      "correct_index": 1,
+      "explanation": "The column-alias list lets you give clean, explicit names to the view's output columns, which is especially useful when the underlying SELECT includes expressions like COUNT(e.id) that don't have natural names.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-19-create-view-6",
+      "test_id": "pt-dbms-sql-19-create-view",
+      "question_text": "What happens when you run `DROP VIEW dept_summary;` if another view selects from dept_summary, and the engine defaults to RESTRICT semantics?",
+      "options": [
+        "Both views are dropped automatically",
+        "The drop fails unless CASCADE is specified",
+        "Only dept_summary's data is dropped, not its dependents",
+        "The dependent view is automatically rewritten to bypass dept_summary"
+      ],
+      "correct_index": 1,
+      "explanation": "Under RESTRICT (the typical default), dropping an object that other objects depend on fails; CASCADE must be used to also drop the dependents.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-19-create-view-7",
+      "test_id": "pt-dbms-sql-19-create-view",
+      "question_text": "Can a view's defining query reference another view?",
+      "options": [
+        "No, only base tables can be referenced",
+        "Yes, as long as the referenced view already exists at creation time",
+        "Yes, but only materialized views can be referenced",
+        "Only in Oracle"
+      ],
+      "correct_index": 1,
+      "explanation": "A view's SELECT can reference other views (nested views), but the referenced view must already exist, since view creation validates the query against the current catalog.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-19-create-view-8",
+      "test_id": "pt-dbms-sql-19-create-view",
+      "question_text": "Which statement correctly contrasts an ordinary view with a materialized view in terms of CREATE VIEW semantics?",
+      "options": [
+        "Both store the result physically and require REFRESH",
+        "An ordinary view re-runs its query on every access; a materialized view computes and stores results, requiring REFRESH to update",
+        "An ordinary view is faster in every case",
+        "A materialized view cannot be created with CREATE VIEW syntax variants at all"
+      ],
+      "correct_index": 1,
+      "explanation": "The defining trade-off is: plain views always reflect live data by re-running the query, while materialized views trade that freshness for stored, faster-to-read results that must be explicitly refreshed (see 19.6).",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "/root/worker_1",
+    "independent_review": "passed",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "author semantic review; independent review pending",
+    "canonical_answer_indices_preserved": true,
+    "independent_reviewer": "/root",
+    "independent_review_scope": "Full notes,20 MCQs/options/reasoning,both exercises with five predicted outputs and interface diagram reviewed. MySQL frozen star projection, caller grain/order, live visibility, definition replacement and security context correct. PostgreSQL-specific replacement and RESTRICT questions explicitly labeled and primary references added. Synthetic view reads and outer-summary fixtures passed portable SQLite; actual DDL permissions and denied actors unverified. Exact MySQL/provider, browser and release validation remain separate."
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-19-create-view",
+    "original_note_sha256": "367465722ea21100b41ad94e31894794a6602e7c3cbe178f06e6685424170b80",
+    "status": "drafted; not included in prepared paired migrations"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "A view exposes a contract over source facts",
+      "description": "The query definition filters and projects; the caller adds its own final order.",
+      "columns": [
+        "Boundary",
+        "Responsibility"
+      ],
+      "rows": [
+        [
+          "Base workshops",
+          "Stored workshop facts"
+        ],
+        [
+          "active_workshops view",
+          "Active eligibility and explicit projected columns"
+        ],
+        [
+          "Caller query",
+          "Additional eligibility, joins and final ordering"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "provided",
+    "technical_review": "coordinator independent manual review passed",
+    "server_rendering": "passed",
+    "browser_rendering": "unverified",
+    "independent_review": "passed",
+    "server_rendering_evidence": "2026-10-29 full Vitest:1310 passed/12 skipped; actual LessonBlock/TopicDiagrams render over230 packages. Browser visual QA remains unverified."
+  },
+  "authoring_status": "drafted; verification pending",
+  "sql_verification": {
+    "scope": "not executed; exact MySQL/provider verification pending",
+    "all_passed": false,
+    "cases": []
+  }
+}

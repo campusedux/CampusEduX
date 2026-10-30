@@ -1,0 +1,574 @@
+{
+  "source_ref": "chapter-18-set-operations/set-compatibility",
+  "slug": "set-compatibility",
+  "title": "Set Compatibility",
+  "description": "Align SQL set operands by column count, position, type and meaning, with explicit duplicate, NULL, provenance, collation and ordering policies.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Align meaning before combining query results\n\nSet operations combine the rows produced by separate queries. For the combination to be useful, each operand must describe compatible columns in the same positions. The engine can check some structural and type requirements, but it cannot establish that the values represent the same business concept. Combining student identifiers with room numbers may be syntactically acceptable while producing a result with no coherent interpretation.\n\nStudy [UNION](/learning/dbms-sql-tutorial/union-sql), [UNION ALL](/learning/dbms-sql-tutorial/union-all), [INTERSECT](/learning/dbms-sql-tutorial/intersect) and [EXCEPT](/learning/dbms-sql-tutorial/except) alongside this topic. MySQL 8.4 supports these set operations. Their combination rules include positional compatibility, result-type derivation and duplicate semantics. Other engines and older versions can have different support and conversion details.\n\n## Match the number of projected columns\n\nEvery operand in a set operation must project the same number of columns. A two-column query cannot be unioned directly with a one-column query merely because they share one alias. Decide the intended output schema, then explicitly project each operand into that shape. Avoid SELECT * because a later source-table change can alter the arity or positional meaning unexpectedly.\n\n```sql\nSELECT learner_id, display_name FROM morning_roster\nUNION ALL\nSELECT learner_id, display_name FROM evening_roster;\n```\n\nBoth operands here provide an identifier followed by a name. The source tables may contain other fields in different storage orders without affecting this explicit projection. A schema-compatible projection creates a clear review boundary: the combined output has exactly the columns the consumer expects rather than whatever happens to exist in each table today.\n\n## Align by position rather than by alias\n\nSet operands are paired by column position. The first expression of the second operand aligns with the first expression of the first operand, even if their aliases are different or misleading. Naming the second query's first expression display_name does not tell the engine to search for a matching alias elsewhere in the first query.\n\nA dangerous example reverses identifier and name positions in the second operand. Depending on type-conversion rules, the query may fail or coerce values into a broader result type. Neither outcome should be relied on as semantic validation. Write both projections in a visibly parallel order and review each position against the intended output definition.\n\n## Check compatible types without relying on accidental coercion\n\nMySQL derives a result type that accounts for corresponding expressions. This can widen representations and change how values are delivered to a client. An integer-like identifier combined with textual identifiers may no longer arrive in the same type a caller expected. Explicit casts can document the desired shared representation when the values truly belong to the same domain.\n\nCasts do not make unrelated domains meaningful. A course code and a building code remain different concepts after both are cast to text. Likewise, amounts denominated in different currencies are not comparable merely because they share DECIMAL. Establish units and identity domains before choosing a conversion, and preserve a source or currency label when that distinction belongs in the output.\n\n## Use typed placeholders for genuinely absent fields\n\nOne source may lack an attribute that the combined output intentionally permits to be unknown. A projected null can represent that absence. An explicit cast on the placeholder can make the intended output type clear. An empty string or numeric zero is a different value and should not be used as a universal substitute for unavailable information.\n\n```sql\nSELECT learner_id, CAST(NULL AS CHAR(20)) AS cohort_label\nFROM legacy_roster\nUNION ALL\nSELECT learner_id, cohort_label\nFROM current_roster;\n```\n\nThis design needs a stated contract: the missing legacy cohort is unknown, not necessarily an empty label or an unassigned current cohort. If consumers need to distinguish those states, add a source or provenance field. A technically compatible two-column result can still erase information when absent values are flattened into one ambiguous presentation.\n\n## Decide what makes rows duplicates\n\nUNION removes duplicate result rows by default, while UNION ALL retains their appearances. Duplicate comparison concerns the complete projected row, not a hidden source identity. If two learners share a name and the projection contains only that name, UNION can merge their labels even though the underlying people are distinct. Include the identity when the task concerns distinct learners.\n\nAdding a source label changes duplicate semantics because it becomes another projected value. Two otherwise equal rows labeled morning and evening are now distinct full rows. That can be exactly what an attendance-source report needs. It is not equivalent to a deduplicated learner list, so choose provenance columns according to the requested grain rather than adding or removing them casually.\n\n## Treat NULL duplicate behavior separately from equality predicates\n\nSet duplicate handling can treat two null-bearing result rows as duplicates even though a WHERE equality comparison involving null is unknown. Do not transfer the truth table of a row predicate directly to the set operator's duplicate-elimination rules. In a fixture with two identical unknown cohort rows, UNION can retain one appearance where UNION ALL retains both.\n\nThis behavior also matters for INTERSECT and EXCEPT when null-bearing rows appear in both operands. Clarify whether the desired result is set-oriented or multiplicity-oriented, and use supported ALL forms where the task requires them. A null placeholder inserted for compatibility participates in the complete row comparison, so its meaning should be reviewed before deduplication.\n\n## Account for text comparison rules\n\nCharacter set and collation influence which text values can be combined and how comparisons treat case or accents. A report that assumes differently cased learner codes are distinct may behave differently under a case-insensitive collation. Conversely, incompatible collations can require an explicit consistent choice rather than a guessed conversion.\n\nDo not change database-wide collation just to make one teaching query run. Identify the column or expression contract and use a suitable local expression when authorized. If text codes are identities, define their comparison semantics at the system boundary. A lesson's sample ASCII names cannot establish how every international name or code behaves.\n\n## Apply final sorting to the combined relation\n\nThe final ORDER BY belongs to the combined result when the task asks for global order. Sorting one operand does not establish the order of all rows after a set operation. Refer to the result's visible column names or another supported ordering form, and use unambiguous aliases in the first projection for a clear consumer-facing schema.\n\nParentheses matter when mixing operators, limits or operand-specific ordering. MySQL gives INTERSECT different precedence from UNION and EXCEPT, so use parentheses when the intended grouping could be misunderstood. The compatibility checks apply at each combination point. A three-query expression must have both a valid schema and the intended grouping of set operations.\n\n## Review output contracts with contrasting fixtures\n\nThe exercises combine morning and evening rosters that share one exact learner row. UNION ALL retains both appearances, while UNION keeps one identical full row. Another learner shares a display name but has a different identifier, so that person must remain a separate row. The fixtures make projection and duplicate policy observable without relying on execution order.\n\nWhen moving a combined result into an application, check column names, nullability and result types as well as row counts. Keep tenant and visibility restrictions within each operand so another source does not accidentally broaden access. Compatible SQL shape is the beginning of a correct set operation; compatible meaning, provenance and consumer expectations complete the definition.\n\n## Design a common projection before touching the operator\n\nWrite a short output contract that assigns one meaning to each ordinal position: learner identity first, display label second, and source third only if source belongs to the requested grain. Then check both operands against that contract. This makes an accidental reversal visible before runtime conversion rules can disguise it.\n\nIf two sources disagree about the representation of the same identity, resolve that disagreement explicitly. Leading zeros can be meaningful in a textual code, while converting the code to a number can erase them. A successful cast only proves that conversion was possible for the supplied values. It does not prove that the resulting identity still means what downstream callers expect.\n",
+  "references": [
+    {
+      "title": "Primary reference",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/set-operations.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-18-set-compatibility",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-18-set-compatibility-1",
+          "test_id": "pt-dbms-sql-18-set-compatibility",
+          "question_text": "How are columns aligned across set operands?",
+          "options": [
+            "By matching aliases",
+            "By ordinal position",
+            "By alphabetical name",
+            "By primary-key declaration"
+          ],
+          "correct_index": 1,
+          "explanation": "The first expression aligns with the first expression regardless of labels.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-18-set-compatibility-2",
+          "test_id": "pt-dbms-sql-18-set-compatibility",
+          "question_text": "What arity must operands have?",
+          "options": [
+            "The same table size",
+            "The same number of projected columns",
+            "Exactly one column always",
+            "Exactly two rows"
+          ],
+          "correct_index": 1,
+          "explanation": "Set operators require corresponding positions across operand projections.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-18-set-compatibility-3",
+          "test_id": "pt-dbms-sql-18-set-compatibility",
+          "question_text": "Why avoid SELECT* for a stable combined output?",
+          "options": [
+            "It always returns duplicates only",
+            "Source changes can alter position and arity",
+            "It disables indexes",
+            "It grants access"
+          ],
+          "correct_index": 1,
+          "explanation": "Explicit projections preserve the intended output schema.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-18-set-compatibility-4",
+          "test_id": "pt-dbms-sql-18-set-compatibility",
+          "question_text": "Does casting course codes and room codes to text establish a shared domain?",
+          "options": [
+            "Yes",
+            "No",
+            "Only with UNION ALL",
+            "Only after sorting"
+          ],
+          "correct_index": 1,
+          "explanation": "Representation compatibility does not establish business meaning.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-18-set-compatibility-5",
+          "test_id": "pt-dbms-sql-18-set-compatibility",
+          "question_text": "What does UNION ALL retain?",
+          "options": [
+            "Only unique identities automatically",
+            "Every operand appearance",
+            "Only nonnull values",
+            "Only first-operand rows"
+          ],
+          "correct_index": 1,
+          "explanation": "ALL preserves duplicate result appearances.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-18-set-compatibility-6",
+          "test_id": "pt-dbms-sql-18-set-compatibility",
+          "question_text": "What does ordinary UNION remove?",
+          "options": [
+            "Every repeated name regardless of other columns",
+            "Duplicate complete projected rows",
+            "Only duplicate primary keys",
+            "Only null rows"
+          ],
+          "correct_index": 1,
+          "explanation": "Duplicate comparison concerns the full output row.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-18-set-compatibility-7",
+          "test_id": "pt-dbms-sql-18-set-compatibility",
+          "question_text": "Can projecting only names merge distinct people under UNION?",
+          "options": [
+            "No",
+            "Yes",
+            "Only with numeric names",
+            "Only after deployment"
+          ],
+          "correct_index": 1,
+          "explanation": "Two identities sharing the same projected label can become one result row.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-18-set-compatibility-8",
+          "test_id": "pt-dbms-sql-18-set-compatibility",
+          "question_text": "What does a source label do to duplicate comparison?",
+          "options": [
+            "It is ignored automatically",
+            "It becomes another compared output value",
+            "It enforces one row per learner",
+            "It changes nothing always"
+          ],
+          "correct_index": 1,
+          "explanation": "Different provenance labels make otherwise equal full rows distinct.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-18-set-compatibility-new-9",
+          "test_id": "pt-dbms-sql-18-set-compatibility",
+          "question_text": "What is a null placeholder suitable for?",
+          "options": [
+            "An intentionally unknown compatible attribute",
+            "Every absent value as measured zero",
+            "A missing permission grant",
+            "An arbitrary valid identity"
+          ],
+          "correct_index": 0,
+          "explanation": "NULL represents unknown information rather than an invented known value.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-18-set-compatibility-new-10",
+          "test_id": "pt-dbms-sql-18-set-compatibility",
+          "question_text": "Why cast a null placeholder explicitly?",
+          "options": [
+            "To turn it into a real cohort",
+            "To document its intended shared type",
+            "To make every row unique",
+            "To bypass access rules"
+          ],
+          "correct_index": 1,
+          "explanation": "Typed expressions clarify the combined result representation.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-18-set-compatibility-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-18-set-compatibility-application-new-1",
+          "test_id": "pt-dbms-sql-18-set-compatibility-application",
+          "question_text": "Are empty string and NULL interchangeable?",
+          "options": [
+            "Always",
+            "Only in UNION ALL",
+            "No",
+            "Only for short labels"
+          ],
+          "correct_index": 2,
+          "explanation": "An empty known string differs from unknown information.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-18-set-compatibility-application-new-2",
+          "test_id": "pt-dbms-sql-18-set-compatibility-application",
+          "question_text": "Can set deduplication treat two null-bearing equal rows as duplicates?",
+          "options": [
+            "No because NULL=NULL is unknown",
+            "Only with COUNT",
+            "Only if sorted",
+            "Yes"
+          ],
+          "correct_index": 3,
+          "explanation": "Duplicate-elimination semantics differ from ordinary predicate equality.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-18-set-compatibility-application-new-3",
+          "test_id": "pt-dbms-sql-18-set-compatibility-application",
+          "question_text": "What can text collation affect?",
+          "options": [
+            "Case and accent comparison behavior",
+            "The number of projected columns",
+            "The FROM table's existence",
+            "The SQL permissions automatically"
+          ],
+          "correct_index": 0,
+          "explanation": "Collation controls how compatible text values are compared.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-18-set-compatibility-application-new-4",
+          "test_id": "pt-dbms-sql-18-set-compatibility-application",
+          "question_text": "Does sorting one operand guarantee global output order?",
+          "options": [
+            "Yes",
+            "No",
+            "Only for UNION ALL",
+            "Only with identical names"
+          ],
+          "correct_index": 1,
+          "explanation": "The final combined relation needs its own requested order.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-18-set-compatibility-application-new-5",
+          "test_id": "pt-dbms-sql-18-set-compatibility-application",
+          "question_text": "Where should global ORDER BY apply?",
+          "options": [
+            "Only to the first table scan",
+            "Only to a comment",
+            "To the combined result",
+            "Inside an unrelated subquery"
+          ],
+          "correct_index": 2,
+          "explanation": "Final ordering is defined after the set combination.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-18-set-compatibility-application-new-6",
+          "test_id": "pt-dbms-sql-18-set-compatibility-application",
+          "question_text": "Why parenthesize mixed set operators?",
+          "options": [
+            "To bypass type checking",
+            "To guarantee no duplicates",
+            "To remove nulls",
+            "To make intended grouping explicit"
+          ],
+          "correct_index": 3,
+          "explanation": "Operator precedence can otherwise combine inputs in an unintended order.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-18-set-compatibility-application-new-7",
+          "test_id": "pt-dbms-sql-18-set-compatibility-application",
+          "question_text": "Does a numeric type prove compatible currency units?",
+          "options": [
+            "No",
+            "Yes",
+            "Only with DECIMAL",
+            "Only with UNION"
+          ],
+          "correct_index": 0,
+          "explanation": "Currency meaning must be retained or converted by an explicit policy.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-18-set-compatibility-application-new-8",
+          "test_id": "pt-dbms-sql-18-set-compatibility-application",
+          "question_text": "What should client verification include besides rows?",
+          "options": [
+            "Only query character count",
+            "Names types and nullability",
+            "Only operand table sizes",
+            "Only a screenshot title"
+          ],
+          "correct_index": 1,
+          "explanation": "A combined result can change representation even when values look plausible.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-18-set-compatibility-application-new-9",
+          "test_id": "pt-dbms-sql-18-set-compatibility-application",
+          "question_text": "Where must access restrictions remain?",
+          "options": [
+            "Only the first operand always",
+            "Only the final caption",
+            "In every relevant operand",
+            "Nowhere for UNION ALL"
+          ],
+          "correct_index": 2,
+          "explanation": "Each source population must be authorized before its rows enter the result.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-18-set-compatibility-application-new-10",
+          "test_id": "pt-dbms-sql-18-set-compatibility-application",
+          "question_text": "Which fixture distinguishes identities from labels?",
+          "options": [
+            "Only one learner",
+            "Only empty sources",
+            "Only distinct names",
+            "Different learner IDs sharing a name"
+          ],
+          "correct_index": 3,
+          "explanation": "Keeping the identity prevents accidental merging of different people.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cx-set-compatibility-retain-appearances",
+      "slug": "set-compatibility-retain-appearances",
+      "title": "Combine roster appearances",
+      "difficulty": "Easy",
+      "task": "Return learner_id,display_name from both rosters retaining all appearances. Order by learner_id,display_name.",
+      "schema_sql": "CREATE TABLE morning_roster(learner_id INT NOT NULL,display_name VARCHAR(30) NOT NULL); CREATE TABLE evening_roster(learner_id INT NOT NULL,display_name VARCHAR(30) NOT NULL);",
+      "seed_sql": "INSERT INTO morning_roster VALUES (1,'Ari'),(2,'Bo'); INSERT INTO evening_roster VALUES (1,'Ari'),(3,'Bo');",
+      "solution_sql": "SELECT learner_id,display_name FROM morning_roster UNION ALL SELECT learner_id,display_name FROM evening_roster ORDER BY learner_id,display_name;",
+      "expected": "learner_id\tdisplay_name\n1\tAri\n1\tAri\n2\tBo\n3\tBo",
+      "validation_cases": [
+        {
+          "seed_sql": "",
+          "expected": ""
+        }
+      ],
+      "ordering": "Order by keys explicitly stated in the task.",
+      "constraints": [
+        "Use supplied synthetic data.",
+        "Return only requested columns."
+      ],
+      "edge_cases": [
+        "Exact repeated appearance",
+        "Different IDs with same name"
+      ],
+      "hints": [
+        "Align identity and label positions and use UNION ALL."
+      ],
+      "explanation": "Align identity and label positions and use UNION ALL."
+    },
+    {
+      "id": "cx-set-compatibility-unique-full-rows",
+      "slug": "set-compatibility-unique-full-rows",
+      "title": "Return unique complete roster rows",
+      "difficulty": "Medium",
+      "task": "Return unique learner_id,display_name rows across both rosters. Keep different IDs sharing a name. Order by learner_id,display_name.",
+      "schema_sql": "CREATE TABLE morning_roster(learner_id INT NOT NULL,display_name VARCHAR(30) NOT NULL); CREATE TABLE evening_roster(learner_id INT NOT NULL,display_name VARCHAR(30) NOT NULL);",
+      "seed_sql": "INSERT INTO morning_roster VALUES (1,'Ari'),(2,'Bo'); INSERT INTO evening_roster VALUES (1,'Ari'),(3,'Bo');",
+      "solution_sql": "SELECT learner_id,display_name FROM morning_roster UNION SELECT learner_id,display_name FROM evening_roster ORDER BY learner_id,display_name;",
+      "expected": "learner_id\tdisplay_name\n1\tAri\n2\tBo\n3\tBo",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO morning_roster VALUES (4,'X'),(5,'X');",
+          "expected": "learner_id\tdisplay_name\n4\tX\n5\tX"
+        }
+      ],
+      "ordering": "Order by keys explicitly stated in the task.",
+      "constraints": [
+        "Use supplied synthetic data.",
+        "Return only requested columns."
+      ],
+      "edge_cases": [
+        "Shared labels preserve separate identities"
+      ],
+      "hints": [
+        "Deduplicate the complete identity-and-label row rather than the label alone."
+      ],
+      "explanation": "Deduplicate the complete identity-and-label row rather than the label alone."
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-18-set-compatibility-1",
+      "test_id": "pt-dbms-sql-18-set-compatibility",
+      "question_text": "What does set (union) compatibility require of two queries combined with UNION/INTERSECT/EXCEPT?",
+      "options": [
+        "Identical column names",
+        "The same number of columns, with compatible types in corresponding positions",
+        "Both queries must reference the same table",
+        "Both queries must return the same number of rows"
+      ],
+      "correct_index": 1,
+      "explanation": "Column count and type compatibility are the structural requirements — not matching names.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-18-set-compatibility-2",
+      "test_id": "pt-dbms-sql-18-set-compatibility",
+      "question_text": "Do the column names in the two queries combined by UNION need to match?",
+      "options": [
+        "Yes, they must be identical",
+        "No — only column count and type compatibility matter; names don't need to match",
+        "Only the first column's name must match",
+        "Names must be different, never the same"
+      ],
+      "correct_index": 1,
+      "explanation": "Structural compatibility is about count/type, not naming.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-18-set-compatibility-3",
+      "test_id": "pt-dbms-sql-18-set-compatibility",
+      "question_text": "Where do the final output column names in a UNION/INTERSECT/EXCEPT result come from?",
+      "options": [
+        "Always auto-generated as col1, col2, etc.",
+        "The FIRST query's column names/aliases",
+        "The LAST query's column names/aliases",
+        "Alphabetically sorted across both queries"
+      ],
+      "correct_index": 1,
+      "explanation": "The first query's naming determines the combined result's output names.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-18-set-compatibility-4",
+      "test_id": "pt-dbms-sql-18-set-compatibility",
+      "question_text": "Is passing the set-compatibility check (right column count/types) a guarantee that the combination is semantically meaningful?",
+      "options": [
+        "Yes, structural compatibility guarantees semantic correctness",
+        "No — the database only checks structure, not whether combining the data actually makes sense for the use case",
+        "Semantic meaning is checked automatically by every SQL engine",
+        "This distinction doesn't apply to set operations"
+      ],
+      "correct_index": 1,
+      "explanation": "Structural compatibility and semantic sensibility are separate concerns — SQL only enforces the former.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-18-set-compatibility-5",
+      "test_id": "pt-dbms-sql-18-set-compatibility",
+      "question_text": "What happens if two queries combined with UNION have a different number of columns?",
+      "options": [
+        "Extra columns are silently dropped",
+        "This is a hard error — column counts must match",
+        "Missing columns are automatically filled with NULL",
+        "The queries run separately and results are concatenated"
+      ],
+      "correct_index": 1,
+      "explanation": "Mismatched column counts are a straightforward structural error, not silently resolved.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-18-set-compatibility-6",
+      "test_id": "pt-dbms-sql-18-set-compatibility",
+      "question_text": "Can an INT column and a DECIMAL column generally be combined via UNION?",
+      "options": [
+        "Never, this always causes an error",
+        "Often yes, via implicit type conversion, though genuinely incompatible types (like numbers and non-numeric text) may error or convert unpredictably",
+        "Only if both columns contain exactly the same values",
+        "Only in NoSQL databases"
+      ],
+      "correct_index": 1,
+      "explanation": "Reasonably compatible numeric types are often implicitly converted, unlike fundamentally mismatched types.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-18-set-compatibility-7",
+      "test_id": "pt-dbms-sql-18-set-compatibility",
+      "question_text": "When is set compatibility checked relative to row-level operations like deduplication?",
+      "options": [
+        "After deduplication has already happened",
+        "Before any row-level comparison — a structural mismatch is caught immediately regardless of the data",
+        "Simultaneously, with no defined order",
+        "Only if ORDER BY is present"
+      ],
+      "correct_index": 1,
+      "explanation": "Structural validation happens first, independent of the actual row data.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-18-set-compatibility-8",
+      "test_id": "pt-dbms-sql-18-set-compatibility",
+      "question_text": "Does set compatibility apply equally to UNION, INTERSECT, and EXCEPT?",
+      "options": [
+        "No, only UNION requires it",
+        "Yes — all three set operations share the same union-compatibility requirement",
+        "Only EXCEPT requires it",
+        "Set compatibility is unrelated to any of these operations"
+      ],
+      "correct_index": 1,
+      "explanation": "The structural requirement is uniform across all set operations covered in this chapter.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "/root/worker_2",
+    "independent_review": "passed",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "authored; independent review pending",
+    "canonical_answer_indices_preserved": true,
+    "editorial_record": "Original prose and assessments. Seed snapshots and canonical answer indices retained; external originality clearance pending.",
+    "independent_reviewer": "/root",
+    "independent_review_scope": "Full notes,20 MCQs/options/reasoning,both exercises and four sample/alternative outputs, diagram and links reviewed. Positional alignment, full-row duplicate policy, identity-versus-label, typed NULL placeholders, collation and operator precedence explanations appropriately scoped. Portable SQLite subset separate; MySQL/provider and browser remain unverified."
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-18-set-compatibility",
+    "original_note_sha256": "03dc152fc102138d4cf0e84e51f9f721c0174af65913abe8447255c3a2283129",
+    "status": "drafted; not included in prepared paired migrations"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Compatibility includes identity and duplicate policy",
+      "description": "The exact repeated identity-and-label row merges only under UNION.",
+      "columns": [
+        "Projected row",
+        "Morning appearances",
+        "Evening appearances",
+        "UNION ALL / UNION"
+      ],
+      "rows": [
+        [
+          "1,Ari",
+          "1",
+          "1",
+          "2 / 1"
+        ],
+        [
+          "2,Bo",
+          "1",
+          "0",
+          "1 / 1"
+        ],
+        [
+          "3,Bo",
+          "0",
+          "1",
+          "1 / 1"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "technical_review": "coordinator independent manual review passed",
+    "browser_rendering": "unverified",
+    "independent_review": "passed",
+    "server_rendering": "passed",
+    "server_rendering_evidence": "2026-10-29 full Vitest:1310 passed/12 skipped; actual LessonBlock/TopicDiagrams render over230 packages. Browser visual QA remains unverified."
+  },
+  "authoring_status": "drafted; verification pending",
+  "sql_verification": {
+    "scope": "not executed; exact MySQL/provider execution pending",
+    "all_passed": false,
+    "cases": []
+  }
+}

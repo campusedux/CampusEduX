@@ -15,7 +15,7 @@ export function ReviewCard({ review, className }: { review: ReviewCardData; clas
   const name = review.author_name?.trim() || "Student";
   const initial = name.charAt(0).toUpperCase();
   return (
-    <div className={cn("rounded-2xl border border-line bg-card p-4 shadow-card", className)}>
+    <div className={cn("card card-pad", className)}>
       <div className="flex items-center gap-3">
         <span className="flex h-9 w-9 items-center justify-center rounded-full bg-primary-50 text-sm font-bold text-primary">
           {initial}

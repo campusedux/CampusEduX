@@ -1,0 +1,596 @@
+{
+  "source_ref": "chapter-13-sorting-and-pagination/pagination-performance",
+  "slug": "pagination-performance",
+  "title": "Pagination Performance",
+  "description": "Measure SQL paging cost fairly, distinguish returned rows from examined work, and compare offset, keyset and deferred joins without unsupported speed claims.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Small pages can require large amounts of work\n\nPagination performance concerns the work needed to produce a requested slice, not merely the number of rows displayed. A page containing twenty equipment records may require traversing a large prefix, testing many rejected candidates, joining details or sorting a substantial population. Identical output counts therefore do not imply identical latency or resource use.\n\nBegin with [OFFSET](/learning/dbms-sql-tutorial/offset), [keyset pagination](/learning/dbms-sql-tutorial/keyset-pagination) and [multiple sort keys](/learning/dbms-sql-tutorial/multiple-sort-keys). This topic compares their operational consequences rather than redefining continuation semantics. Preserve result correctness first: making a query faster by dropping an eligibility predicate or changing tie handling changes the requirement instead of optimizing it.\n\n## Understand the work behind an offset\n\nAn offset describes a positional prefix in the ordered qualifying sequence. Before returning the requested slice, an execution strategy must account for the earlier positions. A simple ordered index scan commonly traverses those entries before emitting the page. Increasing the prefix can increase work even when the page size remains fixed and an ordering index exists.\n\n```sql\nSELECT equipment_id, title\nFROM equipment\nWHERE active = 1\nORDER BY equipment_id ASC\nLIMIT 20 OFFSET 100000;\n```\n\nDo not infer an exact physical access count from that logical description. Rejected filters, joins, covering indexes, materialization and engine choices can alter the work. The useful lesson is that a small output limit does not bound preceding work. Test shallow and deep offsets on the actual query shape instead of promising a universal linear timing formula.\n\n## Give the engine a useful range boundary\n\nA keyset continuation supplies ordering values from the previous displayed page. When a suitable access path exists, the engine may enter the relevant range without repeatedly accounting for every earlier result position. The equivalent continuation depends on the actual boundary identity, not on replacing the numeric offset with the same number in a WHERE condition.\n\n```sql\nSELECT equipment_id, title\nFROM equipment\nWHERE active = 1\n  AND equipment_id > 450120\nORDER BY equipment_id ASC\nLIMIT 20;\n```\n\nHere the boundary value is an example of a remembered identifier, not an assertion that the one hundred thousandth qualifying item has that identifier. Gaps and inactive rows break that assumption. For repeated or mixed-direction ordering keys, derive the complete continuation tuple before measuring. An incorrect query can appear fast because it silently excludes required candidates.\n\n## Design a fair comparison\n\nCompare both methods against the same logical population and dataset observation. Establish the ordered identities around each test boundary, then confirm that the queries return the same slice. Keep selected columns, eligibility, tie policy and page size aligned. Comparing an unrestricted offset query with a narrowly filtered cursor query measures several differences at once.\n\nChoose shallow, middle and deep boundaries rather than a single convenient page. Record dataset size, qualifying fraction, key distribution, indexes, server version and query text with accepted parameter values. Use synthetic or approved nonprivate data. Do not print production credentials, copy sensitive records or run expensive experiments against a live service merely to obtain a teaching example.\n\n## Inspect plans and actual execution carefully\n\nMySQL EXPLAIN describes an optimizer's chosen plan and estimates. EXPLAIN ANALYZE executes the statement and reports runtime observations, so it carries execution cost and should be used only in an appropriate test environment. Explain the difference between an estimate and an observed measurement when reporting findings. Neither substitutes for checking returned identities.\n\nLook for the access method, index used, filtering stages, sort operations and loops through joins. A plan label such as index usage is not a verdict that the query is efficient. An index scan can still traverse a long prefix, and a useful range can still reject many rows. Read the plan together with the data distribution and the query's required output.\n\n## Align indexes with filters and order\n\nConsider a list restricted by tenant and active status and ordered by identity. An index beginning with those fixed eligibility keys and then the ordering key can be a candidate access path. The best design depends on the full workload, selectivity and existing indexes. Do not add every conceivable composite index without considering maintenance, space and overlapping coverage.\n\nA covering index contains values needed by the query so that some additional row lookups may be avoided. Selecting large descriptions or every column can remove that advantage or increase transfer and serialization cost. Retrieve only fields the feature needs, while preserving accessibility and display requirements. Index direction, expressions and collation can also affect whether an order is supplied directly.\n\n## Separate positional traversal from wide-row retrieval\n\nA deferred-join design can first find a page of narrow identities and then retrieve wider details for those identities. This can reduce unnecessary wide-row lookups for skipped positions when the plan supports it. It does not remove the offset prefix itself and should not be described as equivalent to a cursor seek.\n\nThe intermediate exercise pages within one tenant's active population in a derived query, then joins the selected identities to their titles. Its outer ORDER BY is still necessary to specify final display order. Keeping the filter inside the page-defining query preserves membership. Joining first against one-to-many details could change the result grain and invalidate the intended item count.\n\n## Include surrounding application costs\n\nThe database query is one stage of page latency. Connection acquisition, network round trips, server serialization, response size and browser rendering can dominate a tiny query. Measure query execution separately from end-to-end request time. A faster database plan need not produce the same percentage improvement in the user-visible request, especially under changing network conditions.\n\nA separate exact total-count query can cost more than retrieving the page. Decide whether the product truly needs an exact count on every navigation request, a cached count with stated freshness or a simple indication of another page. These choices affect the interface contract and should not be changed silently as a performance shortcut.\n\n## Control variability in measurements\n\nRepeated tests can become faster because relevant data is already cached. Record whether a result represents warmed repeated access or another explicitly controlled cache state. Avoid disruptive cache-clearing experiments on shared systems. Run several trials, retain variation and report the measurement conditions rather than choosing only the fastest observation.\n\nConcurrent workloads can change timings and plans can change as data and statistics evolve. A benchmark should state its limitations instead of promising that keyset latency stays constant at every depth. Selective filters, sparse eligible rows and expensive joins can make a range continuation do substantial work. Test representative difficult distributions as well as a uniform happy path.\n\n## Protect correctness under changing data\n\nOffset positions can shift between requests when earlier rows are inserted or deleted. Keyset boundaries can reduce that particular disruption, but changing ordering values can still cause skipped or repeated identities in a live traversal. Specify whether a feed accepts live-list behaviour or an export requires stronger consistency. Performance and cross-request visibility must be designed together.\n\nLarge sequential exports also need a resumable progress contract. Save the last successfully processed boundary at an appropriate transaction or batch boundary and make downstream processing safe to retry. Increasing page size alone does not resolve prefix work, memory limits or partial-processing failures. The appropriate batch size balances throughput, response limits, recovery cost and the time each request occupies resources.\n\n## Verify semantics before reporting a gain\n\nThe beginner exercise retrieves a specific suffix using a remembered boundary rather than substituting an offset number for an identity. The intermediate exercise isolates a narrow paged population before fetching titles. Their small fixtures establish membership, ordering and filter placement. They do not demonstrate a speedup; no runtime measurements are supplied or invented here.\n\nFor a real investigation, record the original requirement, matching results, plans, repeated timings and remaining consistency limits. Choose offset for bounded navigation when evidence supports its cost, and keyset for sequential access when its contract and measured access path fit. Treat any deferred join as a separate tested optimization with its own plan, rather than assuming one technique solves every paging bottleneck.\n",
+  "references": [
+    {
+      "title": "MySQL 8.4 LIMIT query optimization",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/limit-optimization.html"
+    },
+    {
+      "title": "MySQL 8.4 obtaining execution plan information",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/execution-plan-information.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-13-pagination-performance",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-13-pagination-performance-1",
+          "test_id": "pt-dbms-sql-13-pagination-performance",
+          "question_text": "Why can a deep offset cost more despite the same page size?",
+          "options": [
+            "The output must contain every skipped row",
+            "The execution can need more work accounting for preceding positions",
+            "Every offset causes a full table lock",
+            "Page size determines every access count"
+          ],
+          "correct_index": 1,
+          "explanation": "Output size and preceding physical work are distinct; actual plans must be inspected.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-13-pagination-performance-2",
+          "test_id": "pt-dbms-sql-13-pagination-performance",
+          "question_text": "What opportunity does a suitable indexed keyset boundary provide?",
+          "options": [
+            "Automatic caching of every page",
+            "Range access starting near the continuation boundary",
+            "Elimination of every join",
+            "An authorization bypass"
+          ],
+          "correct_index": 1,
+          "explanation": "The engine may enter a useful range rather than account for a long positional prefix.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-13-pagination-performance-3",
+          "test_id": "pt-dbms-sql-13-pagination-performance",
+          "question_text": "Which factor is relevant when evaluating efficient ordered page retrieval?",
+          "options": [
+            "Only the spelling of the cursor parameter",
+            "An access path aligned with the actual filters and ordering",
+            "Whether the UI heading contains SQL",
+            "Only the displayed page number"
+          ],
+          "correct_index": 1,
+          "explanation": "Index design matters alongside selectivity, joins, selected columns and the actual plan.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-13-pagination-performance-4",
+          "test_id": "pt-dbms-sql-13-pagination-performance",
+          "question_text": "Can bounded shallow page-number navigation reasonably use OFFSET?",
+          "options": [
+            "No, every such query is forbidden",
+            "Yes, when measured cost and the navigation requirement support it",
+            "Only after removing ORDER BY",
+            "Only without filters"
+          ],
+          "correct_index": 1,
+          "explanation": "Shallow depth can reduce prefix work but does not itself guarantee every query is cheap.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-13-pagination-performance-5",
+          "test_id": "pt-dbms-sql-13-pagination-performance",
+          "question_text": "In a simple ordered index scan, what tends to grow as the skipped prefix grows?",
+          "options": [
+            "The requested output column count",
+            "The work traversing preceding entries",
+            "The guaranteed rows returned beyond LIMIT",
+            "The number of primary keys per row"
+          ],
+          "correct_index": 1,
+          "explanation": "This access-pattern model explains deep-offset cost without asserting universal timing complexity.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-13-pagination-performance-6",
+          "test_id": "pt-dbms-sql-13-pagination-performance",
+          "question_text": "Which option deserves evaluation for increasingly costly deep sequential export pages?",
+          "options": [
+            "Remove all eligibility checks",
+            "A correctly indexed keyset continuation with a suitable consistency contract",
+            "Add another OFFSET keyword",
+            "Return rows in unspecified order"
+          ],
+          "correct_index": 1,
+          "explanation": "A value boundary can avoid repeated prefix traversal, while export correctness remains a separate requirement.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-13-pagination-performance-7",
+          "test_id": "pt-dbms-sql-13-pagination-performance",
+          "question_text": "Is keyset pagination immune to missing useful indexes?",
+          "options": [
+            "Yes, cursors create indexes automatically",
+            "No, its query can still require substantial scanning or sorting",
+            "Only when page size is twenty",
+            "Only if identifiers are consecutive"
+          ],
+          "correct_index": 1,
+          "explanation": "A continuation predicate does not guarantee an efficient physical plan.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-13-pagination-performance-8",
+          "test_id": "pt-dbms-sql-13-pagination-performance",
+          "question_text": "Which comparison accurately states a common paging tradeoff?",
+          "options": [
+            "OFFSET supports positional jumps; keyset uses known value boundaries and can reduce deep-prefix work",
+            "Keyset always guarantees constant runtime",
+            "OFFSET requires window functions",
+            "The methods have identical navigation semantics"
+          ],
+          "correct_index": 0,
+          "explanation": "The tradeoff concerns navigation contracts and access opportunities rather than guaranteed timings.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-13-pagination-performance-new-9",
+          "test_id": "pt-dbms-sql-13-pagination-performance",
+          "question_text": "Can offset 100000 be replaced with id > 100000 without checking the data?",
+          "options": [
+            "No, identifier values need not equal qualifying positions",
+            "Yes, every id is a row position",
+            "Only when the column is indexed",
+            "Only when page size is fixed"
+          ],
+          "correct_index": 0,
+          "explanation": "Gaps and eligibility filters break the assumed mapping.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-13-pagination-performance-new-10",
+          "test_id": "pt-dbms-sql-13-pagination-performance",
+          "question_text": "What should be verified before comparing page-query timings?",
+          "options": [
+            "That both query strings have equal length",
+            "That they implement the same population, order and slice",
+            "That both include SELECT *",
+            "That no rows share a score"
+          ],
+          "correct_index": 1,
+          "explanation": "Different semantics cannot establish a fair optimization comparison.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-13-pagination-performance-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-13-pagination-performance-application-new-1",
+          "test_id": "pt-dbms-sql-13-pagination-performance-application",
+          "question_text": "How does EXPLAIN ANALYZE differ materially from a plain estimate report?",
+          "options": [
+            "It never touches data",
+            "It executes the statement and reports runtime observations",
+            "It creates all suggested indexes",
+            "It guarantees the fastest possible plan"
+          ],
+          "correct_index": 1,
+          "explanation": "Execution has cost, so use an appropriate test environment.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-13-pagination-performance-application-new-2",
+          "test_id": "pt-dbms-sql-13-pagination-performance-application",
+          "question_text": "What does a deferred join try to postpone?",
+          "options": [
+            "Every eligibility check",
+            "The existence of all table rows",
+            "Retrieving wide details until page identities are selected",
+            "All ordered prefix traversal automatically"
+          ],
+          "correct_index": 2,
+          "explanation": "A narrow identity page can reduce unnecessary wide-row lookups without eliminating offset semantics.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-13-pagination-performance-application-new-3",
+          "test_id": "pt-dbms-sql-13-pagination-performance-application",
+          "question_text": "Where must tenant and active predicates appear in the shown deferred-page design?",
+          "options": [
+            "Only in a browser label",
+            "Only after returning all identities",
+            "Nowhere if a cursor is used",
+            "Inside the query that defines page membership"
+          ],
+          "correct_index": 3,
+          "explanation": "Paging the wrong population and filtering later can lose intended members.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-13-pagination-performance-application-new-4",
+          "test_id": "pt-dbms-sql-13-pagination-performance-application",
+          "question_text": "Why repeat the required ORDER BY after joining selected page identities?",
+          "options": [
+            "The final display order needs its own explicit contract",
+            "Joins cannot return ordered results",
+            "The inner ORDER BY must always be ignored semantically",
+            "To increase the page size"
+          ],
+          "correct_index": 0,
+          "explanation": "Inner selection order does not replace an outer result order guarantee.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-13-pagination-performance-application-new-5",
+          "test_id": "pt-dbms-sql-13-pagination-performance-application",
+          "question_text": "What can explain lower latency on repeated benchmark trials?",
+          "options": [
+            "A guaranteed schema change",
+            "Relevant data becoming cached",
+            "Automatic removal of every join",
+            "A mandatory reduction in result count"
+          ],
+          "correct_index": 1,
+          "explanation": "Record warm-cache conditions and variation instead of selecting only the fastest run.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-13-pagination-performance-application-new-6",
+          "test_id": "pt-dbms-sql-13-pagination-performance-application",
+          "question_text": "Why measure database time separately from end-to-end request latency?",
+          "options": [
+            "They are necessarily identical",
+            "Network cost is always zero",
+            "Connection, transport and serialization add other costs",
+            "Database plans measure browser rendering"
+          ],
+          "correct_index": 2,
+          "explanation": "A query improvement need not produce the same percentage improvement in total request time.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-13-pagination-performance-application-new-7",
+          "test_id": "pt-dbms-sql-13-pagination-performance-application",
+          "question_text": "Can an exact total-count query dominate the cost of displaying a small page?",
+          "options": [
+            "No, COUNT is always free",
+            "Only when N is one",
+            "Only with no filters",
+            "Yes, counting the full qualifying population can be expensive"
+          ],
+          "correct_index": 3,
+          "explanation": "An exact total has a separate workload and freshness contract.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-13-pagination-performance-application-new-8",
+          "test_id": "pt-dbms-sql-13-pagination-performance-application",
+          "question_text": "What does a tiny correct SQL fixture establish?",
+          "options": [
+            "Membership and ordering for that fixture",
+            "A universal production speedup",
+            "The exact hosted provider plan",
+            "A guarantee of constant latency"
+          ],
+          "correct_index": 0,
+          "explanation": "Semantic verification and representative performance measurement are separate evidence levels.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-13-pagination-performance-application-new-9",
+          "test_id": "pt-dbms-sql-13-pagination-performance-application",
+          "question_text": "Why save export progress after successful batch processing?",
+          "options": [
+            "To disable all retries",
+            "To resume from a meaningful processed boundary with safe retries",
+            "To make rows immutable automatically",
+            "To avoid specifying any consistency policy"
+          ],
+          "correct_index": 1,
+          "explanation": "Cursor position and downstream processing must agree when recovering from partial failures.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-13-pagination-performance-application-new-10",
+          "test_id": "pt-dbms-sql-13-pagination-performance-application",
+          "question_text": "Which claim needs measurement rather than inference from cursor syntax?",
+          "options": [
+            "The query has a WHERE clause",
+            "The order contains an identifier",
+            "The actual query stays fast at deep boundaries under the intended workload",
+            "The limit is twenty"
+          ],
+          "correct_index": 2,
+          "explanation": "Range eligibility, joins, index layout and runtime conditions affect real cost.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cx-performance-known-boundary",
+      "slug": "performance-known-boundary",
+      "title": "Resume from an observed identity boundary",
+      "difficulty": "Easy",
+      "task": "A previous page ended at equipment_id 50. Return equipment_id,title for the next two active equipment rows ordered by equipment_id ascending using a strict keyset boundary, without OFFSET. Identifiers are not row positions.",
+      "schema_sql": "CREATE TABLE equipment(equipment_id INT PRIMARY KEY,title VARCHAR(40) NOT NULL,active INT NOT NULL);",
+      "seed_sql": "INSERT INTO equipment VALUES (10,'Lens',1),(20,'Tripod',1),(50,'Mic',1),(60,'Closed',0),(70,'Light',1),(80,'Stand',1),(90,'Screen',1);",
+      "expected": "equipment_id\ttitle\n70\tLight\n80\tStand",
+      "ordering": "equipment_id ascending",
+      "constraints": [
+        "Return at most two active rows.",
+        "Preserve all rows; use no OFFSET."
+      ],
+      "edge_cases": [
+        "Inactive rows between boundaries do not qualify.",
+        "The boundary need not remain present."
+      ],
+      "hints": [
+        "Filter active rows and identities greater than fifty.",
+        "Do not compare the identifier to a count of skipped positions."
+      ],
+      "solution_sql": "SELECT equipment_id,title FROM equipment WHERE active=1 AND equipment_id>50 ORDER BY equipment_id ASC LIMIT 2;",
+      "explanation": "The first two active identities after fifty are seventy and eighty. This establishes semantic correctness only; no performance measurement is implied.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO equipment VALUES (1,'Before',1),(65,'Inactive',0),(100,'Later',1);",
+          "expected": "equipment_id\ttitle\n100\tLater"
+        },
+        {
+          "seed_sql": "INSERT INTO equipment VALUES (10,'Before',1),(70,'Inactive',0);",
+          "expected": ""
+        },
+        {
+          "seed_sql": "INSERT INTO equipment VALUES (99,'Last',1),(51,'First',1),(80,'Middle',1);",
+          "expected": "equipment_id\ttitle\n51\tFirst\n80\tMiddle"
+        }
+      ]
+    },
+    {
+      "id": "cx-performance-deferred-page-details",
+      "slug": "performance-deferred-page-details",
+      "title": "Select a narrow page before loading titles",
+      "difficulty": "Medium",
+      "task": "For tenant_id 7 and active=1, select equipment identities ordered ascending, skip the first two qualifying identities and take at most two more. Define that identity page in a derived query before joining equipment to return equipment_id,title. Order the final output by equipment_id ascending. This exercise verifies filter and slice semantics, not a measured speedup.",
+      "schema_sql": "CREATE TABLE equipment(equipment_id INT PRIMARY KEY,tenant_id INT NOT NULL,active INT NOT NULL,title VARCHAR(40) NOT NULL);",
+      "seed_sql": "INSERT INTO equipment VALUES (1,8,1,'Other tenant'),(2,7,1,'Lens'),(3,7,0,'Inactive'),(5,7,1,'Mic'),(8,7,1,'Light'),(9,8,1,'Other light'),(12,7,1,'Stand'),(20,7,1,'Screen');",
+      "expected": "equipment_id\ttitle\n8\tLight\n12\tStand",
+      "ordering": "equipment_id ascending in the final result",
+      "constraints": [
+        "Filter the intended population before applying OFFSET.",
+        "Preserve source rows and use a derived identity-page query."
+      ],
+      "edge_cases": [
+        "Other tenants do not consume positions.",
+        "Inactive rows do not consume positions.",
+        "A short qualifying sequence can be skipped entirely."
+      ],
+      "hints": [
+        "The inner query should return only the bounded identity page.",
+        "Join those identities back to equipment and explicitly order the final output."
+      ],
+      "solution_sql": "SELECT e.equipment_id,e.title FROM (SELECT equipment_id FROM equipment WHERE tenant_id=7 AND active=1 ORDER BY equipment_id ASC LIMIT 2 OFFSET 2) AS page JOIN equipment AS e ON e.equipment_id=page.equipment_id ORDER BY e.equipment_id ASC;",
+      "explanation": "The qualifying identity sequence is 2,5,8,12,20. The inner query selects 8 and 12 before details are retrieved. Whether this reduces runtime requires a representative plan and benchmark.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO equipment VALUES (1,8,1,'Other'),(2,7,1,'Only'),(3,7,0,'Closed');",
+          "expected": ""
+        },
+        {
+          "seed_sql": "INSERT INTO equipment VALUES (90,7,1,'Last'),(10,7,1,'First'),(30,7,1,'Second'),(50,7,1,'Third');",
+          "expected": "equipment_id\ttitle\n50\tThird\n90\tLast"
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-13-pagination-performance-1",
+      "test_id": "pt-dbms-sql-13-pagination-performance",
+      "question_text": "As the OFFSET value grows on a large table, what generally happens to LIMIT/OFFSET query time?",
+      "options": [
+        "It stays constant regardless of offset",
+        "It grows, roughly in proportion to the offset value, because more rows must be scanned and discarded",
+        "It decreases, because later pages have fewer rows left",
+        "It becomes instant once an index exists, with no relation to offset size"
+      ],
+      "correct_index": 1,
+      "explanation": "OFFSET-based pagination cost grows roughly linearly with the offset value because the engine must walk past and discard that many rows first.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-13-pagination-performance-2",
+      "test_id": "pt-dbms-sql-13-pagination-performance",
+      "question_text": "Why does keyset pagination avoid the slowdown that OFFSET experiences at deep pages?",
+      "options": [
+        "It disables ORDER BY entirely",
+        "It uses a WHERE condition on an indexed sort key, allowing an index seek directly to the right position instead of scanning and discarding rows",
+        "It caches all previous pages permanently in the database",
+        "It limits tables to a maximum of 1000 rows"
+      ],
+      "correct_index": 1,
+      "explanation": "Keyset pagination's WHERE-based seek can jump directly to the target position via an index, unlike OFFSET which must traverse every preceding row.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-13-pagination-performance-3",
+      "test_id": "pt-dbms-sql-13-pagination-performance",
+      "question_text": "What single factor most determines whether either OFFSET-based or keyset pagination performs efficiently?",
+      "options": [
+        "Whether the table uses a NoSQL engine",
+        "Whether the sort/filter column has an index",
+        "Whether the query uses SELECT *",
+        "Whether the client caches results in the browser"
+      ],
+      "correct_index": 1,
+      "explanation": "An index on the sort/filter column is what enables either an efficient scan-and-skip (OFFSET) or an efficient seek (keyset); without it, both approaches require a full sort/scan.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-13-pagination-performance-4",
+      "test_id": "pt-dbms-sql-13-pagination-performance",
+      "question_text": "For a public search UI that never shows results past page 5, which pagination approach is a reasonable, simple choice?",
+      "options": [
+        "Keyset pagination is mandatory in all cases",
+        "Plain LIMIT/OFFSET is fine, since depth is always shallow and the performance downside never materializes",
+        "Neither approach works without window functions",
+        "Pagination should be avoided and all rows should be returned at once"
+      ],
+      "correct_index": 1,
+      "explanation": "OFFSET's cost problem only shows up at deep pages; for shallow, bounded pagination it's simple and performs perfectly well.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-13-pagination-performance-5",
+      "test_id": "pt-dbms-sql-13-pagination-performance",
+      "question_text": "Roughly how does LIMIT/OFFSET query cost scale as the offset (m) grows, assuming the sort column is indexed?",
+      "options": [
+        "Constant time, O(1)",
+        "Roughly linear, O(m)",
+        "Roughly logarithmic, O(log m)",
+        "It decreases as m increases"
+      ],
+      "correct_index": 1,
+      "explanation": "The engine must still traverse and discard on the order of m rows/index entries before returning the requested page, giving roughly linear cost in m.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-13-pagination-performance-6",
+      "test_id": "pt-dbms-sql-13-pagination-performance",
+      "question_text": "An API that must page through millions of rows (e.g. a data export job) is experiencing progressively slower requests as it advances through pages using LIMIT/OFFSET. What is the most effective fix?",
+      "options": [
+        "Increase the page size to reduce the number of requests",
+        "Switch to keyset (seek-method) pagination using a WHERE condition on the last-seen indexed key",
+        "Remove the ORDER BY clause to speed up each query",
+        "Add a second OFFSET clause"
+      ],
+      "correct_index": 1,
+      "explanation": "This is precisely the scenario keyset pagination is built for — deep, sequential pagination over large datasets, where its constant-ish cost avoids OFFSET's linear blowup.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-13-pagination-performance-7",
+      "test_id": "pt-dbms-sql-13-pagination-performance",
+      "question_text": "If the column used for pagination sorting has NO index at all, what happens to both LIMIT/OFFSET and keyset pagination?",
+      "options": [
+        "Both remain equally fast regardless of index presence",
+        "Both suffer, since the engine must first sort/scan the whole table before either approach can apply its cutoff or seek",
+        "Only LIMIT/OFFSET is affected; keyset pagination is immune to missing indexes",
+        "Only keyset pagination is affected; LIMIT/OFFSET is immune to missing indexes"
+      ],
+      "correct_index": 1,
+      "explanation": "Without an index, both techniques require scanning/sorting the full table first, eliminating keyset's seek advantage and making OFFSET's linear cost even worse.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-13-pagination-performance-8",
+      "test_id": "pt-dbms-sql-13-pagination-performance",
+      "question_text": "Which best summarizes the trade-off between OFFSET pagination and keyset pagination?",
+      "options": [
+        "OFFSET allows arbitrary page jumps but degrades with depth; keyset stays fast at any depth but can't jump to an arbitrary page directly",
+        "Keyset pagination is always slower but simpler to implement",
+        "OFFSET pagination requires window functions; keyset does not",
+        "There is no meaningful performance difference between the two approaches"
+      ],
+      "correct_index": 0,
+      "explanation": "This captures the core trade-off: OFFSET's simplicity and arbitrary-page-jump ability comes at the cost of degrading performance at depth, while keyset trades away arbitrary jumps for consistently fast sequential access.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "content_author",
+    "independent_review": "passed",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Independent manual review passed; native MySQL fixture evidence recorded separately; provider/browser/Supabase release gates remain separate.",
+    "canonical_answer_indices_preserved": true,
+    "editorial_record": "Original question snapshots retained; live MCQs correct unconditional performance and single-factor claims. Prose, exercises and comparison illustration independently authored; no benchmark values invented.",
+    "independent_reviewer": "Codex reviewer, current 2026-10-30 session",
+    "independent_review_scope": "Read full notes, all 640 MCQ stems/options/canonical answers/explanations, 64 exercise contracts/solutions/fixtures, and all 32 diagrams. Verified retained identities/answers through source-continuity tests; SQL execution evidence is recorded separately. No external originality, provider, live application or Supabase authorization clearance.",
+    "independent_review_record": "reports/independent-review-2026-10-30.json",
+    "content_sha256": "6938532c1e497a23b153f3c3a2e557dc975a54d153129cb163a696fdc5bfbbb9"
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-13-pagination-performance",
+    "original_note_sha256": "31547dc96e9909b046669b604ceccff6e2a71b11bcefbee3e3826a69887e4833",
+    "status": "drafted; not included in prepared paired migrations"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Paging techniques expose different opportunities",
+      "description": "This conceptual comparison describes work and navigation contracts; it contains no claimed benchmark timings.",
+      "columns": [
+        "Technique",
+        "Boundary",
+        "Potential benefit",
+        "Remaining work or limit"
+      ],
+      "rows": [
+        [
+          "OFFSET",
+          "Position in eligible order",
+          "Direct page-number navigation",
+          "Account for earlier positions"
+        ],
+        [
+          "Keyset",
+          "Remembered ordering tuple",
+          "Enter a suitable ordered range",
+          "Filtering, joins, and actual plan still matter"
+        ],
+        [
+          "Deferred join",
+          "Narrow selected identity page",
+          "Delay some wide-row retrieval",
+          "Offset prefix remains if OFFSET is used"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "author comparison; independent review pending",
+    "server_rendering": "pending",
+    "browser_rendering": "unverified",
+    "independent_review": "pending"
+  },
+  "authoring_status": "drafted; verification pending",
+  "sql_verification": {
+    "scope": "not executed; native runtime blocked by command policy; exact MySQL/provider and performance measurements pending",
+    "all_passed": false,
+    "cases": []
+  }
+}

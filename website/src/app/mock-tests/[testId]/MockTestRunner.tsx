@@ -5,12 +5,15 @@ import { useRouter } from "next/navigation";
 import { Clock, Loader2, Lock } from "lucide-react";
 import { Button } from "@/components/ui";
 import { createBrowserSupabase } from "@/lib/supabase/browser";
+import { InlineTestResult } from "@/components/learning/InlineTestResult";
+import { quizOptionOrder } from "@/lib/quizOptionOrder";
 
 interface Question {
   id: string;
   question_text: string;
   options: string[];
   marks: number;
+  option_order?: number[];
 }
 
 type Phase =
@@ -21,7 +24,8 @@ type Phase =
   | { k: "premium" }
   | { k: "error"; message: string }
   | { k: "quiz"; questions: Question[] }
-  | { k: "submitting" };
+  | { k: "submitting" }
+  | { k: "result"; attemptId: string };
 
 function fmt(total: number) {
   const m = Math.floor(total / 60);
@@ -35,6 +39,7 @@ export function MockTestRunner({
   isPremium,
   resultBase,
   scope = "topic",
+  inline = false,
 }: {
   testId: string;
   title: string;
@@ -45,6 +50,7 @@ export function MockTestRunner({
    *  and score via submit_randomized_test_attempt() instead of the plain
    *  per-topic test_questions() and submit_test_attempt() paths. */
   scope?: "topic" | "chapter" | "course";
+  inline?: boolean;
 }) {
   const router = useRouter();
   const supabase = useMemo(() => createBrowserSupabase(), []);
@@ -63,7 +69,9 @@ export function MockTestRunner({
       } = await supabase.auth.getUser();
       if (!active) return;
       setPhase(user ? { k: "intro" } : { k: "signin" });
-    })();
+    })().catch(() => {
+      if (active) setPhase({ k: "error", message: "Couldn't load the questions. Please try again." });
+    });
     return () => {
       active = false;
     };
@@ -71,48 +79,56 @@ export function MockTestRunner({
 
   const startTest = useCallback(async () => {
     setPhase({ k: "loading" });
-    let questions: Question[];
-    if (scope === "topic") {
-      const { data, error } = await supabase
-        .from("test_questions")
-        .select("id,question_text,options,marks,sort_order")
-        .eq("test_id", testId)
-        .order("sort_order", { ascending: true });
-      if (error) {
-        setPhase({ k: "error", message: "Couldn't load the questions. Please try again." });
+    try {
+      let questions: Question[];
+      if (scope === "topic") {
+        const { data, error } = await supabase
+          .from("test_questions")
+          .select("id,question_text,options,marks,sort_order")
+          .eq("test_id", testId)
+          .order("sort_order", { ascending: true });
+        if (error) {
+          setPhase({ k: "error", message: "Couldn't load the questions. Please try again." });
+          return;
+        }
+        questions = (data ?? []).map((r) => ({
+          id: r.id as string,
+          question_text: r.question_text as string,
+          options: (r.options ?? []) as string[],
+          marks: (r.marks ?? 1) as number,
+        }));
+      } else {
+        // Chapter / course tests: a fresh random sample every attempt, drawn
+        // server-side from the live pool (practice_test_pool, 0091/063).
+        const { data, error } = await supabase.rpc("practice_test_questions", { p_test_id: testId, p_platform: "website" });
+        if (error) {
+          setPhase({ k: "error", message: "Couldn't load the questions. Please try again." });
+          return;
+        }
+        questions = (Array.isArray(data) ? data : []).map((r) => ({
+          id: r.id as string,
+          question_text: r.question_text as string,
+          options: (r.options ?? []) as string[],
+          marks: (r.marks ?? 1) as number,
+        }));
+      }
+      if (questions.length === 0) {
+        setPhase(isPremium ? { k: "premium" } : { k: "error", message: "This test has no questions yet." });
         return;
       }
-      questions = (data ?? []).map((r) => ({
-        id: r.id as string,
-        question_text: r.question_text as string,
-        options: (r.options ?? []) as string[],
-        marks: (r.marks ?? 1) as number,
-      }));
-    } else {
-      // Chapter / course tests: a fresh random sample every attempt, drawn
-      // server-side from the live pool (practice_test_pool, 0091/063).
-      const { data, error } = await supabase.rpc("practice_test_questions", { p_test_id: testId, p_platform: "website" });
-      if (error) {
-        setPhase({ k: "error", message: "Couldn't load the questions. Please try again." });
-        return;
+      if (inline) {
+        questions = questions.map((question) => ({ ...question, option_order: quizOptionOrder(question.options.length) }));
       }
-      questions = (Array.isArray(data) ? data : []).map((r) => ({
-        id: r.id as string,
-        question_text: r.question_text as string,
-        options: (r.options ?? []) as string[],
-        marks: (r.marks ?? 1) as number,
-      }));
+      startedAt.current = Date.now();
+      submittedRef.current = false;
+      setSecondsLeft(durationMinutes > 0 ? durationMinutes * 60 : null);
+      setCurrent(0);
+      setAnswers({});
+      setPhase({ k: "quiz", questions });
+    } catch {
+      setPhase({ k: "error", message: "Couldn't load the questions. Please try again." });
     }
-    if (questions.length === 0) {
-      setPhase(isPremium ? { k: "premium" } : { k: "error", message: "This test has no questions yet." });
-      return;
-    }
-    startedAt.current = Date.now();
-    setSecondsLeft(durationMinutes > 0 ? durationMinutes * 60 : null);
-    setCurrent(0);
-    setAnswers({});
-    setPhase({ k: "quiz", questions });
-  }, [supabase, testId, durationMinutes, isPremium, scope]);
+  }, [supabase, testId, durationMinutes, isPremium, scope, inline]);
 
   const submit = useCallback(
     async (questions: Question[]) => {
@@ -124,31 +140,37 @@ export function MockTestRunner({
         selected_index: q.id in answers ? answers[q.id] : null,
       }));
       const timeTaken = Math.round((Date.now() - startedAt.current) / 1000);
-      const { data, error } =
-        scope === "topic"
-          ? await supabase.rpc("submit_test_attempt", {
-              p_test_id: testId,
-              p_answers: payload,
-              p_time_taken_seconds: timeTaken,
-            })
-          : await supabase.rpc("submit_randomized_test_attempt", {
-              p_test_id: testId,
-              p_question_ids: questions.map((q) => q.id),
-              p_answers: payload,
-              p_time_taken_seconds: timeTaken,
-            });
-      const attempt = Array.isArray(data) ? data[0] : data;
-      if (error || !attempt?.id) {
+      try {
+        const { data, error } =
+          scope === "topic"
+            ? await supabase.rpc("submit_test_attempt", {
+                p_test_id: testId,
+                p_answers: payload,
+                p_time_taken_seconds: timeTaken,
+              })
+            : await supabase.rpc("submit_randomized_test_attempt", {
+                p_test_id: testId,
+                p_question_ids: questions.map((q) => q.id),
+                p_answers: payload,
+                p_time_taken_seconds: timeTaken,
+              });
+        const attempt = Array.isArray(data) ? data[0] : data;
+        if (error || !attempt?.id) {
+          submittedRef.current = false;
+          setPhase({
+            k: "error",
+            message: error?.message ? `Couldn't submit: ${error.message}` : "Couldn't submit your test. Please try again.",
+          });
+          return;
+        }
+        if (inline) setPhase({ k: "result", attemptId: attempt.id });
+        else router.push(`${resultBase}/result/${attempt.id}`);
+      } catch {
         submittedRef.current = false;
-        setPhase({
-          k: "error",
-          message: error?.message ? `Couldn't submit: ${error.message}` : "Couldn't submit your test. Please try again.",
-        });
-        return;
+        setPhase({ k: "error", message: "Couldn't submit your test. Please try again." });
       }
-      router.push(`${resultBase}/result/${attempt.id}`);
     },
-    [answers, supabase, testId, resultBase, router, scope],
+    [answers, supabase, testId, resultBase, router, scope, inline],
   );
 
   // countdown
@@ -158,11 +180,14 @@ export function MockTestRunner({
       void submit(phase.questions);
       return;
     }
-    const t = setTimeout(() => setSecondsLeft((s) => (s ?? 1) - 1), 1000);
+    const t = setTimeout(() => setSecondsLeft(Math.max(0, Math.ceil((startedAt.current + durationMinutes * 60000 - Date.now()) / 1000))), 1000);
     return () => clearTimeout(t);
-  }, [phase, secondsLeft, submit]);
+  }, [phase, secondsLeft, submit, durationMinutes]);
 
   // ---- render ----
+  if (phase.k === "result") {
+    return <InlineTestResult testId={testId} attemptId={phase.attemptId} onRetake={() => setPhase({ k: "intro" })} />;
+  }
   if (phase.k === "gate") {
     return (
       <p className="mt-6 flex items-center gap-2 text-sm text-ink-muted">
@@ -260,7 +285,8 @@ export function MockTestRunner({
               type="button"
               onClick={() => setCurrent(i)}
               aria-label={`Go to question ${i + 1}${done ? " (answered)" : ""}`}
-              className={`h-8 w-8 rounded-full text-xs font-semibold transition ${
+              aria-pressed={active}
+              className={`h-11 w-11 rounded-full text-xs font-semibold transition ${
                 active
                   ? "bg-primary text-white"
                   : done
@@ -275,10 +301,10 @@ export function MockTestRunner({
       </div>
 
       <fieldset className="rounded-2xl border border-line bg-card p-5 shadow-card">
-        <legend className="sr-only">Question {current + 1}</legend>
-        <p className="text-base font-medium text-ink">{q.question_text}</p>
+        <legend className="whitespace-pre-wrap text-base font-medium text-ink">Question {current + 1}. {q.question_text}</legend>
         <div className="mt-4 space-y-2">
-          {q.options.map((opt, i) => {
+          {(q.option_order ?? q.options.map((_, index) => index)).map((i) => {
+            const opt = q.options[i];
             const selected = answers[q.id] === i;
             return (
               <label
@@ -289,7 +315,7 @@ export function MockTestRunner({
               >
                 <input
                   type="radio"
-                  name={`q-${q.id}`}
+                  name={`q-${testId}-${q.id}`}
                   checked={selected}
                   onChange={() => setAnswers((prev) => ({ ...prev, [q.id]: i }))}
                   className="h-4 w-4"

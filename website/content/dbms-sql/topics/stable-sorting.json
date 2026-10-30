@@ -1,0 +1,609 @@
+{
+  "source_ref": "chapter-13-sorting-and-pagination/stable-sorting",
+  "slug": "stable-sorting",
+  "title": "Stable Sorting",
+  "description": "Make SQL result order reproducible with unique result-grain tiebreakers, explicit null policies and correct outer ordering across paging and joins.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Make equal-key choices explicit\n\nA reproducible SQL result order requires enough ordering information to distinguish every displayed row. Ordering by a repeated category places categories in order, but does not specify the relative order of products inside one category. A repeated execution might happen to show the same sequence; that observation does not turn the unspecified tie order into a database contract.\n\nIn sorting algorithms, stable has a narrower meaning: equal-key elements retain their relative input order. A SQL table supplies no implicit ordered input sequence for an ordinary SELECT. Do not rely on an engine using a stable internal algorithm to define ties. This topic uses complete ordering to obtain deterministic results for a fixed visible dataset.\n\n## Begin with the intended business order\n\nSuppose a campus lending list groups equipment by storage area. Users expect items in the same area together, so the first ordering term is storage_area. Several items can share that value. If the page also needs a reproducible sequence inside an area, append the unique equipment identity with a stated direction.\n\n```sql\nSELECT equipment_id, storage_area, label\nFROM equipment\nORDER BY storage_area ASC, equipment_id ASC;\n```\n\nStorage area controls grouping in the displayed order; identity controls ties. The additional term does not change which area comes first. It makes an otherwise unspecified choice explicit. Understand [ORDER BY](/learning/dbms-sql-tutorial/order-by) and [multiple sort keys](/learning/dbms-sql-tutorial/multiple-sort-keys) before extending this pattern to paging or joined results.\n\n## Distinguish uniqueness from a familiar column name\n\nA column called id is useful only if its values actually distinguish rows at the result grain. A primary key distinguishes base-table rows, but a join can produce several result rows for the same parent. If each equipment item has several inspection records, equipment_id alone leaves those inspection rows tied. Include inspection identity or change the query to produce one row per item.\n\nA composite identity can also complete an order. A room number may repeat across buildings, while building_id and room_number together identify one room. Use the actual uniqueness contract instead of inventing a surrogate requirement. Check nullable unique columns carefully: uniqueness rules can permit multiple missing values, so the supposed final tiebreaker may not distinguish all results.\n\n## Set each direction deliberately\n\nA leaderboard can rank score descending and identity ascending. Higher scores come first; equal scores prefer lower identifiers. Reversing every direction changes both preferences. If a feature switches between newest-first and oldest-first, decide whether identity direction should change with time or remain independent. Treat that choice as part of navigation semantics.\n\nThe intermediate exercise uses priority descending, due-day ascending and ticket identity ascending. An earlier due day wins within a priority, and identity resolves identical priority-and-day pairs. Trace these terms from left to right. Comparing identity first would impose a different business policy even if the resulting list looked tidy and remained technically ordered.\n\n## Define missing-value policy explicitly\n\nA missing due day can mean unscheduled work rather than a very early or very late real date. Choose whether those tickets belong before or after dated tickets. MySQL places nulls before known values in ascending order and after known values in descending order; a portable teaching example should explain rather than assume those defaults.\n\nFor missing due days last, first sort by whether the value is missing, then by the value and final identity:\n\n```sql\nORDER BY priority DESC,\n         (due_day IS NULL) ASC,\n         due_day ASC,\n         ticket_id ASC\n```\n\nKnown dates have a false missing-value flag and precede true flags inside each priority. The final identity still distinguishes tickets whose dates are both missing. A replacement sentinel can collide with a legitimate value or alter access-path opportunities, so do not use one casually to avoid thinking about the policy.\n\n## Recognize collation-defined peers\n\nString comparisons follow the selected collation. A case-insensitive collation can treat different spellings as equivalent for sorting even when the text bytes differ. Accent sensitivity can matter too. Adding a genuinely unique final identity completes these peers, while assuming that visually different labels can never tie may leave an incomplete order.\n\nDo not change collation merely to repair a flaky test without checking the application's language and search expectations. A collation change can affect equality, grouping, uniqueness and index behavior as well as display order. Keep the required language policy explicit and test representative names, rather than claim one byte-based order suits every learner-facing catalogue.\n\n## Connect complete orders to bounded slices\n\nA LIMIT boundary through equal scores can choose different identities when the order is incomplete. OFFSET pages can then repeat or miss identities across requests even on a logically unchanged dataset if tied membership changes. Appending the result-grain identity makes the static slice well defined. This is a correctness requirement, not merely a visual preference.\n\nA keyset cursor must remember and compare the complete ordering tuple. Sorting by priority and date while continuing only by identity is inconsistent. See [keyset pagination](/learning/dbms-sql-tutorial/keyset-pagination) for direction-aware comparisons and missing-value transitions. A complete order is a prerequisite for that design; it does not independently provide a cursor implementation or a query performance guarantee.\n\n## Separate ordering from changing visibility\n\nDeterminism means the same complete query over the same visible values has one specified sequence. It does not mean separate requests observe unchanged data. A new higher-priority ticket can move before the next page, while an updated due date can move an existing ticket across a continuation boundary. A unique final key does not stop those changes.\n\nSpecify whether a live list accepts that behavior or requires a stable snapshot for reporting. Repeating a query inside one tested scenario cannot establish every cross-request isolation guarantee. Keep the visibility contract separate from the ordering contract so an application does not promise an immutable export merely because its ORDER BY ends in a primary key.\n\n## Order at the outer result boundary\n\nAn inner query's ORDER BY can define which rows a limit selects, but it does not replace an outer query's final display order. Joining page identities to details, combining results or wrapping them in another SELECT can require an explicit outer order. Repeat the required terms at the boundary that returns the displayed result.\n\nSimilarly, a window function's ORDER BY defines its calculation, not the entire returned table's sequence. A GROUP BY groups facts but does not guarantee presentation ordering. These distinctions explain why a row-number calculation can be correct while its displayed rows still need a final ORDER BY. Review selected membership and displayed sequence as separate assertions.\n\n## Test incomplete ties with contrasting fixtures\n\nConstruct several rows sharing every business key, with nonconsecutive identifiers inserted in a scrambled order. A test whose identifiers happen to match insertion order can conceal reliance on an incidental plan. Verify the entire expected identity sequence, not only that adjacent scores are descending. Include a slice whose boundary cuts through a repeated business value.\n\nFor joined data, include two children of one parent to expose a false uniqueness assumption. For missing-value policies, include several nulls and several equal known values. Explain the expected outcome from the declared terms. Avoid changing a correct SQL contract simply to match a fixture's accidental physical row arrangement or an unexamined database default.\n\n## Choose performance evidence separately\n\nA suitable index may provide the requested order and reduce sorting work, but adding a unique term does not prove the actual plan uses that path. Filtering, collation, selected columns and joins affect available strategies. Inspect representative plans when performance matters, while keeping the complete result order intact.\n\nThe exercises use small synthetic fixtures to test sequence meaning. They establish neither production latency nor cross-request snapshot behavior. Recap a review in three questions: what is one output row, which terms express the business ranking, and what finally distinguishes remaining ties? Answering these makes deterministic ordering reviewable across different plans and storage arrangements.\n\nWhen a query changes, recheck the uniqueness argument rather than mechanically retaining a familiar id term. Adding a join or changing the projection can alter what one returned row means. Document that result grain alongside the required order so a later maintainer can preserve the same behavior.\n",
+  "references": [
+    {
+      "title": "MySQL 8.4 LIMIT and nondeterministic ties",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/limit-optimization.html"
+    },
+    {
+      "title": "MySQL 8.4 working with NULL values",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/working-with-null.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-13-stable-sorting",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-13-stable-sorting-1",
+          "test_id": "pt-dbms-sql-13-stable-sorting",
+          "question_text": "What does ORDER BY category alone specify for repeated categories?",
+          "options": [
+            "A mandatory primary-key tie order",
+            "Category order but not relative identity order within a category",
+            "Insertion order for every tie",
+            "A guaranteed random sample"
+          ],
+          "correct_index": 1,
+          "explanation": "All listed terms can tie.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-13-stable-sorting-2",
+          "test_id": "pt-dbms-sql-13-stable-sorting",
+          "question_text": "What commonly completes a base-table category order?",
+          "options": [
+            "Removing ORDER BY",
+            "A final unique identity with an explicit direction",
+            "Increasing the limit only",
+            "An unrelated comment"
+          ],
+          "correct_index": 1,
+          "explanation": "The complete tuple distinguishes rows.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-13-stable-sorting-3",
+          "test_id": "pt-dbms-sql-13-stable-sorting",
+          "question_text": "Does repeatedly observing the same tied order make it guaranteed?",
+          "options": [
+            "Yes, after two executions",
+            "No",
+            "Only if the UI is desktop",
+            "Only if categories are text"
+          ],
+          "correct_index": 1,
+          "explanation": "Observed behavior is weaker than a query contract.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-13-stable-sorting-4",
+          "test_id": "pt-dbms-sql-13-stable-sorting",
+          "question_text": "Can a complete order specify identities selected by a LIMIT boundary?",
+          "options": [
+            "Only for tables with one column",
+            "Yes, for the same visible data and query",
+            "No, identity never matters",
+            "Only without filters"
+          ],
+          "correct_index": 1,
+          "explanation": "Every competing row has a defined place.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-13-stable-sorting-5",
+          "test_id": "pt-dbms-sql-13-stable-sorting",
+          "question_text": "Does deterministic ordering freeze future data changes?",
+          "options": [
+            "Yes, primary keys freeze every row",
+            "Only for ascending lists",
+            "No",
+            "Only for numeric measures"
+          ],
+          "correct_index": 2,
+          "explanation": "Visibility over time is a separate requirement.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-13-stable-sorting-6",
+          "test_id": "pt-dbms-sql-13-stable-sorting",
+          "question_text": "For equal priority, due_day, which term can distinguish ticket rows?",
+          "options": [
+            "A constant literal",
+            "Unique ticket_id",
+            "The same repeated priority",
+            "A hidden insertion sequence assumption"
+          ],
+          "correct_index": 1,
+          "explanation": "A genuine final unique value resolves remaining ties.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-13-stable-sorting-7",
+          "test_id": "pt-dbms-sql-13-stable-sorting",
+          "question_text": "Why can equipment_id stop being unique after a join?",
+          "options": [
+            "Joins delete every identity",
+            "Several inspection rows can belong to one item",
+            "All join columns become NULL",
+            "SQL prohibits ordered joins"
+          ],
+          "correct_index": 1,
+          "explanation": "Uniqueness must hold at result grain.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-13-stable-sorting-8",
+          "test_id": "pt-dbms-sql-13-stable-sorting",
+          "question_text": "What does a stable sorting algorithm preserve?",
+          "options": [
+            "All table insertion positions as a SQL guarantee",
+            "The relative input order of equal-key elements",
+            "A cross-request database snapshot",
+            "A fixed execution plan forever"
+          ],
+          "correct_index": 1,
+          "explanation": "SQL does not supply an implicit ordered input table.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-13-stable-sorting-new-9",
+          "test_id": "pt-dbms-sql-13-stable-sorting",
+          "question_text": "What is the effect of score DESC,id ASC?",
+          "options": [
+            "Higher scores first, then lower ids within each score",
+            "Lower scores first",
+            "Higher ids before all scores",
+            "An order independent of score"
+          ],
+          "correct_index": 0,
+          "explanation": "Directions apply term by term.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-13-stable-sorting-new-10",
+          "test_id": "pt-dbms-sql-13-stable-sorting",
+          "question_text": "Does a nullable UNIQUE column necessarily complete every tie?",
+          "options": [
+            "Yes, NULL is always disallowed",
+            "No, several missing values can be permitted",
+            "Only for text columns",
+            "Only if OFFSET is zero"
+          ],
+          "correct_index": 1,
+          "explanation": "Check the actual uniqueness and nullability contract.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-13-stable-sorting-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-13-stable-sorting-application-new-1",
+          "test_id": "pt-dbms-sql-13-stable-sorting-application",
+          "question_text": "What is a useful missing-last ordering prefix in MySQL?",
+          "options": [
+            "due_day ASC alone always puts NULL last",
+            "(due_day IS NULL) ASC, due_day ASC",
+            "due_day = NULL ASC",
+            "COUNT(due_day) without grouping"
+          ],
+          "correct_index": 1,
+          "explanation": "False known-value flags precede true missing-value flags.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-13-stable-sorting-application-new-2",
+          "test_id": "pt-dbms-sql-13-stable-sorting-application",
+          "question_text": "What completes several tickets whose due_day is NULL?",
+          "options": [
+            "The null value alone",
+            "The fact that all are missing",
+            "Their unique final ticket identity",
+            "Removing every ordering term"
+          ],
+          "correct_index": 2,
+          "explanation": "Missing-date peers still need distinguishing values.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-13-stable-sorting-application-new-3",
+          "test_id": "pt-dbms-sql-13-stable-sorting-application",
+          "question_text": "Why can visually different text values be sorting peers?",
+          "options": [
+            "Text cannot be ordered",
+            "Every character is a primary key",
+            "All SQL comparisons use raw bytes necessarily",
+            "The collation can compare them as equal"
+          ],
+          "correct_index": 3,
+          "explanation": "Case and accent policies affect comparison.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-13-stable-sorting-application-new-4",
+          "test_id": "pt-dbms-sql-13-stable-sorting-application",
+          "question_text": "Should collation be changed casually to fix an ordering test?",
+          "options": [
+            "No, it can affect equality, grouping and other contracts",
+            "Yes, it affects only font color",
+            "Only when ids are integers",
+            "Only if the row count is ten"
+          ],
+          "correct_index": 0,
+          "explanation": "The change has broader semantic effects.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-13-stable-sorting-application-new-5",
+          "test_id": "pt-dbms-sql-13-stable-sorting-application",
+          "question_text": "Does an inner ORDER BY replace the final outer order guarantee?",
+          "options": [
+            "Yes, all joins preserve it by contract",
+            "No",
+            "Only if an index exists",
+            "Only if LIMIT is small"
+          ],
+          "correct_index": 1,
+          "explanation": "Specify the required display order at the outer boundary.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-13-stable-sorting-application-new-6",
+          "test_id": "pt-dbms-sql-13-stable-sorting-application",
+          "question_text": "Does GROUP BY guarantee the final row display order?",
+          "options": [
+            "Yes, all groups ascend automatically",
+            "Only for category names",
+            "No",
+            "Only if every group has two rows"
+          ],
+          "correct_index": 2,
+          "explanation": "Grouping and ordering solve different problems.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-13-stable-sorting-application-new-7",
+          "test_id": "pt-dbms-sql-13-stable-sorting-application",
+          "question_text": "What should a keyset cursor compare?",
+          "options": [
+            "Any convenient identifier regardless of sort",
+            "Only the number of returned rows",
+            "The page title",
+            "The complete tuple matching the query's ordering directions"
+          ],
+          "correct_index": 3,
+          "explanation": "A mismatched continuation can omit or repeat identities.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-13-stable-sorting-application-new-8",
+          "test_id": "pt-dbms-sql-13-stable-sorting-application",
+          "question_text": "Which fixture reveals incomplete tie handling?",
+          "options": [
+            "Many equal business keys with scrambled unique ids",
+            "All business keys unique",
+            "One row only",
+            "No qualifying rows only"
+          ],
+          "correct_index": 0,
+          "explanation": "An incomplete order is exposed by genuine peers.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-13-stable-sorting-application-new-9",
+          "test_id": "pt-dbms-sql-13-stable-sorting-application",
+          "question_text": "Does adding a unique order term prove an efficient index plan?",
+          "options": [
+            "Yes, sorting becomes free",
+            "No, inspect the actual query plan",
+            "Only for descending keys",
+            "Only if id gaps exist"
+          ],
+          "correct_index": 1,
+          "explanation": "Correctness and physical efficiency need separate evidence.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-13-stable-sorting-application-new-10",
+          "test_id": "pt-dbms-sql-13-stable-sorting-application",
+          "question_text": "What should an ordering test verify beyond descending scores?",
+          "options": [
+            "Only the HTML heading",
+            "Only the output column count",
+            "The expected complete identity sequence",
+            "Only database connection time"
+          ],
+          "correct_index": 2,
+          "explanation": "Correct tie identities matter at slice boundaries.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cx-stable-area-equipment",
+      "slug": "stable-area-equipment",
+      "title": "Order equipment inside each storage area",
+      "difficulty": "Easy",
+      "task": "Return equipment_id,storage_area,label ordered by storage_area ascending then equipment_id ascending.",
+      "schema_sql": "CREATE TABLE equipment(equipment_id INT PRIMARY KEY,storage_area VARCHAR(10) NOT NULL,label VARCHAR(30) NOT NULL);",
+      "seed_sql": "INSERT INTO equipment VALUES (90,'B','Lamp'),(30,'A','Mic'),(10,'A','Lens'),(50,'B','Stand');",
+      "expected": "equipment_id\tstorage_area\tlabel\n10\tA\tLens\n30\tA\tMic\n50\tB\tStand\n90\tB\tLamp",
+      "ordering": "As explicitly required by the task and solution query.",
+      "constraints": [
+        "Use only supplied synthetic data.",
+        "Preserve unrelated rows."
+      ],
+      "edge_cases": [
+        "Equal areas need identities.",
+        "Identifiers can have gaps."
+      ],
+      "hints": [
+        "Sort by area first.",
+        "Do not assume insertion order."
+      ],
+      "solution_sql": "SELECT equipment_id,storage_area,label FROM equipment ORDER BY storage_area ASC,equipment_id ASC;",
+      "explanation": "The business key groups A before B; identity orders each repeated area.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO equipment VALUES (8,'A','Eight'),(2,'A','Two'),(5,'A','Five');",
+          "expected": "equipment_id\tstorage_area\tlabel\n2\tA\tTwo\n5\tA\tFive\n8\tA\tEight"
+        },
+        {
+          "seed_sql": "INSERT INTO equipment VALUES (1,'B','Only');",
+          "expected": "equipment_id\tstorage_area\tlabel\n1\tB\tOnly"
+        }
+      ]
+    },
+    {
+      "id": "cx-stable-ticket-priority",
+      "slug": "stable-ticket-priority",
+      "title": "Complete a priority-and-date order",
+      "difficulty": "Medium",
+      "task": "Return ticket_id,priority,due_day ordered by priority descending, known due_day ascending with NULL last within each priority, then ticket_id ascending. due_day is an integer day index, not a calendar date.",
+      "schema_sql": "CREATE TABLE tickets(ticket_id INT PRIMARY KEY,priority INT NOT NULL,due_day INT NULL);",
+      "seed_sql": "INSERT INTO tickets VALUES (9,2,NULL),(4,2,5),(2,2,5),(1,1,1),(8,2,3),(7,2,NULL);",
+      "expected": "ticket_id\tpriority\tdue_day\n8\t2\t3\n2\t2\t5\n4\t2\t5\n7\t2\tNULL\n9\t2\tNULL\n1\t1\t1",
+      "ordering": "As explicitly required by the task and solution query.",
+      "constraints": [
+        "Use only supplied synthetic data.",
+        "Preserve unrelated rows."
+      ],
+      "edge_cases": [
+        "Priority outranks due day.",
+        "Multiple null due days remain tied until identity."
+      ],
+      "hints": [
+        "Use a missing-value flag within priority.",
+        "Identity must resolve even null-date ties."
+      ],
+      "solution_sql": "SELECT ticket_id,priority,due_day FROM tickets ORDER BY priority DESC,(due_day IS NULL) ASC,due_day ASC,ticket_id ASC;",
+      "explanation": "Priority dominates; known earlier days precede later or missing days inside the priority; identity completes all date ties.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO tickets VALUES (8,1,NULL),(2,1,NULL),(9,2,NULL);",
+          "expected": "ticket_id\tpriority\tdue_day\n9\t2\tNULL\n2\t1\tNULL\n8\t1\tNULL"
+        },
+        {
+          "seed_sql": "INSERT INTO tickets VALUES (7,3,10),(1,3,10),(4,2,1);",
+          "expected": "ticket_id\tpriority\tdue_day\n1\t3\t10\n7\t3\t10\n4\t2\t1"
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-13-stable-sorting-1",
+      "test_id": "pt-dbms-sql-13-stable-sorting",
+      "question_text": "What does it mean for a sort to be 'stable'?",
+      "options": [
+        "It always sorts in ascending order",
+        "Rows with equal sort-key values keep a consistent, repeatable relative order across runs",
+        "It never includes NULL values",
+        "It executes in constant time regardless of table size"
+      ],
+      "correct_index": 1,
+      "explanation": "Stability specifically concerns tie-breaking: whether rows tied on the sort key(s) retain the same relative order every time the sort runs.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-13-stable-sorting-2",
+      "test_id": "pt-dbms-sql-13-stable-sorting",
+      "question_text": "Does plain `ORDER BY category` guarantee the same relative order for two rows that share the same category value, across repeated executions?",
+      "options": [
+        "Yes, SQL guarantees ties always resolve identically",
+        "No — the relative order of tied rows is not guaranteed and can differ between runs",
+        "Yes, but only in PostgreSQL",
+        "No, because ORDER BY cannot be used on non-unique columns"
+      ],
+      "correct_index": 1,
+      "explanation": "When rows tie on all specified ORDER BY columns, SQL does not guarantee any particular relative order among them, and it can vary between executions.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-13-stable-sorting-3",
+      "test_id": "pt-dbms-sql-13-stable-sorting",
+      "question_text": "What is the standard fix to make an ORDER BY clause fully deterministic?",
+      "options": [
+        "Add LIMIT to the query",
+        "Append a guaranteed-unique column, such as the primary key, as the final sort key",
+        "Use SELECT DISTINCT instead of ORDER BY",
+        "Remove all WHERE conditions"
+      ],
+      "correct_index": 1,
+      "explanation": "Adding a unique column as the last ORDER BY key eliminates any remaining ties, making the sort order fully deterministic.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-13-stable-sorting-4",
+      "test_id": "pt-dbms-sql-13-stable-sorting",
+      "question_text": "Why is deterministic (stable) ordering especially important for pagination?",
+      "options": [
+        "It makes queries run faster automatically",
+        "Without it, a tied row could appear on two different pages (duplicated) or on no page at all (skipped) as the tie order shifts between queries",
+        "It is only a cosmetic concern with no functional impact",
+        "It is required syntax for LIMIT to work at all"
+      ],
+      "correct_index": 1,
+      "explanation": "If ties are unresolved, a row's position relative to the page boundary can shift between the two separate queries that fetch page N and page N+1, causing duplication or omission.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-13-stable-sorting-5",
+      "test_id": "pt-dbms-sql-13-stable-sorting",
+      "question_text": "Which ORDER BY clause guarantees fully deterministic results when paginating a products table, assuming `id` is the unique primary key?",
+      "options": [
+        "ORDER BY category",
+        "ORDER BY rating DESC",
+        "ORDER BY rating DESC, id ASC",
+        "ORDER BY price"
+      ],
+      "correct_index": 2,
+      "explanation": "Appending the unique id column as a final tiebreaker after rating eliminates any remaining ties, making the order fully deterministic.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-13-stable-sorting-6",
+      "test_id": "pt-dbms-sql-13-stable-sorting",
+      "question_text": "What could cause the relative order of tied rows to change between two runs of the same non-deterministic ORDER BY query, even though the tied values themselves haven't changed?",
+      "options": [
+        "Nothing can change it if the WHERE clause is identical",
+        "Physical storage reorganization (e.g. VACUUM), updates to other rows, or the query planner choosing a different execution plan",
+        "Changing the SELECT list column order",
+        "Only changing the database's time zone setting"
+      ],
+      "correct_index": 1,
+      "explanation": "Because tie order isn't guaranteed, anything that affects physical row layout or plan choice (VACUUM, updates, planner changes) can shift the observed order of tied rows.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-13-stable-sorting-7",
+      "test_id": "pt-dbms-sql-13-stable-sorting",
+      "question_text": "A test suite asserts `SELECT name FROM products ORDER BY category` always returns rows within the 'Electronics' group in a specific fixed order, and the test occasionally fails intermittently. What is the most likely root cause?",
+      "options": [
+        "The category column contains a typo",
+        "ORDER BY category alone doesn't guarantee tie order among same-category rows, so the test is relying on unstable, undefined behavior",
+        "The test is checking the wrong table",
+        "SQL always sorts alphabetically by name automatically"
+      ],
+      "correct_index": 1,
+      "explanation": "This is a classic flaky-test symptom caused by relying on unresolved tie order; adding a unique tiebreaker column to ORDER BY would fix it.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-13-stable-sorting-8",
+      "test_id": "pt-dbms-sql-13-stable-sorting",
+      "question_text": "If every row in a query result already has a fully unique combination of ORDER BY column values (e.g. ORDER BY id where id is a primary key), is the sort guaranteed to be deterministic?",
+      "options": [
+        "No, uniqueness has no effect on determinism",
+        "Yes — with no ties possible at all, there is nothing left for the engine to order arbitrarily, so the result is fully deterministic",
+        "Only if the table has fewer than 1000 rows",
+        "Only in MySQL, not other engines"
+      ],
+      "correct_index": 1,
+      "explanation": "When the ORDER BY key(s) are unique across all rows, no ties exist, so there is no ambiguity left for the engine to resolve non-deterministically.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "content_author",
+    "independent_review": "passed",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Independent manual review passed; native MySQL fixture evidence recorded separately; provider/browser/Supabase release gates remain separate.",
+    "canonical_answer_indices_preserved": true,
+    "editorial_record": "Original seeded MCQ snapshots and canonical answer identities preserved. Newly authored prose, exercises and diagram; third-party references verify facts only.",
+    "independent_reviewer": "Codex reviewer, current 2026-10-30 session",
+    "independent_review_scope": "Read full notes, all 640 MCQ stems/options/canonical answers/explanations, 64 exercise contracts/solutions/fixtures, and all 32 diagrams. Verified retained identities/answers through source-continuity tests; SQL execution evidence is recorded separately. No external originality, provider, live application or Supabase authorization clearance.",
+    "independent_review_record": "reports/independent-review-2026-10-30.json",
+    "content_sha256": "ab484d5c21e285a90364599a3f5aae4695f86c59111c3132f03d0c3247ea0458"
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-13-stable-sorting",
+    "original_note_sha256": "64348706d8c15806919abe642db961349b8f895fb948210fa02d094c66805697",
+    "status": "drafted; not included in prepared paired migrations"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Business keys can tie until the final identity",
+      "description": "Priority descending, known day ascending with missing days last, and ticket identity ascending define one sequence.",
+      "columns": [
+        "Ticket",
+        "Priority",
+        "Due day",
+        "Decision"
+      ],
+      "rows": [
+        [
+          "8",
+          "2",
+          "3",
+          "Earliest known day"
+        ],
+        [
+          "2",
+          "2",
+          "5",
+          "Lower identity in day-5 tie"
+        ],
+        [
+          "4",
+          "2",
+          "5",
+          "Higher identity in day-5 tie"
+        ],
+        [
+          "7",
+          "2",
+          "NULL",
+          "Lower identity in missing-day tie"
+        ],
+        [
+          "9",
+          "2",
+          "NULL",
+          "Higher identity in missing-day tie"
+        ],
+        [
+          "1",
+          "1",
+          "1",
+          "Lower priority comes last"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "author review; independent review pending",
+    "server_rendering": "pending",
+    "browser_rendering": "unverified",
+    "independent_review": "pending"
+  },
+  "authoring_status": "drafted; verification pending",
+  "sql_verification": {
+    "scope": "not executed; native interpreter blocked by command policy; exact MySQL/provider execution pending",
+    "all_passed": false,
+    "cases": []
+  }
+}

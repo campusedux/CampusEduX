@@ -59,7 +59,7 @@ export default function CookieConsentBanner() {
   return (
     <section
       aria-label="Cookie preferences"
-      className="fixed inset-x-3 bottom-[calc(4.75rem+env(safe-area-inset-bottom))] z-[190] mx-auto max-h-[calc(100dvh-6rem)] max-w-2xl overflow-y-auto rounded-2xl border border-line bg-card p-4 text-ink shadow-card-lg sm:bottom-4 sm:p-5"
+      className="fixed inset-x-3 bottom-[calc(4.75rem+env(safe-area-inset-bottom))] z-modal mx-auto max-h-[calc(100dvh-6rem)] max-w-2xl overflow-y-auto rounded-2xl border border-line bg-card p-4 text-ink shadow-card-lg sm:bottom-4 sm:p-5"
     >
       <h2 className="text-base font-bold">Cookie choices</h2>
       <p className="mt-2 text-sm leading-relaxed text-ink-muted">

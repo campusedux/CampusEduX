@@ -15,32 +15,35 @@ export function useAutosaveField<T>(
   onStatusChange: (status: SaveStatus) => void,
   delayMs = 800,
 ) {
-  const isFirstRender = useRef(true);
+  const previousValue = useRef(value);
+  const writes = useRef<Promise<void>>(Promise.resolve());
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const latestValue = useRef(value);
   latestValue.current = value;
 
   useEffect(() => {
-    if (isFirstRender.current) {
-      isFirstRender.current = false;
-      return;
-    }
+    if (Object.is(previousValue.current, value)) return;
+    previousValue.current = value;
+    let current = true;
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
     timeoutRef.current = setTimeout(() => {
       onStatusChange("saving");
       // A Server Action call also *rejects* on a transport failure (offline,
       // action-infra 5xx), not just resolves with `{ error }`. Without the
-      // `.catch` that becomes an unhandled rejection and the field is stuck
+      // catch that becomes an unhandled rejection and the field is stuck
       // on "Saving…" forever — surface it as a normal save error instead.
-      save(latestValue.current)
-        .then((result) => {
-          onStatusChange(result && typeof result === "object" && "ok" in result ? "saved" : "error");
-        })
-        .catch(() => {
-          onStatusChange("error");
-        });
+      const pendingValue = latestValue.current;
+      writes.current = writes.current.then(async () => {
+        try {
+          const result = await save(pendingValue);
+          if (current) onStatusChange(result && typeof result === "object" && "ok" in result ? "saved" : "error");
+        } catch {
+          if (current) onStatusChange("error");
+        }
+      });
     }, delayMs);
     return () => {
+      current = false;
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps

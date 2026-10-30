@@ -1,0 +1,512 @@
+{
+  "source_ref": "chapter-20-indexes-and-access-paths/b-plus-tree",
+  "slug": "b-plus-tree",
+  "title": "B Plus Tree",
+  "description": "Understand B+ tree navigation, linked-leaf ranges, splits, InnoDB clustered and secondary payloads, and the limits of index ordering claims.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Follow a sorted path from a separator to a leaf\n\nA B+ tree is a balanced search-tree structure designed to keep many ordered keys in relatively few levels of storage pages. Internal nodes contain separator keys and child-page pointers. Leaf nodes contain the indexed entries and the information needed to reach the associated records. Leaves are linked in key order, supporting continued scanning after the first qualifying leaf is found. The exact payload and page layout depend on the database implementation.\n\nImagine a workshop catalog containing millions of equipment records. A request for asset number eight thousand should not require reading every equipment row. A request for asset numbers eight thousand through eight thousand nine hundred should find the beginning efficiently and continue through neighboring entries. These point and range patterns explain why ordered balanced trees are useful for general-purpose database indexes.\n\n## Separate navigation keys from stored record information\n\nA root page directs the search toward a child whose key interval could contain the target. Another internal page can narrow the interval again until the search reaches a leaf. Separator keys summarize routing boundaries; they do not mean that an entire application record is stored at every internal occurrence of that value. Finding an equal separator still requires following the appropriate route to the leaf entry.\n\nIn a textbook B tree, record information may appear in internal nodes as well as leaves. In the B+ organization, keeping the record payload at leaves can allow compact internal entries and high fanout. Do not simplify this to internal nodes having no pointers. They must have pointers to child pages. What they generally omit is the application row payload or row locator stored at the leaf level in the chosen model.\n\n## Work through a small routing example\n\nSuppose the root divides the key space into values below twenty, values from twenty through thirty-nine and values at least forty. Its three children are leaves in a deliberately tiny teaching tree. Search for twenty-seven follows the middle interval, then inspects that leaf for the matching entry. Search for thirty-five reaches the same interval but may find no exact key there.\n\n| Routing interval | Example leaf keys | Next leaf |\n|---|---|---|\n| Below20 | 4, 11, 18 | Middle |\n| 20 through39 | 20, 27, 33 | Right |\n| At least40 | 40, 46, 52 | None shown |\n\nReal pages hold far more entries, and occupancy changes over time. The tiny fanout in the picture is a teaching choice, not a claim about a particular database page. The important invariant is that all leaf entries remain at the same logical depth and routing intervals cover the ordered search space without losing valid entries.\n\n## Trace an inclusive range rather than repeat point lookups\n\nFor the interval eighteen through forty-six, first locate the leaf position containing eighteen or its first greater entry. Read eighteen, continue through twenty, twenty-seven and thirty-three, and then reach forty and forty-six through the next leaf. Stop once the upper bound is passed. Returning only existing keys is correct; a tree does not invent nineteen or every other absent integer.\n\nThis navigation is often described as a tree descent followed by a leaf scan. In a simplified cost model, it takes logarithmic search work plus work proportional to the qualifying leaf entries. Actual database cost also includes caching, page reads, visibility checks, base-row lookups and output production. A million qualifying results still require substantial work even when the beginning of the interval is located efficiently.\n\n## Connect the idea to an SQL access path\n\n```sql\nCREATE TABLE equipment(asset_id INT PRIMARY KEY, depot_id INT NOT NULL,label VARCHAR(40));\nCREATE INDEX equipment_depot_asset ON equipment(depot_id,asset_id);\nSELECT asset_id,label FROM equipment\nWHERE depot_id=7 AND asset_id BETWEEN 8000 AND 8900\nORDER BY asset_id;\n```\n\nThe composite key is ordered first by depot and then by asset identifier within each depot. Fixing the leading depot value exposes a useful contiguous asset interval. Asking only for asset_id between the bounds has a different relationship to that composite order because all depots occupy separate leading-key groups. Optimizer capabilities and available alternatives determine the chosen plan; the existence of an index does not force its use.\n\n## Understand what InnoDB stores at the leaves\n\nInnoDB's clustered index stores row data at its leaf level. A secondary-index entry contains its indexed columns and the primary-key columns needed to locate the clustered record. Therefore a secondary lookup that needs an uncontained label may require a further clustered lookup. A query whose required data is available from an eligible index can avoid that additional row-fetch work, subject to actual engine execution and visibility requirements.\n\nA wide primary key enlarges secondary entries because that identity is carried with them. This can reduce entries per page and increase storage or maintenance work. The choice of primary key therefore affects more than uniqueness alone. However, replacing a sound business design solely to shorten one benchmark can create other costs. Review keys, access patterns and data integrity together.\n\n## Explain insertions and page splits\n\nAn insertion descends to the appropriate leaf position. If the page has room, its ordered entries can be updated there. If space is insufficient, splitting can distribute entries across pages and introduce or change a parent separator. A split can propagate upward, and a root split can add a level while preserving equal leaf depth. Balanced does not mean that every page is completely full or that no insertion moves data.\n\nSequential and scattered key arrival create different page-locality and contention patterns. A monotonically increasing key can concentrate inserts near one end; random keys can spread page access and splitting. Neither pattern is universally best. Record width, concurrency, cache, fill policy and storage implementation affect the trade-off. Measure the target workload rather than converting one classroom picture into an unconditional key-generation rule.\n\n## Distinguish logical order from physical placement\n\nLinked leaves provide logical key order. They need not occupy consecutive disk addresses, and growing the table can alter physical placement. An ordered range scan therefore should not be described as guaranteed sequential physical input/output on every storage device. The database buffer pool can satisfy some accesses without disk reads at all.\n\nLikewise, an index does not make an unordered SQL result contractually sorted. Use the required outer ORDER BY even when a particular plan currently walks leaves in the desired order. Reverse scans, alternate access paths, parallel operators or later query changes can affect observed order. The SQL output contract belongs in the statement, while the tree explains one way an implementation might satisfy it efficiently.\n\n## Study duplicates, comparison rules and selective access\n\nA nonunique index can contain many equal search values. The implementation needs a stable way to distinguish entries, commonly involving row identity in the full stored key. A range on a highly repeated value may visit a large fraction of the data. High fanout improves navigation, but it cannot make producing a large matching population free.\n\nText keys are ordered using their defined comparison rules, including collation. A change to collation or an expression around an indexed column can change which access paths are useful and which values compare equal. Null handling also follows the engine's index and SQL comparison semantics. Learn the structural model first, then inspect these concrete rules before predicting a plan from a column name alone.\n\n## Relate fanout to height without promising constant cost\n\nFor a simplified fully populated model with fanout one hundred, one internal level can direct a search to roughly one hundred children and another to roughly ten thousand descendants. This multiplication explains why a large tree can remain shallow. Real occupancy is lower and key widths vary, so derive an estimate from declared assumptions rather than present those figures as observed InnoDB measurements.\n\nA cached root also does not make all operations constant time. Increasing the number of qualifying entries increases leaf and output work, and a new level can add another navigation step. Concurrent latches, visibility checks and storage latency add costs outside the textbook comparison count. Explain which part of the operation a height estimate models and which parts it omits. That habit prevents a useful structural argument from becoming a misleading end-to-end performance promise.\n\n## Practice navigation and maintenance reasoning\n\nFor a first exercise, use the three-leaf table to locate twenty-seven, thirty-five and the interval eleven through forty. The solutions are a successful middle-leaf lookup, an absent middle-leaf key and the ordered sequence eleven, eighteen, twenty, twenty-seven, thirty-three, forty. Explain the initial route and every leaf transition, rather than merely listing the final numbers.\n\nFor a second exercise, suppose a full middle leaf receives key twenty-five. Draw one valid split, choose a separator consistent with your routing convention and reconnect the leaf chain. One solution assumes leaf capacity three and root capacity four children: split the updated middle leaf into twenty, twenty-five and twenty-seven, thirty-three, use root separators twenty, twenty-seven, forty, and reconnect the ordered leaf chain. Different occupancy policies can produce different legal pictures. Then explain why all leaves remain at equal depth even if the root changes.\n\nA SQL SELECT result alone cannot prove page splitting, tree height or physical placement. Those questions require an approved engine inspection or performance lab. Continue with [B trees](/learning/dbms-sql-tutorial/b-tree), [clustered indexes](/learning/dbms-sql-tutorial/clustered-index), [covering indexes](/learning/dbms-sql-tutorial/covering-index) and [composite indexes](/learning/dbms-sql-tutorial/composite-index). Tie every claimed benefit to navigation, qualifying entries or avoided row fetches.",
+  "references": [
+    {
+      "title": "MySQL clustered and secondary indexes",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/innodb-index-types.html"
+    },
+    {
+      "title": "MySQL physical structure of an InnoDB index",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/innodb-physical-structure.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-20-b-plus-tree",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-20-b-plus-tree-1",
+          "test_id": "pt-dbms-sql-20-b-plus-tree",
+          "question_text": "What is the defining structural difference between a B+ Tree and a plain B-Tree?",
+          "options": [
+            "A B+ Tree has no root node",
+            "In a B+ Tree, all data pointers live only in leaf nodes, while internal nodes hold keys purely for navigation",
+            "A B+ Tree cannot be balanced",
+            "A B+ Tree stores data in random order"
+          ],
+          "correct_index": 1,
+          "explanation": "This is the core distinction: B+ Tree internal nodes are pure navigation aids, while ALL data pointers live in leaves.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-20-b-plus-tree-2",
+          "test_id": "pt-dbms-sql-20-b-plus-tree",
+          "question_text": "What additional feature do B+ Tree leaf nodes have that plain B-Tree leaves typically do not?",
+          "options": [
+            "They are compressed using a hash function",
+            "They are linked together in a chain (e.g., a linked list) in sorted order",
+            "They store data out of order",
+            "They are duplicated across every level of the tree"
+          ],
+          "correct_index": 1,
+          "explanation": "B+ Tree leaves are linked together, letting the engine walk sequentially across them for range scans.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-20-b-plus-tree-3",
+          "test_id": "pt-dbms-sql-20-b-plus-tree",
+          "question_text": "Why is a B+ Tree particularly efficient for a query like `WHERE gpa BETWEEN 3.0 AND 3.5`?",
+          "options": [
+            "Because BETWEEN queries never use indexes",
+            "Because after locating the starting leaf, the engine can walk the linked leaf chain to collect the rest of the range without re-traversing the tree",
+            "Because B+ Trees convert ranges into hash lookups",
+            "Because internal nodes store the full row data for ranges"
+          ],
+          "correct_index": 1,
+          "explanation": "The linked leaf chain lets a range scan proceed sequentially once the start point is found, avoiding repeated top-down traversals.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-20-b-plus-tree-4",
+          "test_id": "pt-dbms-sql-20-b-plus-tree",
+          "question_text": "In the textbook B+ tree model, what do internal nodes contain?",
+          "options": [
+            "Separator keys and child-page pointers; row payload is stored in leaves.",
+            "The full row data for every record",
+            "A random sample of leaf keys",
+            "Nothing; internal nodes are empty placeholders"
+          ],
+          "correct_index": 0,
+          "explanation": "Navigation requires child pointers; absence of row payload does not mean absence of all pointers.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-20-b-plus-tree-5",
+          "test_id": "pt-dbms-sql-20-b-plus-tree",
+          "question_text": "Which database index structure is more commonly used in practice for general-purpose indexing: plain B-Tree or B+ Tree?",
+          "options": [
+            "Plain B-Tree, because it is simpler",
+            "B+ Tree, because its linked leaves make range scans efficient in addition to fast equality lookups",
+            "Neither; hash indexes are always used instead",
+            "They are used with exactly equal frequency in all engines"
+          ],
+          "correct_index": 1,
+          "explanation": "Nearly every mainstream relational database's default index (PostgreSQL btree, MySQL InnoDB, SQL Server) is actually a B+ Tree variant.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-20-b-plus-tree-6",
+          "test_id": "pt-dbms-sql-20-b-plus-tree",
+          "question_text": "Why might a B+ Tree end up shallower than an equivalent plain B-Tree over the same data?",
+          "options": [
+            "Because B+ Tree leaves store no data at all",
+            "Its internal separator keys and child-page pointers can omit full row payload, allowing higher fanout under comparable page assumptions.",
+            "Because B+ Trees are always stored entirely in RAM",
+            "Because B+ Trees skip the balancing step"
+          ],
+          "correct_index": 1,
+          "explanation": "Compact routing entries may fit more children per page; actual height depends on key width, occupancy and implementation.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-20-b-plus-tree-7",
+          "test_id": "pt-dbms-sql-20-b-plus-tree",
+          "question_text": "A query needs `ORDER BY gpa` with no other filter. How can a B+ Tree index on gpa help?",
+          "options": [
+            "It cannot help with ORDER BY at all",
+            "Walking the linked leaf chain in order can satisfy the sort without a separate sorting step",
+            "It requires converting the index to a hash index first",
+            "ORDER BY always ignores indexes"
+          ],
+          "correct_index": 1,
+          "explanation": "Since B+ Tree leaves are linked in sorted key order, an in-order leaf walk directly produces sorted output.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-20-b-plus-tree-8",
+          "test_id": "pt-dbms-sql-20-b-plus-tree",
+          "question_text": "True or false: in a B+ Tree, a key value used for navigation in an internal node is often also duplicated in a leaf node.",
+          "options": [
+            "False, keys never repeat across levels",
+            "True, this redundancy is intentional and supports the self-sufficient leaf chain",
+            "False, internal nodes and leaf nodes never share any keys",
+            "True, but only in hash indexes"
+          ],
+          "correct_index": 1,
+          "explanation": "It's normal and by design for a signpost key in an internal node to also appear in a leaf, since leaves must independently hold the full sorted data.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-20-b-plus-tree-c-new-1",
+          "test_id": "pt-dbms-sql-20-b-plus-tree",
+          "question_text": "Which pointer must an internal B+ tree node contain?",
+          "options": [
+            "Child-page pointers",
+            "Email addresses",
+            "Every full application row",
+            "Only the final SQL result"
+          ],
+          "correct_index": 0,
+          "explanation": "Internal nodes route searches to their children.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-20-b-plus-tree-c-new-2",
+          "test_id": "pt-dbms-sql-20-b-plus-tree",
+          "question_text": "Where does search for an absent key35 go in the example?",
+          "options": [
+            "Directly to key40 as an exact match",
+            "The20-through39 leaf, then reports absence",
+            "Every leaf must be read",
+            "It inserts35 automatically"
+          ],
+          "correct_index": 1,
+          "explanation": "Routing finds the possible interval, not proof that the entry exists.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-20-b-plus-tree-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-20-b-plus-tree-c-new-3",
+          "test_id": "pt-dbms-sql-20-b-plus-tree-application",
+          "question_text": "Which keys fall in the illustrated inclusive range18 through46?",
+          "options": [
+            "18 and46 only",
+            "Every integer from 18 to46",
+            "18, 20, 27, 33, 40, 46",
+            "4, 11, 52"
+          ],
+          "correct_index": 2,
+          "explanation": "The scan returns existing entries within both bounds.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-20-b-plus-tree-c-new-4",
+          "test_id": "pt-dbms-sql-20-b-plus-tree-application",
+          "question_text": "Does equal leaf depth mean every page is full?",
+          "options": [
+            "Yes, always",
+            "Only for text keys",
+            "Only after SELECT",
+            "No"
+          ],
+          "correct_index": 3,
+          "explanation": "Balance describes depth; occupancy is a separate invariant.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-20-b-plus-tree-c-new-5",
+          "test_id": "pt-dbms-sql-20-b-plus-tree-application",
+          "question_text": "What can a full leaf insertion require?",
+          "options": [
+            "A split and parent separator update",
+            "Dropping every index",
+            "Changing SQL NULL into zero",
+            "Copying all data into the root"
+          ],
+          "correct_index": 0,
+          "explanation": "Splits preserve ordering and can propagate upward.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-20-b-plus-tree-c-new-6",
+          "test_id": "pt-dbms-sql-20-b-plus-tree-application",
+          "question_text": "Where are InnoDB clustered row records stored?",
+          "options": [
+            "Only in the root",
+            "At clustered-index leaves",
+            "Only in client memory",
+            "In a separate email queue"
+          ],
+          "correct_index": 1,
+          "explanation": "The clustered leaf contains row data rather than just a secondary locator.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-20-b-plus-tree-c-new-7",
+          "test_id": "pt-dbms-sql-20-b-plus-tree-application",
+          "question_text": "What can a secondary lookup need when label is not covered?",
+          "options": [
+            "No record access ever",
+            "A guaranteed full backup",
+            "A clustered lookup using primary-key information",
+            "An automatic schema migration"
+          ],
+          "correct_index": 2,
+          "explanation": "Secondary entries lead to clustered records for additional columns.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-20-b-plus-tree-c-new-8",
+          "test_id": "pt-dbms-sql-20-b-plus-tree-application",
+          "question_text": "Why can a wider primary key enlarge secondary indexes?",
+          "options": [
+            "It changes every label into binary",
+            "It disables leaf links",
+            "Only root pages store primary keys",
+            "Primary-key columns are carried in secondary entries"
+          ],
+          "correct_index": 3,
+          "explanation": "Larger per-entry payload reduces density or increases storage.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-20-b-plus-tree-c-new-9",
+          "test_id": "pt-dbms-sql-20-b-plus-tree-application",
+          "question_text": "Do linked leaves guarantee adjacent disk addresses?",
+          "options": [
+            "No; the chain describes logical key order",
+            "Yes on all storage",
+            "Only for integer keys",
+            "Only when the root has three children"
+          ],
+          "correct_index": 0,
+          "explanation": "Physical placement and caching are implementation concerns.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-20-b-plus-tree-c-new-10",
+          "test_id": "pt-dbms-sql-20-b-plus-tree-application",
+          "question_text": "Does a B+ index remove the need for an outer ORDER BY?",
+          "options": [
+            "Yes for every query",
+            "No",
+            "Only for ascending names",
+            "Only with no WHERE"
+          ],
+          "correct_index": 1,
+          "explanation": "SQL ordering must be requested explicitly.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-20-b-plus-tree-c-new-11",
+          "test_id": "pt-dbms-sql-20-b-plus-tree-application",
+          "question_text": "Can a highly repeated indexed value still require many row visits?",
+          "options": [
+            "No; all matches collapse into one",
+            "Only when the index is corrupt",
+            "Yes; navigation does not eliminate qualifying output work",
+            "Only for absent values"
+          ],
+          "correct_index": 2,
+          "explanation": "Selectivity affects how much of the indexed population qualifies.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-20-b-plus-tree-c-new-12",
+          "test_id": "pt-dbms-sql-20-b-plus-tree-application",
+          "question_text": "What does depot_id equality help with in (depot_id, asset_id)?",
+          "options": [
+            "It globally sorts only asset_id",
+            "It guarantees a specific plan",
+            "It deletes other depots",
+            "It fixes the leading group so asset bounds form a useful interval"
+          ],
+          "correct_index": 3,
+          "explanation": "Composite ordering follows the leading key before later keys.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [],
+  "coding_not_applicable": "Tree routing, page splitting and payload organization require explicit structural traces or approved engine inspection; result-only SQL exercises cannot establish these physical properties. Two worked navigation/split exercises are included in the prose.",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-20-b-plus-tree-1",
+      "test_id": "pt-dbms-sql-20-b-plus-tree",
+      "question_text": "What is the defining structural difference between a B+ Tree and a plain B-Tree?",
+      "options": [
+        "A B+ Tree has no root node",
+        "In a B+ Tree, all data pointers live only in leaf nodes, while internal nodes hold keys purely for navigation",
+        "A B+ Tree cannot be balanced",
+        "A B+ Tree stores data in random order"
+      ],
+      "correct_index": 1,
+      "explanation": "This is the core distinction: B+ Tree internal nodes are pure navigation aids, while ALL data pointers live in leaves.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-20-b-plus-tree-2",
+      "test_id": "pt-dbms-sql-20-b-plus-tree",
+      "question_text": "What additional feature do B+ Tree leaf nodes have that plain B-Tree leaves typically do not?",
+      "options": [
+        "They are compressed using a hash function",
+        "They are linked together in a chain (e.g., a linked list) in sorted order",
+        "They store data out of order",
+        "They are duplicated across every level of the tree"
+      ],
+      "correct_index": 1,
+      "explanation": "B+ Tree leaves are linked together, letting the engine walk sequentially across them for range scans.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-20-b-plus-tree-3",
+      "test_id": "pt-dbms-sql-20-b-plus-tree",
+      "question_text": "Why is a B+ Tree particularly efficient for a query like `WHERE gpa BETWEEN 3.0 AND 3.5`?",
+      "options": [
+        "Because BETWEEN queries never use indexes",
+        "Because after locating the starting leaf, the engine can walk the linked leaf chain to collect the rest of the range without re-traversing the tree",
+        "Because B+ Trees convert ranges into hash lookups",
+        "Because internal nodes store the full row data for ranges"
+      ],
+      "correct_index": 1,
+      "explanation": "The linked leaf chain lets a range scan proceed sequentially once the start point is found, avoiding repeated top-down traversals.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-20-b-plus-tree-4",
+      "test_id": "pt-dbms-sql-20-b-plus-tree",
+      "question_text": "In a B+ Tree, what do internal (non-leaf) nodes contain?",
+      "options": [
+        "Only keys used for navigation, no actual data pointers",
+        "The full row data for every record",
+        "A random sample of leaf keys",
+        "Nothing; internal nodes are empty placeholders"
+      ],
+      "correct_index": 0,
+      "explanation": "Internal nodes in a B+ Tree hold only navigational keys; actual data pointers are confined to leaves.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-20-b-plus-tree-5",
+      "test_id": "pt-dbms-sql-20-b-plus-tree",
+      "question_text": "Which database index structure is more commonly used in practice for general-purpose indexing: plain B-Tree or B+ Tree?",
+      "options": [
+        "Plain B-Tree, because it is simpler",
+        "B+ Tree, because its linked leaves make range scans efficient in addition to fast equality lookups",
+        "Neither; hash indexes are always used instead",
+        "They are used with exactly equal frequency in all engines"
+      ],
+      "correct_index": 1,
+      "explanation": "Nearly every mainstream relational database's default index (PostgreSQL btree, MySQL InnoDB, SQL Server) is actually a B+ Tree variant.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-20-b-plus-tree-6",
+      "test_id": "pt-dbms-sql-20-b-plus-tree",
+      "question_text": "Why might a B+ Tree end up shallower than an equivalent plain B-Tree over the same data?",
+      "options": [
+        "Because B+ Tree leaves store no data at all",
+        "Because internal nodes hold only keys (no data pointers), so they can be more compact and fit more keys per node, increasing branching factor",
+        "Because B+ Trees are always stored entirely in RAM",
+        "Because B+ Trees skip the balancing step"
+      ],
+      "correct_index": 1,
+      "explanation": "Lighter internal nodes (keys only) can pack in more entries per node, which can increase the branching factor and reduce overall depth.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-20-b-plus-tree-7",
+      "test_id": "pt-dbms-sql-20-b-plus-tree",
+      "question_text": "A query needs `ORDER BY gpa` with no other filter. How can a B+ Tree index on gpa help?",
+      "options": [
+        "It cannot help with ORDER BY at all",
+        "Walking the linked leaf chain in order can satisfy the sort without a separate sorting step",
+        "It requires converting the index to a hash index first",
+        "ORDER BY always ignores indexes"
+      ],
+      "correct_index": 1,
+      "explanation": "Since B+ Tree leaves are linked in sorted key order, an in-order leaf walk directly produces sorted output.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-20-b-plus-tree-8",
+      "test_id": "pt-dbms-sql-20-b-plus-tree",
+      "question_text": "True or false: in a B+ Tree, a key value used for navigation in an internal node is often also duplicated in a leaf node.",
+      "options": [
+        "False, keys never repeat across levels",
+        "True, this redundancy is intentional and supports the self-sufficient leaf chain",
+        "False, internal nodes and leaf nodes never share any keys",
+        "True, but only in hash indexes"
+      ],
+      "correct_index": 1,
+      "explanation": "It's normal and by design for a signpost key in an internal node to also appear in a leaf, since leaves must independently hold the full sorted data.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "/root/content_c",
+    "independent_review": "passed",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Independent manual content review passed within independent_review_scope; engine/browser/release gates separate.",
+    "canonical_answer_indices_preserved": true,
+    "editorial_record": "Original explanations, examples and scenarios; external originality clearance and AdSense review unperformed.",
+    "independent_reviewer": "/root",
+    "independent_review_scope": "Full notes,20MCQs/options/explanations,diagram and routing/split exercises. Recomputed range18..46 and absent35; child pointers/row payload,clustered/secondary entries,logical versus physical order and fanout sound after corrected inherited wording and explicit split solution. Manual editorial/fixture reasoning only; SQL engine,browser,originality and AdSense verification separate."
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-20-b-plus-tree",
+    "original_note_sha256": "c2fa2873eee617d85b9ccb6ad91e4fe5b6b347942d821175655dada81e6ec1ab",
+    "status": "drafted; not included in prepared paired migrations"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "A routed range across linked leaves",
+      "description": "The search descends once to the lower bound, then advances through ordered neighboring leaves.",
+      "columns": [
+        "Page role",
+        "Keys or separators",
+        "Next action"
+      ],
+      "rows": [
+        [
+          "Root",
+          "20 and40",
+          "Choose a child interval"
+        ],
+        [
+          "Left leaf",
+          "4, 11, 18",
+          "Follow middle link"
+        ],
+        [
+          "Middle leaf",
+          "20, 27, 33",
+          "Follow right link"
+        ],
+        [
+          "Right leaf",
+          "40, 46, 52",
+          "Stop after the upper bound"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "technical_review": "author self-review",
+    "server_rendering": "unverified",
+    "browser_rendering": "unverified"
+  },
+  "authoring_status": "drafted; verification pending"
+}

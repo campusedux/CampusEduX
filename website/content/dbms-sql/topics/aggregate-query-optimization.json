@@ -1,0 +1,569 @@
+{
+  "source_ref": "chapter-15-group-by-and-aggregation/aggregate-query-optimization",
+  "slug": "aggregate-query-optimization",
+  "title": "Aggregate Query Optimization",
+  "description": "Optimize SQL aggregates by preserving fact grain, filtering precise populations, avoiding join inflation and checking plans against representative workloads.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Optimize a well-defined aggregate\n\nAn aggregate query reduces many facts into counts, totals or other summaries. Optimization should reduce the work needed to obtain the required summary while preserving its population, grouping grain and missing-value semantics. A faster number is not useful if it counts the wrong events. Begin with a small correct result and a written definition of what one input fact and one output row mean.\n\nReview [GROUP BY](/learning/dbms-sql-tutorial/group-by), [WHERE versus HAVING](/learning/dbms-sql-tutorial/where-vs-having) and [composite index](/learning/dbms-sql-tutorial/composite-index). The examples describe MySQL 8.4. Access-path choices depend on the engine, statistics and data distribution. The presence of an index is evidence of an available structure, not a guarantee that every query should use it.\n\n## Remove ineligible facts before grouping\n\nSuppose each row in ticket_sales represents one sale, with event_id, sold_at, status and amount. A report needs posted revenue by event during April. Restricting the date range and status in WHERE reduces the eligible population before grouping. A condition on the completed total belongs in HAVING because it asks which resulting events qualify.\n\n```sql\nSELECT event_id, SUM(amount) AS posted_total\nFROM ticket_sales\nWHERE status = 'posted'\n  AND sold_at >= '2026-04-01 00:00:00'\n  AND sold_at <  '2026-05-01 00:00:00'\nGROUP BY event_id\nORDER BY event_id;\n```\n\nThe half-open date range includes April's start and excludes May's start. It handles fractional timestamps without guessing the last instant of April. Wrapping sold_at in a month-name function can make an ordinary range access harder and can accidentally mix years. Keep the intended calendar and time-zone boundary policy explicit before discussing index efficiency.\n\n## Preserve the fact grain through joins\n\nJoining a sale to multiple tags repeats its amount once per matching tag. Aggregating afterward can inflate revenue even though every join predicate is valid. If tags only determine eligibility, an EXISTS condition can express that decision without projecting one row per tag. If tag-level output is required, decide how revenue should be attributed across tags rather than silently counting it several times.\n\nPre-aggregation is useful when a many-side relation can first be summarized to the key needed by the next join. For example, calculate per-event sales totals before joining each event to a one-row event catalogue. Verify that the catalogue key is unique. Pre-aggregating the wrong key or joining the summary to several catalogue matches can still multiply the result.\n\n## Do not replace identities with equal measures\n\nSUM(DISTINCT amount) deduplicates amounts, not sales. Two legitimate sales of fifty units should contribute one hundred, while two appearances of the same sale after a tag join should contribute fifty. Those situations can look identical when only the amount is inspected. Preserve or reconstruct fact identity instead of using coincidental equality as a substitute.\n\nThe same caution applies to counting. COUNT(*) counts input rows, COUNT(amount) counts known values and COUNT(DISTINCT sale_id) counts distinct nonnull sale identities. These are different measures. A performance rewrite must not replace one with another unless the data constraints and task definition establish their equivalence for every permitted input.\n\n## Choose an index that matches the actual search\n\nA composite index beginning with an equality-constrained status and then a date can help locate posted facts in a date range. Whether that is preferable to another order depends on the workload and selectivity. A range on one index component can limit how later components participate in narrowing the search. Do not memorize a universal order without inspecting the predicates.\n\nGrouping by event_id does not automatically mean event_id must lead every index. A selective month filter may eliminate most rows, while a broad report may benefit from a different scan. Adding amount to an index can make it cover a particular query, but increases index size and write cost. Measure the complete workload rather than optimizing one screenshot in isolation.\n\n## Understand grouping work and sorting work\n\nGROUP BY defines groups; ORDER BY defines requested output order. Do not rely on grouping to supply stable ordering. An engine may use an index, temporary structures or another strategy to implement grouping. Asking for an extra sort can add work, but removing ORDER BY is only valid when the consumer does not require that order.\n\nMySQL has specialized grouping optimizations for certain index-compatible query forms. Those forms have specific prerequisites and do not imply that every SUM grouped by an indexed column avoids scanning the contributing facts. Summing arbitrary values generally requires accounting for all values in the specified population. Treat claims of reading only one arbitrary row per group with suspicion.\n\n## Read plans as evidence with limits\n\nEXPLAIN describes the optimizer's chosen plan and estimates. EXPLAIN ANALYZE executes the statement to provide observed timing and row information. That distinction matters on large or sensitive workloads: an execution-based diagnostic has actual operational cost. Until the plan is observed on the intended engine with representative data and parameters, proposed access paths remain hypotheses to verify.\n\nCompare estimated and observed rows where a safe representative environment permits it. Large disagreements can suggest stale statistics or skewed data. A report for a rare event may behave differently from one for the most popular event. Keep parameters and input volumes with the measurements so future reviewers can tell whether an improvement generalizes.\n\n## Avoid scanning facts repeatedly for sibling measures\n\nA query may need posted_count, known_amount_count and posted_total over the same eligible rows. Calculate compatible measures in one grouped pass when the semantics align, rather than issuing a separate correlated subquery for each measure. Conditional aggregation can also produce several categories from one population, provided null and zero policies are explicit.\n\nCombining measures is not permission to mix incompatible populations. For example, a count of all sales and a total of posted sales can coexist only if the query intentionally represents both eligibility rules. Name the outputs clearly and test unposted facts. A compact query that hides those differences is harder to maintain than a slightly longer query with a clear reporting contract.\n\n## Consider summaries only with a freshness contract\n\nA stored daily summary can avoid repeated raw-fact aggregation, but introduces update and correction responsibilities. Late sales, refunds and status changes can alter an earlier day. The design must specify how those changes reach the summary, what readers may observe during refresh and how the result can be reconciled against source facts.\n\nMySQL does not supply a generic native materialized-view feature equivalent to every other database's implementation. A manually maintained summary is an application and database design decision, not a free optimizer switch. This topic does not create such structures or alter production data. Learn the trade-off before proposing a separate high-risk migration or refresh process.\n\n## Test semantic boundaries before celebrating speed\n\nUse fixtures containing repeated equal amounts, several tags on one fact, a null amount, an unposted fact and dates at both range boundaries. Compare both output identities and measures. A total alone can accidentally match despite incorrect grouping, so check per-event rows and completeness counts as well.\n\nAfter semantic agreement, benchmark representative volume and concurrent workload without claiming certainty from a tiny fixture. Preserve access checks and tenant filters in every candidate query. Record the SQL, data assumptions and measurement environment. Those habits turn an optimization from an appealing guess into a repeatable engineering conclusion with clearly stated limits.\n\n## Separate correctness checks from performance experiments\n\nThe two exercises deliberately contain only a few rows. They can verify the shape of a monthly population and the relationship between row counts, known-value counts and totals. They cannot show that one index order is faster on a large server. Those are different evidence levels, and recording the distinction keeps a successful example from becoming an unsupported performance claim.\n\nWhen comparing candidates later, keep the returned column names, numeric types and ordering contract stable as well as the numbers. A client may depend on a nullable raw total to distinguish unknown observations from zero. An optimization that wraps every missing sum in zero can break that interpretation even when a dashboard looks cleaner. Preserve the consumer contract while reducing unnecessary database work.\n",
+  "references": [
+    {
+      "title": "Primary reference",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/group-by-optimization.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-15-aggregate-query-optimization",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-15-aggregate-query-optimization-1",
+          "test_id": "pt-dbms-sql-15-aggregate-query-optimization",
+          "question_text": "What must an aggregate optimization preserve?",
+          "options": [
+            "Only the query length",
+            "Population and output grain",
+            "Only the caption",
+            "Only the index name"
+          ],
+          "correct_index": 1,
+          "explanation": "A faster query is valid only when it still answers the defined question.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-15-aggregate-query-optimization-2",
+          "test_id": "pt-dbms-sql-15-aggregate-query-optimization",
+          "question_text": "Where does posted-only eligibility belong?",
+          "options": [
+            "ORDER BY alone",
+            "WHERE before aggregation",
+            "A display caption",
+            "An arbitrary selected column"
+          ],
+          "correct_index": 1,
+          "explanation": "Status can be decided for an individual fact before computing totals.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-15-aggregate-query-optimization-3",
+          "test_id": "pt-dbms-sql-15-aggregate-query-optimization",
+          "question_text": "Why use an exclusive next-month boundary?",
+          "options": [
+            "It removes every midnight",
+            "It covers the month without guessing final fractional precision",
+            "It includes all future dates",
+            "It changes the stored timezone"
+          ],
+          "correct_index": 1,
+          "explanation": "A half-open range includes the start and excludes the next period's start.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-15-aggregate-query-optimization-4",
+          "test_id": "pt-dbms-sql-15-aggregate-query-optimization",
+          "question_text": "What can a one-to-many tag join do to SUM?",
+          "options": [
+            "Automatically deduplicate identities",
+            "Repeat a sale's amount",
+            "Make every total null",
+            "Prove authorization"
+          ],
+          "correct_index": 1,
+          "explanation": "Each matching tag can produce another appearance of the same fact.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-15-aggregate-query-optimization-5",
+          "test_id": "pt-dbms-sql-15-aggregate-query-optimization",
+          "question_text": "What does SUM(DISTINCT amount) deduplicate?",
+          "options": [
+            "Sale identities",
+            "Equal amount values",
+            "Tag identities",
+            "Workshop permissions"
+          ],
+          "correct_index": 1,
+          "explanation": "Two separate sales can share an amount and must still contribute separately.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-15-aggregate-query-optimization-6",
+          "test_id": "pt-dbms-sql-15-aggregate-query-optimization",
+          "question_text": "Which predicate can test tag eligibility without projecting tag multiplicity?",
+          "options": [
+            "An unrestricted cross join",
+            "EXISTS",
+            "ORDER BY amount",
+            "A renamed amount alias"
+          ],
+          "correct_index": 1,
+          "explanation": "Existence is a Boolean decision for each outer fact.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-15-aggregate-query-optimization-7",
+          "test_id": "pt-dbms-sql-15-aggregate-query-optimization",
+          "question_text": "Which count measures known amounts?",
+          "options": [
+            "COUNT(*) always",
+            "COUNT(amount)",
+            "SUM(amount)",
+            "MAX(sale_id)"
+          ],
+          "correct_index": 1,
+          "explanation": "COUNT of an expression ignores its null values.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-15-aggregate-query-optimization-8",
+          "test_id": "pt-dbms-sql-15-aggregate-query-optimization",
+          "question_text": "Does an available index guarantee optimizer use?",
+          "options": [
+            "Yes for every report",
+            "No",
+            "Only if its name contains sales",
+            "Only after sorting"
+          ],
+          "correct_index": 1,
+          "explanation": "The chosen plan depends on selectivity, statistics and costs.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-15-aggregate-query-optimization-new-9",
+          "test_id": "pt-dbms-sql-15-aggregate-query-optimization",
+          "question_text": "What does GROUP BY guarantee about output sorting?",
+          "options": [
+            "No requested order by itself",
+            "Always ascending identity order",
+            "Always descending total",
+            "Insertion order"
+          ],
+          "correct_index": 0,
+          "explanation": "ORDER BY is needed when a stable output order is part of the task.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-15-aggregate-query-optimization-new-10",
+          "test_id": "pt-dbms-sql-15-aggregate-query-optimization",
+          "question_text": "What does EXPLAIN ANALYZE do?",
+          "options": [
+            "Only rename indexes",
+            "Execute and observe the statement",
+            "Only display comments",
+            "Never run the query"
+          ],
+          "correct_index": 1,
+          "explanation": "Execution-based diagnostics have operational cost and require a suitable environment.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-15-aggregate-query-optimization-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-15-aggregate-query-optimization-application-new-1",
+          "test_id": "pt-dbms-sql-15-aggregate-query-optimization-application",
+          "question_text": "Why retain benchmark parameters?",
+          "options": [
+            "To grant more privileges",
+            "To suppress nulls",
+            "To make the workload and results interpretable",
+            "To force all indexes"
+          ],
+          "correct_index": 2,
+          "explanation": "Rare and popular parameters can produce different access paths and runtimes.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-15-aggregate-query-optimization-application-new-2",
+          "test_id": "pt-dbms-sql-15-aggregate-query-optimization-application",
+          "question_text": "What can compatible measures share?",
+          "options": [
+            "An arbitrary different tenant",
+            "A guessed total",
+            "A missing identity",
+            "One grouped input population"
+          ],
+          "correct_index": 3,
+          "explanation": "Sibling counts and sums can be computed together when their eligibility rules align.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-15-aggregate-query-optimization-application-new-3",
+          "test_id": "pt-dbms-sql-15-aggregate-query-optimization-application",
+          "question_text": "What is a risk of a wider covering index?",
+          "options": [
+            "More storage and write maintenance",
+            "Guaranteed slower reads only",
+            "Automatic data deletion",
+            "Loss of every primary key"
+          ],
+          "correct_index": 0,
+          "explanation": "Extra indexed columns consume space and must be maintained on relevant writes.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-15-aggregate-query-optimization-application-new-4",
+          "test_id": "pt-dbms-sql-15-aggregate-query-optimization-application",
+          "question_text": "Can pre-aggregation still be multiplied by a later join?",
+          "options": [
+            "No because groups are immutable",
+            "Yes if the next relation has multiple matches",
+            "Only when sums are zero",
+            "Only without an alias"
+          ],
+          "correct_index": 1,
+          "explanation": "A summary row can still join to several downstream records.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-15-aggregate-query-optimization-application-new-5",
+          "test_id": "pt-dbms-sql-15-aggregate-query-optimization-application",
+          "question_text": "What does COUNT(*) count after a multiplying join?",
+          "options": [
+            "Original sales automatically",
+            "Only nonnull amounts",
+            "Joined input appearances",
+            "Only distinct events"
+          ],
+          "correct_index": 2,
+          "explanation": "COUNT(*) measures the actual current row grain.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-15-aggregate-query-optimization-application-new-6",
+          "test_id": "pt-dbms-sql-15-aggregate-query-optimization-application",
+          "question_text": "Does every grouped SUM use a one-row-per-group shortcut?",
+          "options": [
+            "Yes if the key is indexed",
+            "Only if totals are positive",
+            "Only with ORDER BY",
+            "No"
+          ],
+          "correct_index": 3,
+          "explanation": "General totals must account for every contributing value; specialized shortcuts have prerequisites.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-15-aggregate-query-optimization-application-new-7",
+          "test_id": "pt-dbms-sql-15-aggregate-query-optimization-application",
+          "question_text": "What does a stored summary require?",
+          "options": [
+            "A correction and freshness policy",
+            "No reconciliation ever",
+            "Only a table caption",
+            "Automatic perfect consistency"
+          ],
+          "correct_index": 0,
+          "explanation": "Late changes and refresh timing can make summaries disagree with current source facts.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-15-aggregate-query-optimization-application-new-8",
+          "test_id": "pt-dbms-sql-15-aggregate-query-optimization-application",
+          "question_text": "What should a date fixture include?",
+          "options": [
+            "Only noon timestamps",
+            "Both range boundaries",
+            "Only one month name",
+            "Only current clock output"
+          ],
+          "correct_index": 1,
+          "explanation": "Boundary facts reveal accidental inclusion of the next period or exclusion of the start.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-15-aggregate-query-optimization-application-new-9",
+          "test_id": "pt-dbms-sql-15-aggregate-query-optimization-application",
+          "question_text": "Why compare per-event rows as well as a grand total?",
+          "options": [
+            "A grand total always proves all keys",
+            "Rows are unnecessary in SQL",
+            "Incorrect grouping can hide behind equal overall totals",
+            "Sorting grants access"
+          ],
+          "correct_index": 2,
+          "explanation": "Measures can cancel or aggregate plausibly while being assigned to the wrong groups.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-15-aggregate-query-optimization-application-new-10",
+          "test_id": "pt-dbms-sql-15-aggregate-query-optimization-application",
+          "question_text": "What supports a claim that an aggregate query is faster for a workload?",
+          "options": [
+            "A shorter SQL statement alone",
+            "The presence of any index",
+            "One tiny fixture with an equal result",
+            "Equivalent results plus measured execution on representative data and parameters"
+          ],
+          "correct_index": 3,
+          "explanation": "Correctness comparisons establish equivalent answers; reproducible measurements establish performance only within the tested workload.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cx-aggregate-optimization-monthly-population",
+      "slug": "aggregate-optimization-monthly-population",
+      "title": "Summarize posted April sales",
+      "difficulty": "Easy",
+      "task": "Return event_id,posted_total for posted April 2026 sales. Preserve legitimate equal amounts. Order by event_id.",
+      "schema_sql": "CREATE TABLE ticket_sales(sale_id INT PRIMARY KEY,event_id INT NOT NULL,sold_at DATETIME NOT NULL,status VARCHAR(10) NOT NULL,amount INT NULL);",
+      "seed_sql": "INSERT INTO ticket_sales VALUES (1,1,'2026-04-01','posted',50),(2,1,'2026-04-30 23:59:59','posted',50),(3,1,'2026-05-01','posted',900),(4,2,'2026-04-12','pending',700),(5,2,'2026-04-12','posted',NULL),(6,2,'2026-04-12','posted',20);",
+      "solution_sql": "SELECT event_id,SUM(amount) AS posted_total FROM ticket_sales WHERE status='posted' AND sold_at>='2026-04-01' AND sold_at<'2026-05-01' GROUP BY event_id ORDER BY event_id;",
+      "expected": "event_id\tposted_total\n1\t100\n2\t20",
+      "validation_cases": [
+        {
+          "seed_sql": "",
+          "expected": ""
+        }
+      ],
+      "ordering": "Order by keys explicitly stated in the task.",
+      "constraints": [
+        "Use supplied synthetic data.",
+        "Return only requested columns."
+      ],
+      "edge_cases": [
+        "Repeated equal amounts",
+        "Next-month boundary"
+      ],
+      "hints": [
+        "Use row eligibility and a half-open range before grouping."
+      ],
+      "explanation": "Use row eligibility and a half-open range before grouping."
+    },
+    {
+      "id": "cx-aggregate-optimization-completeness-metrics",
+      "slug": "aggregate-optimization-completeness-metrics",
+      "title": "Report amount completeness by event",
+      "difficulty": "Medium",
+      "task": "Return event_id,sale_count,known_count,posted_total for the same posted April population using compatible grouped measures. Order by event_id.",
+      "schema_sql": "CREATE TABLE ticket_sales(sale_id INT PRIMARY KEY,event_id INT NOT NULL,sold_at DATETIME NOT NULL,status VARCHAR(10) NOT NULL,amount INT NULL);",
+      "seed_sql": "INSERT INTO ticket_sales VALUES (1,1,'2026-04-01','posted',50),(2,1,'2026-04-30 23:59:59','posted',50),(3,1,'2026-05-01','posted',900),(4,2,'2026-04-12','pending',700),(5,2,'2026-04-12','posted',NULL),(6,2,'2026-04-12','posted',20);",
+      "solution_sql": "SELECT event_id,COUNT(*) AS sale_count,COUNT(amount) AS known_count,SUM(amount) AS posted_total FROM ticket_sales WHERE status='posted' AND sold_at>='2026-04-01' AND sold_at<'2026-05-01' GROUP BY event_id ORDER BY event_id;",
+      "expected": "event_id\tsale_count\tknown_count\tposted_total\n1\t2\t2\t100\n2\t2\t1\t20",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO ticket_sales VALUES (1,3,'2026-04-01','posted',NULL);",
+          "expected": "event_id\tsale_count\tknown_count\tposted_total\n3\t1\t0\tNULL"
+        }
+      ],
+      "ordering": "Order by keys explicitly stated in the task.",
+      "constraints": [
+        "Use supplied synthetic data.",
+        "Return only requested columns."
+      ],
+      "edge_cases": [
+        "Unknown amount is not absent sale",
+        "All-null total"
+      ],
+      "hints": [
+        "Compute compatible counts and sums over one clearly defined input."
+      ],
+      "explanation": "Compute compatible counts and sums over one clearly defined input."
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-15-aggregate-query-optimization-1",
+      "test_id": "pt-dbms-sql-15-aggregate-query-optimization",
+      "question_text": "Which of the following is the single most impactful optimization for an aggregate query with a row-level filter condition?",
+      "options": [
+        "Adding ORDER BY to the result",
+        "Pushing the row-level condition into WHERE instead of HAVING, so it filters rows before grouping/aggregation happens",
+        "Always using CUBE instead of GROUP BY",
+        "Removing all indexes before aggregating"
+      ],
+      "correct_index": 1,
+      "explanation": "WHERE eliminates rows before the (more expensive) grouping/aggregation step runs, whereas an equivalent HAVING condition aggregates everything first and then discards groups.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-15-aggregate-query-optimization-2",
+      "test_id": "pt-dbms-sql-15-aggregate-query-optimization",
+      "question_text": "How can an index on the GROUP BY column(s) help an aggregate query?",
+      "options": [
+        "It has no effect on GROUP BY performance",
+        "It can let the engine scan rows in an order matching the grouping columns, potentially avoiding a separate sort/hash step, or quickly skip to relevant rows for a matching WHERE filter",
+        "It automatically rewrites HAVING conditions into WHERE conditions",
+        "It only helps ORDER BY, never GROUP BY"
+      ],
+      "correct_index": 1,
+      "explanation": "A matching index can let the engine read rows already ordered by the grouping columns (streaming aggregation) or quickly locate rows for a filtered WHERE clause, both of which reduce work versus a full scan plus explicit sort/hash.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-15-aggregate-query-optimization-3",
+      "test_id": "pt-dbms-sql-15-aggregate-query-optimization",
+      "question_text": "Why does selecting only the columns actually needed (e.g., region and amount) instead of SELECT * improve an aggregate query's performance?",
+      "options": [
+        "It has no real effect, since aggregation reads the whole table regardless",
+        "It reduces the I/O and memory needed to carry unnecessary column data through the grouping/aggregation step",
+        "It changes the result values returned by SUM",
+        "SELECT * is always forbidden in SQL"
+      ],
+      "correct_index": 1,
+      "explanation": "Narrower row reads and less data carried through grouping directly reduce I/O and memory pressure, even though the final aggregate values are unaffected.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-15-aggregate-query-optimization-4",
+      "test_id": "pt-dbms-sql-15-aggregate-query-optimization",
+      "question_text": "Why is one GROUP BY GROUPING SETS ((region), (product), ()) query generally more efficient than three separate GROUP BY queries combined with UNION ALL?",
+      "options": [
+        "It returns fewer rows",
+        "It lets the engine compute all requested grouping levels from a single logical scan of the base table, instead of one scan per separate query",
+        "UNION ALL is always disallowed with GROUP BY",
+        "GROUPING SETS uses a completely different, faster aggregate algorithm unrelated to scanning"
+      ],
+      "correct_index": 1,
+      "explanation": "GROUPING SETS (and ROLLUP/CUBE) let the engine derive multiple grouping levels from one pass over the base data, avoiding the redundant re-scans that separate UNIONed GROUP BY queries require.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-15-aggregate-query-optimization-5",
+      "test_id": "pt-dbms-sql-15-aggregate-query-optimization",
+      "question_text": "Why should CUBE be used cautiously when grouping by many columns?",
+      "options": [
+        "CUBE only works with exactly two columns",
+        "The number of grouping sets grows as 2^n for n columns, so many columns can generate and aggregate a very large number of groups",
+        "CUBE cannot use indexes at all, unlike ROLLUP",
+        "CUBE always returns incorrect totals with more than 2 columns"
+      ],
+      "correct_index": 1,
+      "explanation": "CUBE's combinatorial growth (2^n grouping sets) means adding columns can rapidly multiply the number of groups the engine must materialize, which can be wasteful if not all combinations are actually needed.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-15-aggregate-query-optimization-6",
+      "test_id": "pt-dbms-sql-15-aggregate-query-optimization",
+      "question_text": "Can an index on the WHERE column speed up a HAVING condition on an aggregate like SUM(amount) > 400?",
+      "options": [
+        "Yes, indexes always speed up HAVING directly",
+        "No — HAVING conditions run against already-computed group aggregates, not raw table rows, so raw-column indexes cannot speed up the HAVING check itself",
+        "Only if the index is a composite index",
+        "Only in MySQL"
+      ],
+      "correct_index": 1,
+      "explanation": "HAVING filters aggregated results after grouping is complete; an index can speed up the underlying scan/grouping (e.g. via WHERE or GROUP BY column ordering) but not the HAVING comparison itself, which operates on already-computed aggregate values.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-15-aggregate-query-optimization-7",
+      "test_id": "pt-dbms-sql-15-aggregate-query-optimization",
+      "question_text": "Does adding LIMIT 5 after a GROUP BY ... HAVING clause generally reduce the amount of aggregation work the engine performs, in the general case?",
+      "options": [
+        "Yes, LIMIT always makes the engine skip aggregating unneeded groups entirely",
+        "Not necessarily — the engine typically still needs to compute (or largely compute) all groups before it can determine which ones satisfy HAVING and rank/limit the output",
+        "LIMIT is disallowed after HAVING",
+        "LIMIT converts HAVING into WHERE automatically"
+      ],
+      "correct_index": 1,
+      "explanation": "In general, the engine must aggregate all groups (and evaluate HAVING) before it knows which rows qualify for the final LIMIT, so LIMIT alone doesn't shortcut the aggregation work the way an earlier WHERE filter can.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-15-aggregate-query-optimization-8",
+      "test_id": "pt-dbms-sql-15-aggregate-query-optimization",
+      "question_text": "Given the guidance in this topic, which query is the better-optimized way to get 'total amount for West orders only'?",
+      "options": [
+        "SELECT region, SUM(amount) FROM orders GROUP BY region HAVING region = 'West';",
+        "SELECT region, SUM(amount) FROM orders WHERE region = 'West' GROUP BY region;",
+        "Both are equally optimized",
+        "Neither is valid SQL"
+      ],
+      "correct_index": 1,
+      "explanation": "The WHERE version filters out non-West rows before any aggregation work happens, avoiding the wasted work of aggregating East/North groups only to discard them via HAVING.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "/root/worker_2",
+    "independent_review": "passed",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "authored; independent review pending",
+    "canonical_answer_indices_preserved": true,
+    "editorial_record": "Original prose and assessments. Seed snapshots and canonical answer indices retained; external originality clearance pending.",
+    "independent_reviewer": "/root",
+    "independent_review_scope": "Full notes,20 MCQs/options/reasoning,both exercise contracts with four sample/alternative fixture predictions and original diagram reviewed. Fact-grain, equal amounts, half-open eligibility and missingness correct; performance claims appropriately conditional. Four portable fixture cases executed under SQLite3.46.1; exact MySQL engine/provider and performance unverified."
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-15-aggregate-query-optimization",
+    "original_note_sha256": "6539a5fb063fb9c9cc0731e232ea45e1c7a1c7936acb6feeb22ad01d9c1c10da",
+    "status": "drafted; not included in prepared paired migrations"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Read fewer eligible facts without changing their meaning",
+      "description": "The same population supports several compatible measures.",
+      "columns": [
+        "Event",
+        "Eligible facts",
+        "Known amounts",
+        "Known total"
+      ],
+      "rows": [
+        [
+          "1",
+          "2",
+          "2",
+          "100"
+        ],
+        [
+          "2",
+          "2",
+          "1",
+          "20"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "technical_review": "coordinator independent manual review passed",
+    "browser_rendering": "unverified",
+    "independent_review": "passed",
+    "server_rendering": "passed",
+    "server_rendering_evidence": "2026-10-29 full Vitest:1310 passed/12 skipped; actual LessonBlock/TopicDiagrams render over230 packages. Browser visual QA remains unverified."
+  },
+  "authoring_status": "drafted; verification pending",
+  "sql_verification": {
+    "scope": "not executed; exact MySQL/provider execution pending",
+    "all_passed": false,
+    "cases": []
+  }
+}

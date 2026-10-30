@@ -1,0 +1,629 @@
+{
+  "source_ref": "chapter-14-sql-functions/string-functions",
+  "slug": "string-functions",
+  "title": "String Functions",
+  "description": "Use MySQL text functions for labels, case, trimming, and replacement; distinguish character counts from bytes and handle NULL explicitly.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Text functions transform values without collapsing rows\n\nString functions build, inspect, and transform text expressions. A campus service can display a requester's name in uppercase, extract a room-code prefix, or assemble a readable equipment label. Unlike an aggregate, an ordinary scalar string function returns a value for each qualifying row. Applying UPPER to ten names normally preserves ten result rows.\n\nUnderstand a basic [SELECT](/learning/dbms-sql-tutorial/select), quoted text literals, column aliases, and missing values before composing these expressions. Decide whether the transformation is for presentation or establishes a stored identity. A formatted display label and an authoritative equipment code can require very different rules even when both happen to use the same function.\n\n## Build readable labels with an explicit separator\n\nCONCAT combines its arguments in the order supplied. It does not automatically insert punctuation or spaces. If a label needs a colon and one following space, supply those characters explicitly. An alias names the computed result without renaming the underlying source column or changing stored values.\n\n```sql\nCREATE TABLE equipment_labels (\n  equipment_id INT PRIMARY KEY,\n  display_name VARCHAR(40),\n  room_code VARCHAR(12)\n);\nINSERT INTO equipment_labels VALUES\n  (1, 'Camera', 'M12'), (2, 'Microphone', NULL);\n\nSELECT equipment_id,\n       CONCAT(display_name, ': ', room_code) AS label\nFROM equipment_labels\nORDER BY equipment_id;\n```\n\nFor the first synthetic row, the anticipated label is Camera followed by a colon, a space, and M12. The second row demonstrates a separate rule: in MySQL, a NULL argument makes the entire CONCAT result NULL. These are manually reasoned expectations, not evidence that the example has already executed.\n\n## Choose a missing-value policy before concatenation\n\nA missing room code may mean unassigned, unknown, or unavailable to the caller. Replacing it with an empty string erases those distinctions in the label. If the display should communicate absence, an explicit fallback such as Unassigned can be appropriate. Make that meaning part of the feature's contract rather than silently inserting an arbitrary value.\n\nMySQL CONCAT_WS supplies a separator and skips NULL arguments after that separator. It does not skip ordinary empty strings. A NULL separator itself produces a NULL result. This makes CONCAT_WS useful for some optional label components, but not a universal substitute for deliberate [NULL handling](/learning/dbms-sql-tutorial/null-values).\n\n## Bytes and characters answer different length questions\n\nMySQL LENGTH measures bytes. CHAR_LENGTH measures characters as represented by the string, so a multibyte character can contribute several bytes but one character. ASCII-only samples conceal that difference because their common letters occupy one byte in UTF-8. A task asking for a character count should not be solved with LENGTH merely because its initial names are ASCII.\n\nCharacter count is not necessarily the number of visible symbols a reader perceives. A base letter followed by a combining mark can involve more than one character while appearing as one combined unit. Database character length is useful for its documented purpose; it is not a complete user-interface typography or Unicode normalization algorithm.\n\n## Preserve the existing name-length exercise precisely\n\nThe retained exercise asks for each order identity, an uppercase customer name, and the original name's character count. Its schema and sample data remain intact. Use CHAR_LENGTH on the original customer_name rather than count the uppercase result or the number of encoded bytes. A multibyte test makes the intended measurement visible.\n\n```sql\nSELECT id,\n       UPPER(customer_name) AS name_upper,\n       CHAR_LENGTH(customer_name) AS name_length\nFROM orders\nORDER BY id;\n```\n\nCase conversion and length measurement are distinct operations here. The order by identity defines output sequence; neither UPPER nor CHAR_LENGTH sorts the rows. Repeated customer names still produce separate results for separate orders. Adding DISTINCT would change the exercise's output grain rather than improve its formatting.\n\n## Case conversion does not define every identity rule\n\nUPPER and LOWER transform character case according to the applicable character-set rules. They are useful for display and some explicitly designed normalized search values. They do not automatically establish case-sensitive comparison, remove accents, or enforce uniqueness. A column's collation can compare values differently from what their visible uppercase forms suggest.\n\nDo not silently rewrite a person's stored name to make a report look consistent. Preserve source meaning and transform the display expression when that is the requirement. If an application normalizes identifiers, define allowed characters, collision handling, comparison rules, and migration effects separately. Two input codes becoming the same normalized value can require an explicit rejection policy.\n\n## Substring positions follow the SQL contract\n\nMySQL SUBSTRING with a positive position counts from one. Taking three characters starting at position one obtains the first three characters, not the three after an initial zero position. The length argument limits how much is extracted; it does not describe the final character's absolute position.\n\nMySQL also supports negative positions counted from the end. Missing input, empty input, and a starting position beyond available characters need distinct tests. Avoid importing an application's zero-based array convention into SQL. Name whether the extracted segment is a prefix, suffix, or fixed-position field before choosing arguments.\n\n## Trim only the characters the rule actually excludes\n\nOrdinary TRIM removes leading and trailing spaces by default. It does not promise to remove every tab, line break, or Unicode whitespace character. Internal spaces remain. The label Media Lab therefore should not become MediaLab merely because an import permits removing unwanted boundary spaces.\n\nAn explicitly specified removal string has its own documented behavior. Repeated removal at the boundaries differs from replacing characters everywhere in the value. For classroom cleaning exercises, describe exactly which boundary characters are permitted to disappear. Broadly calling the operation whitespace cleanup can hide a mismatch between the intended input contract and the actual transformation.\n\n## Replace literal fragments without assuming pattern semantics\n\nREPLACE substitutes occurrences of a literal search string; it is not a regular-expression function and does not interpret percent as a LIKE wildcard. MySQL performs this search case sensitively. Replacing one capitalization does not automatically replace every differently cased spelling, so include a case variation when that distinction matters.\n\nThe function REPLACE in a SELECT expression also differs from MySQL's REPLACE write statement. One computes a text result; the other has insert or replacement semantics for stored rows. The surrounding syntax matters. Demonstrating a text correction should not unexpectedly mutate a table or invoke a different operation with the same visible name.\n\n## Compose transformations in an explainable order\n\nAn imported equipment code can require boundary-space removal, uppercase conversion, and replacement of hyphens with underscores. Read nested functions from the innermost transformation outward. Explain the intermediate value after each step so a learner can tell whether the operation preserves internal spaces and handles empty input deliberately.\n\nDo not convert all missing values into empty strings simply to simplify the nesting. An unknown code and a supplied blank code may require different diagnostics. In a report, CASE can classify those states before computing a display label. In a write path, trusted validation must enforce the accepted domain rather than rely on formatting to make every value acceptable.\n\n## Dialect names do not guarantee identical behavior\n\nThis lesson uses MySQL 8.4. The pair of vertical bars is not a dependable concatenation spelling under every MySQL SQL mode; PIPES_AS_CONCAT changes its interpretation. Prefer the declared function when teaching a mode-independent intention within this scope. Verify NULL behavior instead of assuming similarly named functions agree across engines.\n\nSQL Server has LEN for a character-length measurement, and its ordinary behavior excludes trailing spaces. That is another reason function-name substitution is insufficient during a dialect migration. Establish the required measurement and boundary behavior, then consult the destination engine's contract rather than translating syntax mechanically.\n\n## Verify transformations against deliberate counterexamples\n\nUse fixtures containing an ordinary ASCII name, a multibyte character, an empty string, a boundary-space-only value, and an actual NULL where the schema permits it. Check which distinctions survive each transformation. Keep output identity and ordering visible so identical formatted values do not conceal missing or duplicated source rows.\n\nThe beginner exercise preserves the existing uppercase-name contract. The intermediate exercise formats optional equipment codes while distinguishing missing from blank input. Both return computed values without rewriting source facts. A useful recap identifies the transformation order, the chosen length unit, and the missing-value policy before interpreting a successful query result.\n",
+  "references": [
+    {
+      "title": "MySQL 8.4 string functions and operators",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/string-functions.html"
+    },
+    {
+      "title": "SQL Server LEN character length and trailing spaces",
+      "url": "https://learn.microsoft.com/en-us/sql/t-sql/functions/len-transact-sql?view=sql-server-ver17"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-14-string-functions",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-14-string-functions-1",
+          "test_id": "pt-dbms-sql-14-string-functions",
+          "question_text": "What does CONCAT('Camera', ': ', 'M12') produce?",
+          "options": [
+            "CameraM12",
+            "Camera: M12",
+            "Camera :M12",
+            "NULL"
+          ],
+          "correct_index": 1,
+          "explanation": "CONCAT joins arguments in their stated order and adds only the supplied punctuation.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-14-string-functions-2",
+          "test_id": "pt-dbms-sql-14-string-functions",
+          "question_text": "Which MySQL SQL mode makes the vertical-bar pair a concatenation operator?",
+          "options": [
+            "ONLY_FULL_GROUP_BY",
+            "ANSI_QUOTES alone",
+            "PIPES_AS_CONCAT",
+            "STRICT_TRANS_TABLES alone"
+          ],
+          "correct_index": 2,
+          "explanation": "Do not assume the pair concatenates under every SQL mode.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-14-string-functions-3",
+          "test_id": "pt-dbms-sql-14-string-functions",
+          "question_text": "For the ASCII string Cedar, what does MySQL LENGTH return?",
+          "options": [
+            "4",
+            "5",
+            "6",
+            "NULL"
+          ],
+          "correct_index": 1,
+          "explanation": "These five ASCII characters occupy five bytes; the example does not establish byte and character equivalence for every string.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-14-string-functions-4",
+          "test_id": "pt-dbms-sql-14-string-functions",
+          "question_text": "Which SQL Server function is commonly used for string character length, excluding trailing spaces?",
+          "options": [
+            "CHAR_LENGTH",
+            "BYTE_COUNT",
+            "LEN",
+            "SIZEOF"
+          ],
+          "correct_index": 2,
+          "explanation": "Function names and trailing-space behavior differ across dialects.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-14-string-functions-5",
+          "test_id": "pt-dbms-sql-14-string-functions",
+          "question_text": "What does MySQL SUBSTRING('Camera',1,3) return?",
+          "options": [
+            "Cam",
+            "ame",
+            "era",
+            "Camera"
+          ],
+          "correct_index": 0,
+          "explanation": "Positive substring positions begin at one.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-14-string-functions-6",
+          "test_id": "pt-dbms-sql-14-string-functions",
+          "question_text": "What does default TRIM return for a value containing two spaces, M12, and two spaces?",
+          "options": [
+            "The unchanged padded text",
+            "M12",
+            "An empty string",
+            "NULL"
+          ],
+          "correct_index": 1,
+          "explanation": "Default trimming removes the boundary spaces without removing internal characters.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-14-string-functions-7",
+          "test_id": "pt-dbms-sql-14-string-functions",
+          "question_text": "What does MySQL REPLACE('cam-cam','cam','MIC') return?",
+          "options": [
+            "cam-cam",
+            "MIC-MIC",
+            "MIC-cam",
+            "NULL"
+          ],
+          "correct_index": 1,
+          "explanation": "The function replaces each literal occurrence of the matching search string.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-14-string-functions-8",
+          "test_id": "pt-dbms-sql-14-string-functions",
+          "question_text": "What does MySQL CONCAT('Room ',NULL) return?",
+          "options": [
+            "Room followed by an empty string",
+            "NULL",
+            "The string NULL appended to Room",
+            "A guaranteed syntax error"
+          ],
+          "correct_index": 1,
+          "explanation": "A missing CONCAT argument propagates to a missing result.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-14-string-functions-new-9",
+          "test_id": "pt-dbms-sql-14-string-functions",
+          "question_text": "Which MySQL function directly measures characters rather than bytes?",
+          "options": [
+            "CHAR_LENGTH",
+            "LENGTH in every character set",
+            "OCTET_LENGTH",
+            "BYTE_LENGTH"
+          ],
+          "correct_index": 0,
+          "explanation": "CHAR_LENGTH supplies the character count; LENGTH measures encoded bytes.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-14-string-functions-new-10",
+          "test_id": "pt-dbms-sql-14-string-functions",
+          "question_text": "Does a character count necessarily equal the count of visible grapheme clusters?",
+          "options": [
+            "Yes, for all Unicode input",
+            "No, combining sequences can contain more than one character",
+            "Yes, provided LENGTH is used",
+            "No, because SQL never supports Unicode"
+          ],
+          "correct_index": 1,
+          "explanation": "Database character units and perceived visual units are different concepts.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-14-string-functions-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-14-string-functions-application-new-1",
+          "test_id": "pt-dbms-sql-14-string-functions-application",
+          "question_text": "Does default TRIM guarantee removal of tabs and every Unicode whitespace character?",
+          "options": [
+            "Yes, all whitespace everywhere",
+            "Only if the input contains numbers",
+            "No, its default removal is spaces",
+            "It removes only internal spaces"
+          ],
+          "correct_index": 2,
+          "explanation": "Define the specific boundary characters the cleanup contract permits removing.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-14-string-functions-application-new-2",
+          "test_id": "pt-dbms-sql-14-string-functions-application",
+          "question_text": "How does MySQL REPLACE search for its literal fragment?",
+          "options": [
+            "As a regular expression",
+            "As a LIKE pattern",
+            "Always ignoring case regardless of its search string",
+            "Case sensitively"
+          ],
+          "correct_index": 3,
+          "explanation": "A different capitalization need not match the specified fragment.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-14-string-functions-application-new-3",
+          "test_id": "pt-dbms-sql-14-string-functions-application",
+          "question_text": "What is the difference between the REPLACE function and the REPLACE write statement?",
+          "options": [
+            "The function computes a text value; the statement can change stored rows",
+            "Both always delete source rows",
+            "Neither can appear in SQL",
+            "The function is an aggregate"
+          ],
+          "correct_index": 0,
+          "explanation": "The surrounding syntax distinguishes a scalar transformation from a write operation.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-14-string-functions-application-new-4",
+          "test_id": "pt-dbms-sql-14-string-functions-application",
+          "question_text": "What does MySQL CONCAT_WS skip after its separator argument?",
+          "options": [
+            "Every empty string",
+            "NULL arguments",
+            "Every numeric string",
+            "Every string containing a space"
+          ],
+          "correct_index": 1,
+          "explanation": "Empty strings remain supplied values, while later NULL arguments are omitted.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-14-string-functions-application-new-5",
+          "test_id": "pt-dbms-sql-14-string-functions-application",
+          "question_text": "What happens if the separator supplied to CONCAT_WS is NULL?",
+          "options": [
+            "All separators become commas",
+            "The separator is ignored automatically",
+            "The result is NULL",
+            "The query removes every source row"
+          ],
+          "correct_index": 2,
+          "explanation": "The separator's missingness has its own propagation rule.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-14-string-functions-application-new-6",
+          "test_id": "pt-dbms-sql-14-string-functions-application",
+          "question_text": "A task asks for the original name's character count. Which expression matches that requirement?",
+          "options": [
+            "LENGTH(customer_name) for every encoding",
+            "CHAR_LENGTH(UPPER(customer_name)) regardless of the task",
+            "COUNT(*)",
+            "CHAR_LENGTH(customer_name)"
+          ],
+          "correct_index": 3,
+          "explanation": "Measure the requested original expression in the correct unit.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-14-string-functions-application-new-7",
+          "test_id": "pt-dbms-sql-14-string-functions-application",
+          "question_text": "Does applying UPPER in a SELECT update the stored name?",
+          "options": [
+            "No, it computes a result expression",
+            "Yes, every matching name is rewritten",
+            "Only when an alias is present",
+            "It deletes lowercase source rows"
+          ],
+          "correct_index": 0,
+          "explanation": "A projection expression does not independently mutate the table.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-14-string-functions-application-new-8",
+          "test_id": "pt-dbms-sql-14-string-functions-application",
+          "question_text": "Why can normalizing codes create a data-integrity decision?",
+          "options": [
+            "UPPER guarantees unique output values",
+            "Different inputs can transform into the same normalized identity",
+            "TRIM always supplies a primary key",
+            "Every normalization is reversible"
+          ],
+          "correct_index": 1,
+          "explanation": "Collision policy must be designed rather than inferred from a formatting function.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-14-string-functions-application-new-9",
+          "test_id": "pt-dbms-sql-14-string-functions-application",
+          "question_text": "What should a formatting report do when missing and blank codes have different meanings?",
+          "options": [
+            "Replace both unconditionally with an arbitrary valid code",
+            "Delete both source rows",
+            "Classify them separately before constructing the requested display",
+            "Assume an empty string is SQL NULL"
+          ],
+          "correct_index": 2,
+          "explanation": "The task's absence policy must survive the transformation.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-14-string-functions-application-new-10",
+          "test_id": "pt-dbms-sql-14-string-functions-application",
+          "question_text": "How should nested transformations be traced?",
+          "options": [
+            "By alphabetical function-name order",
+            "By the SELECT alias's spelling",
+            "By assuming the optimizer sorts source rows first",
+            "From the innermost expression outward, checking each intermediate value"
+          ],
+          "correct_index": 3,
+          "explanation": "Intermediate values expose wrong operation order and unintended removal.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cp-dbms-sql-uppercase-names-and-lengths",
+      "slug": "uppercase-names-and-lengths",
+      "title": "Uppercase Names and Lengths",
+      "schema_sql": "CREATE TABLE orders (\n  id INTEGER PRIMARY KEY,\n  customer_name TEXT NOT NULL,\n  amount INTEGER NOT NULL,\n  order_date DATE NOT NULL\n);",
+      "seed_sql": "INSERT INTO orders (id, customer_name, amount, order_date) VALUES\n(1, 'Asha', 500, '2026-03-05'),\n(2, 'Rohan', 300, '2026-03-20'),\n(3, 'Neha', 700, '2026-04-02'),\n(4, 'Asha', 200, '2026-03-28');",
+      "check_sql": "",
+      "description": "Write a query returning `id`, an uppercase version of `customer_name` as `name_upper`, and the number of characters in `customer_name` as `name_length`, ordered by `id`.\n\n```sql\nCREATE TABLE orders (\n  id INTEGER PRIMARY KEY,\n  customer_name TEXT NOT NULL,\n  amount INTEGER NOT NULL,\n  order_date DATE NOT NULL\n);\n```\n\n**Sample data**:\n\n```sql\nINSERT INTO orders (id, customer_name, amount, order_date) VALUES\n(1, 'Asha', 500, '2026-03-05'),\n(2, 'Rohan', 300, '2026-03-20'),\n(3, 'Neha', 700, '2026-04-02'),\n(4, 'Asha', 200, '2026-03-28');\n```\n",
+      "original_description_md5": "65d3cd66084a6c4fb786b87bceab4914",
+      "examples": [
+        {
+          "input": "",
+          "output": "id\tname_upper\tname_length\n1\tASHA\t4\n2\tROHAN\t5\n3\tNEHA\t4\n4\tASHA\t4"
+        }
+      ],
+      "validation_cases": [
+        {
+          "hidden": true,
+          "seed_sql": "INSERT INTO orders (id, customer_name, amount, order_date) VALUES\n(1, 'Zara', 1000, '2026-05-01'),\n(2, 'Omar', 400, '2026-05-15'),\n(3, 'Leo', 250, '2026-06-01');",
+          "expected": "id\tname_upper\tname_length\n1\tZARA\t4\n2\tOMAR\t4\n3\tLEO\t3"
+        },
+        {
+          "seed_sql": "INSERT INTO orders(id,customer_name,amount,order_date) VALUES (1,'Café',10,'2026-01-01'),(2,'',0,'2026-01-02');",
+          "expected": "id\tname_upper\tname_length\n1\tCAFÉ\t4\n2\t\t0"
+        },
+        {
+          "seed_sql": "",
+          "expected": ""
+        }
+      ],
+      "difficulty": "Easy",
+      "existing_problem": true,
+      "original_check_sql": "",
+      "task": "Return id, UPPER(customer_name) as name_upper, and the number of characters in the original customer_name as name_length from the supplied orders. Order by id ascending. Count characters, not encoded bytes. Preserve all source rows and the retained setup.",
+      "expected": "id\tname_upper\tname_length\n1\tASHA\t4\n2\tROHAN\t5\n3\tNEHA\t4\n4\tASHA\t4",
+      "ordering": "id ASC.",
+      "constraints": [
+        "Preserve the retained problem identity, schema, seed, and trailing checker.",
+        "Measure the original name's characters rather than bytes or transformed-name length."
+      ],
+      "edge_cases": [
+        "A multibyte character can occupy several bytes.",
+        "Repeated names remain separate order rows.",
+        "An empty source table yields no rows."
+      ],
+      "hints": [
+        "MySQL LENGTH measures bytes.",
+        "Use CHAR_LENGTH on the original column."
+      ],
+      "solution_sql": "SELECT id,UPPER(customer_name) AS name_upper,CHAR_LENGTH(customer_name) AS name_length FROM orders ORDER BY id;",
+      "explanation": "UPPER computes the requested display value while CHAR_LENGTH measures the original text in characters. The retained ASCII sample remains unchanged; a multibyte fixture distinguishes this solution from byte length. Identity ordering preserves every source order."
+    },
+    {
+      "id": "cx-string-code-classification",
+      "slug": "string-code-classification",
+      "title": "Format optional codes without hiding missingness",
+      "difficulty": "Medium",
+      "task": "Return code_id,formatted_code,raw_characters for every imported_codes row, ordered by code_id. If raw_code is NULL, formatted_code must be MISSING. If trimming ordinary boundary spaces leaves empty text, use BLANK. Otherwise trim ordinary boundary spaces, uppercase the result, and replace every literal hyphen with an underscore, retaining internal spaces. raw_characters is the character count of the unmodified raw_code and remains NULL when raw_code is NULL. Preserve source data.",
+      "schema_sql": "CREATE TABLE imported_codes(code_id INT PRIMARY KEY,raw_code VARCHAR(40));",
+      "seed_sql": "INSERT INTO imported_codes VALUES (1,' ab-2 '),(2,'  '),(3,NULL),(4,'Media Lab');",
+      "expected": "code_id\tformatted_code\traw_characters\n1\tAB_2\t6\n2\tBLANK\t2\n3\tMISSING\tNULL\n4\tMEDIA LAB\t9",
+      "ordering": "code_id ASC.",
+      "constraints": [
+        "Distinguish actual NULL from present blank input.",
+        "Do not remove internal spaces or mutate source values."
+      ],
+      "edge_cases": [
+        "An empty string is BLANK with zero characters.",
+        "Repeated hyphens are replaced individually.",
+        "Ordinary internal spaces survive."
+      ],
+      "hints": [
+        "Classify NULL before applying the blank test.",
+        "Compute the displayed transformation from inner TRIM outward, and count the raw column separately."
+      ],
+      "solution_sql": "SELECT code_id,CASE WHEN raw_code IS NULL THEN 'MISSING' WHEN TRIM(raw_code)='' THEN 'BLANK' ELSE REPLACE(UPPER(TRIM(raw_code)),'-','_') END AS formatted_code,CHAR_LENGTH(raw_code) AS raw_characters FROM imported_codes ORDER BY code_id;",
+      "explanation": "The CASE branches preserve the distinction between missing and blank input. Nested scalar functions produce the requested display code without removing internal spaces. CHAR_LENGTH evaluates the original value independently, so trimming does not shorten the reported raw count.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO imported_codes VALUES (8,''),(3,' a--b '),(5,NULL);",
+          "expected": "code_id\tformatted_code\traw_characters\n3\tA__B\t6\n5\tMISSING\tNULL\n8\tBLANK\t0"
+        },
+        {
+          "seed_sql": "INSERT INTO imported_codes VALUES (2,' X Y ');",
+          "expected": "code_id\tformatted_code\traw_characters\n2\tX Y\t5"
+        },
+        {
+          "seed_sql": "",
+          "expected": ""
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-14-string-functions-1",
+      "test_id": "pt-dbms-sql-14-string-functions",
+      "question_text": "What does CONCAT(customer_name, ' - ', status) produce for a row with customer_name='Alice' and status='completed'?",
+      "options": [
+        "'Alice completed'",
+        "'Alice - completed'",
+        "'AliceStatus'",
+        "An error"
+      ],
+      "correct_index": 1,
+      "explanation": "CONCAT joins the three arguments in order: 'Alice' + ' - ' + 'completed' = 'Alice - completed'.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-14-string-functions-2",
+      "test_id": "pt-dbms-sql-14-string-functions",
+      "question_text": "Which operator, used as an alternative to CONCAT() in dialects like PostgreSQL, Oracle, and SQLite, joins strings together?",
+      "options": [
+        "+",
+        "&",
+        "||",
+        "%"
+      ],
+      "correct_index": 2,
+      "explanation": "|| is the standard-SQL-style string concatenation operator supported by PostgreSQL, Oracle, and SQLite; SQL Server historically used + instead.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-14-string-functions-3",
+      "test_id": "pt-dbms-sql-14-string-functions",
+      "question_text": "What does LENGTH('Charlie') return?",
+      "options": [
+        "6",
+        "7",
+        "8",
+        "NULL"
+      ],
+      "correct_index": 1,
+      "explanation": "'Charlie' has 7 characters: C-h-a-r-l-i-e.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-14-string-functions-4",
+      "test_id": "pt-dbms-sql-14-string-functions",
+      "question_text": "Which SQL dialect uses LEN() instead of the more common LENGTH() function?",
+      "options": [
+        "PostgreSQL",
+        "MySQL",
+        "SQL Server",
+        "SQLite"
+      ],
+      "correct_index": 2,
+      "explanation": "SQL Server's string-length function is named LEN(), unlike LENGTH() in PostgreSQL, MySQL, and SQLite.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-14-string-functions-5",
+      "test_id": "pt-dbms-sql-14-string-functions",
+      "question_text": "What does SUBSTRING('Charlie', 1, 3) return?",
+      "options": [
+        "'Cha'",
+        "'har'",
+        "'lie'",
+        "'Charlie'"
+      ],
+      "correct_index": 0,
+      "explanation": "SUBSTRING(string, start, length) extracts 3 characters starting at position 1: 'Cha'.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-14-string-functions-6",
+      "test_id": "pt-dbms-sql-14-string-functions",
+      "question_text": "What does TRIM('  Alice  ') return?",
+      "options": [
+        "'  Alice  ' (unchanged)",
+        "'Alice'",
+        "'Alice  '",
+        "'  Alice'"
+      ],
+      "correct_index": 1,
+      "explanation": "TRIM removes both leading and trailing spaces by default, leaving just 'Alice'.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-14-string-functions-7",
+      "test_id": "pt-dbms-sql-14-string-functions",
+      "question_text": "What does REPLACE(status, 'completed', 'DONE') return for a row where status = 'completed'?",
+      "options": [
+        "'completed'",
+        "'DONE'",
+        "'DONEcompleted'",
+        "NULL"
+      ],
+      "correct_index": 1,
+      "explanation": "REPLACE(string, search, replacement) substitutes every occurrence of 'completed' with 'DONE', so the entire matching string becomes 'DONE'.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-14-string-functions-8",
+      "test_id": "pt-dbms-sql-14-string-functions",
+      "question_text": "Why is it important to test how a specific SQL dialect's CONCAT() handles a NULL argument?",
+      "options": [
+        "Because CONCAT() is not supported in any dialect",
+        "Because behavior genuinely varies — e.g. some dialects propagate NULL through the whole result while others treat NULL as an empty string",
+        "Because CONCAT() always throws a syntax error with NULL arguments",
+        "Because NULL arguments are illegal in all SQL dialects"
+      ],
+      "correct_index": 1,
+      "explanation": "NULL handling in CONCAT() is dialect-specific: some engines (e.g. MySQL's CONCAT) return NULL if any argument is NULL, while others (e.g. PostgreSQL's CONCAT function) substitute an empty string for NULL arguments instead.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "/root/integration_seo author",
+    "independent_review": "passed",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Independent manual review passed; native MySQL fixture evidence recorded separately; provider/browser/Supabase release gates remain separate.",
+    "existing_question_corrections": [
+      "tq-dbms-sql-14-string-functions-1",
+      "tq-dbms-sql-14-string-functions-2",
+      "tq-dbms-sql-14-string-functions-3",
+      "tq-dbms-sql-14-string-functions-4",
+      "tq-dbms-sql-14-string-functions-5",
+      "tq-dbms-sql-14-string-functions-6",
+      "tq-dbms-sql-14-string-functions-7",
+      "tq-dbms-sql-14-string-functions-8"
+    ],
+    "canonical_answer_indices_preserved": true,
+    "editorial_record": "Original seed snapshots retained. Rewritten questions preserve IDs and answer positions. Existing uppercase-names-and-lengths exercise preserves its identity, schema, seed, and trailing checker; reference uses CHAR_LENGTH to honor the original task's character-count contract.",
+    "independent_reviewer": "Codex reviewer, current 2026-10-30 session",
+    "independent_review_scope": "Read full notes, all 640 MCQ stems/options/canonical answers/explanations, 64 exercise contracts/solutions/fixtures, and all 32 diagrams. Verified retained identities/answers through source-continuity tests; SQL execution evidence is recorded separately. No external originality, provider, live application or Supabase authorization clearance.",
+    "independent_review_record": "reports/independent-review-2026-10-30.json",
+    "content_sha256": "e6e3631a467081870ca4e833f9728d7f6522c2a57507338f83df47604b949bef"
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-14-string-functions",
+    "original_note_sha256": "e25fcb7e4ef93fb44cd234dafb712f99b81520a225d7a3bc6bf57f25f9b3e8ae",
+    "status": "drafted; not included in prepared paired migrations"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Different text states need different display decisions",
+      "description": "The code-formatting exercise classifies missing and blank source values before nested display transformations, while raw character count remains independent.",
+      "columns": [
+        "Raw code",
+        "Classification or transformation",
+        "Display result",
+        "Raw characters"
+      ],
+      "rows": [
+        [
+          "NULL",
+          "Missing branch",
+          "MISSING",
+          "NULL"
+        ],
+        [
+          "Two spaces",
+          "Blank after trimming",
+          "BLANK",
+          "2"
+        ],
+        [
+          "Space + ab-2 + space",
+          "Trim, uppercase, replace hyphen",
+          "AB_2",
+          "6"
+        ],
+        [
+          "Media Lab",
+          "Uppercase; retain internal space",
+          "MEDIA LAB",
+          "9"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required; original comparison table",
+    "technical_review": "authored draft; independent check pending",
+    "server_rendering": "pending",
+    "browser_rendering": "unverified",
+    "independent_review": "pending"
+  },
+  "authoring_status": "drafted; verification pending",
+  "sql_verification": {
+    "scope": "not executed; exact MySQL 8.4/provider and compatibility execution pending",
+    "all_passed": false,
+    "cases": []
+  }
+}

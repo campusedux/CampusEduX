@@ -71,21 +71,27 @@ export default function OnboardingForm({
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!canContinue) return;
+    if (!canContinue || saving) return;
     setSaving(true);
     setError(null);
-    const { error: saveError } = await saveOnboardingProfile(createBrowserSupabase(), userId, {
-      course,
-      branch,
-      year,
-    });
-    setSaving(false);
-    if (saveError) {
-      setError(saveError);
-      return;
+    try {
+      const { error: saveError } = await saveOnboardingProfile(createBrowserSupabase(), userId, {
+        course,
+        branch,
+        year,
+      });
+      setSaving(false);
+      if (saveError) {
+        setError(saveError);
+        return;
+      }
+      router.push(ONBOARDING_COMPLETE_REDIRECT);
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
+    } finally {
+      setSaving(false);
     }
-    router.push(ONBOARDING_COMPLETE_REDIRECT);
-    router.refresh();
   }
 
   return (

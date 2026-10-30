@@ -1,0 +1,518 @@
+{
+  "source_ref": "chapter-1-database-foundations/transaction-manager",
+  "slug": "transaction-manager",
+  "title": "Transaction Manager",
+  "description": "Understand transaction management through ACID, a transfer illustration, concurrent seat reservation, InnoDB visibility, unfinished sessions, and configured durability guarantees.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Coordinating work under a transaction contract\n\nTransaction management coordinates operations that belong together and controls how they interact with concurrent work and failures. A transaction is more than a convenient group of SQL statements in a file. It has boundaries and a contract about which outcomes the system may expose or preserve. The application must choose those boundaries and operations correctly, while the DBMS supplies the mechanisms supporting the selected guarantees.\n\nThe responsibility interacts closely with query execution, storage, memory management, and recovery. A product may implement these facilities across several components rather than one independent program called transaction manager. The educational name helps identify the coordinated work: tracking transaction state, controlling visibility and conflicts, and arranging appropriate commit, rollback, and recovery behavior.\n\nThis topic uses MySQL InnoDB when discussing product-specific examples. Do not assume that every table engine or database product supplies identical behavior under every named isolation level. Likewise, a connection to a product that offers transactions does not establish that an application's actual statements, table arrangement, and configuration meet its intended business guarantees.\n\n## Understanding the four ACID properties\n\nACID stands for atomicity, consistency, isolation, and durability. Atomicity concerns the grouped outcome: the transaction's changes commit together or its uncommitted effects are undone under the supported contract. Consistency concerns preservation of the relevant valid-state rules. Isolation concerns the interaction and visibility of concurrent work. Durability concerns whether acknowledged committed work survives the failures covered by the configured guarantees.\n\nThese properties must not be reduced to a slogan that the database makes every application correct. A transaction can faithfully commit a logically wrong update. If an application credits the wrong account while satisfying all declared constraints, transaction machinery does not independently know the intended recipient. Define the invariant and choose correct operations before explaining which mechanisms support it.\n\nSimilarly, the properties answer different questions. Atomicity does not decide who is authorized to initiate an operation. Isolation does not promise that every transaction runs without waiting. Durability does not establish that a report interpreted a value correctly. A useful explanation identifies which property is relevant rather than treating any problem involving data as proof that all four properties have failed.\n\n## Following a hypothetical transfer through its outcomes\n\nSuppose an illustrative system holds account A at 1,000 units and account B at 500 units. A permitted transfer of 100 units should leave A at 900 and B at 600. The total remains 1,500. If the operation is canceled before commit, the intended atomic outcome leaves the original balances. These are conceptual arithmetic examples, not measurements from an executed banking or database system.\n\nAfter only the debit has been performed inside the transaction, its working state can temporarily contain A at 900 and B at 500. That intermediate state is not the intended committed business outcome. Appropriate atomicity and recovery prevent a failed transaction from leaving only that debit as the committed result. What another transaction can observe during the work is a separate isolation question.\n\nThe application must still check relevant conditions such as authorization, the actual account identifiers, and the rules for sufficient funds. Choosing a transaction boundary around two inappropriate updates does not make them the correct transfer. If the work crosses an external service boundary, a local database transaction alone does not automatically coordinate that other system's success or reversal.\n\n## Coordinating concurrent operations deliberately\n\nConcurrency allows overlapping work, which can improve useful throughput but introduces conflicts and visibility questions. Mechanisms can include locking, multiple versions, snapshots, and conflict detection. Their behavior depends on the database, statements, isolation level, and actual algorithm. A label in an architecture diagram is not proof that every overlapping workflow preserves its required invariant.\n\nConsider two students trying to reserve the final seat. A correctly designed atomic conditional capacity update can make only one request succeed, with appropriate transaction and conflict handling. A separate read of the seat count followed later by an unconditional write can still be unsafe. The transaction facilities support the algorithm; they do not repair every application that reads and writes a shared counter incorrectly.\n\nA blocked or rejected request is not necessarily a defect. Preserving the rule may require waiting, retrying eligible work, or reporting that the seat is no longer available. The application needs a policy appropriate to the actual outcome. Retrying without understanding whether earlier work committed can create a different problem, especially when an operation also has external effects.\n\n## Separating visibility from the existence of stored changes\n\nIsolation determines aspects of what concurrent transactions may observe and how their operations interact. In MySQL InnoDB, READ UNCOMMITTED can allow dirty reads: an operation can observe changes that another transaction has not committed and might later undo. A workload needing a stronger guarantee cannot establish it merely by wrapping statements in a transaction while using unsuitable visibility behavior.\n\nOther products can implement named isolation levels differently, so verify the actual engine's contract. Even a stronger level should not be described as removing every requirement for correct statements and error handling. Some combinations require the application to handle conflicts or retry an eligible transaction. The desired business invariant and the actual database guarantees must be evaluated together.\n\nMultiversion facilities can provide suitable record versions to readers rather than requiring every read to observe the latest uncommitted bytes. Old versions and their maintenance have physical costs. A long-lived transaction with an older snapshot can delay cleanup of versions that are still needed. The resulting resource or storage pressure depends on the implementation and workload; it is not a universal fixed amount of bloat per transaction.\n\n## Handling commit, rollback, and unfinished work\n\nCommit requests the transaction's successful completion under the applicable contract. Rollback abandons its uncommitted changes where supported. The application must handle errors from the statements and transaction boundaries rather than assume that sending a completion command proves every earlier operation did the intended work. Inspect the actual outcome before communicating success to the user.\n\nAn unfinished transaction on a connection that remains open can retain locks, snapshots, or other resources longer than intended. An exception path that forgets to complete or roll back work is one way this can happen. Relevant resources depend on the operations and engine, but the application should not leave transaction lifetime undefined while waiting for unrelated user interaction or external work.\n\nA client process crash is not identical to an application exception that leaves a connection alive. When the database detects that a session has disconnected, it normally cleans up its active transaction according to the product's behavior. Detection and cleanup can take time. Do not teach that every client crash holds locks forever, or that every failure is detected and fully cleaned up instantaneously.\n\n## Connecting durability to recovery and storage\n\nWrite-ahead logging is an important recovery mechanism in systems that use it. Required log information must be durable before the corresponding changed data pages are persisted under the recovery protocol. A durable commit also depends on the acknowledgement and persistence settings and the behavior of the storage system. The word logging alone is not a guarantee that every acknowledged operation survives every possible failure.\n\nDirty buffered data pages need not all be written immediately when an application changes a value. Appropriate log and recovery coordination can support the intended outcome while the engine manages page writes. However, changing persistence settings can change the failure guarantees. A course explanation should state the assumed guarantee instead of presenting an unverified configuration as universally durable or universally faster.\n\n## Reviewing transaction management with actual invariants\n\nTo evaluate a workflow, state the valid committed outcomes and relevant rejected or failed cases. For the seat reservation, test overlapping eligible requests and the final capacity rule. For the transfer illustration, distinguish a canceled operation from a completed one and verify that the intended accounts and amounts are used. Merely observing a call to a method named transaction is not sufficient evidence.\n\nTransaction management is therefore a coordinated responsibility that makes carefully defined grouped work possible. Its mechanisms interact with query execution, visibility, buffered pages, persistence, and application error handling. Keep the business invariant, algorithm, product contract, and observed evidence distinct. That approach explains ACID accurately while avoiding the mistaken promise that transaction support automatically makes every application safe.",
+  "references": [
+    {
+      "title": "MySQL InnoDB transaction model",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/innodb-transaction-model.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-1-transaction-manager",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-1-transaction-manager-1",
+          "test_id": "pt-dbms-sql-1-transaction-manager",
+          "question_text": "What does the acronym ACID stand for in the context of the Transaction Manager?",
+          "options": [
+            "Atomicity, Consistency, Isolation, Durability",
+            "Access, Control, Integrity, Design",
+            "Availability, Concurrency, Indexing, Durability",
+            "Atomicity, Caching, Isolation, Data-independence"
+          ],
+          "correct_index": 0,
+          "explanation": "The notes explicitly define ACID as Atomicity, Consistency, Isolation, and Durability.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-1-transaction-manager-2",
+          "test_id": "pt-dbms-sql-1-transaction-manager",
+          "question_text": "In the fund-transfer example, what does 'Atomicity' guarantee?",
+          "options": [
+            "Either both UPDATE statements take effect, or neither does",
+            "The transaction always completes within one second",
+            "Only the DBA can see the transaction's changes",
+            "The transaction is automatically logged to a printed report"
+          ],
+          "correct_index": 0,
+          "explanation": "The notes define atomicity as an all-or-nothing guarantee across the transaction's statements.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-1-transaction-manager-3",
+          "test_id": "pt-dbms-sql-1-transaction-manager",
+          "question_text": "Which mechanism does the notes give as a way the Transaction Manager achieves Isolation?",
+          "options": [
+            "Locking or multi-version concurrency control (MVCC)",
+            "Write-ahead logging alone",
+            "The Query Processor's cost-based optimizer",
+            "The Storage Manager's page fill-factor setting"
+          ],
+          "correct_index": 0,
+          "explanation": "The notes state isolation is achieved through locking or MVCC, distinct from durability's write-ahead logging mechanism.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-1-transaction-manager-4",
+          "test_id": "pt-dbms-sql-1-transaction-manager",
+          "question_text": "With a correctly designed atomic conditional capacity update and appropriate conflict handling, how can transaction facilities support reserving the last seat?",
+          "options": [
+            "One eligible request can succeed while the competing operation waits, retries safely, or is rejected under the actual algorithm",
+            "Every separate read followed by an unconditional write becomes correct automatically",
+            "All callers can reserve the same final seat without a conflict",
+            "Transaction boundaries remove every need for application checks"
+          ],
+          "correct_index": 0,
+          "explanation": "The DBMS supports a correct algorithm. Transaction support alone does not fix an arbitrary read-then-write counter design.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-1-transaction-manager-5",
+          "test_id": "pt-dbms-sql-1-transaction-manager",
+          "question_text": "Which mechanism can support durable commits when coordinated with the required persistence settings and storage guarantees?",
+          "options": [
+            "Write-ahead logging with the necessary durable log and acknowledgement ordering",
+            "An arbitrary log message that is never persisted",
+            "A guarantee inferred solely from the word transaction",
+            "Discarding every recovery record before commit"
+          ],
+          "correct_index": 0,
+          "explanation": "Logging is part of a recovery/persistence contract, not an unconditional guarantee independent of configuration and storage behavior.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-1-transaction-manager-6",
+          "test_id": "pt-dbms-sql-1-transaction-manager",
+          "question_text": "What is the risk of using READ UNCOMMITTED isolation for a workload that actually needs strong guarantees, per the notes?",
+          "options": [
+            "It permits dirty reads, where a transaction reads data from another transaction that is later rolled back",
+            "It guarantees perfect durability with zero performance cost",
+            "It automatically upgrades itself to SERIALIZABLE when needed",
+            "It prevents any transaction from ever committing"
+          ],
+          "correct_index": 0,
+          "explanation": "The notes explicitly describe the dirty-read risk of READ UNCOMMITTED isolation for workloads needing stronger guarantees.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-1-transaction-manager-7",
+          "test_id": "pt-dbms-sql-1-transaction-manager",
+          "question_text": "What can happen if an application exception leaves a transaction and its connection active without completing or rolling back work?",
+          "options": [
+            "Locks, snapshots or other transaction resources can remain longer than intended, depending on the operations and engine",
+            "Every such session is guaranteed to end instantly",
+            "Every client crash holds locks forever without any cleanup",
+            "The database automatically fixes the application's business algorithm"
+          ],
+          "correct_index": 0,
+          "explanation": "An open unfinished transaction differs from a detected disconnect. Product cleanup and failure detection must be considered precisely.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-1-transaction-manager-8",
+          "test_id": "pt-dbms-sql-1-transaction-manager",
+          "question_text": "Under MVCC, what specific storage-related risk does the notes associate with long-running transactions?",
+          "options": [
+            "Old row versions can pile up and bloat storage until cleaned up",
+            "The Transaction Manager immediately deletes the transaction's data",
+            "MVCC disables the Buffer Manager entirely for the duration of the transaction",
+            "The Query Processor stops optimizing all other queries system-wide"
+          ],
+          "correct_index": 0,
+          "explanation": "The notes specifically mention that under MVCC, long-running transactions can cause old row versions to accumulate, bloating storage.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "question_text": "Can a transaction commit the wrong business operation while satisfying declared database constraints?",
+          "options": [
+            "No; ACID automatically invents every business requirement",
+            "Yes; authorization therefore never matters",
+            "Yes; correct boundaries do not independently identify the intended recipient or rule",
+            "No; every committed value is necessarily factually correct"
+          ],
+          "correct_index": 2,
+          "explanation": "Transaction facilities support specified operations. The application must still choose correct identities, amounts, rules, and boundaries.",
+          "marks": 1,
+          "id": "tq-dbx2-transaction-manager-1-9",
+          "test_id": "pt-dbms-sql-1-transaction-manager",
+          "sort_order": 8
+        },
+        {
+          "question_text": "Is an exception that leaves a connection alive identical to a detected client disconnect?",
+          "options": [
+            "Yes; both always hold locks forever",
+            "No; an open session can retain active work while a detected disconnect triggers product-specific cleanup",
+            "Yes; both are always cleaned up with zero delay",
+            "No; disconnected sessions can never have active transactions"
+          ],
+          "correct_index": 1,
+          "explanation": "Session state and detection matter. Do not assume indefinite retention or instantaneous cleanup for every failure.",
+          "marks": 1,
+          "id": "tq-dbx2-transaction-manager-1-10",
+          "test_id": "pt-dbms-sql-1-transaction-manager",
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbx2-transaction-manager-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "question_text": "A starts at 1,000 and B at 500. An intended transfer of 100 commits correctly. What balances illustrate the intended result?",
+          "options": [
+            "A 900, B 500",
+            "A 900, B 600",
+            "A 1,000, B 600",
+            "A 1,100, B 400"
+          ],
+          "correct_index": 1,
+          "explanation": "The debit and credit preserve the total 1,500 when the intended operation completes.",
+          "marks": 1,
+          "id": "tq-dbx2-transaction-manager-2-1",
+          "test_id": "pt-dbx2-transaction-manager-application",
+          "sort_order": 0
+        },
+        {
+          "question_text": "The transfer is canceled before commit under the assumed atomic contract. Which outcome illustrates rollback?",
+          "options": [
+            "A 1,000, B 500",
+            "Only A remains at 900",
+            "Only B remains at 600",
+            "The system invents a third account"
+          ],
+          "correct_index": 0,
+          "explanation": "Rollback of the uncommitted grouped work leaves the original balances in this illustration.",
+          "marks": 1,
+          "id": "tq-dbx2-transaction-manager-2-2",
+          "test_id": "pt-dbx2-transaction-manager-application",
+          "sort_order": 1
+        },
+        {
+          "question_text": "After only the debit, the transaction's working state is A 900, B 500. Which distinction matters?",
+          "options": [
+            "The partial state must always be visible to every other user",
+            "An intermediate working state is not the intended committed business outcome",
+            "Atomicity decides the caller's authorization",
+            "The total is still 1,500"
+          ],
+          "correct_index": 1,
+          "explanation": "Grouped completion and concurrent visibility are different questions. This intermediate arithmetic total is 1,400.",
+          "marks": 1,
+          "id": "tq-dbx2-transaction-manager-2-3",
+          "test_id": "pt-dbx2-transaction-manager-application",
+          "sort_order": 2
+        },
+        {
+          "question_text": "Two students read one seat and later issue separate unconditional writes. Does the existence of a transaction manager prove this algorithm correct?",
+          "options": [
+            "Yes; every possible counter algorithm is repaired automatically",
+            "Yes; multiple versions remove every conflict",
+            "No; the actual statements, boundaries, and coordination must preserve the capacity invariant",
+            "No; databases cannot coordinate any reservations"
+          ],
+          "correct_index": 2,
+          "explanation": "A correct atomic conditional update and conflict handling differ from an unsafe read-then-write design.",
+          "marks": 1,
+          "id": "tq-dbx2-transaction-manager-2-4",
+          "test_id": "pt-dbx2-transaction-manager-application",
+          "sort_order": 3
+        },
+        {
+          "question_text": "A request loses a legitimate concurrency conflict. What response is appropriate?",
+          "options": [
+            "Always fabricate success",
+            "Disable all integrity checks",
+            "Repeat unknown external effects without checking prior completion",
+            "Handle the actual outcome with a safe eligible retry or a clear failure response"
+          ],
+          "correct_index": 3,
+          "explanation": "Conflict handling belongs to the application contract and must consider what actually completed.",
+          "marks": 1,
+          "id": "tq-dbx2-transaction-manager-2-5",
+          "test_id": "pt-dbx2-transaction-manager-application",
+          "sort_order": 4
+        },
+        {
+          "question_text": "In MySQL InnoDB, what risk is associated with READ UNCOMMITTED for a workload requiring committed observations?",
+          "options": [
+            "Dirty reads of work that another transaction may roll back",
+            "A guarantee that every read sees only committed data",
+            "The automatic removal of every old version",
+            "A grant of administrative access"
+          ],
+          "correct_index": 0,
+          "explanation": "The named level can permit dirty reads in this engine. The required visibility must match the workload.",
+          "marks": 1,
+          "id": "tq-dbx2-transaction-manager-2-6",
+          "test_id": "pt-dbx2-transaction-manager-application",
+          "sort_order": 5
+        },
+        {
+          "question_text": "A long-lived snapshot still needs older row versions. What resource consequence can follow?",
+          "options": [
+            "Every database must immediately corrupt those versions",
+            "Every old version is always deleted despite active readers",
+            "The exact bloat amount is identical for all products",
+            "Cleanup of needed versions can be delayed, contributing to storage/resource pressure"
+          ],
+          "correct_index": 3,
+          "explanation": "Version retention and cleanup depend on the active snapshots, implementation, and workload.",
+          "marks": 1,
+          "id": "tq-dbx2-transaction-manager-2-7",
+          "test_id": "pt-dbx2-transaction-manager-application",
+          "sort_order": 6
+        },
+        {
+          "question_text": "An application exception leaves a transaction and connection open. What should be investigated?",
+          "options": [
+            "Only the spelling of the button label",
+            "A certainty that no locks or snapshots can remain",
+            "Retained transaction resources and a missing completion/rollback path",
+            "A claim that all disconnected sessions last forever"
+          ],
+          "correct_index": 2,
+          "explanation": "An active open transaction can retain resources. Its actual operations determine which ones.",
+          "marks": 1,
+          "id": "tq-dbx2-transaction-manager-2-8",
+          "test_id": "pt-dbx2-transaction-manager-application",
+          "sort_order": 7
+        },
+        {
+          "question_text": "The engine logs changes but acknowledges work before required durable persistence. What remains unsupported?",
+          "options": [
+            "That logging can support recovery when configured appropriately",
+            "A claim that all recently acknowledged changes survive the relevant crash",
+            "That persistence settings affect guarantees",
+            "That the application must inspect outcomes"
+          ],
+          "correct_index": 1,
+          "explanation": "Logging must be coordinated with acknowledgement, persistence settings and actual storage behavior.",
+          "marks": 1,
+          "id": "tq-dbx2-transaction-manager-2-9",
+          "test_id": "pt-dbx2-transaction-manager-application",
+          "sort_order": 8
+        },
+        {
+          "question_text": "A local transaction includes a database update followed by a call to an independent external service. What must not be assumed?",
+          "options": [
+            "That the local transaction automatically commits or reverses the external service too",
+            "That local database operations can have boundaries",
+            "That external effects need their own reasoning",
+            "That the application can receive errors"
+          ],
+          "correct_index": 0,
+          "explanation": "A local commit/rollback does not by itself establish distributed atomicity.",
+          "marks": 1,
+          "id": "tq-dbx2-transaction-manager-2-10",
+          "test_id": "pt-dbx2-transaction-manager-application",
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [],
+  "coding_not_applicable": "An architecture and responsibility overview; executable transaction syntax, savepoints, isolation demonstrations, and concurrency exercises belong to their dedicated topics.",
+  "review": {
+    "reviewer": "coordinator",
+    "independent_review": "unavailable; no agent tools",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "definitions, worked examples and question coverage checked; no external plagiarism certification",
+    "existing_question_corrections": [
+      "tq-dbms-sql-1-transaction-manager-4",
+      "tq-dbms-sql-1-transaction-manager-5",
+      "tq-dbms-sql-1-transaction-manager-7"
+    ],
+    "canonical_answer_indices_preserved": true,
+    "answer_position_policy": "Original indices retained; new canonical positions shuffled; website display order also shuffled per attempt."
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-1-transaction-manager",
+    "original_note_sha256": "3db52923e89396c04ffbf1d9d3f9ec50b08c3d3d3d7128e6c37069b760f385e0",
+    "status": "paired migration prepared; not applied"
+  },
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-1-transaction-manager-1",
+      "test_id": "pt-dbms-sql-1-transaction-manager",
+      "question_text": "What does the acronym ACID stand for in the context of the Transaction Manager?",
+      "options": [
+        "Atomicity, Consistency, Isolation, Durability",
+        "Access, Control, Integrity, Design",
+        "Availability, Concurrency, Indexing, Durability",
+        "Atomicity, Caching, Isolation, Data-independence"
+      ],
+      "correct_index": 0,
+      "explanation": "The notes explicitly define ACID as Atomicity, Consistency, Isolation, and Durability.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-1-transaction-manager-2",
+      "test_id": "pt-dbms-sql-1-transaction-manager",
+      "question_text": "In the fund-transfer example, what does 'Atomicity' guarantee?",
+      "options": [
+        "Either both UPDATE statements take effect, or neither does",
+        "The transaction always completes within one second",
+        "Only the DBA can see the transaction's changes",
+        "The transaction is automatically logged to a printed report"
+      ],
+      "correct_index": 0,
+      "explanation": "The notes define atomicity as an all-or-nothing guarantee across the transaction's statements.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-1-transaction-manager-3",
+      "test_id": "pt-dbms-sql-1-transaction-manager",
+      "question_text": "Which mechanism does the notes give as a way the Transaction Manager achieves Isolation?",
+      "options": [
+        "Locking or multi-version concurrency control (MVCC)",
+        "Write-ahead logging alone",
+        "The Query Processor's cost-based optimizer",
+        "The Storage Manager's page fill-factor setting"
+      ],
+      "correct_index": 0,
+      "explanation": "The notes state isolation is achieved through locking or MVCC, distinct from durability's write-ahead logging mechanism.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-1-transaction-manager-4",
+      "test_id": "pt-dbms-sql-1-transaction-manager",
+      "question_text": "How does the Transaction Manager prevent two students from both successfully registering for the last seat in a course, according to the notes?",
+      "options": [
+        "It ensures only one transaction can successfully decrement the seat counter, while the other blocks, retries, or fails cleanly",
+        "It allows both registrations to succeed and resolves the conflict afterward",
+        "It disables course registration entirely once one seat remains",
+        "It requires the DBA to manually approve every registration"
+      ],
+      "correct_index": 0,
+      "explanation": "The notes describe this exact mechanism: only one transaction succeeds, the other is blocked, retried, or fails cleanly.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-1-transaction-manager-5",
+      "test_id": "pt-dbms-sql-1-transaction-manager",
+      "question_text": "What mechanism does the notes say typically guarantees Durability?",
+      "options": [
+        "Write-ahead logging (WAL), where the change is durably logged before being confirmed to the client",
+        "Locking of rows during the transaction",
+        "Full table scans on every commit",
+        "Physical redundancy of the Query Processor"
+      ],
+      "correct_index": 0,
+      "explanation": "The notes attribute durability specifically to write-ahead logging, where changes are logged durably before confirmation.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-1-transaction-manager-6",
+      "test_id": "pt-dbms-sql-1-transaction-manager",
+      "question_text": "What is the risk of using READ UNCOMMITTED isolation for a workload that actually needs strong guarantees, per the notes?",
+      "options": [
+        "It permits dirty reads, where a transaction reads data from another transaction that is later rolled back",
+        "It guarantees perfect durability with zero performance cost",
+        "It automatically upgrades itself to SERIALIZABLE when needed",
+        "It prevents any transaction from ever committing"
+      ],
+      "correct_index": 0,
+      "explanation": "The notes explicitly describe the dirty-read risk of READ UNCOMMITTED isolation for workloads needing stronger guarantees.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-1-transaction-manager-7",
+      "test_id": "pt-dbms-sql-1-transaction-manager",
+      "question_text": "A developer opens a transaction with BEGIN but the application crashes before ever calling COMMIT or ROLLBACK. What does the notes say is the consequence?",
+      "options": [
+        "The transaction can silently hold locks or resources far longer than intended, degrading concurrency for other users",
+        "The DBMS automatically deletes the affected table",
+        "This has no effect since BEGIN statements are ignored by the Transaction Manager",
+        "The transaction is instantly and safely committed by default"
+      ],
+      "correct_index": 0,
+      "explanation": "The notes warn that forgetting to commit or roll back can leave locks/resources held, hurting concurrency for others.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-1-transaction-manager-8",
+      "test_id": "pt-dbms-sql-1-transaction-manager",
+      "question_text": "Under MVCC, what specific storage-related risk does the notes associate with long-running transactions?",
+      "options": [
+        "Old row versions can pile up and bloat storage until cleaned up",
+        "The Transaction Manager immediately deletes the transaction's data",
+        "MVCC disables the Buffer Manager entirely for the duration of the transaction",
+        "The Query Processor stops optimizing all other queries system-wide"
+      ],
+      "correct_index": 0,
+      "explanation": "The notes specifically mention that under MVCC, long-running transactions can cause old row versions to accumulate, bloating storage.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Conceptual transfer outcomes under an assumed atomic transaction",
+      "description": "These are illustrative balances, not executed SQL results. A working state is not a promised public snapshot. The intended operation moves 100 from A to B; a correct committed outcome preserves total 1,500, while a canceled transaction restores the initial balances.",
+      "columns": [
+        "Illustrated state",
+        "Account A",
+        "Account B",
+        "Meaning"
+      ],
+      "rows": [
+        [
+          "Initial",
+          "1,000",
+          "500",
+          "Starting balances"
+        ],
+        [
+          "After debit inside unfinished work",
+          "900",
+          "500",
+          "Intermediate working state; not the intended committed result"
+        ],
+        [
+          "After complete successful transaction",
+          "900",
+          "600",
+          "Intended debit and credit together"
+        ],
+        [
+          "After rollback before commit",
+          "1,000",
+          "500",
+          "Uncommitted grouped work undone"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "coordinator review",
+    "server_rendering": "passed",
+    "browser_rendering": "unverified",
+    "independent_review": "unavailable; no agent tools",
+    "rendering_check": "Actual LessonBlock/TopicDiagrams in React server rendering; 18 authored package checks passed; desktop/mobile browser QA remains unverified"
+  }
+}

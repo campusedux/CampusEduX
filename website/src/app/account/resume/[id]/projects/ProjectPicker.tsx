@@ -10,15 +10,22 @@ export default function ProjectPicker({ resumeId, projects }: { resumeId: string
   const [error, setError] = useState<string | null>(null);
 
   async function handleAdd(projectId: string) {
+    if (pendingId !== null) return;
     setPendingId(projectId);
     setError(null);
-    const result = await appendCustomProjectToResumeAction(resumeId, projectId);
-    setPendingId(null);
-    if ("error" in result) {
-      setError(result.error);
-      return;
+    try {
+      const result = await appendCustomProjectToResumeAction(resumeId, projectId);
+      setPendingId(null);
+      if ("error" in result) {
+        setError(result.error);
+        return;
+      }
+      setAddedIds((prev) => new Set(prev).add(projectId));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
+    } finally {
+      setPendingId(null);
     }
-    setAddedIds((prev) => new Set(prev).add(projectId));
   }
 
   return (

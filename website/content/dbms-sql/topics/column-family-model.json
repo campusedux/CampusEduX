@@ -1,0 +1,627 @@
+{
+  "source_ref": "chapter-3-data-models/column-family-model",
+  "slug": "column-family-model",
+  "title": "Column Family Model",
+  "description": "Distinguish sparse wide-column cells from typed Cassandra rows and analytical column storage, with query-first keys, bounded time partitions, and SQL representation exercises.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Organizing data around keys and related columns\n\nThe column-family or wide-column model groups related named values under keyed access structures. Google's Bigtable is a foundational system associated with this model family. A row key identifies a logical row, families organize related columns, and supported qualifiers identify values within that organization. The precise representation and operations depend on the product.\n\nApache Cassandra is also commonly discussed in the wide-column family, but its modern CQL tables have declared columns, types, partition keys, and clustering rules. It should not be taught as identical to a Bigtable row with arbitrary dynamic qualifiers. A broad model category is useful only if the important implementation differences remain visible.\n\nThis topic uses MySQL exercises that mirror selected keyed structures and time-window queries. They do not create native Bigtable families or Cassandra partitions. The fixtures let students practise explicit row identity and access scope through the established SQL judge while leaving native distribution, consistency, and storage behavior unverified.\n\n## Keeping sparse presence distinct from NULL\n\nA sparse representation can store different populated qualifiers for different row keys. A campus profile might have a name and city, while another profile has only a name. An absent cell need not be represented by an explicit value for every possible qualifier. That is different from assuming a fixed rectangular result filled with identical NULL markers.\n\nMissingness still needs meaning. A city cell can be absent because it was never recorded, while a stored string can intentionally be empty. A delete operation can have its own retention and tombstone behavior depending on the engine. Do not infer the physical representation of missing values or deletion from the word sparse alone.\n\nIn Cassandra's typed interface, the schema and operations define which columns and values are supported. A statement that every wide-column product permits arbitrary new column names in every write would therefore be misleading. Explain the selected representation and product rather than transferring one system's qualifier model unchanged into another.\n\n## Distinguishing wide-column from analytical column storage\n\nThe name column-family can be confused with analytical columnar storage. These are different concerns. A column-oriented analytical engine may store values by column to support scans and compression for reporting. A wide-column design centers keyed rows or partitions and their supported related values. Similar terminology does not establish identical logical models or query behavior.\n\nA workload asking for a few sensor readings in one time range differs from a warehouse query scanning totals across millions of records. Either product category may offer additional facilities, but the design should start from required operations. Choosing a system because both descriptions contain column is not an access-pattern analysis.\n\nLikewise, a relational table can be represented physically using varied storage strategies. Logical model and physical layout should not be collapsed into one label. The same caution applies when a teaching table mirrors cell triples: an SQL table named cells is not proof that MySQL has become a native wide-column service.\n\n## Designing keys from the query\n\nQuery-first design identifies the required access pattern and chooses keys and organization that support it. For time-series readings, a request might specify one sensor, one day bucket, and a bounded time interval. The key must make that population reachable through the product's supported operations without relying on an unrestricted arbitrary scan.\n\nA partition key can group related records, while clustering components can organize records within that group under the selected engine's rules. In a Cassandra-style design, sensor and bucket can identify the partition, with observation time and a tie-breaker distinguishing readings. Exact syntax and allowed predicates require documentation for the target version.\n\nKeys also affect load distribution. Grouping every reading for a popular sensor forever can produce a large or hot partition. A time bucket can bound growth, but too many tiny partitions or poorly chosen buckets have other costs. The correct size follows measured volume, retention, and access patterns rather than a universal daily-bucket rule.\n\n## Preserving event identity and ordering\n\nTwo readings can have the same timestamp. A model that identifies a reading only by sensor and time can accidentally overwrite or merge valid occurrences if the domain permits ties. Include a reading identifier or another defined distinguishing component when needed. Timestamp precision alone is not a substitute for a clear occurrence contract.\n\nFor a query returning the latest readings, state the ordering and limit. A descending timestamp with a descending reading identifier can provide a deterministic sequence in the fixture. A time window also needs inclusive and exclusive boundaries. The interval from ten inclusive to eleven exclusive contains the ten o'clock reading but not the eleven o'clock reading.\n\nA bucket field should agree with the intended observation time under a stated time policy. A local date and a UTC timestamp can fall on different calendar days. The teaching fixture uses consistent fixed times; a production design needs its own timezone and bucketing rule. Avoid mixing wall-clock assumptions into a key merely because the sample has no midnight boundary.\n\n## Comparing consistency as a product contract\n\nCassandra provides configurable consistency choices for operations, with consequences depending on replication and the complete configuration. That is more precise than saying every wide-column system has one default eventual-consistency guarantee. Even within a product, a chosen read or write level matters to what the caller observes.\n\nIt is equally misleading to contrast this with a claim that every relational database always supplies strict serializable behavior. Transaction guarantees depend on the engine, isolation level, configuration, and operation. Compare the actual requirements and supported settings on both sides rather than treating model names as universal consistency promises.\n\nA successful single-client query over a SQL mirror does not test distributed quorum behavior, replica lag, or concurrent native writes. Record that scope explicitly. The fixture can verify selected rows and ordering while leaving the operational consistency question open. Local output evidence should not be inflated into a hosted-engine guarantee.\n\n## Handling writes and retention deliberately\n\nWide-column implementations can be effective for supported write-heavy workloads, but high throughput is not guaranteed by the model alone. Storage engine choices, partition skew, value size, compaction, replication, and workload shape matter. Do not state that every product in the family uses one identical physical mechanism or always outperforms another model.\n\nRetention and deletion need their own review. Expiry, tombstones, and storage reclamation can interact with the actual engine's maintenance behavior. Removing a logical reading from a query does not prove every retained physical copy is gone immediately. A lifecycle policy should account for the relevant product and operational requirements.\n\nUpdating a value also needs an identity contract. If a new write targets the same key, is it correcting one measurement, replacing a cell, or representing a separate event? Those are different facts. Use keys and supported operations that preserve the intended history rather than silently overwriting a prior observation with the same visible timestamp.\n\n## Practising with explicit SQL mirrors\n\nOne exercise represents a sparse cell as row_key, family, qualifier, and cell_value. The triple identifies one fixture cell. Listing a profile family shows that only populated qualifiers appear. The schema is a relational mirror and intentionally does not reproduce native cell versions or every storage behavior.\n\nThe second exercise represents typed sensor readings with a sensor, day bucket, timestamp, reading identifier, and decimal value. A query selects one sensor and bucket, applies the bounded interval, and requests the latest three readings. It tests access-scope reasoning and result order, not actual Cassandra partition routing or native scan performance.\n\nInclude absent qualifiers, different sensors, other buckets, equal timestamps, and the exact interval endpoints in validation. A correct query must preserve the requested population and distinguish separate occurrences. These cases reveal mistakes that a single monotonically increasing timestamp sample would miss.\n\nThe wide-column family is useful for understanding keyed organization and query-driven design. Keep sparse cells, typed rows, analytical column storage, and physical implementation distinct. Clear keys, bounded populations, and honest consistency and execution claims make the model useful without turning category vocabulary into guarantees about every product or workload.\n",
+  "references": [
+    {
+      "title": "Bigtable schema design",
+      "url": "https://cloud.google.com/bigtable/docs/schema-design"
+    },
+    {
+      "title": "Cassandra data modeling",
+      "url": "https://cassandra.apache.org/doc/latest/cassandra/developing/data-modeling/intro.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-3-column-family-model",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-3-column-family-model-1",
+          "test_id": "pt-dbms-sql-3-column-family-model",
+          "question_text": "What is the fundamental organizing structure of the column-family model?",
+          "options": [
+            "Rows identified by a row key, with columns grouped into families, where different rows can have different sets of populated columns",
+            "A fixed schema table where every row has identical columns",
+            "Nodes connected by labeled edges",
+            "A single opaque value per key"
+          ],
+          "correct_index": 0,
+          "explanation": "Column-family databases organize data as rows (keyed by a row key) whose columns are grouped into families, and rows are sparse — they need not share the same columns.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-3-column-family-model-2",
+          "test_id": "pt-dbms-sql-3-column-family-model",
+          "question_text": "Which research paper/system pioneered the column-family (wide-column) model?",
+          "options": [
+            "Google's Bigtable",
+            "IBM's IMS",
+            "CODASYL's network model spec",
+            "Codd's relational model paper"
+          ],
+          "correct_index": 0,
+          "explanation": "Google's 2006 Bigtable paper introduced the wide-column storage design later implemented in systems like Cassandra and HBase.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-3-column-family-model-3",
+          "test_id": "pt-dbms-sql-3-column-family-model",
+          "question_text": "What can sparsity mean in a Bigtable-style cell representation?",
+          "options": [
+            "It stores very little data overall",
+            "Different row keys can have different populated qualifiers without explicit cells for every absent value",
+            "Only one column family is allowed per database",
+            "Rows cannot contain more than one column"
+          ],
+          "correct_index": 1,
+          "explanation": "Modern Cassandra CQL tables still have declared schemas; do not universalize dynamic qualifiers.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-3-column-family-model-4",
+          "test_id": "pt-dbms-sql-3-column-family-model",
+          "question_text": "Which of these systems is a widely used column-family database?",
+          "options": [
+            "Apache Cassandra",
+            "Redis",
+            "Neo4j",
+            "MongoDB"
+          ],
+          "correct_index": 0,
+          "explanation": "Apache Cassandra, along with Apache HBase, is a well-known column-family (wide-column) database implementing Bigtable-style concepts.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-3-column-family-model-5",
+          "test_id": "pt-dbms-sql-3-column-family-model",
+          "question_text": "Why choose Cassandra partition and clustering keys from required queries?",
+          "options": [
+            "Because Cassandra has no query language at all",
+            "They determine supported keyed access scope and organization, so arbitrary predicates are not interchangeable",
+            "Because arbitrary predicates are faster than key-based lookups in Cassandra",
+            "Because Cassandra enforces strict relational normalization"
+          ],
+          "correct_index": 1,
+          "explanation": "Exact query and indexing capabilities depend on the target product and version.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-3-column-family-model-6",
+          "test_id": "pt-dbms-sql-3-column-family-model",
+          "question_text": "What is the accurate way to discuss Cassandra consistency?",
+          "options": [
+            "Strict serializability with no configuration options",
+            "Inspect configured operation levels, replication, and the full deployment rather than infer one guarantee from the model label",
+            "No consistency guarantees whatsoever",
+            "Full two-phase commit across all nodes for every write"
+          ],
+          "correct_index": 1,
+          "explanation": "Relational products also have implementation-dependent transaction and isolation guarantees.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-3-column-family-model-7",
+          "test_id": "pt-dbms-sql-3-column-family-model",
+          "question_text": "How does a structured wide-column interface differ from the simplest opaque key-value interface?",
+          "options": [
+            "They are functionally identical opaque blobs",
+            "It exposes the supported keyed and named-value organization, with product-specific schema and access rules",
+            "A key-value store's value supports nested JSON while column-family values do not",
+            "Column-family stores do not use any key to identify rows"
+          ],
+          "correct_index": 1,
+          "explanation": "It does not imply every product permits arbitrary qualifier scans.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-3-column-family-model-8",
+          "test_id": "pt-dbms-sql-3-column-family-model",
+          "question_text": "Why can a keyed time-series design fit a wide-column workload?",
+          "options": [
+            "Because it enforces a fixed schema across all sensors",
+            "Its keys and bounded time organization can match the required access pattern, subject to actual workload and engine checks",
+            "Because it requires normalizing readings into a separate join table",
+            "Because it does not support horizontal scaling"
+          ],
+          "correct_index": 1,
+          "explanation": "Do not infer universal throughput or physical layout from the model name.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-3-column-family-model-new-9",
+          "test_id": "pt-dbms-sql-3-column-family-model",
+          "question_text": "Is wide-column organization the same as analytical columnar storage?",
+          "options": [
+            "Yes; every use of column means the same engine",
+            "No; keyed model organization and scan-oriented physical layout are distinct concerns",
+            "Only if there are no indexes",
+            "Only if all values are numeric"
+          ],
+          "correct_index": 1,
+          "explanation": "Similar vocabulary does not establish equivalent behavior.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-3-column-family-model-new-10",
+          "test_id": "pt-dbms-sql-3-column-family-model",
+          "question_text": "Why can sensor ID plus timestamp be insufficient event identity?",
+          "options": [
+            "Every timestamp is a table name",
+            "Sensors cannot repeat",
+            "The domain can permit multiple readings at the same time",
+            "Timestamps always grant access"
+          ],
+          "correct_index": 2,
+          "explanation": "A tie-breaker can preserve separate occurrences.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-3-column-family-model-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-3-column-family-model-application-new-1",
+          "test_id": "pt-dbms-sql-3-column-family-model-application",
+          "question_text": "The time window is [10:00,11:00). Which endpoint qualifies?",
+          "options": [
+            "Both endpoints qualify",
+            "Neither endpoint qualifies",
+            "10:00 qualifies; 11:00 does not",
+            "Only 11:00 qualifies"
+          ],
+          "correct_index": 2,
+          "explanation": "The interval has an inclusive lower and exclusive upper boundary.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-3-column-family-model-application-new-2",
+          "test_id": "pt-dbms-sql-3-column-family-model-application",
+          "question_text": "Two readings share a timestamp. Which explicit sort makes the fixture ranking deterministic?",
+          "options": [
+            "observed_at DESC alone always breaks ties",
+            "The current insertion order",
+            "The sensor label length",
+            "observed_at DESC, reading_id DESC"
+          ],
+          "correct_index": 3,
+          "explanation": "The identifier resolves equal timestamp values.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-3-column-family-model-application-new-3",
+          "test_id": "pt-dbms-sql-3-column-family-model-application",
+          "question_text": "One sensor accumulates all readings forever in one partition. What needs review?",
+          "options": [
+            "Partition growth and hot-key behavior",
+            "Only the display color",
+            "Only the number of query keywords",
+            "Nothing because all wide-column partitions are unlimited"
+          ],
+          "correct_index": 0,
+          "explanation": "Key grouping can concentrate storage and traffic.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-3-column-family-model-application-new-4",
+          "test_id": "pt-dbms-sql-3-column-family-model-application",
+          "question_text": "A profile has no city cell. What should the sparse-cell listing return for city?",
+          "options": [
+            "An invented city value",
+            "No city cell under the fixture contract",
+            "A mandatory empty string",
+            "A new root record"
+          ],
+          "correct_index": 1,
+          "explanation": "Absent population differs from an explicitly stored value.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-3-column-family-model-application-new-5",
+          "test_id": "pt-dbms-sql-3-column-family-model-application",
+          "question_text": "A modern Cassandra CQL table is used. What should not be assumed from Bigtable terminology?",
+          "options": [
+            "That a schema matters",
+            "That keys can organize access",
+            "Every write can create arbitrary undeclared column names",
+            "That product documentation is useful"
+          ],
+          "correct_index": 2,
+          "explanation": "Products within the broad family have different interfaces.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-3-column-family-model-application-new-6",
+          "test_id": "pt-dbms-sql-3-column-family-model-application",
+          "question_text": "A SQL mirror selects a bounded sensor interval correctly. What remains unverified?",
+          "options": [
+            "The observed selected rows",
+            "The fixture ordering",
+            "The executed SQL engine",
+            "Native partition routing, distributed consistency, and throughput"
+          ],
+          "correct_index": 3,
+          "explanation": "Output tests are not native operational evidence.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-3-column-family-model-application-new-7",
+          "test_id": "pt-dbms-sql-3-column-family-model-application",
+          "question_text": "A UTC observation is assigned a local-date bucket. What must be explicit?",
+          "options": [
+            "Timezone and bucketing policy",
+            "Only timestamp string length",
+            "Only sensor capitalization",
+            "Only the value's decimal places"
+          ],
+          "correct_index": 0,
+          "explanation": "Calendar boundaries can differ by time interpretation.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-3-column-family-model-application-new-8",
+          "test_id": "pt-dbms-sql-3-column-family-model-application",
+          "question_text": "A reading is logically expired. What cannot be inferred immediately?",
+          "options": [
+            "That visibility can follow an expiry policy",
+            "Every physical copy has been reclaimed",
+            "That retention behavior needs documentation",
+            "That the operation has an identity"
+          ],
+          "correct_index": 1,
+          "explanation": "Logical deletion and storage reclamation are separate claims.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-3-column-family-model-application-new-9",
+          "test_id": "pt-dbms-sql-3-column-family-model-application",
+          "question_text": "A key is reused for what was intended as a new event. What is at risk?",
+          "options": [
+            "Only query indentation",
+            "Only the model diagram size",
+            "Overwriting or merging an earlier occurrence",
+            "Only the number of families"
+          ],
+          "correct_index": 2,
+          "explanation": "Identity must reflect whether the write is a correction or a distinct fact.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-3-column-family-model-application-new-10",
+          "test_id": "pt-dbms-sql-3-column-family-model-application",
+          "question_text": "An analytical report scans every sensor across years. What should guide model choice?",
+          "options": [
+            "The shared word column alone",
+            "A universal claim that all NoSQL is faster",
+            "Only the dataset's subject name",
+            "The actual access pattern and required guarantees"
+          ],
+          "correct_index": 3,
+          "explanation": "Representation should follow concrete workload needs.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "dsa-dbms-sql-wide-profile-cells",
+      "slug": "wide-profile-cells",
+      "title": "Read populated qualifiers in a sparse family mirror",
+      "difficulty": "Easy",
+      "task": "Return qualifier and cell_value for row_key campus:1 and family profile, ordered by qualifier. Do not invent rows for absent qualifiers. This ordinary SQL table mirrors sparse cells; it does not create native Bigtable storage.",
+      "schema_sql": "CREATE TABLE cells (row_key VARCHAR(30) NOT NULL, family VARCHAR(20) NOT NULL, qualifier VARCHAR(30) NOT NULL, cell_value VARCHAR(60) NOT NULL, PRIMARY KEY(row_key,family,qualifier));",
+      "seed_sql": "INSERT INTO cells VALUES ('campus:1','profile','name','West Campus'),('campus:1','profile','city','Pune'),('campus:1','stats','labs','4'),('campus:2','profile','name','East Campus');",
+      "expected": "qualifier\tcell_value\ncity\tPune\nname\tWest Campus",
+      "ordering": "qualifier ascending",
+      "constraints": [
+        "One fixture value per row/family/qualifier triple",
+        "Names use consistent spelling",
+        "Missing qualifiers have no row"
+      ],
+      "edge_cases": [
+        "Other families are excluded",
+        "Other row keys are excluded",
+        "No profile cells returns no rows"
+      ],
+      "hints": [
+        "Restrict both row identity and family",
+        "Order the populated qualifiers explicitly"
+      ],
+      "solution_sql": "SELECT qualifier,cell_value FROM cells WHERE row_key='campus:1' AND family='profile' ORDER BY qualifier;",
+      "explanation": "The query reads only populated cells within the requested family and row scope.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO cells VALUES ('campus:1','stats','labs','4');",
+          "expected": ""
+        },
+        {
+          "seed_sql": "INSERT INTO cells VALUES ('campus:1','profile','name','Only Name');",
+          "expected": "qualifier\tcell_value\nname\tOnly Name"
+        }
+      ]
+    },
+    {
+      "id": "dsa-dbms-sql-wide-time-window",
+      "slug": "wide-time-window",
+      "title": "Read a bounded sensor bucket with stable ties",
+      "difficulty": "Medium",
+      "task": "Return observed_at, reading_id, reading for sensor_id 1 and bucket_day 2026-10-28 in the interval from 10:00:00 inclusive to 11:00:00 exclusive that day. Return at most three rows, ordered observed_at descending then reading_id descending. This is a typed SQL mirror, not a native Cassandra partition test.",
+      "schema_sql": "CREATE TABLE readings (sensor_id INT NOT NULL, bucket_day DATE NOT NULL, observed_at DATETIME NOT NULL, reading_id INT NOT NULL, reading DECIMAL(8,2) NOT NULL, PRIMARY KEY(sensor_id,bucket_day,observed_at,reading_id));",
+      "seed_sql": "INSERT INTO readings VALUES (1,'2026-10-28','2026-10-28 10:00:00',1,20.00),(1,'2026-10-28','2026-10-28 10:30:00',2,21.00),(1,'2026-10-28','2026-10-28 10:30:00',3,22.00),(1,'2026-10-28','2026-10-28 11:00:00',4,99.00),(2,'2026-10-28','2026-10-28 10:45:00',5,90.00);",
+      "expected": "observed_at\treading_id\treading\n2026-10-28 10:30:00\t3\t22.00\n2026-10-28 10:30:00\t2\t21.00\n2026-10-28 10:00:00\t1\t20.00",
+      "ordering": "observed_at descending, reading_id descending",
+      "constraints": [
+        "Fixture bucket days agree with observation dates",
+        "Reading identities distinguish timestamp ties",
+        "The time policy is fixed for reproducibility"
+      ],
+      "edge_cases": [
+        "Exact lower endpoint qualifies",
+        "Exact upper endpoint does not",
+        "Other sensors and buckets are excluded",
+        "More than three qualifying readings are limited deterministically"
+      ],
+      "hints": [
+        "Constrain the full requested bucket scope",
+        "Use a half-open interval and explicit tie-breaker"
+      ],
+      "solution_sql": "SELECT observed_at,reading_id,reading FROM readings WHERE sensor_id=1 AND bucket_day='2026-10-28' AND observed_at>='2026-10-28 10:00:00' AND observed_at<'2026-10-28 11:00:00' ORDER BY observed_at DESC,reading_id DESC LIMIT 3;",
+      "explanation": "The scope and half-open interval select the intended records, while the secondary ordering preserves tied occurrences.",
+      "validation_cases": [
+        {
+          "seed_sql": "",
+          "expected": ""
+        },
+        {
+          "seed_sql": "INSERT INTO readings VALUES (1,'2026-10-28','2026-10-28 10:01:00',1,1.00),(1,'2026-10-28','2026-10-28 10:02:00',2,2.00),(1,'2026-10-28','2026-10-28 10:03:00',3,3.00),(1,'2026-10-28','2026-10-28 10:04:00',4,4.00);",
+          "expected": "observed_at\treading_id\treading\n2026-10-28 10:04:00\t4\t4.00\n2026-10-28 10:03:00\t3\t3.00\n2026-10-28 10:02:00\t2\t2.00"
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-3-column-family-model-1",
+      "test_id": "pt-dbms-sql-3-column-family-model",
+      "question_text": "What is the fundamental organizing structure of the column-family model?",
+      "options": [
+        "Rows identified by a row key, with columns grouped into families, where different rows can have different sets of populated columns",
+        "A fixed schema table where every row has identical columns",
+        "Nodes connected by labeled edges",
+        "A single opaque value per key"
+      ],
+      "correct_index": 0,
+      "explanation": "Column-family databases organize data as rows (keyed by a row key) whose columns are grouped into families, and rows are sparse — they need not share the same columns.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-3-column-family-model-2",
+      "test_id": "pt-dbms-sql-3-column-family-model",
+      "question_text": "Which research paper/system pioneered the column-family (wide-column) model?",
+      "options": [
+        "Google's Bigtable",
+        "IBM's IMS",
+        "CODASYL's network model spec",
+        "Codd's relational model paper"
+      ],
+      "correct_index": 0,
+      "explanation": "Google's 2006 Bigtable paper introduced the wide-column storage design later implemented in systems like Cassandra and HBase.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-3-column-family-model-3",
+      "test_id": "pt-dbms-sql-3-column-family-model",
+      "question_text": "What does it mean for the column-family model to be 'sparse'?",
+      "options": [
+        "It stores very little data overall",
+        "Different rows can have entirely different sets of populated columns, with no need to store unused columns as NULL",
+        "Only one column family is allowed per database",
+        "Rows cannot contain more than one column"
+      ],
+      "correct_index": 1,
+      "explanation": "Sparseness means rows aren't required to share identical columns; a row simply omits columns it doesn't use, avoiding the overhead of storing NULLs.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-3-column-family-model-4",
+      "test_id": "pt-dbms-sql-3-column-family-model",
+      "question_text": "Which of these systems is a widely used column-family database?",
+      "options": [
+        "Apache Cassandra",
+        "Redis",
+        "Neo4j",
+        "MongoDB"
+      ],
+      "correct_index": 0,
+      "explanation": "Apache Cassandra, along with Apache HBase, is a well-known column-family (wide-column) database implementing Bigtable-style concepts.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-3-column-family-model-5",
+      "test_id": "pt-dbms-sql-3-column-family-model",
+      "question_text": "Why is Cassandra typically queried by partition/row key rather than arbitrary column predicates?",
+      "options": [
+        "Because Cassandra has no query language at all",
+        "Because its storage engine and physical data layout are optimized for fast key-based/range access, requiring query-first schema design",
+        "Because arbitrary predicates are faster than key-based lookups in Cassandra",
+        "Because Cassandra enforces strict relational normalization"
+      ],
+      "correct_index": 1,
+      "explanation": "Cassandra's architecture is optimized around efficient key/range access; ad-hoc filtering on arbitrary columns isn't efficient, so schemas are designed per query pattern (denormalized) rather than normalized.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-3-column-family-model-6",
+      "test_id": "pt-dbms-sql-3-column-family-model",
+      "question_text": "What consistency model does Cassandra typically offer by default, in contrast to strict relational ACID guarantees?",
+      "options": [
+        "Strict serializability with no configuration options",
+        "Tunable eventual consistency with configurable levels like QUORUM or ONE",
+        "No consistency guarantees whatsoever",
+        "Full two-phase commit across all nodes for every write"
+      ],
+      "correct_index": 1,
+      "explanation": "Cassandra offers tunable consistency levels (e.g., ONE, QUORUM, ALL) rather than defaulting to strict ACID transactions, trading strict consistency for availability and scale.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-3-column-family-model-7",
+      "test_id": "pt-dbms-sql-3-column-family-model",
+      "question_text": "How does a column-family row's value differ structurally from a key-value store's value?",
+      "options": [
+        "They are functionally identical opaque blobs",
+        "A column-family row's value is internally structured into named, independently addressable columns that can be scanned by name/range, unlike a key-value store's fully opaque blob",
+        "A key-value store's value supports nested JSON while column-family values do not",
+        "Column-family stores do not use any key to identify rows"
+      ],
+      "correct_index": 1,
+      "explanation": "Column-family values have internal named-column structure that the database can address and range-scan, which is a level of structure a pure key-value store's opaque blob lacks.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-3-column-family-model-8",
+      "test_id": "pt-dbms-sql-3-column-family-model",
+      "question_text": "Why is the column-family model well suited to time-series/IoT telemetry data, such as sensor readings keyed by sensor ID and timestamp?",
+      "options": [
+        "Because it enforces a fixed schema across all sensors",
+        "Because its LSM-tree-based storage engine gives very high sustained write throughput and rows can sparsely accumulate timestamped columns as new readings arrive",
+        "Because it requires normalizing readings into a separate join table",
+        "Because it does not support horizontal scaling"
+      ],
+      "correct_index": 1,
+      "explanation": "The LSM-tree write path gives high write throughput, and sparse rows let each sensor accumulate only the timestamped columns it actually has readings for.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "coordinator",
+    "independent_review": "unavailable; no agent tools",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Definitions and examples checked against questions; no plagiarism certification.",
+    "existing_question_corrections": [
+      "tq-dbms-sql-3-column-family-model-3",
+      "tq-dbms-sql-3-column-family-model-5",
+      "tq-dbms-sql-3-column-family-model-6",
+      "tq-dbms-sql-3-column-family-model-7",
+      "tq-dbms-sql-3-column-family-model-8"
+    ],
+    "canonical_answer_indices_preserved": true
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-3-column-family-model",
+    "original_note_sha256": "49b882278a20734b29166d60f504b20201648014cb114f065c6d8c5ab2b46c0a",
+    "status": "paired migration prepared; not applied"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Sparse profile cells versus typed time-series rows",
+      "description": "These are distinct teaching representations. The first preserves populated named qualifiers; the second uses explicit typed columns and a bounded key scope. Neither SQL mirror implements a native distributed wide-column service.",
+      "columns": [
+        "Representation",
+        "Identity components",
+        "Access question"
+      ],
+      "rows": [
+        [
+          "Sparse cell",
+          "row key + family + qualifier",
+          "Which profile fields are present for campus:1?"
+        ],
+        [
+          "Typed reading",
+          "sensor + day bucket + time + reading ID",
+          "Which latest readings fall within this interval?"
+        ],
+        [
+          "Analytical column storage",
+          "Product-specific physical layout",
+          "A separate storage concern, not the same model definition"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "coordinator review",
+    "server_rendering": "passed",
+    "browser_rendering": "unverified",
+    "independent_review": "unavailable; no agent tools",
+    "rendering_check": "2026-10-29: 54 authored-package checks plus 8 diagram/access checks passed through actual renderers. Browser rendering unverified."
+  },
+  "sql_verification": {
+    "engine": "11.8.6-MariaDB-0+deb13u1 from Debian",
+    "scope": "MariaDB compatibility execution; exact MySQL 8.4/provider execution unverified",
+    "fingerprint": "e8b492061415b710a30a3ac96962ee9f0bd446d1f54f2f7dba160c0aaffee260",
+    "cases": [
+      {
+        "problem": "wide-profile-cells",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "wide-profile-cells",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "wide-profile-cells",
+        "case": 2,
+        "passed": true
+      },
+      {
+        "problem": "wide-time-window",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "wide-time-window",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "wide-time-window",
+        "case": 2,
+        "passed": true
+      }
+    ],
+    "all_passed": true
+  }
+}

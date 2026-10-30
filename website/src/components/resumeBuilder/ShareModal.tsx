@@ -24,29 +24,47 @@ function shareUrl(token: string): string {
   return absoluteUrl(`/r/${token}`);
 }
 
-function ShareRow({ share, onChange }: { share: ResumeShare; onChange: () => void }) {
+function ShareRow({ share, onChange, onError }: { share: ResumeShare; onChange: () => Promise<void>; onError: (message: string) => void }) {
   const [copied, setCopied] = useState(false);
   const [busy, setBusy] = useState(false);
   const url = shareUrl(share.token);
 
   async function copy() {
-    await navigator.clipboard.writeText(url);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch (err) {
+      onError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
+    }
   }
 
   async function toggle() {
+    if (busy) return;
     setBusy(true);
-    await toggleResumeShareAction(share.id, !share.isActive);
-    setBusy(false);
-    onChange();
+    try {
+      const result = await toggleResumeShareAction(share.id, !share.isActive);
+      if ("error" in result) { onError(result.error); return; }
+      await onChange();
+    } catch (err) {
+      onError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function remove() {
+    if (busy) return;
     setBusy(true);
-    await deleteResumeShareAction(share.id);
-    setBusy(false);
-    onChange();
+    try {
+      const result = await deleteResumeShareAction(share.id);
+      if ("error" in result) { onError(result.error); return; }
+      await onChange();
+    } catch (err) {
+      onError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (
@@ -89,19 +107,27 @@ export default function ShareModal({ resumeId, initialShares }: { resumeId: stri
     // Re-fetching the full list keeps view counts/active state accurate after any change.
     const { listResumeSharesAction } = await import("@/lib/actions/resumeBuilder");
     const result = await listResumeSharesAction(resumeId);
-    if (!("error" in result)) setShares(result);
+    if ("error" in result) setError(result.error);
+    else setShares(result);
   }
 
   async function handleCreate() {
+    if (creating) return;
     setCreating(true);
     setError(null);
-    const result = await createResumeShareAction(resumeId);
-    setCreating(false);
-    if ("error" in result) {
-      setError(result.error);
-      return;
+    try {
+      const result = await createResumeShareAction(resumeId);
+      setCreating(false);
+      if ("error" in result) {
+        setError(result.error);
+        return;
+      }
+      setShares((prev) => [result, ...prev]);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
+    } finally {
+      setCreating(false);
     }
-    setShares((prev) => [result, ...prev]);
   }
 
   return (
@@ -124,7 +150,7 @@ export default function ShareModal({ resumeId, initialShares }: { resumeId: stri
           {shares.length === 0 ? (
             <p className="text-sm text-ink-faint">No share links yet.</p>
           ) : (
-            shares.map((share) => <ShareRow key={share.id} share={share} onChange={refresh} />)
+            shares.map((share) => <ShareRow key={share.id} share={share} onChange={refresh} onError={setError} />)
           )}
         </div>
 

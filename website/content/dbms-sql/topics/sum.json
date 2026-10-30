@@ -1,0 +1,608 @@
+{
+  "source_ref": "chapter-14-sql-functions/sum",
+  "slug": "sum",
+  "title": "SUM",
+  "description": "Build reliable SQL totals with explicit units, missing-value policies, conditional signs and grouping that preserves legitimate facts and currency boundaries.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Add values from a defined population\n\nSUM combines numeric expression values from qualifying rows into a total. A campus club might add approved contributions, while a shop might calculate net charges after refunds. The arithmetic is straightforward only after the population, units and expression are clear. A total over the wrong facts can look convincing while answering a different question.\n\nUnderstand [aggregate functions](/learning/dbms-sql-tutorial/aggregate-functions), [COUNT](/learning/dbms-sql-tutorial/count) and [null semantics](/learning/dbms-sql-tutorial/null-semantics) first. This topic focuses on totals rather than general grouping syntax. Start every review by stating what one input row means and what quantity each numeric value measures.\n\n## Begin with a whole-population total\n\nFor one contribution per row, the simplest summary adds the amount column:\n\n```sql\nSELECT SUM(amount) AS total_amount\nFROM contributions;\n```\n\nWithout GROUP BY, this returns one summary row over the entire input. Repeated amounts each contribute because they can represent different legitimate contributions. SUM does not choose a single contribution, count donors or remove rows from the table. It calculates a measure whose meaning comes from the input definition.\n\nA WHERE clause narrows the contributing population. Approved-only totals should exclude unapproved rows before the aggregate. The eligibility rule can include tenant, date or access restrictions as well as status. Returning only a total does not remove the need for authorization: even one aggregate number can reveal protected activity.\n\n## Keep missing amounts distinct from zero\n\nSUM ignores null expression values. If amounts are ten, null and minus two, the known-value total is eight. This does not prove that eight is the complete real-world total: the missing contribution could change it. Report the number of known values alongside the total when incomplete measurement matters.\n\nA group whose only amounts are null has a null sum, while a group containing a recorded zero has a known total of zero. Empty ungrouped input also yields a null sum. COUNT(*) and COUNT(amount) help distinguish no rows, existing unknown rows and known amounts. A dashboard should not silently present all three as equally certain measured zero.\n\n## Apply zero replacement at the intended level\n\nCOALESCE(SUM(amount),0) replaces a missing final total with zero. SUM(COALESCE(amount,0)) substitutes zero for each missing input value before adding. Over nonempty all-null input, both produce zero, but over completely empty input the second still has no values to add and yields null.\n\n```sql\nSELECT COUNT(*) AS input_rows,\n       COUNT(amount) AS known_amounts,\n       SUM(amount) AS known_total,\n       COALESCE(SUM(amount), 0) AS display_total\nFROM contributions;\n```\n\nThe beginner exercise deliberately exposes both the raw known total and a zero-replaced display total. That allows the caller to preserve the difference between absent measurements and a presentation policy. Replacing an aggregate result is a business choice, not evidence that the missing values were originally zero.\n\n## Sum expressions only when their meaning matches\n\nA line-item revenue total may sum quantity multiplied by unit_price rather than unit_price alone. If either operand is null, the product can be null and disappear from SUM. Count known products or validate required inputs when every line is supposed to have a complete measured amount. A count of known prices alone cannot establish that quantities are known too.\n\nChoose units before arithmetic. Multiplying a quantity in kilograms by a price per kilogram is coherent; adding cents to rupees without conversion is not. Integer minor units and exact decimal types can support precise monetary policies. Do not assume a numeric SQL type establishes currency identity or appropriate rounding behavior.\n\n## Represent refunds and adjustments consistently\n\nA ledger may store every known amount as a nonnegative magnitude and use an entry kind to distinguish charges from refunds. The net expression then adds charges and subtracts refunds. Another design may store signed amounts directly. Mixing both conventions can subtract a refund twice or accidentally treat an already negative adjustment as new revenue.\n\nThe intermediate exercise uses nonnegative known magnitudes and a CASE expression to assign signs. It includes posted entries only and groups each account separately by currency. An unknown magnitude remains missing in the expression; it is not invented as zero. The known-value count warns that a displayed known net can be incomplete.\n\n## Use conditional totals with explicit alternatives\n\nA conditional total can add one subset while leaving other input rows available for additional measures. CASE expresses which values contribute. For example, summing only charges can return null when no known charge value contributes, while a CASE with ELSE zero can produce zero when noncharge rows exist. Empty input still needs separate consideration.\n\nFor the net ledger expression, recognized charge and refund branches contribute signed amounts. Unexpected entry kinds should be rejected or handled according to an explicit contract rather than silently accepted as meaningful money. The exercise guarantees the two recognized kinds; a production ingestion boundary must enforce its own input rules.\n\n## Group totals without mixing incompatible units\n\nGROUP BY account_id,currency produces one measure per represented account-and-currency pair. Two currency balances for the same account remain separate rows. Adding those amounts into one number without a conversion policy would lose meaning even if SQL executes successfully. The output should retain enough labels for the consumer to interpret each total.\n\nAn ordinary grouped query over empty input returns no groups. To show every configured account and currency combination, start from the correct catalogue and design an outer join with suitable missing-value semantics. Do not assume SUM automatically invents absent combinations. Define the report population separately from the facts that contribute amounts.\n\n## Protect totals from joined-row multiplication\n\nJoining one contribution to several descriptive tags can repeat its amount in the joined input. SUM then adds every appearance. The resulting total describes tag-level appearances rather than the original contribution facts. Pre-aggregate at the required grain or use an existence condition when tags are only eligibility criteria.\n\nSUM(DISTINCT amount) is not a general correction. Two separate donors can each contribute fifty, and both fifty-value facts belong in revenue. DISTINCT would keep only one value and undercount them. Identify the actual duplicated fact by its stable identity, not by the amount it happens to contain. A counterexample with equal legitimate amounts is essential when reviewing this mistake.\n\n## Distinguish row eligibility from a total threshold\n\nWHERE filters inputs; HAVING filters completed groups. A report of groups whose net total is positive should include their negative adjustments in the sum and then test the net. Excluding negative rows with WHERE would calculate gross positive inflow instead, changing the measure before the threshold is applied.\n\nSimilarly, limiting source rows before summing creates a total over that limited subset rather than over the whole eligible population. If the requirement is the top accounts by revenue, first compute one correct account total, then order and limit those summary rows. The order of logical operations changes the question being answered.\n\n## Consider numeric range and execution cost\n\nMySQL SUM result handling depends on the argument types; exact and approximate numeric inputs have different arithmetic consequences. Select types and client representations that can handle expected totals, not just individual rows. A sum can exceed the range that a downstream application assumed even when every source amount was accepted correctly.\n\nFloating-point values can accumulate approximation differences, so compare and present them according to an explicit tolerance or exact-value policy. Avoid using unexamined floating-point totals for exact financial assertions. Aggregate queries can also scan large populations or maintain many groups despite returning a compact summary; inspect actual plans before making performance claims.\n\n## Verify totals with contrasting data\n\nThe contribution exercise checks repeated amounts, a real zero, an unknown value and empty input. The ledger exercise checks refunds, pending entries, separate currencies and an all-unknown group. List each contributing signed amount and add it manually before comparing SQL results. Predicted fixture outcomes remain distinct from executed engine evidence.\n\nRecap four choices: which facts qualify, which numeric expression contributes, which units can be added, and how absence is communicated. Then test a known zero against a missing total and a duplicated join against two legitimate equal amounts. These contrasts make an apparently simple SUM query dependable enough to review and maintain.\n",
+  "references": [
+    {
+      "title": "MySQL 8.4 SUM and aggregate functions",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/aggregate-functions.html"
+    },
+    {
+      "title": "MySQL 8.4 numeric type overview",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/numeric-type-syntax.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-14-sum",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-14-sum-1",
+          "test_id": "pt-dbms-sql-14-sum",
+          "question_text": "What does SUM(amount) do with repeated known amounts?",
+          "options": [
+            "Adds each contributing value",
+            "Keeps only one automatically",
+            "Counts distinct donors",
+            "Returns one arbitrary amount"
+          ],
+          "correct_index": 0,
+          "explanation": "Equal measures can be separate legitimate facts.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-14-sum-2",
+          "test_id": "pt-dbms-sql-14-sum",
+          "question_text": "How does SUM normally handle null expression values?",
+          "options": [
+            "It treats them as one",
+            "It ignores them",
+            "It rejects every row group",
+            "It necessarily converts them to measured zero"
+          ],
+          "correct_index": 1,
+          "explanation": "No known numeric value contributes from a null expression.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-14-sum-3",
+          "test_id": "pt-dbms-sql-14-sum",
+          "question_text": "What does an ungrouped SUM return over empty input?",
+          "options": [
+            "Zero always",
+            "No summary row",
+            "NULL",
+            "The number of columns"
+          ],
+          "correct_index": 2,
+          "explanation": "The aggregate summary exists but has no known sum.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-14-sum-4",
+          "test_id": "pt-dbms-sql-14-sum",
+          "question_text": "Which form replaces a missing final total with zero?",
+          "options": [
+            "COALESCE(SUM(amount),0)",
+            "SUM(amount)=NULL",
+            "COUNT(amount)",
+            "SUM(DISTINCT amount)"
+          ],
+          "correct_index": 0,
+          "explanation": "Replacement is applied to the completed aggregate result.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-14-sum-5",
+          "test_id": "pt-dbms-sql-14-sum",
+          "question_text": "Why can SUM(COALESCE(amount,0)) still be NULL on empty input?",
+          "options": [
+            "COALESCE always fails",
+            "There are no input rows on which to produce substituted values",
+            "SUM ignores every zero",
+            "The table must have an index"
+          ],
+          "correct_index": 1,
+          "explanation": "Per-row replacement and final-result replacement differ.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-14-sum-6",
+          "test_id": "pt-dbms-sql-14-sum",
+          "question_text": "What can a known-value count reveal beside a total?",
+          "options": [
+            "The exact unknown amounts",
+            "Whether some input rows have missing amounts",
+            "A guarantee that every fact is authorized",
+            "The future total after updates"
+          ],
+          "correct_index": 1,
+          "explanation": "The observed total can be incomplete.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-14-sum-7",
+          "test_id": "pt-dbms-sql-14-sum",
+          "question_text": "Which expression totals line amounts when both inputs are known?",
+          "options": [
+            "SUM(unit_price) regardless of quantity",
+            "SUM(quantity*unit_price)",
+            "COUNT(quantity)",
+            "MAX(quantity*unit_price)"
+          ],
+          "correct_index": 1,
+          "explanation": "The summed expression must match the measured fact.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-14-sum-8",
+          "test_id": "pt-dbms-sql-14-sum",
+          "question_text": "Can amounts in different currencies simply be added as one balance?",
+          "options": [
+            "Yes, every numeric column has the same units",
+            "No, they need separate groups or an explicit conversion policy",
+            "Only if both values are positive",
+            "Only if SUM returns an integer"
+          ],
+          "correct_index": 1,
+          "explanation": "Numeric compatibility does not establish meaningful units.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-14-sum-new-9",
+          "test_id": "pt-dbms-sql-14-sum",
+          "question_text": "What is wrong with SUM(DISTINCT amount) as a generic join-duplication repair?",
+          "options": [
+            "Legitimate different facts can share the same amount",
+            "It always returns twice the correct sum",
+            "SUM forbids DISTINCT",
+            "Distinct removes only duplicated identities automatically"
+          ],
+          "correct_index": 0,
+          "explanation": "Deduplicate the fact grain, not coincidental measure values.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-14-sum-new-10",
+          "test_id": "pt-dbms-sql-14-sum",
+          "question_text": "Which clause restricts a report to posted entries before summing?",
+          "options": [
+            "A final display caption",
+            "WHERE",
+            "ORDER BY alone",
+            "LIMIT alone"
+          ],
+          "correct_index": 1,
+          "explanation": "Eligibility defines the input population.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-14-sum-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-14-sum-application-new-1",
+          "test_id": "pt-dbms-sql-14-sum-application",
+          "question_text": "Which clause tests a group's already calculated net total?",
+          "options": [
+            "A same-level aggregate condition in WHERE",
+            "HAVING",
+            "A table rename",
+            "A missing-value flag only"
+          ],
+          "correct_index": 1,
+          "explanation": "Group thresholds differ from row filters.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-14-sum-application-new-2",
+          "test_id": "pt-dbms-sql-14-sum-application",
+          "question_text": "Why is excluding negative entries before summing not a net-positive-group test?",
+          "options": [
+            "Negative numbers cannot be added",
+            "SUM always discards negative values",
+            "It changes the measure by removing adjustments before the net is calculated",
+            "HAVING cannot compare numbers"
+          ],
+          "correct_index": 2,
+          "explanation": "Gross inflow and net total are different measures.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-14-sum-application-new-3",
+          "test_id": "pt-dbms-sql-14-sum-application",
+          "question_text": "What can a one-to-many tag join do to a contribution total?",
+          "options": [
+            "Automatically deduplicate contribution identities",
+            "Force every amount to zero",
+            "Convert every amount to a different currency",
+            "Repeat source amounts across joined rows"
+          ],
+          "correct_index": 3,
+          "explanation": "Check the input grain after joins.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-14-sum-application-new-4",
+          "test_id": "pt-dbms-sql-14-sum-application",
+          "question_text": "In a magnitude-plus-kind ledger, how does a refund contribute?",
+          "options": [
+            "As a negative magnitude under the stated sign convention",
+            "Always positively as revenue",
+            "Twice as a charge",
+            "As a count of rows only"
+          ],
+          "correct_index": 0,
+          "explanation": "Avoid applying both signed storage and another sign reversal accidentally.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-14-sum-application-new-5",
+          "test_id": "pt-dbms-sql-14-sum-application",
+          "question_text": "Does a group whose sum is zero necessarily have no known input?",
+          "options": [
+            "Yes, zero proves an empty table",
+            "No, known values can cancel or include real zeros",
+            "Only if COUNT(*) is one",
+            "Only when refunds are absent"
+          ],
+          "correct_index": 1,
+          "explanation": "Use counts to distinguish absence from a measured zero.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-14-sum-application-new-6",
+          "test_id": "pt-dbms-sql-14-sum-application",
+          "question_text": "What does ordinary GROUP BY return for entirely empty input?",
+          "options": [
+            "Every configured account automatically",
+            "One invented zero group per currency",
+            "No represented groups",
+            "A random account"
+          ],
+          "correct_index": 2,
+          "explanation": "A separate catalogue is needed for absent combinations.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-14-sum-application-new-7",
+          "test_id": "pt-dbms-sql-14-sum-application",
+          "question_text": "Can limiting source rows before SUM change the requested total?",
+          "options": [
+            "No, aggregates always ignore inner limits",
+            "Only if amounts are null",
+            "Only if ordering descends",
+            "Yes, it can restrict the sum to the limited subset"
+          ],
+          "correct_index": 3,
+          "explanation": "Logical operation order changes population.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-14-sum-application-new-8",
+          "test_id": "pt-dbms-sql-14-sum-application",
+          "question_text": "Does a small SUM output imply low resource cost?",
+          "options": [
+            "No, many rows or groups may need processing",
+            "Yes, only one row is read",
+            "Only when an alias is used",
+            "Only for positive amounts"
+          ],
+          "correct_index": 0,
+          "explanation": "Output size and execution work are distinct.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-14-sum-application-new-9",
+          "test_id": "pt-dbms-sql-14-sum-application",
+          "question_text": "Which arithmetic policy is important for exact monetary totals?",
+          "options": [
+            "A random floating-point tolerance without a contract",
+            "Suitable exact representation, units and rounding rules",
+            "The spelling of the table alias",
+            "Only the number of selected columns"
+          ],
+          "correct_index": 1,
+          "explanation": "Individual valid amounts do not guarantee safe downstream totals.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-14-sum-application-new-10",
+          "test_id": "pt-dbms-sql-14-sum-application",
+          "question_text": "Which tests distinguish missingness and legitimate repeated facts?",
+          "options": [
+            "Only one positive amount",
+            "Only row insertion order",
+            "Empty input, all-null input, known zero and separate equal amounts",
+            "Only an unrelated page title"
+          ],
+          "correct_index": 2,
+          "explanation": "Contrasting populations expose incorrect zero and DISTINCT assumptions.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cx-sum-known-contributions",
+      "slug": "sum-known-contributions",
+      "title": "Report known and display totals",
+      "difficulty": "Easy",
+      "task": "Return input_rows,known_amounts,known_total,display_total over contributions. Count rows and known amounts, retain NULL for a missing raw sum, and replace only the final missing display total with zero.",
+      "schema_sql": "CREATE TABLE contributions(contribution_id INT PRIMARY KEY,amount INT NULL);",
+      "seed_sql": "INSERT INTO contributions VALUES (1,10),(2,NULL),(3,10),(4,0),(5,-2);",
+      "expected": "input_rows\tknown_amounts\tknown_total\tdisplay_total\n5\t4\t18\t18",
+      "ordering": "As explicitly required by the task and solution query.",
+      "constraints": [
+        "Use only supplied synthetic data.",
+        "Preserve unrelated rows."
+      ],
+      "edge_cases": [
+        "Empty input differs from known cancellation.",
+        "Equal amounts can be separate facts."
+      ],
+      "hints": [
+        "COUNT(amount) counts known values, including zero.",
+        "Apply COALESCE after SUM for the display policy."
+      ],
+      "solution_sql": "SELECT COUNT(*) AS input_rows,COUNT(amount) AS known_amounts,SUM(amount) AS known_total,COALESCE(SUM(amount),0) AS display_total FROM contributions;",
+      "explanation": "Both ten-value contributions count separately. The null is excluded from the known sum; zero is a known value.",
+      "validation_cases": [
+        {
+          "seed_sql": "",
+          "expected": "input_rows\tknown_amounts\tknown_total\tdisplay_total\n0\t0\tNULL\t0"
+        },
+        {
+          "seed_sql": "INSERT INTO contributions VALUES (1,NULL),(2,NULL);",
+          "expected": "input_rows\tknown_amounts\tknown_total\tdisplay_total\n2\t0\tNULL\t0"
+        },
+        {
+          "seed_sql": "INSERT INTO contributions VALUES (1,5),(2,-5);",
+          "expected": "input_rows\tknown_amounts\tknown_total\tdisplay_total\n2\t2\t0\t0"
+        }
+      ]
+    },
+    {
+      "id": "cx-sum-posted-ledger-by-currency",
+      "slug": "sum-posted-ledger-by-currency",
+      "title": "Calculate known posted net by account and currency",
+      "difficulty": "Medium",
+      "task": "Return account_id,currency,entry_count,known_count,known_net for each represented account and currency among posted entries. Every kind is charge or refund; every known amount is a nonnegative magnitude. Add charges and subtract refunds. Missing magnitudes stay unknown and do not contribute to known_net. Do not replace an all-unknown known_net with zero. Order by account_id ascending,currency ascending.",
+      "schema_sql": "CREATE TABLE ledger(entry_id INT PRIMARY KEY,account_id INT NOT NULL,currency VARCHAR(3) NOT NULL,kind VARCHAR(10) NOT NULL,status VARCHAR(10) NOT NULL,amount INT NULL);",
+      "seed_sql": "INSERT INTO ledger VALUES (1,7,'INR','charge','posted',100),(2,7,'INR','refund','posted',20),(3,7,'INR','charge','pending',900),(4,7,'USD','charge','posted',5),(5,8,'INR','refund','posted',NULL),(6,7,'INR','charge','posted',NULL);",
+      "expected": "account_id\tcurrency\tentry_count\tknown_count\tknown_net\n7\tINR\t3\t2\t80\n7\tUSD\t1\t1\t5\n8\tINR\t1\t0\tNULL",
+      "ordering": "As explicitly required by the task and solution query.",
+      "constraints": [
+        "Use only supplied synthetic data.",
+        "Preserve unrelated rows."
+      ],
+      "edge_cases": [
+        "Unknown net is not known zero.",
+        "Currency balances cannot be merged without conversion."
+      ],
+      "hints": [
+        "Apply status eligibility before grouping.",
+        "Derive the sign once from kind and retain currency in the group."
+      ],
+      "solution_sql": "SELECT account_id,currency,COUNT(*) AS entry_count,COUNT(amount) AS known_count,SUM(CASE WHEN kind='charge' THEN amount WHEN kind='refund' THEN -amount END) AS known_net FROM ledger WHERE status='posted' GROUP BY account_id,currency ORDER BY account_id ASC,currency ASC;",
+      "explanation": "The INR account-7 known net is 100 minus20, with one additional unknown posted entry. Pending900 is excluded; USD remains separate and account8 has no known amount.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO ledger VALUES (1,1,'INR','charge','posted',5),(2,1,'INR','refund','posted',5),(3,1,'USD','refund','posted',2);",
+          "expected": "account_id\tcurrency\tentry_count\tknown_count\tknown_net\n1\tINR\t2\t2\t0\n1\tUSD\t1\t1\t-2"
+        },
+        {
+          "seed_sql": "INSERT INTO ledger VALUES (1,1,'INR','charge','pending',10);",
+          "expected": ""
+        },
+        {
+          "seed_sql": "INSERT INTO ledger VALUES (1,2,'USD','charge','posted',NULL),(2,2,'USD','refund','posted',NULL);",
+          "expected": "account_id\tcurrency\tentry_count\tknown_count\tknown_net\n2\tUSD\t2\t0\tNULL"
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-14-sum-1",
+      "test_id": "pt-dbms-sql-14-sum",
+      "question_text": "Given order amounts 250.00, NULL, 400.00, 150.00, 300.00, what does SUM(amount) return?",
+      "options": [
+        "1100.00",
+        "1350.00",
+        "220.00",
+        "NULL"
+      ],
+      "correct_index": 0,
+      "explanation": "SUM ignores the NULL row and adds 250 + 400 + 150 + 300 = 1100.00.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-14-sum-2",
+      "test_id": "pt-dbms-sql-14-sum",
+      "question_text": "What does SUM(amount) return when filtered to a customer with zero matching orders?",
+      "options": [
+        "0",
+        "NULL",
+        "An error",
+        "-1"
+      ],
+      "correct_index": 1,
+      "explanation": "SUM over an empty set (no rows, or all values NULL) returns NULL, not zero.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-14-sum-3",
+      "test_id": "pt-dbms-sql-14-sum",
+      "question_text": "Which expression guarantees a numeric 0 instead of NULL when there are no rows to sum?",
+      "options": [
+        "SUM(amount)",
+        "SUM(amount) + 0",
+        "COALESCE(SUM(amount), 0)",
+        "SUM(DISTINCT amount)"
+      ],
+      "correct_index": 2,
+      "explanation": "COALESCE replaces a NULL result with the fallback value 0, which plain arithmetic on NULL cannot do (NULL + 0 is still NULL).",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-14-sum-4",
+      "test_id": "pt-dbms-sql-14-sum",
+      "question_text": "Given completed orders with amounts 250.00, 400.00, and 300.00 (the cancelled/pending orders excluded by a WHERE clause), what does SUM(amount) return?",
+      "options": [
+        "950.00",
+        "1100.00",
+        "1050.00",
+        "NULL"
+      ],
+      "correct_index": 0,
+      "explanation": "250 + 400 + 300 = 950.00 for the filtered set of completed orders.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-14-sum-5",
+      "test_id": "pt-dbms-sql-14-sum",
+      "question_text": "Why might SUM(amount) + 0 fail to produce a fallback zero when there are no matching rows?",
+      "options": [
+        "Because SUM never returns NULL",
+        "Because any arithmetic expression involving NULL evaluates to NULL, so NULL + 0 is still NULL",
+        "Because addition with NULL always errors out",
+        "Because SUM always returns 0 for empty sets already"
+      ],
+      "correct_index": 1,
+      "explanation": "NULL propagates through arithmetic — NULL + 0 = NULL, which is why COALESCE (not plain addition) is needed to supply a real fallback.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-14-sum-6",
+      "test_id": "pt-dbms-sql-14-sum",
+      "question_text": "What does SUM(DISTINCT amount) compute differently from a plain SUM(amount)?",
+      "options": [
+        "It sums the absolute values only",
+        "It first removes duplicate values, then sums the remaining distinct values",
+        "It sums only the top value",
+        "It has no difference in any case"
+      ],
+      "correct_index": 1,
+      "explanation": "SUM(DISTINCT ...) deduplicates the column's values before adding them, so repeated identical amounts are only counted once.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-14-sum-7",
+      "test_id": "pt-dbms-sql-14-sum",
+      "question_text": "If two of Alice's orders both had amount = 250.00, how would SUM(DISTINCT amount) differ from SUM(amount) across all orders?",
+      "options": [
+        "They would always be identical regardless of duplicates",
+        "SUM(DISTINCT amount) would count the repeated 250.00 only once, producing a smaller total than SUM(amount)",
+        "SUM(DISTINCT amount) would throw an error",
+        "SUM(DISTINCT amount) would double the repeated value"
+      ],
+      "correct_index": 1,
+      "explanation": "DISTINCT removes duplicate values before summing, so a repeated amount contributes only once to SUM(DISTINCT amount), making it potentially smaller than the plain sum.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-14-sum-8",
+      "test_id": "pt-dbms-sql-14-sum",
+      "question_text": "What generally happens to the result data type when SUM() is applied to a large INT column?",
+      "options": [
+        "It stays INT and may silently overflow with no protection",
+        "Most engines widen the result type (e.g. to a BIGINT-class type) to reduce overflow risk",
+        "SUM automatically converts INT to VARCHAR",
+        "SUM refuses to run on INT columns"
+      ],
+      "correct_index": 1,
+      "explanation": "To avoid overflow on large totals, most SQL engines widen the aggregate result type for SUM on integer columns.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "content_author",
+    "independent_review": "passed",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "independent editorial and predicted fixture review passed",
+    "canonical_answer_indices_preserved": true,
+    "editorial_record": "Original seeded MCQ snapshots and canonical answer identities preserved. Newly authored prose, exercises and diagram; third-party references verify facts only.",
+    "independent_reviewer": "/root",
+    "independent_review_scope": "Full prose, all 20 MCQs and explanations, two exercise contracts with eight manually traced fixture outputs, original table diagram, links and description. MySQL official aggregate documentation checked; engine execution and browser review separate."
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-14-sum",
+    "original_note_sha256": "d32b5fb78cf607b8d31e93605002516138ea88edf4c8ade016e9869dc9b7beff",
+    "status": "drafted; not included in prepared paired migrations"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "A missing total differs from a measured zero",
+      "description": "Raw SUM and final zero replacement answer different reporting needs across empty, unknown and known populations.",
+      "columns": [
+        "Input amounts",
+        "Rows",
+        "Known values",
+        "SUM",
+        "COALESCE(SUM,0)"
+      ],
+      "rows": [
+        [
+          "No rows",
+          "0",
+          "0",
+          "NULL",
+          "0"
+        ],
+        [
+          "NULL, NULL",
+          "2",
+          "0",
+          "NULL",
+          "0"
+        ],
+        [
+          "5, -5",
+          "2",
+          "2",
+          "0",
+          "0"
+        ],
+        [
+          "10, 10, NULL, 0, -2",
+          "5",
+          "4",
+          "18",
+          "18"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "coordinator independent manual review passed",
+    "server_rendering": "pending",
+    "browser_rendering": "unverified",
+    "independent_review": "passed"
+  },
+  "authoring_status": "drafted; verification pending",
+  "sql_verification": {
+    "scope": "not executed; native interpreter blocked by command policy; exact MySQL/provider execution pending",
+    "all_passed": false,
+    "cases": []
+  }
+}

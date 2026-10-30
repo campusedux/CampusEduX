@@ -1,10 +1,10 @@
 "use client";
 
-import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { LucideIcon } from "lucide-react";
 import { Bell, Bookmark, Briefcase, FileText, Gift, Heart, LayoutDashboard, LogOut, ShoppingBag, User, Wallet } from "lucide-react";
-import { cn } from "@/lib/cn";
+import { Chip } from "@/components/ui/Chip";
+import { ChipRow } from "@/components/ui/ChipRow";
 
 const NAV: { href: string; label: string; icon: LucideIcon }[] = [
   { href: "/account", label: "Overview", icon: LayoutDashboard },
@@ -23,38 +23,33 @@ const NAV: { href: string; label: string; icon: LucideIcon }[] = [
 export function AccountNav() {
   const pathname = usePathname();
   return (
-    <nav
-      aria-label="Account"
-      className="-mx-4 flex gap-1 overflow-x-auto px-4 pb-1 text-sm [scrollbar-width:none] md:mx-0 md:flex-col md:gap-0.5 md:overflow-visible md:px-0 md:pb-0 [&::-webkit-scrollbar]:hidden"
+    <ChipRow
+      label="Account"
+      className="text-sm md:flex-col md:overflow-visible"
     >
       {NAV.map((n) => {
         const active = n.href === "/account" ? pathname === "/account" : pathname.startsWith(n.href);
         const Icon = n.icon;
         return (
-          <Link
+          <Chip
             key={n.href}
             href={n.href}
-            aria-current={active ? "page" : undefined}
-            className={cn(
-              "inline-flex flex-shrink-0 items-center gap-2.5 whitespace-nowrap rounded-xl px-3 py-2 font-medium transition",
-              active
-                ? "bg-primary-50 text-primary"
-                : "border border-line bg-card text-ink-muted hover:text-ink md:border-transparent md:bg-transparent md:hover:bg-surface",
-            )}
+            active={active}
+            className="gap-2 whitespace-nowrap md:justify-start"
           >
             <Icon className="h-4 w-4 flex-shrink-0" aria-hidden />
             {n.label}
-          </Link>
+          </Chip>
         );
       })}
-      <Link
+      <Chip
         href="/logout"
-        className="inline-flex flex-shrink-0 items-center gap-2.5 whitespace-nowrap rounded-xl px-3 py-2 font-medium text-ink-faint transition hover:text-danger md:mt-2 md:hover:bg-danger/10"
+        className="gap-2 whitespace-nowrap hover:text-danger md:mt-2 md:justify-start"
       >
         <LogOut className="h-4 w-4 flex-shrink-0" aria-hidden />
         Sign out
-      </Link>
-    </nav>
+      </Chip>
+    </ChipRow>
   );
 }
 

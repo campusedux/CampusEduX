@@ -1,0 +1,607 @@
+{
+  "source_ref": "chapter-13-sorting-and-pagination/null-ordering",
+  "slug": "null-ordering",
+  "title": "NULL Ordering",
+  "description": "Control NULL ordering in MySQL using explicit missing-value expressions, known-value directions, and tie keys; compare other SQL dialects carefully.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Missingness is an ordering policy\n\nA nullable sort key requires a decision about where unknown values belong. A campus catalogue may show known prices from low to high and place unpriced equipment at the end. An audit queue may do the opposite, bringing missing measurements first so they can be investigated. Neither choice follows automatically from the business meaning of ascending numeric values.\n\nKeep placement separate from interpretation. Placing [NULL](/learning/dbms-sql-tutorial/null-values) before a known price does not make the unknown price numerically less than zero. Ordinary comparisons with NULL remain unknown. ORDER BY has a rule for presenting missing positions, while arithmetic and predicates have their own rules. Conflating those features leads to false claims about what a missing value represents.\n\n## MySQL and PostgreSQL have different defaults\n\nFor an ordinary MySQL 8.4 ascending ordering term, NULL appears before known values; descending places it after known values. PostgreSQL 18's ordinary defaults are the opposite: ascending places NULL last and descending places it first. The same short query can therefore place unknown prices at different ends when moved between these engines.\n\nLabel those defaults by engine rather than describe one as universal SQL behaviour. A report should state its intended missing-value placement even if the current target's default happens to match it. That makes a later migration easier to review and prevents a consumer from discovering the difference only when the first missing price appears in production data.\n\n## A missingness key defines two groups\n\nIn MySQL, the expression price IS NULL produces zero for known prices and one for missing prices. Sorting that expression ascending puts the known group first and the missing group second. A later price term ranks known values within the first group. A unique identity term then completes ties, including ties among several missing-price rows.\n\n```sql\nSELECT equipment_id, price\nFROM equipment_prices\nORDER BY price IS NULL ASC, price ASC, equipment_id ASC;\n```\n\nThe first expression is a grouping priority for ordering, not a GROUP BY operation and not a filter. Every row remains in the result unless another clause changes the population. This distinction matters because excluding unpriced equipment with WHERE is a different report from preserving it at the bottom of an ordered catalogue.\n\n## Known-value direction is independent\n\nA price-descending catalogue can still keep unknown prices last. Retain the ascending missingness key, then use descending price. Reversing the entire key list is not necessary and can be wrong. Each term has a separate role and direction: known before missing, high known price before low, then a stable identity comparison for otherwise tied rows.\n\nTo put unknown values first, reverse the missingness priority rather than invent a numeric replacement. Sorting price IS NULL descending places its one-valued missing group before the zero-valued known group. The price term can still ascend or descend inside known values according to the requirement. Write those directions explicitly when teaching the separation.\n\n## More than one NULL needs a tie policy\n\nSeveral unpriced equipment rows all share the same missingness flag and the same NULL price position. Those keys alone do not determine their relative order. Add a final identity or another defined comparison that distinguishes the result rows. A test containing only one NULL cannot demonstrate whether the complete missing group has a stable internal sequence.\n\nA similar issue occurs for equal known prices. The identity key resolves both types of remaining tie under one consistent contract. Confirm that the identity is unique at the result grain. A join that intentionally returns several rows per equipment item may need the matching event identity as well, just as in an all-known multi-key order.\n\n## Native placement syntax is dialect specific\n\nPostgreSQL supports NULLS FIRST and NULLS LAST attached to individual sort terms. That syntax can communicate placement directly beside the value direction. MySQL 8.4 does not use that same native ordering form, so the exercises use explicit missingness expressions. Do not copy a PostgreSQL clause into MySQL merely because both engines support [ORDER BY](/learning/dbms-sql-tutorial/order-by).\n\nAn equivalent cross-engine design needs to preserve value direction, missingness position and tie order together. A CASE expression mapping known and missing groups can be another supported representation in suitable query contexts. Pick a verified form for the target engine, then run the same expected-sequence fixtures there. Similar syntax is not evidence of equivalent results.\n\n## Avoid artificial sentinel values for sorting\n\nReplacing NULL with zero makes unknown prices compete with genuine zero-priced items. Replacing it with a very large number assumes the domain never reaches that number and that every future direction uses the same intended placement. These assumptions can fail as values or feature requirements change. A separate missingness key preserves the source value without pretending it is a measurement.\n\nA display fallback may still be appropriate in the selected output, but ordering should follow the documented business meaning. If a report intentionally treats missing stock as zero for a specific ranking, state that imputation explicitly. It is a different policy from keeping unknown values in a separate group, and it can change both ranking and the user's interpretation of the data.\n\n## A NULL can come from an absent relationship\n\nA LEFT JOIN may supply a missing right-side price because no price record exists, or a matched price row may itself contain an optional NULL amount. Both produce a NULL amount in the result, but they can represent different workflow states. Sorting only on that amount groups them together without explaining why the information is absent.\n\nWhen the distinction matters, use a reliable matched-row identifier or an explicit status expression before the value keys. An audit can put missing price records ahead of incomplete recorded prices, then order known values. Do not test an optional caption as the relationship marker because it can also be absent on a real matched row. The ordering policy should follow the actual data relationship.\n\n## Conditional ordering must preserve shared scope\n\nA multi-department report may sort department first, then unknown measurements first within each department. Putting missingness before department instead makes one global unknown group across all departments. Both are valid sequences, but they answer different presentation requirements. Write the priorities in the same order as the natural-language request so that an early missingness key does not accidentally override the primary grouping.\n\nThe intermediate exercise makes this distinction explicit. Each department retains its alphabetic priority; inside it, missing measurement timestamps appear first and known timestamps descend from newest to oldest. A final event identity resolves equal timestamps and multiple unknowns. The source values remain unchanged, and no row is excluded merely because its timestamp is missing.\n\n## Pagination needs the complete missingness rule\n\nA continuation design for nullable ordering must include the missingness dimension as well as the known value and tie breaker. A simple numeric greater-than comparison cannot advance into or out of the missing group by itself. Define whether the cursor represents a known or unknown key and compare it using the same ordering contract as the displayed result.\n\nUpdates can also move a row between the groups when an unknown price becomes known. Stable ordering for one observation does not freeze those transitions across later pages. Decide the required snapshot or live-list behaviour separately and test boundary changes under that policy. This topic defines sequence; it does not promise that data remains unchanged between requests.\n\n## Performance follows the complete expression\n\nAdding a missingness expression can affect how an available index satisfies the order. The engine may use a suitable access strategy or need additional sorting, depending on query shape and available definitions. Inspect a representative plan when performance matters. Do not remove the explicit policy merely because a simpler order happens to use an index in one environment.\n\nThe beginner exercise includes negative, zero, positive and missing values so that replacing NULL with zero is visibly wrong. The intermediate exercise includes multiple departments and repeated missing timestamps. Trace each expected adjacent pair by its first distinguishing key. This verifies the chosen missing-value policy directly while keeping domain validity, presentation fallbacks and physical optimization as separate questions.\n",
+  "references": [
+    {
+      "title": "MySQL 8.4 NULL ordering",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/working-with-null.html"
+    },
+    {
+      "title": "PostgreSQL 18 ordering defaults and NULLS placement",
+      "url": "https://www.postgresql.org/docs/18/queries-order.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-13-null-ordering",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-13-null-ordering-1",
+          "test_id": "pt-dbms-sql-13-null-ordering",
+          "question_text": "Where does PostgreSQL 18 ordinarily place NULL for an ascending term?",
+          "options": [
+            "First",
+            "Last",
+            "It removes NULL rows",
+            "It raises an error"
+          ],
+          "correct_index": 1,
+          "explanation": "Its default differs from MySQL’s ascending placement.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-13-null-ordering-2",
+          "test_id": "pt-dbms-sql-13-null-ordering",
+          "question_text": "Where does MySQL 8.4 ordinarily place NULL for an ascending term?",
+          "options": [
+            "Last",
+            "First",
+            "It replaces NULL with zero",
+            "It always filters NULL"
+          ],
+          "correct_index": 1,
+          "explanation": "This is an ordering convention, not ordinary numeric comparison.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-13-null-ordering-3",
+          "test_id": "pt-dbms-sql-13-null-ordering",
+          "question_text": "What native syntax can PostgreSQL attach to an ordering term?",
+          "options": [
+            "NULLS FIRST or NULLS LAST",
+            "SKIP UNKNOWN",
+            "GROUP NULLS",
+            "NULLS EQUAL ZERO"
+          ],
+          "correct_index": 0,
+          "explanation": "Use the target engine’s supported form.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-13-null-ordering-4",
+          "test_id": "pt-dbms-sql-13-null-ordering",
+          "question_text": "Why can the same short ascending query differ between MySQL and PostgreSQL?",
+          "options": [
+            "Their SELECT lists always reverse",
+            "Their default missing-value placements differ",
+            "MySQL cannot sort numbers",
+            "PostgreSQL always removes unknowns"
+          ],
+          "correct_index": 1,
+          "explanation": "Explicit policies make migration differences visible.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-13-null-ordering-5",
+          "test_id": "pt-dbms-sql-13-null-ordering",
+          "question_text": "Why state NULL placement explicitly in a report contract?",
+          "options": [
+            "It always makes the query faster",
+            "Every ORDER BY otherwise fails",
+            "Defaults can differ across engines and feature expectations",
+            "It automatically validates missing data"
+          ],
+          "correct_index": 2,
+          "explanation": "The contract should not depend on an accidental target default.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-13-null-ordering-6",
+          "test_id": "pt-dbms-sql-13-null-ordering",
+          "question_text": "Where does PostgreSQL 18 ordinarily place NULL for a descending term?",
+          "options": [
+            "Last",
+            "First",
+            "Nowhere",
+            "Always between equal known values"
+          ],
+          "correct_index": 1,
+          "explanation": "That is its default missingness placement.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-13-null-ordering-7",
+          "test_id": "pt-dbms-sql-13-null-ordering",
+          "question_text": "Which MySQL ordering form puts known ascending values before NULL?",
+          "options": [
+            "ORDER BY value IS NULL ASC,value ASC",
+            "WHERE value IS NOT NULL only",
+            "ORDER BY value ASC only",
+            "GROUP BY value IS NULL"
+          ],
+          "correct_index": 0,
+          "explanation": "The known group has missingness flag zero.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-13-null-ordering-8",
+          "test_id": "pt-dbms-sql-13-null-ordering",
+          "question_text": "Which statement about ordering defaults is accurate?",
+          "options": [
+            "All engines put NULL last ascending",
+            "They can differ by engine, so verify the intended placement",
+            "NULL cannot be sorted",
+            "NULLS FIRST and LAST are equivalent"
+          ],
+          "correct_index": 1,
+          "explanation": "Dialect differences are observable behaviour.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-13-null-ordering-new-9",
+          "test_id": "pt-dbms-sql-13-null-ordering",
+          "question_text": "Does MySQL NULL-first ascending mean NULL < 0 is TRUE?",
+          "options": [
+            "No, ordinary comparison still yields UNKNOWN",
+            "Yes, NULL is numeric negative infinity",
+            "Only if zero is indexed",
+            "Only in WHERE"
+          ],
+          "correct_index": 0,
+          "explanation": "Sort placement and predicate semantics differ.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-13-null-ordering-new-10",
+          "test_id": "pt-dbms-sql-13-null-ordering",
+          "question_text": "What is value IS NULL for a known zero?",
+          "options": [
+            "One or TRUE",
+            "Zero or FALSE",
+            "UNKNOWN",
+            "An exception"
+          ],
+          "correct_index": 1,
+          "explanation": "Known zero belongs in the known group.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-13-null-ordering-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-13-null-ordering-application-new-1",
+          "test_id": "pt-dbms-sql-13-null-ordering-application",
+          "question_text": "How can MySQL put NULL last while known prices descend?",
+          "options": [
+            "price IS NULL DESC,price DESC",
+            "price IS NULL ASC,price DESC",
+            "price ASC alone",
+            "COALESCE(price,0) always"
+          ],
+          "correct_index": 1,
+          "explanation": "The missingness direction stays independent of value direction.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-13-null-ordering-application-new-2",
+          "test_id": "pt-dbms-sql-13-null-ordering-application",
+          "question_text": "How can a missingness key put NULL first?",
+          "options": [
+            "Sort the flag ascending",
+            "Filter NULL away",
+            "Sort the IS NULL flag descending",
+            "Replace every value with NULL"
+          ],
+          "correct_index": 2,
+          "explanation": "The missing group has flag one.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-13-null-ordering-application-new-3",
+          "test_id": "pt-dbms-sql-13-null-ordering-application",
+          "question_text": "Why add identity after missingness and value?",
+          "options": [
+            "To make missing values present",
+            "To remove known values",
+            "To make all result prices unique",
+            "To order multiple NULLs and equal known values deterministically"
+          ],
+          "correct_index": 3,
+          "explanation": "Complete remaining ties at the result grain.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-13-null-ordering-application-new-4",
+          "test_id": "pt-dbms-sql-13-null-ordering-application",
+          "question_text": "Why can COALESCE(price,0) be wrong for missing-last ranking?",
+          "options": [
+            "Unknown and genuine zero can collapse into the same numeric key",
+            "Zero can never be a price",
+            "COALESCE sorts automatically",
+            "NULL is always positive"
+          ],
+          "correct_index": 0,
+          "explanation": "Separate grouping avoids an invented measurement.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-13-null-ordering-application-new-5",
+          "test_id": "pt-dbms-sql-13-null-ordering-application",
+          "question_text": "Does WHERE price IS NOT NULL implement the same report as preserving NULL last?",
+          "options": [
+            "Yes, every ordering filters first",
+            "No, it removes rows instead of placing them",
+            "Only if prices are positive",
+            "Only with an alias"
+          ],
+          "correct_index": 1,
+          "explanation": "Population and sequence are different contracts.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-13-null-ordering-application-new-6",
+          "test_id": "pt-dbms-sql-13-null-ordering-application",
+          "question_text": "What ordering keeps departments primary and unknown measurements first within each?",
+          "options": [
+            "measured_at IS NULL DESC,department ASC only",
+            "measured_at DESC,department ASC",
+            "department ASC,measured_at IS NULL DESC,measured_at DESC",
+            "department DESC,measured_at ASC"
+          ],
+          "correct_index": 2,
+          "explanation": "Earlier keys own higher priority.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-13-null-ordering-application-new-7",
+          "test_id": "pt-dbms-sql-13-null-ordering-application",
+          "question_text": "Why might two NULL amounts after LEFT JOIN need different audit ranks?",
+          "options": [
+            "Every NULL has identical business meaning",
+            "Only the amount type matters",
+            "Outer joins never introduce NULL",
+            "One can mean no related row and another an incomplete matched row"
+          ],
+          "correct_index": 3,
+          "explanation": "Use a reliable relationship marker if the distinction matters.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-13-null-ordering-application-new-8",
+          "test_id": "pt-dbms-sql-13-null-ordering-application",
+          "question_text": "What must a nullable-key cursor reflect?",
+          "options": [
+            "The missingness group, known value direction and tie breaker",
+            "Only a numeric greater-than on the nullable value",
+            "Only the row count",
+            "Only the current page label"
+          ],
+          "correct_index": 0,
+          "explanation": "Continuation must follow the displayed sequence.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-13-null-ordering-application-new-9",
+          "test_id": "pt-dbms-sql-13-null-ordering-application",
+          "question_text": "Does explicit NULL placement guarantee unchanged page membership later?",
+          "options": [
+            "Yes, indefinitely",
+            "No, values can become known and move between groups",
+            "Only if the last key is id",
+            "Only for timestamps"
+          ],
+          "correct_index": 1,
+          "explanation": "Visibility consistency is a separate design.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-13-null-ordering-application-new-10",
+          "test_id": "pt-dbms-sql-13-null-ordering-application",
+          "question_text": "What should a performance review inspect after adding a missingness key?",
+          "options": [
+            "Only the number of commas",
+            "Only whether a short query existed before",
+            "The complete query plan under representative data",
+            "Only the output title"
+          ],
+          "correct_index": 2,
+          "explanation": "Explicit semantics may affect access and sorting strategies.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cx-null-ordering-known-prices-first",
+      "slug": "null-ordering-known-prices-first",
+      "title": "Keep known prices ascending and NULL last",
+      "difficulty": "Easy",
+      "task": "Return equipment_id,price with known prices ascending, NULL prices last, and equipment_id ascending for equal prices or multiple NULLs. Preserve all rows. Negative and zero values remain known for this ordering-only task.",
+      "schema_sql": "CREATE TABLE equipment_prices(equipment_id INT PRIMARY KEY,price INT);",
+      "seed_sql": "INSERT INTO equipment_prices VALUES (8,NULL),(2,0),(7,-1),(4,5),(1,NULL),(9,0);",
+      "expected": "equipment_id\tprice\n7\t-1\n2\t0\n9\t0\n4\t5\n1\tNULL\n8\tNULL",
+      "ordering": "As explicitly ordered in the result query.",
+      "constraints": [
+        "Use only the supplied synthetic tables and requested transition.",
+        "Preserve unrelated rows."
+      ],
+      "edge_cases": [
+        "Known zero remains distinct from missing price.",
+        "Several missing rows still need a tie breaker."
+      ],
+      "hints": [
+        "Use a missingness flag before the numeric key.",
+        "Do not replace NULL with zero."
+      ],
+      "solution_sql": "SELECT equipment_id,price FROM equipment_prices ORDER BY price IS NULL ASC,price ASC,equipment_id ASC;",
+      "explanation": "The separate flag puts all known values before unknowns without substituting a sentinel. Numeric price ranks known values and identity resolves remaining ties.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO equipment_prices VALUES (7,NULL),(3,NULL);",
+          "expected": "equipment_id\tprice\n3\tNULL\n7\tNULL"
+        },
+        {
+          "seed_sql": "INSERT INTO equipment_prices VALUES (1,0),(2,NULL),(3,-2);",
+          "expected": "equipment_id\tprice\n3\t-2\n1\t0\n2\tNULL"
+        }
+      ]
+    },
+    {
+      "id": "cx-null-ordering-department-measurements",
+      "slug": "null-ordering-department-measurements",
+      "title": "Prioritize unknown timestamps within each department",
+      "difficulty": "Medium",
+      "task": "Return event_id,department,measured_at sorted by department ascending; within each department put NULL measured_at first, then known measured_at newest first; resolve all remaining ties by event_id ascending. Department values are known ASCII text. Preserve every event.",
+      "schema_sql": "CREATE TABLE measurements(event_id INT PRIMARY KEY,department VARCHAR(20) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,measured_at DATETIME);",
+      "seed_sql": "INSERT INTO measurements VALUES (8,'Media',NULL),(2,'Arts','2026-01-02'),(7,'Arts',NULL),(1,'Media',NULL),(4,'Media','2026-01-03'),(5,'Media','2026-01-01');",
+      "expected": "event_id\tdepartment\tmeasured_at\n7\tArts\tNULL\n2\tArts\t2026-01-02 00:00:00\n1\tMedia\tNULL\n8\tMedia\tNULL\n4\tMedia\t2026-01-03 00:00:00\n5\tMedia\t2026-01-01 00:00:00",
+      "ordering": "As explicitly ordered in the result query.",
+      "constraints": [
+        "Use only the supplied synthetic tables and requested transition.",
+        "Preserve unrelated rows."
+      ],
+      "edge_cases": [
+        "Unknown rows in a later department cannot outrank an earlier department.",
+        "Equal known timestamps use identity just like multiple missing timestamps."
+      ],
+      "hints": [
+        "Keep department before missingness.",
+        "The missingness flag and timestamp both descend, while identity ascends."
+      ],
+      "solution_sql": "SELECT event_id,department,measured_at FROM measurements ORDER BY department ASC,measured_at IS NULL DESC,measured_at DESC,event_id ASC;",
+      "explanation": "Department is the universal first priority. Inside each department, descending missingness brings unknown timestamps first; the later timestamp term orders known dates newest first, and identity completes ties.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO measurements VALUES (9,'Arts','2026-01-01'),(2,'Arts','2026-01-01'),(1,'Media',NULL);",
+          "expected": "event_id\tdepartment\tmeasured_at\n2\tArts\t2026-01-01 00:00:00\n9\tArts\t2026-01-01 00:00:00\n1\tMedia\tNULL"
+        },
+        {
+          "seed_sql": "INSERT INTO measurements VALUES (8,'Arts',NULL),(1,'Arts',NULL);",
+          "expected": "event_id\tdepartment\tmeasured_at\n1\tArts\tNULL\n8\tArts\tNULL"
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-13-null-ordering-1",
+      "test_id": "pt-dbms-sql-13-null-ordering",
+      "question_text": "In PostgreSQL, where do NULL values sort by default under `ORDER BY column ASC`?",
+      "options": [
+        "First",
+        "Last",
+        "Randomly",
+        "PostgreSQL raises an error if the column contains NULLs"
+      ],
+      "correct_index": 1,
+      "explanation": "PostgreSQL's default treats NULL as larger than any value, so ASC order places NULLs last.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-13-null-ordering-2",
+      "test_id": "pt-dbms-sql-13-null-ordering",
+      "question_text": "In MySQL, where do NULL values sort by default under `ORDER BY column ASC`?",
+      "options": [
+        "Last, same as PostgreSQL",
+        "First, because MySQL treats NULL as the smallest possible value",
+        "MySQL always excludes NULL rows from sorted results",
+        "It depends on the storage engine (InnoDB vs MyISAM)"
+      ],
+      "correct_index": 1,
+      "explanation": "MySQL sorts NULL as the lowest value, so ascending order places NULL rows first by default — the opposite convention from PostgreSQL.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-13-null-ordering-3",
+      "test_id": "pt-dbms-sql-13-null-ordering",
+      "question_text": "Which clause lets you explicitly control NULL placement regardless of engine defaults, in standard SQL / PostgreSQL?",
+      "options": [
+        "ORDER BY column NULLS FIRST | NULLS LAST",
+        "ORDER BY column SKIP NULLS",
+        "WHERE column IS NOT NULL",
+        "GROUP BY column HAVING NULL"
+      ],
+      "correct_index": 0,
+      "explanation": "NULLS FIRST / NULLS LAST explicitly overrides whatever the engine's default NULL placement is.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-13-null-ordering-4",
+      "test_id": "pt-dbms-sql-13-null-ordering",
+      "question_text": "The same query `SELECT * FROM t ORDER BY price ASC;` is run unchanged on PostgreSQL and then on MySQL against identical data containing NULL prices. What is the likely result?",
+      "options": [
+        "Identical row order on both engines, since ASC is standardized",
+        "NULL rows may appear at opposite ends of the result — last on PostgreSQL, first on MySQL",
+        "The query fails on one of the two engines",
+        "NULLs are automatically converted to 0 on both engines"
+      ],
+      "correct_index": 1,
+      "explanation": "This is the classic cross-engine dialect trap: default NULL placement in ASC order differs between PostgreSQL (last) and MySQL (first).",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-13-null-ordering-5",
+      "test_id": "pt-dbms-sql-13-null-ordering",
+      "question_text": "Why should a developer explicitly write NULLS FIRST/NULLS LAST (or an engine-specific equivalent) instead of relying on ASC/DESC defaults when a sort column can contain NULLs?",
+      "options": [
+        "It's required syntax and queries fail without it",
+        "It makes the query run faster",
+        "Default NULL placement is engine-specific, so relying on it makes behavior non-portable and easy to get wrong when porting code",
+        "NULLS FIRST/LAST is the only way to filter out NULL rows"
+      ],
+      "correct_index": 2,
+      "explanation": "Since default NULL ordering varies by database engine, being explicit avoids silent behavioral differences when code moves between engines.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-13-null-ordering-6",
+      "test_id": "pt-dbms-sql-13-null-ordering",
+      "question_text": "In PostgreSQL, what is the default NULL placement under `ORDER BY column DESC`?",
+      "options": [
+        "NULLS LAST",
+        "NULLS FIRST",
+        "NULLs are omitted from DESC sorts",
+        "Undefined and varies per query"
+      ],
+      "correct_index": 1,
+      "explanation": "PostgreSQL's rule is symmetric: DESC defaults to NULLS FIRST (consistent with treating NULL as 'largest').",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-13-null-ordering-7",
+      "test_id": "pt-dbms-sql-13-null-ordering",
+      "question_text": "A common workaround to control NULL placement on an engine lacking native NULLS FIRST/LAST syntax is:",
+      "options": [
+        "ORDER BY column IS NULL, column",
+        "ORDER BY NULL(column)",
+        "GROUP BY column IS NULL",
+        "WHERE column IS NULL ORDER BY column"
+      ],
+      "correct_index": 0,
+      "explanation": "`column IS NULL` evaluates to 0/false for non-null and 1/true for null, so ordering by it first pushes NULLs to a controlled position before applying the real sort.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-13-null-ordering-8",
+      "test_id": "pt-dbms-sql-13-null-ordering",
+      "question_text": "Which statement about NULL ordering is TRUE?",
+      "options": [
+        "All major SQL engines agree that NULLs sort last in ascending order",
+        "NULL ordering conventions differ across engines, so cross-engine code should specify it explicitly",
+        "NULL values can never appear in a sortable column",
+        "NULLS FIRST and NULLS LAST have identical effect in every engine"
+      ],
+      "correct_index": 1,
+      "explanation": "Default NULL placement is a known, real dialect difference (e.g. PostgreSQL vs MySQL), which is why explicit NULLS FIRST/LAST exists.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "coordinator",
+    "independent_review": "passed",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Independent manual review passed; native MySQL fixture evidence recorded separately; provider/browser/Supabase release gates remain separate.",
+    "existing_question_corrections": [
+      "tq-dbms-sql-13-null-ordering-1",
+      "tq-dbms-sql-13-null-ordering-2",
+      "tq-dbms-sql-13-null-ordering-3",
+      "tq-dbms-sql-13-null-ordering-4",
+      "tq-dbms-sql-13-null-ordering-5",
+      "tq-dbms-sql-13-null-ordering-6",
+      "tq-dbms-sql-13-null-ordering-7",
+      "tq-dbms-sql-13-null-ordering-8"
+    ],
+    "canonical_answer_indices_preserved": true,
+    "editorial_record": "Original snapshots retained. Questions rewritten for precise dialect and topic coverage while preserving identities and canonical answer positions; technical and independent review pending.",
+    "independent_reviewer": "Codex reviewer, current 2026-10-30 session",
+    "independent_review_scope": "Read full notes, all 640 MCQ stems/options/canonical answers/explanations, 64 exercise contracts/solutions/fixtures, and all 32 diagrams. Verified retained identities/answers through source-continuity tests; SQL execution evidence is recorded separately. No external originality, provider, live application or Supabase authorization clearance.",
+    "independent_review_record": "reports/independent-review-2026-10-30.json",
+    "content_sha256": "9a01f1da8b646e0cfe57c2dd105f115233196b4be1b53265737ac797efdce2ae"
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-13-null-ordering",
+    "original_note_sha256": "8c4158760dca1db6ed09ba27b9c4b9824e4c17f30906be9921d9f08b989fd1ab",
+    "status": "drafted; not yet included in prepared paired migrations"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "An explicit missingness key separates placement from value order",
+      "description": "The table describes known-first ascending price with final identity ties.",
+      "columns": [
+        "Price",
+        "IS NULL flag",
+        "Group priority",
+        "Known-value rank"
+      ],
+      "rows": [
+        [
+          "-1",
+          "0",
+          "Known first",
+          "Before 0"
+        ],
+        [
+          "0",
+          "0",
+          "Known first",
+          "After -1"
+        ],
+        [
+          "5",
+          "0",
+          "Known first",
+          "After 0"
+        ],
+        [
+          "NULL",
+          "1",
+          "Missing last",
+          "Identity decides missing ties"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "drafted — verification pending",
+    "server_rendering": "pending",
+    "browser_rendering": "unverified",
+    "independent_review": "pending"
+  },
+  "authoring_status": "drafted — verification pending",
+  "sql_verification": {
+    "scope": "not executed; exact MySQL/provider verification pending",
+    "all_passed": false,
+    "cases": []
+  }
+}

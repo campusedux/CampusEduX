@@ -61,7 +61,7 @@ export function AnnouncementBar() {
         <button
           type="button"
           aria-label="Dismiss announcement"
-          className="flex-shrink-0 rounded-md p-1 text-primary/70 hover:bg-primary-100"
+          className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-md p-1 text-primary/70 hover:bg-primary-100"
           onClick={() => {
             try {
               sessionStorage.setItem(DISMISS_KEY, item.id);

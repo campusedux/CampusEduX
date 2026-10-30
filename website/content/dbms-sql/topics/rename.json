@@ -1,0 +1,628 @@
+{
+  "source_ref": "chapter-7-relational-algebra/rename",
+  "slug": "rename",
+  "title": "Rename",
+  "description": "Distinguish logical rename and SQL aliases from persistent schema changes, use explicit roles in self-joins, and name computed results without hiding their actual meaning.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Rename changes how a result is referenced\n\nRename in relational algebra gives a relation or its attributes different names while preserving the underlying tuples and value associations. Its conventional symbol is rho. A relation named Student can be referenced under another logical name, or a result attribute can receive a clearer label. A pure rename does not filter tuples, remove columns, or change a student's recorded grade.\n\nThe labels still matter because later expressions use them to identify roles unambiguously. A good name explains what a value represents. Changing a label from score to age does not make the stored number an actual age. Rename preserves the values, so the new name must remain faithful to their meaning rather than disguising an incorrect expression or undocumented unit conversion.\n\n## SQL aliases provide local names\n\nSQL AS can introduce a result-column alias or a table-reference alias in supported contexts. SELECT student_name AS display_name labels the output column without changing the stored Student definition. FROM students AS s supplies a local qualifier for that table reference. The scope belongs to the query structure, not automatically to every later statement or application request.\n\nThis is different from persistent DDL that renames a table or stored column. An alias does not update dependent application types, views, or future queries to use a new schema object name. A real persistent rename can affect those callers and needs an authorized migration and compatibility review. The exercises here use query-local aliases only and do not modify application schemas.\n\n## Separate relation roles in a self-join\n\nA self-join refers to one underlying relation in more than one role. Employee can appear as subordinate e and supervisor m, with e.supervisor_id matched to m.employee_id. The aliases distinguish the two references so each selected column and predicate names the intended occurrence. They do not create a second stored Employee table or copy every employee as a new entity.\n\n```sql\nSELECT e.employee_id, e.employee_name,\n       m.employee_name AS supervisor_name\nFROM employees AS e\nLEFT JOIN employees AS m ON m.employee_id = e.supervisor_id\nORDER BY e.employee_id;\n```\n\nThe query follows the directed immediate-supervisor relationship. The preserving join keeps a root employee with no supervisor under the stated policy. A reversed join would express a different role connection, and matching employee names would be unreliable when names repeat. Alias clarity supports correct reasoning, but the join condition still needs to encode the actual relationship.\n\n## Aliasing does not constrain join multiplicity\n\nRenaming references makes them distinguishable, but it does not prevent unintended pair multiplication. Joining students a and b on equal department can produce self-pairs and both orientations of a pair. If the report asks for each distinct pair of students once, the predicate needs a suitable identity ordering such as a.student_id < b.student_id in addition to the department match.\n\nThe inequality is not a rename operation. It selects the requested pair population and excludes the same student in both roles. The aliases then explain which participant supplies each output value. Keep these responsibilities distinct: clear labels cannot repair an absent relationship predicate, and a logically correct predicate still benefits from names that make its roles reviewable.\n\n## Attribute labels define an output interface\n\nResult labels can provide stable names for consumers. A count of enrollment facts can be named enrollment_count, while a total of recorded credits can be named completed_credits when the source population actually matches that definition. An alias does not alter the formula's grain or units. A misleading name can hide an incorrect report even if its SQL parses and returns plausible numbers.\n\nUse explicit selected columns and labels when a caller expects a fixed shape. SELECT star over several aliased sources can expose duplicate column labels or unrelated data and change when a source gains attributes. Qualifying the sources and naming the required outputs makes the contract visible without claiming that aliases themselves enforce authorization or validate every stored property.\n\n## Computation and labeling are different operations\n\nSQL can label a computed expression, such as points + bonus AS adjusted_points. The arithmetic produces a value and the alias names its output role. In basic relational-algebra terminology, computing the expression is richer than a pure rename of an existing attribute. Explain both parts rather than saying rename alone changes points or calculates a new result.\n\nThe label should describe the actual scale. Multiplying a grade by one hundred does not universally produce a percentage unless the domain defines that conversion. A grade scale from zero to four, zero to ten, or another range needs a different interpretation. Preserve the expression's meaning and units when choosing a readable alias instead of teaching a convenient label as a mathematical guarantee.\n\n## Alias visibility follows query structure\n\nA derived table in MySQL needs its own alias so the outer query can reference its result. The inner query can expose named attributes, and the outer consumer can qualify them with the derived source name. This query-level boundary is useful when a computed result must later be filtered or combined while preserving an explicit output contract.\n\n```sql\nSELECT adjusted.student_id, adjusted.adjusted_points\nFROM (\n  SELECT student_id, points + bonus AS adjusted_points\n  FROM results\n) AS adjusted\nWHERE adjusted.adjusted_points >= 80\nORDER BY adjusted.student_id;\n```\n\nDo not assume every alias is visible in every clause of the same query level. Product rules determine visibility, and an output label is not generally an input column for the same WHERE clause. The derived level above makes the value an exposed attribute for its outer consumer without creating a persistent object or changing the source data.\n\n## Preserve identity through descriptive roles\n\nTwo employees named Mira can remain distinct through employee_id. A result naming supervisor_name does not make the supervisor label unique or sufficient for future updates. Keep the relevant identifiers when the task needs to distinguish participants. If two role labels happen to match in a self-join, that alone does not mean the join matched the same entity twice.\n\nA relation alias can also make ambiguous shared column names explicit across different tables. Course and Department can both have id or name columns. Qualification states which one a predicate reads. It does not prove the two ids belong to the same identity domain or that a reference exists. Choose the modeled key connection rather than assuming matching short labels imply a valid relationship.\n\n## Missing values and ordering remain unchanged\n\nRenaming an absent optional value does not turn NULL into a known ordinary value. COALESCE can compute a display fallback if the contract requires it, but that is another expression with its own semantics. Likewise, an alias named first_student does not sort the data. An appropriate outer ORDER BY defines presentation order independently of how descriptive the labels appear.\n\nA pure rename preserves cardinality and degree, although replacing one expression with another or combining sources can change other properties in a full SQL statement. Evaluate the complete query rather than attributing every observed effect to AS. Aliasing is one feature inside the statement, and its naming role should remain distinguishable from projection, filtering, joining, aggregation, and computation.\n\n## Test the role meanings directly\n\nFor self-joins, include repeated names, a root employee, and a supervisor with several subordinates. For pair listings, include several students in one department and another student in a different department. Verify whether self-pairs and reversed duplicates belong in the requested output. One isolated row cannot expose an incorrect role direction or an unintended Cartesian combination.\n\nCheck selected output labels as well as values: a positional consumer can receive a numerically correct result under the wrong field name and still behave incorrectly. The exercises verify a uniquely oriented same-department pair query and a named computed-result filter on synthetic fixtures. The recorded engine determines the actual execution evidence; MariaDB temporary-table results are not exact MySQL/provider proof. Rename is useful because it makes relation references and output attributes understandable while preserving the distinction between local names, persistent schema objects, and the operations that actually determine the result values and population.\n",
+  "references": [],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-7-rename",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-7-rename-1",
+          "test_id": "pt-dbms-sql-7-rename",
+          "question_text": "What does the Rename operation (ρ) do?",
+          "options": [
+            "Changes the actual data values in a relation",
+            "Gives a relation or its attributes a new name, without changing any data",
+            "Deletes a relation",
+            "Filters rows by a condition"
+          ],
+          "correct_index": 1,
+          "explanation": "Rename is purely about naming — it never alters the underlying data.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-7-rename-2",
+          "test_id": "pt-dbms-sql-7-rename",
+          "question_text": "Which SQL keyword can introduce query-local table-reference and output-column aliases in MySQL?",
+          "options": [
+            "WHERE",
+            "AS",
+            "JOIN",
+            "GROUP BY"
+          ],
+          "correct_index": 1,
+          "explanation": "AS supplies query-local aliases in the stated contexts. Persistent stored-object renaming uses different DDL and has different compatibility effects.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-7-rename-3",
+          "test_id": "pt-dbms-sql-7-rename",
+          "question_text": "Why does a self-join make Rename functionally necessary rather than just cosmetic?",
+          "options": [
+            "Self-joins don't actually require Rename at all",
+            "Without aliasing the two references to the same table, the query has no way to distinguish which copy's columns are being referenced — it becomes ambiguous",
+            "Self-joins are illegal in SQL",
+            "Rename is only cosmetic in every situation, including self-joins"
+          ],
+          "correct_index": 1,
+          "explanation": "Distinct aliases qualify role-specific references in a self-join; they do not by themselves choose the correct join predicate.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-7-rename-4",
+          "test_id": "pt-dbms-sql-7-rename",
+          "question_text": "In `SELECT a.name FROM students AS a JOIN students AS b ON a.department = b.department`, what problem does aliasing a and b solve?",
+          "options": [
+            "It makes the query run faster",
+            "It lets the query distinguish between the two separate references to the same students table",
+            "It changes the actual student data being compared",
+            "It removes the need for a JOIN condition"
+          ],
+          "correct_index": 1,
+          "explanation": "Since both sides of the self-join come from the same table, the aliases are what make each reference distinguishable.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-7-rename-5",
+          "test_id": "pt-dbms-sql-7-rename",
+          "question_text": "Can a computed expression receive an output alias distinct from the act of computing it?",
+          "options": [
+            "No, Rename only applies to existing physical columns",
+            "Yes; an expression can be labeled with AS, but the label must match the actual calculation and units",
+            "This would require a separate ALTER TABLE statement",
+            "Computed expressions cannot appear in SELECT at all"
+          ],
+          "correct_index": 1,
+          "explanation": "The expression computes the value while the alias names it. A label such as percent does not validate an arbitrary grade conversion.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-7-rename-6",
+          "test_id": "pt-dbms-sql-7-rename",
+          "question_text": "In MySQL, which source commonly requires an alias in a FROM clause?",
+          "options": [
+            "Never — aliases are always optional",
+            "When using a derived table (a subquery in the FROM clause), many engines require it to be aliased",
+            "Only when the table name is longer than 10 characters",
+            "Only in DELETE statements"
+          ],
+          "correct_index": 1,
+          "explanation": "A derived table requires a local alias in MySQL; the query does not thereby create a permanent relation.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-7-rename-7",
+          "test_id": "pt-dbms-sql-7-rename",
+          "question_text": "Does renaming a relation change the number of rows or columns it has?",
+          "options": [
+            "Yes, renaming can add or remove rows",
+            "No — Rename affects only names, never the structure or content of the data",
+            "Renaming always removes duplicate rows",
+            "Renaming only affects numeric columns"
+          ],
+          "correct_index": 1,
+          "explanation": "Rename is a pure labeling operation with zero effect on the actual rows or columns present.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-7-rename-8",
+          "test_id": "pt-dbms-sql-7-rename",
+          "question_text": "What real-world readability benefit does aliasing output columns provide, beyond correctness?",
+          "options": [
+            "None — it is purely for correctness, never readability",
+            "It gives result columns clearer, more meaningful names than a raw expression or ambiguous default would produce",
+            "It automatically documents the entire query in a separate file",
+            "It changes the data type of the column"
+          ],
+          "correct_index": 1,
+          "explanation": "Even where not strictly required for correctness, aliasing greatly improves how readable and self-explanatory query results are.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-7-rename-new-9",
+          "test_id": "pt-dbms-sql-7-rename",
+          "question_text": "Does AS display_name rename the stored student_name column permanently?",
+          "options": [
+            "Yes; it executes persistent DDL",
+            "No; it labels the query result",
+            "Only if names repeat",
+            "Only if the result is empty"
+          ],
+          "correct_index": 1,
+          "explanation": "Query aliases and stored schema renames differ.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-7-rename-new-10",
+          "test_id": "pt-dbms-sql-7-rename",
+          "question_text": "Do aliases alone prevent every unwanted pair in a self-join?",
+          "options": [
+            "Yes; a and b automatically exclude self-pairs",
+            "Only if ids are integers",
+            "No; the join and selection predicates define the pair population",
+            "Only if names are unique"
+          ],
+          "correct_index": 2,
+          "explanation": "Naming roles is separate from constraining combinations.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-7-rename-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-7-rename-application-new-1",
+          "test_id": "pt-dbms-sql-7-rename-application",
+          "question_text": "What can a.student_id < b.student_id achieve in a same-department pair report?",
+          "options": [
+            "Rename the stored key",
+            "Make department globally unique",
+            "Exclude self-pairs and reversed duplicate orientations",
+            "Create an authorization rule"
+          ],
+          "correct_index": 2,
+          "explanation": "The identity ordering selects one orientation per distinct pair.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-7-rename-application-new-2",
+          "test_id": "pt-dbms-sql-7-rename-application",
+          "question_text": "Why can a name equality be an unsafe employee-supervisor join?",
+          "options": [
+            "Names cannot be strings",
+            "Every name is a key",
+            "A name alias changes identities",
+            "Different employees can share a name"
+          ],
+          "correct_index": 3,
+          "explanation": "The modeled relationship uses identifiers rather than descriptive coincidence.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-7-rename-application-new-3",
+          "test_id": "pt-dbms-sql-7-rename-application",
+          "question_text": "What does points + bonus AS adjusted_points consist of?",
+          "options": [
+            "A computation and a separate result label",
+            "A pure rename with no arithmetic",
+            "A persistent table copy",
+            "A primary-key declaration"
+          ],
+          "correct_index": 0,
+          "explanation": "The expression determines values while AS names the output.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-7-rename-application-new-4",
+          "test_id": "pt-dbms-sql-7-rename-application",
+          "question_text": "Does labeling gpa * 100 as a percentage prove the conversion is valid?",
+          "options": [
+            "Yes; aliases determine numeric truth",
+            "No; the source scale and intended units must justify it",
+            "Only if the field is named gpa",
+            "Only if the result is sorted"
+          ],
+          "correct_index": 1,
+          "explanation": "Readable labels must match an actual calculation contract.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-7-rename-application-new-5",
+          "test_id": "pt-dbms-sql-7-rename-application",
+          "question_text": "What scope does a table-reference alias ordinarily belong to?",
+          "options": [
+            "Every future independent session",
+            "The stored schema forever",
+            "Its supported query structure",
+            "Every application environment automatically"
+          ],
+          "correct_index": 2,
+          "explanation": "Alias visibility is local and dialect-specific.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-7-rename-application-new-6",
+          "test_id": "pt-dbms-sql-7-rename-application",
+          "question_text": "Why can an outer query filter adjusted.adjusted_points?",
+          "options": [
+            "The alias changed the original source schema",
+            "All aliases are globally visible",
+            "WHERE generates a missing column",
+            "The derived source exposes that named result attribute"
+          ],
+          "correct_index": 3,
+          "explanation": "The query-level boundary makes the computed role available to the consumer.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-7-rename-application-new-7",
+          "test_id": "pt-dbms-sql-7-rename-application",
+          "question_text": "Does an alias change SQL NULL into a known value?",
+          "options": [
+            "No; a separate expression would be needed for an explicit fallback",
+            "Yes; every new name supplies zero",
+            "Only if it is long",
+            "Only for numeric columns"
+          ],
+          "correct_index": 0,
+          "explanation": "Naming does not alter missing-value semantics.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-7-rename-application-new-8",
+          "test_id": "pt-dbms-sql-7-rename-application",
+          "question_text": "Does a pure rename change degree or cardinality?",
+          "options": [
+            "It always doubles rows",
+            "No",
+            "It removes the key column",
+            "It sorts by the new label automatically"
+          ],
+          "correct_index": 1,
+          "explanation": "Pure rename preserves structure size and tuple population.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-7-rename-application-new-9",
+          "test_id": "pt-dbms-sql-7-rename-application",
+          "question_text": "Why qualify two different sources both containing id?",
+          "options": [
+            "To prove the ids are semantically related",
+            "To enforce every foreign key",
+            "To identify which role the expression references",
+            "To delete ambiguous source data"
+          ],
+          "correct_index": 2,
+          "explanation": "Qualification resolves source meaning, not domain validity.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-7-rename-application-new-10",
+          "test_id": "pt-dbms-sql-7-rename-application",
+          "question_text": "What must be explicit for stable result presentation?",
+          "options": [
+            "A label beginning with first",
+            "The alias a",
+            "A short column name",
+            "An appropriate outer ORDER BY"
+          ],
+          "correct_index": 3,
+          "explanation": "Names do not establish row order.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cx-rename-pairs",
+      "slug": "rename-pairs",
+      "title": "Name two student roles and report each same-department pair once",
+      "difficulty": "Easy",
+      "task": "Return first_student_id and second_student_id for distinct students sharing a department. Put the smaller id first and report each pair once. Use separate table aliases to make participant roles explicit.",
+      "schema_sql": "CREATE TABLE students (student_id INT PRIMARY KEY, department VARCHAR(40) NOT NULL);",
+      "seed_sql": "INSERT INTO students VALUES (1,'Computing'),(2,'Computing'),(3,'Computing'),(4,'History');",
+      "expected": "first_student_id\tsecond_student_id\n1\t2\n1\t3\n2\t3",
+      "ordering": "Ascending first_student_id, second_student_id.",
+      "constraints": [
+        "Identifiers are unique; department values are nonmissing.",
+        "Reference execution on temporary MariaDB fixtures is not proof of exact MySQL temporary-table self-reference behaviour."
+      ],
+      "edge_cases": [
+        "A one-student department produces no pair.",
+        "Self-pairs and reversed orientations are excluded."
+      ],
+      "hints": [
+        "Use distinct aliases for the source roles.",
+        "Add a strict identity ordering as well as the department predicate."
+      ],
+      "solution_sql": "SELECT a.student_id AS first_student_id, b.student_id AS second_student_id FROM students a JOIN students b ON a.department = b.department AND a.student_id < b.student_id ORDER BY first_student_id, second_student_id;",
+      "explanation": "Aliases distinguish roles, while the join predicates choose the actual membership and one orientation per pair. Output-only grading does not prove arbitrary solutions used the requested aliases.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO students VALUES (9,'Art'),(2,'Art');",
+          "expected": "first_student_id\tsecond_student_id\n2\t9"
+        },
+        {
+          "seed_sql": "INSERT INTO students VALUES (1,'Art'),(2,'History');",
+          "expected": ""
+        }
+      ]
+    },
+    {
+      "id": "cx-rename-derived",
+      "slug": "rename-derived",
+      "title": "Expose a clearly named computed value to an outer query",
+      "difficulty": "Medium",
+      "task": "Compute adjusted_points = points + bonus in a derived source named adjusted. Return student_id and adjusted_points only where the result is at least 80. The inputs are nonmissing integers in one documented points scale.",
+      "schema_sql": "CREATE TABLE results (student_id INT PRIMARY KEY, points INT NOT NULL, bonus INT NOT NULL);",
+      "seed_sql": "INSERT INTO results VALUES (1,70,10),(2,79,0),(3,90,5),(4,0,80);",
+      "expected": "student_id\tadjusted_points\n1\t80\n3\t95\n4\t80",
+      "ordering": "Ascending student_id.",
+      "constraints": [
+        "The result is a points total, not an inferred percentage or grade-scale conversion."
+      ],
+      "edge_cases": [
+        "The inclusive threshold accepts exactly eighty points.",
+        "Different source decompositions can produce the same total."
+      ],
+      "hints": [
+        "Name the inner computed expression with AS.",
+        "Give the derived source a local alias and filter its exposed attribute outside."
+      ],
+      "solution_sql": "SELECT adjusted.student_id, adjusted.adjusted_points FROM (SELECT student_id, points + bonus AS adjusted_points FROM results) AS adjusted WHERE adjusted.adjusted_points >= 80 ORDER BY adjusted.student_id;",
+      "explanation": "The arithmetic computes the value, the aliases define local roles, and the outer predicate selects the intended population without changing stored points.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO results VALUES (1,80,0),(2,0,79);",
+          "expected": "student_id\tadjusted_points\n1\t80"
+        },
+        {
+          "seed_sql": "",
+          "expected": ""
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-7-rename-1",
+      "test_id": "pt-dbms-sql-7-rename",
+      "question_text": "What does the Rename operation (ρ) do?",
+      "options": [
+        "Changes the actual data values in a relation",
+        "Gives a relation or its attributes a new name, without changing any data",
+        "Deletes a relation",
+        "Filters rows by a condition"
+      ],
+      "correct_index": 1,
+      "explanation": "Rename is purely about naming — it never alters the underlying data.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-7-rename-2",
+      "test_id": "pt-dbms-sql-7-rename",
+      "question_text": "Which SQL keyword implements Rename for both tables and columns?",
+      "options": [
+        "WHERE",
+        "AS",
+        "JOIN",
+        "GROUP BY"
+      ],
+      "correct_index": 1,
+      "explanation": "AS is used to alias both table references and column output names in SQL.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-7-rename-3",
+      "test_id": "pt-dbms-sql-7-rename",
+      "question_text": "Why does a self-join make Rename functionally necessary rather than just cosmetic?",
+      "options": [
+        "Self-joins don't actually require Rename at all",
+        "Without aliasing the two references to the same table, the query has no way to distinguish which copy's columns are being referenced — it becomes ambiguous",
+        "Self-joins are illegal in SQL",
+        "Rename is only cosmetic in every situation, including self-joins"
+      ],
+      "correct_index": 1,
+      "explanation": "A self-join genuinely needs two distinguishable names for the same underlying table, or column references become ambiguous.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-7-rename-4",
+      "test_id": "pt-dbms-sql-7-rename",
+      "question_text": "In `SELECT a.name FROM students AS a JOIN students AS b ON a.department = b.department`, what problem does aliasing a and b solve?",
+      "options": [
+        "It makes the query run faster",
+        "It lets the query distinguish between the two separate references to the same students table",
+        "It changes the actual student data being compared",
+        "It removes the need for a JOIN condition"
+      ],
+      "correct_index": 1,
+      "explanation": "Since both sides of the self-join come from the same table, the aliases are what make each reference distinguishable.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-7-rename-5",
+      "test_id": "pt-dbms-sql-7-rename",
+      "question_text": "Can Rename be applied to a computed/derived expression, like gpa * 100?",
+      "options": [
+        "No, Rename only applies to existing physical columns",
+        "Yes — SELECT gpa * 100 AS gpa_percent renames the computed expression's output column for readability",
+        "This would require a separate ALTER TABLE statement",
+        "Computed expressions cannot appear in SELECT at all"
+      ],
+      "correct_index": 1,
+      "explanation": "Aliasing a derived expression's output column is a very common, purely cosmetic use of AS.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-7-rename-6",
+      "test_id": "pt-dbms-sql-7-rename",
+      "question_text": "In which situation might an alias be syntactically REQUIRED, not just optional, in SQL?",
+      "options": [
+        "Never — aliases are always optional",
+        "When using a derived table (a subquery in the FROM clause), many engines require it to be aliased",
+        "Only when the table name is longer than 10 characters",
+        "Only in DELETE statements"
+      ],
+      "correct_index": 1,
+      "explanation": "Some engines will raise a syntax error if a FROM-clause subquery isn't given an alias.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-7-rename-7",
+      "test_id": "pt-dbms-sql-7-rename",
+      "question_text": "Does renaming a relation change the number of rows or columns it has?",
+      "options": [
+        "Yes, renaming can add or remove rows",
+        "No — Rename affects only names, never the structure or content of the data",
+        "Renaming always removes duplicate rows",
+        "Renaming only affects numeric columns"
+      ],
+      "correct_index": 1,
+      "explanation": "Rename is a pure labeling operation with zero effect on the actual rows or columns present.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-7-rename-8",
+      "test_id": "pt-dbms-sql-7-rename",
+      "question_text": "What real-world readability benefit does aliasing output columns provide, beyond correctness?",
+      "options": [
+        "None — it is purely for correctness, never readability",
+        "It gives result columns clearer, more meaningful names than a raw expression or ambiguous default would produce",
+        "It automatically documents the entire query in a separate file",
+        "It changes the data type of the column"
+      ],
+      "correct_index": 1,
+      "explanation": "Even where not strictly required for correctness, aliasing greatly improves how readable and self-explanatory query results are.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "coordinator",
+    "independent_review": "unavailable; no agent tools",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Definitions and examples checked against questions; no plagiarism certification.",
+    "existing_question_corrections": [
+      "tq-dbms-sql-7-rename-2",
+      "tq-dbms-sql-7-rename-3",
+      "tq-dbms-sql-7-rename-5",
+      "tq-dbms-sql-7-rename-6"
+    ],
+    "canonical_answer_indices_preserved": true,
+    "batch_review": {
+      "reviewer": "coordinator",
+      "independent": false,
+      "scope": "New package only: notes, keyed examples, original question identities and canonical indices, every correct answer, exercises and recorded fixture outputs, diagram trace, content-only paired integration.",
+      "findings_resolved": "Outer Join retained absence question clarified: missing parent is a violation only when the modeled relationship requires it. Division retains its original Hard exercise; validator permits retained Hard alongside Easy while rejecting a new Hard substitute.",
+      "remaining": "Exact MySQL/provider execution, browser QA, independent review and applied-migration behavior unverified; output fixtures do not prove required source technique."
+    }
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-7-rename",
+    "original_note_sha256": "c83e21a1a8b2a155cfed9325ed0287f739722e5507836178da42d92d1967eb85",
+    "status": "paired migration prepared; not applied"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Local labels have different responsibilities from query operations",
+      "description": "Aliases make roles explicit, while predicates, arithmetic and outer ordering determine other parts of the result contract. None of these local labels performs a persistent schema rename.",
+      "columns": [
+        "Construct",
+        "Responsibility",
+        "Does not imply"
+      ],
+      "rows": [
+        [
+          "students AS a; students AS b",
+          "Two distinguishable source roles",
+          "Automatic pair filtering"
+        ],
+        [
+          "a.student_id < b.student_id",
+          "One orientation of each distinct pair",
+          "Persistent id renaming"
+        ],
+        [
+          "points + bonus",
+          "Calculate a value",
+          "Correctness of an unrelated percentage label"
+        ],
+        [
+          "AS adjusted_points",
+          "Name the calculated output role",
+          "A source column update"
+        ],
+        [
+          "Outer ORDER BY",
+          "Define display sequence",
+          "An inherent order from alias spelling"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "coordinator checked local scope, role-qualified pair direction and distinction between labels, arithmetic and predicates",
+    "server_rendering": "passed",
+    "browser_rendering": "unverified",
+    "independent_review": "unavailable; no agent tools",
+    "server_rendering_evidence": "Focused Vitest actual LessonBlock rendering passed for the selected algebra batch; unrelated packages intentionally skipped."
+  },
+  "sql_verification": {
+    "engine": "11.8.6-MariaDB-0+deb13u1 from Debian",
+    "scope": "MariaDB compatibility execution; exact MySQL 8.4/provider execution unverified",
+    "fingerprint": "95bc5f2a7005641488e501f4306d7416adb314ad7103913c7d1bed1cdc6f52eb",
+    "cases": [
+      {
+        "problem": "rename-pairs",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "rename-pairs",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "rename-pairs",
+        "case": 2,
+        "passed": true
+      },
+      {
+        "problem": "rename-derived",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "rename-derived",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "rename-derived",
+        "case": 2,
+        "passed": true
+      }
+    ],
+    "all_passed": true
+  }
+}

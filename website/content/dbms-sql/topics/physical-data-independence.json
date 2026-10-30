@@ -1,0 +1,503 @@
+{
+  "source_ref": "chapter-2-dbms-architecture/physical-data-independence",
+  "slug": "physical-data-independence",
+  "title": "Physical Data Independence",
+  "description": "Distinguish transparent physical database changes from changed logical guarantees, and recognize index hints, implicit ordering, engine limitations, and operational costs that constrain independence.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Keeping logical requests stable as storage changes\n\nPhysical data independence is the ability to change internal data representation without requiring corresponding changes to the conceptual schema or external application contracts. The internal level concerns physical organization and access. The conceptual level describes logical facts and rules. A student directory should be able to request the same student information even when the engine obtains it through a different supported access structure.\n\nThe principle helps separate what consumers need from how the database supplies it. An application can identify a student using StudentID without knowing the file offset containing that student's record. This makes storage evolution manageable as workloads grow. It also lets a query processor consider alternative execution strategies without making every consumer a specialist in page layout.\n\nIndependence concerns preservation of logical behavior, not identical timing or freedom from operational work. A compatible physical change can affect latency, resource use, maintenance requirements, and failure exposure. Those effects deserve measurement and planning even when the application's column names and query text stay unchanged. Calling a change physical does not make it automatically safe to perform.\n\n## Comparing physical and logical change\n\nConsider Student with StudentID, Name, and DeptID. Moving its unchanged representation from one storage device to another concerns physical placement. Adding an ordinary non-unique access index concerns an access structure. Splitting Student into two logical relations changes the conceptual organization. Renaming a promised field changes a logical dependency unless a maintained mapping preserves the external contract.\n\nPhysical independence is usually easier to support than logical independence because a stable logical model can hide many representation choices. It is still not universal. A product's supported engines, data types, constraint behavior, transaction semantics, and deployment topology determine which changes actually preserve that model. Architecture describes the intended boundary; implementation evidence establishes whether a particular change respects it.\n\nClassify an operation by its consequences rather than its name alone. An index that merely supplies another access path differs from a new uniqueness requirement. The latter rejects states that were previously allowed. Likewise, a new storage engine that no longer supports an important guarantee cannot be called logically transparent simply because it stores columns with familiar names.\n\n## Following a student lookup through changing access\n\nSuppose a directory looks up a non-key registration reference and returns StudentID and Name. Initially, the engine may scan records to find the qualifying student. A suitable ordinary index can provide a more selective route while the query continues to ask for the same facts. This is a useful illustration of physical independence because the access mechanism changes while the intended result remains stable.\n\nThe index does not guarantee an improvement for every query. A predicate matching most students may still make a scan reasonable. Index maintenance also adds work to writes and consumes storage. The independence claim is that a compatible access structure need not redefine the directory's logical interface, not that every possible index is faster or that adding it has no cost.\n\nThe conceptual-to-internal mapping connects the logical request to available physical structures. Actual implementations distribute this work across the optimizer, executor, storage engine, and metadata facilities. It is not necessarily a standalone mapping program an administrator edits directly. What matters is that consumers can continue using logical identifiers and operations while the implementation manages supported representations.\n\n## Preserving explicit ordering requirements\n\nA query returning students without ORDER BY does not promise insertion order. It may have appeared to do so under an earlier plan or small dataset, but encounter order is not an external ordering contract. A different access path can return the same qualifying rows in a different sequence without contradicting the unordered request.\n\n```sql\nSELECT StudentID, Name\nFROM Student\nWHERE DeptID = 7\nORDER BY StudentID;\n```\n\nThis MySQL query asks for a specific sequence. If students nineteen and four both belong to department seven, the result places four before nineteen regardless of their insertion sequence. A suitable internal strategy must still satisfy that requested order. The engine may use an access path that already provides it or perform additional ordering work.\n\nWhen sorting by a non-unique value, add an appropriate tie-breaker if the application requires a deterministic sequence. Ordering by Name alone can leave two students named Noor in either relative order. Ordering by Name and StudentID resolves that ambiguity when StudentID is unique. Physical independence works best when consumers specify the behavior they actually require instead of inferring it from a past observation.\n\n## Avoiding unnecessary dependence on index names\n\nA query hint that refers to a particular physical index can couple application code to that structure. Removing or renaming the index may then require query review even though the logical tables and values are unchanged. Such hints can be deliberate engineering choices, but they reduce the freedom to change representation transparently.\n\nDo not replace plan investigation with automatic hints. Understand the workload, available indexes, statistics, and measured behavior first. If a hint is justified, record its dependency and include its callers when reviewing physical changes. A claim of independence that ignores hardcoded access-path names is incomplete because those names are already part of the consumer's effective requirements.\n\nPhysical assumptions can also appear outside SQL. An application might store a file offset, assume a fixed row length, or route requests using a shard number it calculated itself. Each dependency exposes implementation details above the intended boundary. Sometimes such coupling is required, but it should be explicit rather than described as an invisible internal arrangement.\n\n## Checking storage moves and topology changes\n\nMoving equivalent data from spinning disks to SSD-backed storage is a common physical illustration. If the logical endpoint and guarantees remain supported, callers can continue asking the same questions. The operation still needs reliable copying, validation, and an appropriate transition process. Physical independence does not itself prove that the move can happen without interruption or that every query becomes faster.\n\nDistributing records across servers requires more caution. A transparent routing layer may preserve a logical relation for callers, but ordinary single-server features do not automatically supply distributed query routing, cross-server constraints, or transaction semantics. If applications must choose servers or coordinate writes differently, the change has exposed behavior above the physical boundary.\n\nSimilarly, compression and partitioning are product-specific mechanisms with restrictions and trade-offs. An architecture example can assume a supported reorganization that preserves semantics, but a real proposal must verify those assumptions. Do not convert the conceptual goal into a blanket claim that every MySQL table can be partitioned, compressed, or moved between engines without compatibility review.\n\n## Separating compatible results from operational success\n\nA useful comparison begins with the promised outputs and guarantees. Run representative reads using explicit ordering where required, compare values and row multiplicity, and confirm relevant constraints and transaction behavior. A smaller execution time is not a substitute for these semantic checks. A faster response containing fewer students because a relationship rule was lost is not a compatible optimization.\n\nThen measure the workload under stated conditions. Include reads and writes, warm and cold behavior where relevant, and the data distribution that matters to the application. An extra index might benefit a directory while increasing enrollment-update costs. Report those observations separately from the conclusion that the logical contract remains intact.\n\nOperational readiness needs its own evidence. Determine the supported change procedure, temporary capacity, availability requirements, and recovery approach. A rollback may require more than restoring a previous index definition, especially if the operation changes representation in a way the old engine cannot read. The application interface can remain stable while the operator still faces substantial migration work.\n\n## Using independence as a review question\n\nBefore describing a physical change as transparent, ask which higher-level promises remain unchanged and which consumers depend on internal details. Verify the actual product capabilities instead of assuming the architecture supplies them. Ordinary queries expressed through logical columns often have fewer physical dependencies than queries containing explicit access-path hints or code that computes storage locations.\n\nPhysical independence is useful precisely because it lets databases evolve without unnecessary application rewrites. Its honest scope is preservation of supported logical behavior across a particular representation change. Keep result semantics, measured performance, and operational execution as separate claims, and the principle becomes a practical tool for evaluating change instead of an unsupported guarantee about every storage operation.\n",
+  "references": [],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-2-physical-data-independence",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-2-physical-data-independence-1",
+          "test_id": "pt-dbms-sql-2-physical-data-independence",
+          "question_text": "What does Physical Data Independence allow a DBA to change without affecting the conceptual schema or applications?",
+          "options": [
+            "The relationships and constraints in the conceptual schema",
+            "The internal/physical schema: file organization, indexing, storage engine, hardware",
+            "The columns visible in an external schema",
+            "The business logic layer of a three-tier application"
+          ],
+          "correct_index": 1,
+          "explanation": "The intended boundary shields logical consumers from supported internal representation changes that preserve their guarantees.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-2-physical-data-independence-2",
+          "test_id": "pt-dbms-sql-2-physical-data-independence",
+          "question_text": "According to the notes, which is generally considered 'easier' to achieve — logical or physical data independence?",
+          "options": [
+            "Logical data independence",
+            "Physical data independence",
+            "Both are equally difficult",
+            "Neither is achievable in practice"
+          ],
+          "correct_index": 1,
+          "explanation": "Physical independence is described as easier because the conceptual level acts as a stable buffer absorbing storage-level churn without needing to touch relationships or constraints.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-2-physical-data-independence-3",
+          "test_id": "pt-dbms-sql-2-physical-data-independence",
+          "question_text": "Migrating a database from spinning disks to SSD-optimized storage is an example of a change at which schema level?",
+          "options": [
+            "External schema",
+            "Conceptual schema",
+            "Internal schema",
+            "Middleware layer"
+          ],
+          "correct_index": 2,
+          "explanation": "Storage medium and organization are internal-schema concerns; the conceptual schema remains untouched by such a migration.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-2-physical-data-independence-4",
+          "test_id": "pt-dbms-sql-2-physical-data-independence",
+          "question_text": "A supported distributed representation preserves the same logical endpoint, constraints, and query semantics. Why can callers continue using the same student queries?",
+          "options": [
+            "Because the conceptual schema Student(StudentID, Name, DeptID) is unchanged, so all external schemas and queries built on it keep working",
+            "Because applications automatically detect server topology changes",
+            "Because repartitioning always requires a new conceptual schema",
+            "Because physical data independence does not apply to repartitioning"
+          ],
+          "correct_index": 0,
+          "explanation": "The scenario assumes transparent routing and preserved guarantees. Distributing data does not automatically provide these capabilities in every product.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-2-physical-data-independence-5",
+          "test_id": "pt-dbms-sql-2-physical-data-independence",
+          "question_text": "Does adding an ordinary non-unique access index inherently violate physical data independence?",
+          "options": [
+            "Yes, because indexes change the schema",
+            "No; a compatible access index can preserve logical results, though performance and maintenance effects still need review",
+            "Yes, because the conceptual schema must be updated for every new index",
+            "No, but only if the index is added at the external schema level"
+          ],
+          "correct_index": 1,
+          "explanation": "An access index can be transparent to the logical interface, but it does not guarantee faster execution or zero operational cost.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-2-physical-data-independence-6",
+          "test_id": "pt-dbms-sql-2-physical-data-independence",
+          "question_text": "How can an application accidentally undermine physical data independence even though the DBA has done nothing wrong?",
+          "options": [
+            "By using the conceptual schema exclusively for all its queries",
+            "By hardcoding a specific index name in a query hint or relying on physical row insertion order instead of an explicit ORDER BY",
+            "By requesting data through a properly defined external schema",
+            "By caching query results in the application tier"
+          ],
+          "correct_index": 1,
+          "explanation": "Leaking storage assumptions (index names, assumed row order) into application queries breaks the isolation physical data independence is supposed to provide.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-2-physical-data-independence-7",
+          "test_id": "pt-dbms-sql-2-physical-data-independence",
+          "question_text": "A query relies on rows being returned in insertion order without an explicit ORDER BY. The DBA later changes the internal storage engine, and the query starts returning rows in a different order. What does this scenario best illustrate?",
+          "options": [
+            "A normal, expected consequence of physical data independence working correctly",
+            "An application depended on an unspecified encounter order rather than an explicit logical ordering contract",
+            "A logical data independence failure unrelated to physical storage",
+            "A problem that must be fixed at the external schema level only"
+          ],
+          "correct_index": 1,
+          "explanation": "Different order for an unordered query need not violate SQL semantics; the application relied on behavior it had not requested.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-2-physical-data-independence-8",
+          "test_id": "pt-dbms-sql-2-physical-data-independence",
+          "question_text": "Why does physical data independence generally not require rethinking entity relationships or constraints, unlike logical data independence?",
+          "options": [
+            "Because internal-level changes are storage-focused and managed by the internal/conceptual mapping, without altering the logical structure or constraints themselves",
+            "Because physical schemas contain their own separate set of relationships and constraints",
+            "Because physical data independence does not involve any mapping at all",
+            "Because relationships only exist at the external schema level"
+          ],
+          "correct_index": 0,
+          "explanation": "Physical changes operate purely at the storage level and are absorbed by the internal/conceptual mapping, leaving the logical structure and constraints untouched.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-2-physical-data-independence-new-9",
+          "test_id": "pt-dbms-sql-2-physical-data-independence",
+          "question_text": "Which claim is outside the definition of physical data independence?",
+          "options": [
+            "Logical requests can survive compatible representation changes",
+            "Every physical change has zero downtime and no operational risk",
+            "Consumers need not calculate physical row addresses",
+            "Internal access can change while values retain meaning"
+          ],
+          "correct_index": 1,
+          "explanation": "Logical transparency does not prove an operation is online or risk-free.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-2-physical-data-independence-new-10",
+          "test_id": "pt-dbms-sql-2-physical-data-independence",
+          "question_text": "Which boundary absorbs supported changes to internal representation?",
+          "options": [
+            "Only the screen title",
+            "Only the external field alias",
+            "The conceptual-to-internal mapping",
+            "Only the login form"
+          ],
+          "correct_index": 2,
+          "explanation": "The mapping links logical objects and operations to physical representation.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-2-physical-data-independence-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-2-physical-data-independence-application-new-1",
+          "test_id": "pt-dbms-sql-2-physical-data-independence-application",
+          "question_text": "Rows were inserted as student 19 then student 4. A query orders by StudentID. Which sequence is required?",
+          "options": [
+            "19, then 4",
+            "Either sequence despite the explicit order",
+            "4, then 19",
+            "Only the most recently inserted student"
+          ],
+          "correct_index": 2,
+          "explanation": "The explicit ascending key order determines presentation rather than insertion sequence.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-2-physical-data-independence-application-new-2",
+          "test_id": "pt-dbms-sql-2-physical-data-independence-application",
+          "question_text": "Two students share Name = Noor. What makes their name-sorted sequence deterministic?",
+          "options": [
+            "ORDER BY Name alone always breaks ties",
+            "Removing both identifiers",
+            "Relying on the current disk order",
+            "ORDER BY Name, StudentID when StudentID is unique"
+          ],
+          "correct_index": 3,
+          "explanation": "A unique tie-breaker specifies relative order for equal names.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-2-physical-data-independence-application-new-3",
+          "test_id": "pt-dbms-sql-2-physical-data-independence-application",
+          "question_text": "An application uses a hint naming idx_registration, and that index is removed. What dependency must be reviewed?",
+          "options": [
+            "Application coupling to a physical access structure",
+            "Only the foreign-key target",
+            "Only the external column spelling",
+            "The student's date of birth"
+          ],
+          "correct_index": 0,
+          "explanation": "Explicit access-path names can make physical changes visible to callers.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-2-physical-data-independence-application-new-4",
+          "test_id": "pt-dbms-sql-2-physical-data-independence-application",
+          "question_text": "An index improves lookups but increases update cost. Is that incompatible with the independence principle?",
+          "options": [
+            "Yes; all operations must become faster",
+            "No; unchanged logical meaning does not imply unchanged cost",
+            "Yes; write costs are part of every column name",
+            "Only if the index is on a string"
+          ],
+          "correct_index": 1,
+          "explanation": "Physical design changes can preserve semantics while changing resource costs.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-2-physical-data-independence-application-new-5",
+          "test_id": "pt-dbms-sql-2-physical-data-independence-application",
+          "question_text": "A unique index begins rejecting duplicate registration references that were previously accepted. What also changed?",
+          "options": [
+            "Only the disk manufacturer",
+            "Only the table's visual width",
+            "The allowed logical states",
+            "Only the name of a buffer"
+          ],
+          "correct_index": 2,
+          "explanation": "A new uniqueness rule is a semantic change, not merely an access optimization.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-2-physical-data-independence-application-new-6",
+          "test_id": "pt-dbms-sql-2-physical-data-independence-application",
+          "question_text": "A database moves to SSD storage while preserving endpoint and guarantees. What remains a separate claim?",
+          "options": [
+            "Whether StudentID names a logical attribute",
+            "Whether SELECT can return columns",
+            "Whether a consumer can request ordering",
+            "Whether the transition completed safely and met availability needs"
+          ],
+          "correct_index": 3,
+          "explanation": "Operational execution requires its own evidence even for a logically transparent move.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-2-physical-data-independence-application-new-7",
+          "test_id": "pt-dbms-sql-2-physical-data-independence-application",
+          "question_text": "After cross-server placement, callers must choose a shard and coordinate writes differently. Is the placement fully hidden?",
+          "options": [
+            "No; storage-topology responsibilities reached the callers",
+            "Yes; server count never matters",
+            "Yes; identical column names guarantee transparency",
+            "Only page compression determines the answer"
+          ],
+          "correct_index": 0,
+          "explanation": "Changed routing and coordination requirements are observable to applications.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-2-physical-data-independence-application-new-8",
+          "test_id": "pt-dbms-sql-2-physical-data-independence-application",
+          "question_text": "A query without ORDER BY changes row sequence after a new plan. What is the first contract question?",
+          "options": [
+            "Was the first inserted row the oldest student?",
+            "Did the consumer explicitly require and request a sequence?",
+            "Did the table have fewer columns?",
+            "Was the view name capitalized?"
+          ],
+          "correct_index": 1,
+          "explanation": "An unordered result does not promise the earlier encounter sequence.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-2-physical-data-independence-application-new-9",
+          "test_id": "pt-dbms-sql-2-physical-data-independence-application",
+          "question_text": "An engine replacement no longer enforces an existing constraint. What conclusion is justified?",
+          "options": [
+            "The change is automatically transparent",
+            "Only the SSD speed matters",
+            "Logical compatibility has not been preserved",
+            "All constraints are necessarily external only"
+          ],
+          "correct_index": 2,
+          "explanation": "Physical independence cannot excuse loss of a promised logical guarantee.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-2-physical-data-independence-application-new-10",
+          "test_id": "pt-dbms-sql-2-physical-data-independence-application",
+          "question_text": "One read benchmark improves after compression. What should not yet be inferred?",
+          "options": [
+            "The measured read completed faster in that run",
+            "Physical representation can affect performance",
+            "Compression concerns representation",
+            "The whole workload and change procedure are acceptable"
+          ],
+          "correct_index": 3,
+          "explanation": "Broader costs and operational feasibility require separate checks.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [],
+  "coding_not_applicable": "The learning objective is to classify compatibility and physical dependencies. Query-output exercises would not establish physical independence, engine support, or performance; those executable investigations belong to indexing and optimization topics.",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-2-physical-data-independence-1",
+      "test_id": "pt-dbms-sql-2-physical-data-independence",
+      "question_text": "What does Physical Data Independence allow a DBA to change without affecting the conceptual schema or applications?",
+      "options": [
+        "The relationships and constraints in the conceptual schema",
+        "The internal/physical schema: file organization, indexing, storage engine, hardware",
+        "The columns visible in an external schema",
+        "The business logic layer of a three-tier application"
+      ],
+      "correct_index": 1,
+      "explanation": "Physical data independence specifically concerns shielding higher levels from changes made at the internal (physical storage) schema.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-2-physical-data-independence-2",
+      "test_id": "pt-dbms-sql-2-physical-data-independence",
+      "question_text": "According to the notes, which is generally considered 'easier' to achieve — logical or physical data independence?",
+      "options": [
+        "Logical data independence",
+        "Physical data independence",
+        "Both are equally difficult",
+        "Neither is achievable in practice"
+      ],
+      "correct_index": 1,
+      "explanation": "Physical independence is described as easier because the conceptual level acts as a stable buffer absorbing storage-level churn without needing to touch relationships or constraints.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-2-physical-data-independence-3",
+      "test_id": "pt-dbms-sql-2-physical-data-independence",
+      "question_text": "Migrating a database from spinning disks to SSD-optimized storage is an example of a change at which schema level?",
+      "options": [
+        "External schema",
+        "Conceptual schema",
+        "Internal schema",
+        "Middleware layer"
+      ],
+      "correct_index": 2,
+      "explanation": "Storage medium and organization are internal-schema concerns; the conceptual schema remains untouched by such a migration.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-2-physical-data-independence-4",
+      "test_id": "pt-dbms-sql-2-physical-data-independence",
+      "question_text": "Why does re-partitioning Student data across multiple physical servers not require any application code changes, assuming the architecture is respected?",
+      "options": [
+        "Because the conceptual schema Student(StudentID, Name, DeptID) is unchanged, so all external schemas and queries built on it keep working",
+        "Because applications automatically detect server topology changes",
+        "Because repartitioning always requires a new conceptual schema",
+        "Because physical data independence does not apply to repartitioning"
+      ],
+      "correct_index": 0,
+      "explanation": "As long as the conceptual schema is unchanged, physical data independence guarantees the storage-level repartitioning is invisible above the internal level.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-2-physical-data-independence-5",
+      "test_id": "pt-dbms-sql-2-physical-data-independence",
+      "question_text": "Is adding a new index to the Student table generally a violation of physical data independence?",
+      "options": [
+        "Yes, because indexes change the schema",
+        "No, because it preserves the same logical query results while only affecting performance, which is exactly what physical independence permits",
+        "Yes, because the conceptual schema must be updated for every new index",
+        "No, but only if the index is added at the external schema level"
+      ],
+      "correct_index": 1,
+      "explanation": "Adding an index is the canonical example of a physical change that is meant to be transparent — same results, better performance.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-2-physical-data-independence-6",
+      "test_id": "pt-dbms-sql-2-physical-data-independence",
+      "question_text": "How can an application accidentally undermine physical data independence even though the DBA has done nothing wrong?",
+      "options": [
+        "By using the conceptual schema exclusively for all its queries",
+        "By hardcoding a specific index name in a query hint or relying on physical row insertion order instead of an explicit ORDER BY",
+        "By requesting data through a properly defined external schema",
+        "By caching query results in the application tier"
+      ],
+      "correct_index": 1,
+      "explanation": "Leaking storage assumptions (index names, assumed row order) into application queries breaks the isolation physical data independence is supposed to provide.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-2-physical-data-independence-7",
+      "test_id": "pt-dbms-sql-2-physical-data-independence",
+      "question_text": "A query relies on rows being returned in insertion order without an explicit ORDER BY. The DBA later changes the internal storage engine, and the query starts returning rows in a different order. What does this scenario best illustrate?",
+      "options": [
+        "A normal, expected consequence of physical data independence working correctly",
+        "A violation of physical data independence caused by the application leaking a storage assumption into logical-level code",
+        "A logical data independence failure unrelated to physical storage",
+        "A problem that must be fixed at the external schema level only"
+      ],
+      "correct_index": 1,
+      "explanation": "Relying on implicit physical row order rather than the logical schema and explicit clauses is exactly the kind of assumption that breaks the guarantee physical data independence is meant to provide.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-2-physical-data-independence-8",
+      "test_id": "pt-dbms-sql-2-physical-data-independence",
+      "question_text": "Why does physical data independence generally not require rethinking entity relationships or constraints, unlike logical data independence?",
+      "options": [
+        "Because internal-level changes are storage-focused and managed by the internal/conceptual mapping, without altering the logical structure or constraints themselves",
+        "Because physical schemas contain their own separate set of relationships and constraints",
+        "Because physical data independence does not involve any mapping at all",
+        "Because relationships only exist at the external schema level"
+      ],
+      "correct_index": 0,
+      "explanation": "Physical changes operate purely at the storage level and are absorbed by the internal/conceptual mapping, leaving the logical structure and constraints untouched.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "coordinator",
+    "independent_review": "unavailable; no agent tools",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Definitions and examples checked against questions; no plagiarism certification.",
+    "existing_question_corrections": [
+      "tq-dbms-sql-2-physical-data-independence-1",
+      "tq-dbms-sql-2-physical-data-independence-4",
+      "tq-dbms-sql-2-physical-data-independence-5",
+      "tq-dbms-sql-2-physical-data-independence-7"
+    ],
+    "canonical_answer_indices_preserved": true
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-2-physical-data-independence",
+    "original_note_sha256": "c2b6859ea9f7955cee2f5861e8b2c9690dddb86e34759167097e3cc204c31659",
+    "status": "paired migration prepared; not applied"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Three claims to check after a physical change",
+      "description": "Logical compatibility, workload performance, and operational execution require different evidence. Passing one does not establish the other two.",
+      "columns": [
+        "Claim",
+        "Example evidence",
+        "Unsupported inference"
+      ],
+      "rows": [
+        [
+          "Logical compatibility",
+          "Same promised values, constraints, and ordering",
+          "Matching column names prove all semantics"
+        ],
+        [
+          "Performance",
+          "Representative read and write measurements",
+          "One faster query means every operation improves"
+        ],
+        [
+          "Operational readiness",
+          "Supported procedure and recovery plan",
+          "A physical change needs no maintenance planning"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "coordinator review",
+    "server_rendering": "passed",
+    "browser_rendering": "unverified",
+    "independent_review": "unavailable; no agent tools",
+    "rendering_check": "2026-10-28: actual LessonBlock/TopicDiagrams server rendering; 25 authored-package tests passed. Desktop/mobile browser rendering unverified."
+  }
+}

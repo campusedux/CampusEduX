@@ -1,0 +1,510 @@
+{
+  "source_ref": "chapter-20-indexes-and-access-paths/b-tree",
+  "slug": "b-tree",
+  "title": "B Tree",
+  "description": "Understand B-tree routing, fan-out, balanced height, splits, merges and ordered ranges, while distinguishing textbook models from engine-specific B+tree indexes.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Organize many keys with a shallow search tree\n\nA B-tree is a balanced multiway search structure designed to keep lookup paths short when data is stored in pages. Each node can hold several ordered keys and several child references. Rather than following one pointer for every comparison as a simple binary tree might, a search uses the keys in one node to choose among a broad range of possible descendants.\n\nConnect this topic to [why indexes exist](/learning/dbms-sql-tutorial/why-indexes-exist), [B+ tree](/learning/dbms-sql-tutorial/b-plus-tree) and [hash index](/learning/dbms-sql-tutorial/hash-index). B-tree is often used loosely in SQL documentation to describe a family of ordered index structures. Distinguish the conceptual B-tree model from a particular storage engine's B+tree implementation before making claims about where complete records reside.\n\n## Begin with the page-access problem\n\nA large table can occupy many storage pages. Reading every page to find one rare key is expensive compared with navigating a short index path. Even when pages are cached in memory, the structure still influences CPU work, cache locality and how many pages must remain resident. Indexing does not make storage cost disappear; it organizes the search so the engine can avoid irrelevant regions.\n\nA node that occupies roughly a page can contain many key-reference entries. That gives the tree a high branching factor, usually called fan-out. The exact number depends on key widths, references, page format and occupancy. A teaching diagram with only two separators illustrates the routing rule, not a realistic promise that every database page stores exactly three children.\n\n## Follow the ordered child ranges\n\nImagine a root with separator keys twenty and forty. Its left child covers keys below twenty, its middle child covers the range between twenty and forty and its right child covers keys above forty, subject to the precise variant's separator convention. To find thirty, the search chooses the middle region. It does not inspect every leaf before making that choice.\n\nWithin each visited node, the implementation locates the relevant key or child position. In a classical B-tree, a key and associated record reference may be found in an internal node. In a B+tree, internal separators primarily guide navigation and data entries are organized at the leaf level. This distinction is why diagrams should name the chosen variant instead of treating all ordered trees as identical.\n\n## Understand balance without imagining identical occupancy\n\nThe balance invariant keeps leaves at the same depth in the standard B-tree model. Searches therefore have a bounded path length based on tree height rather than the order in which keys happened to arrive. Balanced does not mean every node contains exactly the same number of keys. Occupancy can vary within the structure's minimum and maximum rules.\n\nTextbooks use different conventions for order, degree and capacity. One definition may describe maximum child count, while another uses a minimum degree to derive bounds. State the convention before calculating node capacities. Memorizing a formula without its definition can produce contradictory answers that are really just different notations.\n\n## Estimate why fan-out matters\n\nSuppose a simplified tree has a fan-out near one hundred. One root can point to roughly one hundred nodes at the next level, and another level can address roughly ten thousand descendants. This illustrates why a very large ordered index can remain shallow. It is an approximate capacity argument, not an exact height calculation for a partially filled real index.\n\nWider keys reduce the number of entries that fit in a page, potentially reducing fan-out and increasing page count. Composite text keys can therefore have a different footprint from a narrow numeric key. Choose identity and indexing designs for correctness first, then consider their physical cost. A small key is not beneficial if it loses the domain's required uniqueness or meaning.\n\n## Insert while preserving search order\n\nAn insertion first finds the appropriate position for the new key. If the target node has space, the key can be added while maintaining order. When a node exceeds its capacity, a split redistributes entries and adjusts a parent separator or reference according to the tree variant. A split can propagate upward and occasionally create a new root.\n\nA new root increases the height for all root-to-leaf paths consistently. It does not leave one branch permanently deeper than the others. The process preserves the balanced search contract, but incurs work beyond writing the table row alone. This is one reason secondary indexes make inserts and updates more expensive even when indexed reads become faster.\n\n## Delete without abandoning structural invariants\n\nRemoving an entry can leave a node below its permitted occupancy. A B-tree implementation can redistribute entries with a neighbor or merge nodes, updating their parent as needed. The precise algorithm, timing and space-reclamation behavior depend on the engine. Do not infer immediate file shrinkage from the fact that a logical key was deleted.\n\nDatabase implementations also coordinate structural changes with concurrent readers and writers. Their latches, logging and recovery details go beyond a textbook single-threaded split example. Understanding the conceptual invariant is still useful, but a learner should not translate it into unsupported claims about blocking time, crash safety or maintenance commands on a production server.\n\n## Use ordered access for equality and ranges\n\nAn ordered index can support finding a single key and locating a starting point for a range. For a query that requests keys from twenty-five through thirty-five, the engine can navigate toward the beginning and inspect the relevant ordered region. B+tree leaf links commonly make sequential leaf traversal efficient after the initial descent.\n\n```sql\nSELECT item_id, price\nFROM catalogue_items\nWHERE price >= 25 AND price < 36\nORDER BY price, item_id;\n```\n\nAn appropriate index may help this query, but the plan depends on selectivity and the full projection. If most rows satisfy the range, scanning the table can be reasonable. Returning price and item_id also raises covering and ordering questions. A conceptual tree diagram alone cannot establish which access path the optimizer will choose.\n\n## Relate composite keys to lexicographic order\n\nA composite index orders complete key tuples, typically by the first component and then later components within equal prefixes. For a campus-and-student key, students from one campus form a contiguous region before the next campus. A search constrained by the leading campus component fits that order differently from a search on student name alone.\n\nThis is a consequence of the chosen key order, not an unrelated SQL superstition. Later components can be useful for covering or filtering even when they do not provide the same initial range navigation. Read the [composite index](/learning/dbms-sql-tutorial/composite-index) topic for predicate-specific details and avoid claiming that any mention of an indexed column guarantees a narrow lookup.\n\n## Compare the tree with an unordered access structure\n\nA hash structure organizes keys through a hash function and is well suited to supported equality access. It does not generally provide the same natural ordered range traversal. A B-tree-family index maintains order and pays maintenance cost to preserve it. The right choice depends on the operations and engine support, not a universal ranking that one structure is always faster.\n\nUseful conceptual practice traces searches for a present key, an absent key between separators and a range crossing a node boundary. Then trace a split and explain which separators change. These tasks directly assess routing and invariants. A short SELECT that happens to return the right rows cannot prove the internal tree shape or that a split actually occurred.\n\n## Explain an unsuccessful lookup\n\nA search for a missing key still follows the ordered ranges to the location where that key would belong. Reaching that location without finding the key establishes absence within the searched index view. It does not require checking every other branch. For example, a missing key thirty-one belongs between twenty and forty in the illustrated root. Knowing why the neighboring branches can be excluded is the central search-tree argument, whether the requested key is found or not.\n",
+  "references": [
+    {
+      "title": "Primary reference",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/index-btree-hash.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-20-b-tree",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-20-b-tree-1",
+          "test_id": "pt-dbms-sql-20-b-tree",
+          "question_text": "What is a B-tree designed to keep short?",
+          "options": [
+            "Every SQL query string",
+            "Page-oriented search paths",
+            "Every data value",
+            "Only table names"
+          ],
+          "correct_index": 1,
+          "explanation": "High fan-out reduces the number of levels needed to reach a key region.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-20-b-tree-2",
+          "test_id": "pt-dbms-sql-20-b-tree",
+          "question_text": "What does fan-out describe?",
+          "options": [
+            "The total SQL row count",
+            "The branching capacity of a node",
+            "The number of grants",
+            "The length of an alias"
+          ],
+          "correct_index": 1,
+          "explanation": "One node can direct searches into many child ranges.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-20-b-tree-3",
+          "test_id": "pt-dbms-sql-20-b-tree",
+          "question_text": "What guides a child choice?",
+          "options": [
+            "Random output ordering",
+            "Ordered separator keys",
+            "A display caption",
+            "The current username"
+          ],
+          "correct_index": 1,
+          "explanation": "Separators divide the key space into searchable regions.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-20-b-tree-4",
+          "test_id": "pt-dbms-sql-20-b-tree",
+          "question_text": "Where does key30 route under separators20 and40?",
+          "options": [
+            "The region below20",
+            "The region above40",
+            "The middle region",
+            "Every region always"
+          ],
+          "correct_index": 2,
+          "explanation": "Thirty lies between the two separators.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-20-b-tree-5",
+          "test_id": "pt-dbms-sql-20-b-tree",
+          "question_text": "What is the standard balance invariant?",
+          "options": [
+            "Leaves occur at the same depth",
+            "Every node has identical occupancy",
+            "All keys have equal values",
+            "Every node has two children"
+          ],
+          "correct_index": 0,
+          "explanation": "The tree bounds search height without requiring equal key counts per node.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-20-b-tree-6",
+          "test_id": "pt-dbms-sql-20-b-tree",
+          "question_text": "Does balanced mean every node is full?",
+          "options": [
+            "Yes",
+            "No",
+            "Only for leaves",
+            "Only for integers"
+          ],
+          "correct_index": 1,
+          "explanation": "Permitted occupancy varies while structural bounds remain satisfied.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-20-b-tree-7",
+          "test_id": "pt-dbms-sql-20-b-tree",
+          "question_text": "Why state an order or degree convention?",
+          "options": [
+            "It changes row permissions",
+            "Textbooks define capacity notation differently",
+            "It eliminates leaf nodes",
+            "It sorts SQL output"
+          ],
+          "correct_index": 1,
+          "explanation": "The same symbol can refer to different minimum or maximum capacities.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-20-b-tree-8",
+          "test_id": "pt-dbms-sql-20-b-tree",
+          "question_text": "What can wider keys do?",
+          "options": [
+            "Guarantee a shorter tree",
+            "Reduce entries per page",
+            "Remove all writes",
+            "Make ordering irrelevant"
+          ],
+          "correct_index": 1,
+          "explanation": "Wider entries consume page space and can lower effective fan-out.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-20-b-tree-new-9",
+          "test_id": "pt-dbms-sql-20-b-tree",
+          "question_text": "What may happen when an insertion overflows a node?",
+          "options": [
+            "A split and parent adjustment",
+            "Permanent abandonment of balance",
+            "Automatic table deletion",
+            "Loss of every key"
+          ],
+          "correct_index": 0,
+          "explanation": "Structural changes redistribute entries while preserving search order.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-20-b-tree-new-10",
+          "test_id": "pt-dbms-sql-20-b-tree",
+          "question_text": "What can root splitting do?",
+          "options": [
+            "Make only one leaf deeper forever",
+            "Increase tree height consistently",
+            "Remove the index domain",
+            "Disable constraints"
+          ],
+          "correct_index": 1,
+          "explanation": "A new root adds a level to the balanced root-to-leaf paths.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-20-b-tree-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-20-b-tree-application-new-1",
+          "test_id": "pt-dbms-sql-20-b-tree-application",
+          "question_text": "What may follow an underfull node after deletion?",
+          "options": [
+            "Guaranteed immediate file shrinkage",
+            "Automatic database restart",
+            "Redistribution or merge",
+            "An arbitrary lost key"
+          ],
+          "correct_index": 2,
+          "explanation": "Occupancy repair preserves the tree structure; physical reclamation is engine-specific.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-20-b-tree-application-new-2",
+          "test_id": "pt-dbms-sql-20-b-tree-application",
+          "question_text": "Does a logical delete guarantee immediate file shrinkage?",
+          "options": [
+            "Yes",
+            "Only with ordered keys",
+            "Only in a primary index",
+            "No"
+          ],
+          "correct_index": 3,
+          "explanation": "Logical removal and storage reclamation are separate mechanisms.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-20-b-tree-application-new-3",
+          "test_id": "pt-dbms-sql-20-b-tree-application",
+          "question_text": "What access does ordered structure naturally support?",
+          "options": [
+            "Equality and ranges",
+            "Only exact hash lookup",
+            "Only random samples",
+            "Only aggregate counts"
+          ],
+          "correct_index": 0,
+          "explanation": "Order permits locating a starting key and following the relevant interval.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-20-b-tree-application-new-4",
+          "test_id": "pt-dbms-sql-20-b-tree-application",
+          "question_text": "What commonly links B+tree leaf regions?",
+          "options": [
+            "User passwords",
+            "Leaf-to-leaf references",
+            "SQL comments",
+            "Foreign server URLs"
+          ],
+          "correct_index": 1,
+          "explanation": "Leaf linkage supports ordered traversal after the initial descent.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-20-b-tree-application-new-5",
+          "test_id": "pt-dbms-sql-20-b-tree-application",
+          "question_text": "Are conceptual B-tree and B+tree record placements identical?",
+          "options": [
+            "Yes always",
+            "Only for text",
+            "No",
+            "Only for nulls"
+          ],
+          "correct_index": 2,
+          "explanation": "The classical B-tree can store record references internally while B+tree data entries are leaf-oriented.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-20-b-tree-application-new-6",
+          "test_id": "pt-dbms-sql-20-b-tree-application",
+          "question_text": "Does an available ordered index force optimizer use?",
+          "options": [
+            "Yes for every range",
+            "Only when columns are numeric",
+            "Only when the table is named catalogue",
+            "No"
+          ],
+          "correct_index": 3,
+          "explanation": "A broad range may make another access path cheaper.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-20-b-tree-application-new-7",
+          "test_id": "pt-dbms-sql-20-b-tree-application",
+          "question_text": "How are composite keys ordered?",
+          "options": [
+            "Lexicographically by components",
+            "Only by their last component",
+            "By SQL alias",
+            "Randomly for every search"
+          ],
+          "correct_index": 0,
+          "explanation": "Leading components group the later-component order into prefix regions.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-20-b-tree-application-new-8",
+          "test_id": "pt-dbms-sql-20-b-tree-application",
+          "question_text": "What does a hash index generally lack?",
+          "options": [
+            "Equality lookup support",
+            "Natural ordered range traversal",
+            "Any key representation",
+            "Any memory use"
+          ],
+          "correct_index": 1,
+          "explanation": "Hash organization does not preserve the same sorted key neighborhood.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-20-b-tree-application-new-9",
+          "test_id": "pt-dbms-sql-20-b-tree-application",
+          "question_text": "Why do indexes add write work?",
+          "options": [
+            "They rewrite every query caption",
+            "They disable caching",
+            "Entries and structure must be maintained",
+            "They remove transaction logging"
+          ],
+          "correct_index": 2,
+          "explanation": "Relevant inserts updates and deletes change indexed representations.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-20-b-tree-application-new-10",
+          "test_id": "pt-dbms-sql-20-b-tree-application",
+          "question_text": "What best assesses tree routing understanding?",
+          "options": [
+            "Only run an unrelated SELECT",
+            "Only count table columns",
+            "Only sort names",
+            "Trace present absent and range searches"
+          ],
+          "correct_index": 3,
+          "explanation": "Contrasting key paths reveal how separators and boundaries guide navigation.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [],
+  "coding_not_applicable": "This topic assesses internal search-tree routing, capacity and split/merge invariants. SQL result queries do not prove physical page structure; executable engine instrumentation and implementation exercises belong in a dedicated approved storage lab.",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-20-b-tree-1",
+      "test_id": "pt-dbms-sql-20-b-tree",
+      "question_text": "In a B-Tree index, where do sorted keys act as signposts directing a search toward the correct subtree?",
+      "options": [
+        "Only in leaf nodes",
+        "In internal (and root) nodes",
+        "Nowhere; B-Trees are unsorted",
+        "Only in a separate lookup table"
+      ],
+      "correct_index": 1,
+      "explanation": "Internal nodes (including the root) hold sorted keys used purely to navigate toward the correct child during a search.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-20-b-tree-2",
+      "test_id": "pt-dbms-sql-20-b-tree",
+      "question_text": "Why does a B-Tree remain 'shallow' even over a table with a million rows?",
+      "options": [
+        "Because it only stores 100 rows total",
+        "Because each node can hold many keys/children, so tree depth grows logarithmically with data size",
+        "Because it stores data in RAM only",
+        "Because it deletes old rows automatically"
+      ],
+      "correct_index": 1,
+      "explanation": "High branching factor per node means the tree needs only a few levels (roughly log base branching-factor of n) to index huge amounts of data.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-20-b-tree-3",
+      "test_id": "pt-dbms-sql-20-b-tree",
+      "question_text": "What does 'balanced' mean in the context of a B-Tree?",
+      "options": [
+        "Every node has exactly two children",
+        "Every path from root to a leaf has the same length",
+        "The tree never needs to be updated",
+        "Keys are stored in random, not sorted, order"
+      ],
+      "correct_index": 1,
+      "explanation": "Balance means uniform depth across all leaves, which the tree maintains via splitting/merging as data changes.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-20-b-tree-4",
+      "test_id": "pt-dbms-sql-20-b-tree",
+      "question_text": "Roughly how many levels would a B-Tree need to index 1,000,000 rows if each node holds about 100 keys/children?",
+      "options": [
+        "About 1,000,000",
+        "About 500,000",
+        "About 3",
+        "Exactly 1"
+      ],
+      "correct_index": 2,
+      "explanation": "log base 100 of 1,000,000 is about 3 — a wide branching factor keeps the tree very shallow even for large tables.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-20-b-tree-5",
+      "test_id": "pt-dbms-sql-20-b-tree",
+      "question_text": "What operation keeps a B-Tree balanced as rows are inserted and it grows too full at a node?",
+      "options": [
+        "Node splitting",
+        "Deleting random rows",
+        "Converting to a hash index",
+        "Sorting the whole table"
+      ],
+      "correct_index": 0,
+      "explanation": "When a node exceeds its capacity, it splits into two nodes, propagating a new key upward, which keeps the tree balanced.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-20-b-tree-6",
+      "test_id": "pt-dbms-sql-20-b-tree",
+      "question_text": "Why is minimizing node reads (tree depth) especially important for disk-backed database indexes?",
+      "options": [
+        "Because RAM cannot store trees at all",
+        "Because each node read can correspond to a disk I/O operation, and disk I/O is comparatively slow",
+        "Because SQL syntax forbids reading more than 3 nodes",
+        "It isn't important; depth is irrelevant to performance"
+      ],
+      "correct_index": 1,
+      "explanation": "Disk I/O is orders of magnitude slower than in-memory comparisons, so a shallow tree that needs few node reads dramatically improves real-world performance.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-20-b-tree-7",
+      "test_id": "pt-dbms-sql-20-b-tree",
+      "question_text": "Compared to a plain binary search tree, why is a B-Tree generally better suited to database indexing?",
+      "options": [
+        "A B-Tree cannot be balanced, which simplifies coding",
+        "A B-Tree's high branching factor per node yields a much shallower tree, reducing the number of node accesses needed",
+        "A binary search tree cannot store sorted keys",
+        "A B-Tree stores keys in reverse order"
+      ],
+      "correct_index": 1,
+      "explanation": "Wider nodes (many keys/children each) mean fewer levels overall compared to a binary tree, where every node has at most 2 children.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-20-b-tree-8",
+      "test_id": "pt-dbms-sql-20-b-tree",
+      "question_text": "What happens to a B-Tree node when too many rows are deleted, leaving it underfull?",
+      "options": [
+        "Nothing; underfull nodes are ignored forever",
+        "It may merge with a sibling node to maintain balance and structure",
+        "The entire tree is rebuilt from scratch on every delete",
+        "The table becomes unqueryable"
+      ],
+      "correct_index": 1,
+      "explanation": "Underfull nodes can merge with siblings as part of ongoing rebalancing, which is part of the index maintenance overhead (20.14).",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "/root/worker_2",
+    "independent_review": "passed",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "authored; independent review pending",
+    "canonical_answer_indices_preserved": true,
+    "editorial_record": "Original prose and assessments. Seed snapshots and canonical answer indices retained; external originality clearance pending.",
+    "independent_reviewer": "/root",
+    "independent_review_scope": "Full notes,20 MCQs/options/reasoning,original routing diagram and conceptual practice rationale reviewed. Balanced depth, variable occupancy, high fan-out, separators, split/merge, B-tree versus B+tree record placement and range access appropriately distinguished. Engine-specific concurrency, storage reclamation and optimizer behavior not overstated. Exact MySQL/provider, browser and release validation remain separate."
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-20-b-tree",
+    "original_note_sha256": "0cc30d5f53d586d2511159ece1deeedd13452986b5c728361399870b764142b2",
+    "status": "drafted; not included in prepared paired migrations"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Separator keys route a search into one ordered region",
+      "description": "This conceptual routing illustration does not claim a particular engine page layout.",
+      "columns": [
+        "Root separators",
+        "Candidate key",
+        "Chosen region"
+      ],
+      "rows": [
+        [
+          "20,40",
+          "10",
+          "Below20"
+        ],
+        [
+          "20,40",
+          "30",
+          "Between20and40"
+        ],
+        [
+          "20,40",
+          "50",
+          "Above40"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "technical_review": "coordinator independent manual review passed",
+    "browser_rendering": "unverified",
+    "independent_review": "passed",
+    "server_rendering": "passed",
+    "server_rendering_evidence": "2026-10-29 full Vitest:1310 passed/12 skipped; actual LessonBlock/TopicDiagrams render over230 packages. Browser visual QA remains unverified."
+  },
+  "authoring_status": "drafted; verification pending",
+  "sql_verification": {
+    "scope": "not executed; exact MySQL/provider execution pending",
+    "all_passed": false,
+    "cases": []
+  }
+}

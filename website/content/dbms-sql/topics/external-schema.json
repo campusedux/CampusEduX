@@ -1,0 +1,620 @@
+{
+  "source_ref": "chapter-2-dbms-architecture/external-schema",
+  "slug": "external-schema",
+  "title": "External Schema",
+  "description": "Design task-specific database views with explicit columns, row filters, aliases, and joins while preserving result meaning, access boundaries, and compatible application contracts.",
+  "dialect": "MySQL 8.4",
+  "notes": "## A database interface shaped around a task\n\nAn external schema describes the data that a particular user group or application works with. It presents a useful perspective on a shared database rather than exposing every fact and storage detail to every caller. A result portal needs academic results; an accounts portal needs fee information. Both can use the same underlying student records while receiving different columns, rows, and derived values suited to their responsibilities.\n\nIn the three-schema architecture, external schemas sit above the conceptual schema, which describes the overall logical model. The internal schema describes physical representation. External means facing a particular consumer; it does not mean that the database is outside the organization or accessible over the public internet. An internal staff application also has a task-facing perspective and can therefore use an external schema.\n\nThe architectural term is broader than a specific SQL object. A database view is a common implementation technique, and a carefully defined application response can play a similar interface role. MySQL also uses schema as a synonym for database in some commands. That product vocabulary does not turn every database namespace into a separate architectural external schema.\n\n## Following a student record into two portals\n\nConsider a simplified Student relation containing StudentID, Name, DOB, Marks, and FeeBalance. Marks represents the published score for one defined assessment in this teaching example. A production academic model would normally separate students, enrollments, assessments, and results. Keeping the example small lets us examine the interface without pretending that one score column models a complete examination system.\n\nThe Result Portal exposes StudentID, Name, and Marks. The Accounts Portal exposes StudentID, Name, and FeeBalance. Neither perspective needs the student's date of birth for these tasks. StudentID preserves identity even when names repeat. Removing it simply because names look unique in today's sample could make later updates, links, and comparisons ambiguous.\n\nSuppose the stored rows include student 31, Mira, with 92 marks and a fee balance of 500, and student 32, Kabir, with 76 marks and no outstanding balance. The result perspective contains the identifiers, names, and scores for both students. The accounts perspective contains their identifiers, names, and balances. The portals do not need independent master copies that could drift apart.\n\n## Expressing a perspective with SQL\n\nAn explicit projection lists the columns an interface promises. The following MySQL example defines the result perspective without including fee data. Its purpose is a stable reading interface; it does not establish a complete access policy.\n\n```sql\nCREATE VIEW ResultPortal AS\nSELECT StudentID, Name, Marks\nFROM Student;\n\nSELECT StudentID, Name, Marks\nFROM ResultPortal\nORDER BY StudentID;\n```\n\nThe final query orders the two example students by identifier. Ordering belongs in the consuming query when an ordered presentation is required. A view describes a relation-like result, not a permanent display sequence. A later index or plan change must not be allowed to scramble an interface whose consumer silently assumed insertion order.\n\nAvoid selecting every column merely to reduce typing. An explicit list documents the contract and prevents accidental dependence on unrelated fields. In MySQL, a view definition created using a star is fixed when created; adding a base column does not automatically add it to that existing view. Recreating such a view can nevertheless change its exposed shape, making explicit definitions easier to review.\n\n## Distinguishing columns from eligible records\n\nColumn restriction and row restriction answer different questions. Selecting StudentID, Name, and Marks determines which attributes appear. A condition such as Marks greater than or equal to ninety determines which students qualify. Two perspectives can therefore expose identical columns yet describe different populations. A scholarship screening perspective can contain only the students meeting its stated score threshold.\n\nFor Mira and Kabir, that threshold returns Mira alone. A score of exactly ninety qualifies because the comparison is inclusive. A missing score does not qualify through this comparison: SQL treats a comparison with NULL as unknown, and a WHERE condition retains rows for which its condition is true. Missing scores need a separate explicit policy if the application must display them.\n\nA row predicate used for a report is not automatically identity-based authorization. Filtering for high marks selects a business population; restricting a teacher to their permitted students requires a trusted relationship between the authenticated teacher and those records. A client-controlled department parameter cannot establish that relationship by itself. The database and application must enforce the actual allowed access paths.\n\n## Combining entities without losing their meaning\n\nA Class Teacher Portal may expose StudentID, Name, CourseName, and Marks by combining Student, Enrollment, and Course. This shows that an external schema can reshape multiple conceptual entities into one useful perspective. The join conditions must follow their identifiers. Joining on a student's name can incorrectly combine different people who happen to share a name.\n\nThe grain of the result also matters. If a student has two enrollments, the teacher perspective can contain two rows for that student, one per course. Repeated student identifiers are then expected rather than necessarily duplicate errors. The interface should explain whether each row represents a student, an enrollment, or an assessment result before a caller counts or sums it.\n\nAn inner join excludes students without matching enrollments. A left join can preserve them, but then course-related output may be missing. Neither choice is universally correct. Use the consumer's requirements to decide, and test an unenrolled student so that the difference is visible. Applying DISTINCT without understanding the grain can hide evidence of an incorrect join instead of fixing it.\n\n## Mapping names and calculations deliberately\n\nThe external-to-conceptual mapping explains where each exposed field comes from. If the conceptual model renames Marks to Score while the portal must keep its existing contract, an updated projection can select Score under the alias Marks. This preserves a name only when Score still means the same measurement. Renaming a percentage to Marks cannot make it equivalent to an older raw score automatically.\n\nDerived values need equally explicit definitions. A pass label might be based on a score threshold, but the treatment of missing results, different maximum marks, and revised assessments must be stated. A result of NULL should not silently become zero if users would interpret zero as an actual recorded mark. Simplification is useful only while it preserves distinctions the consumer needs.\n\nChanging a base column without updating a dependent mapping can break the perspective. In particular, a MySQL view still referring to a removed column cannot supply it merely because its external name was familiar. Interface compatibility requires dependency review and, where possible, a mapping that continues to provide the promised values and types.\n\n## Keeping security separate from presentation\n\nA narrow perspective can reduce unnecessary data exposure, but the surrounding privileges determine whether it is an enforceable boundary. A user who can directly read the underlying Student table may bypass the result perspective. MySQL views also have security-context rules that affect whose privileges are checked. Those settings require deliberate review rather than assumptions based on a view's friendly name.\n\nLikewise, an application hiding a fee column visually does not prove that its network response omitted the column. Inspect the trusted query or server response and test denied access through the actual enforcement mechanism. The architectural discussion here identifies the desired perspective; it does not authorize granting privileges or modifying an existing production security policy.\n\n## Checking the contract before relying on it\n\nTest representative records against the perspective's promise. Include repeated names, a missing score, a threshold score, and multiple enrollments. Confirm column names, types, row eligibility, and grain. Compare the result with the intended task rather than merely checking that SQL executes. A valid query can still expose an unwanted field or multiply records through a wrong relationship.\n\nWhen the conceptual model changes, list the external perspectives and callers that depend on it. Keep unchanged contracts where their meanings remain supportable, update mappings explicitly, and coordinate unavoidable changes. External schemas are useful because they make these dependencies manageable: each consumer receives a clear, purpose-specific account of shared data without needing to understand every other consumer or physical storage detail.\n",
+  "references": [
+    {
+      "title": "MySQL CREATE VIEW and fixed view definitions",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/create-view.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-2-external-schema",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-2-external-schema-1",
+          "test_id": "pt-dbms-sql-2-external-schema",
+          "question_text": "What does the External Schema represent in the three-schema architecture?",
+          "options": [
+            "The physical storage layout of the database",
+            "A user- or application-specific subset or reshaping of the conceptual schema",
+            "The complete organization-wide logical design",
+            "The network protocol used between client and server"
+          ],
+          "correct_index": 1,
+          "explanation": "The external schema is the view-level abstraction tailored to what a specific user or application needs to see.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-2-external-schema-2",
+          "test_id": "pt-dbms-sql-2-external-schema",
+          "question_text": "In the Student example, what does the Result Portal's external schema expose?",
+          "options": [
+            "(StudentID, Name, FeeBalance)",
+            "(StudentID, Name, Marks)",
+            "(StudentID, DOB, FeeBalance)",
+            "All columns of the Student table"
+          ],
+          "correct_index": 1,
+          "explanation": "The Result Portal is described as seeing only StudentID, Name, and Marks — never fee data.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-2-external-schema-3",
+          "test_id": "pt-dbms-sql-2-external-schema",
+          "question_text": "What database mechanism is typically used to implement an external schema?",
+          "options": [
+            "Indexes",
+            "Views",
+            "Connection pools",
+            "Disk partitions"
+          ],
+          "correct_index": 1,
+          "explanation": "Views are the concrete SQL construct commonly used to realize the abstract external-schema concept.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-2-external-schema-4",
+          "test_id": "pt-dbms-sql-2-external-schema",
+          "question_text": "The Class Teacher Portal's external schema exposes `(StudentID, Name, CourseName, Marks)` by combining Student and Enrollment data. What does this demonstrate?",
+          "options": [
+            "An external schema can only ever expose one table at a time",
+            "An external schema can be built by joining multiple conceptual entities into one simplified view",
+            "This is actually an internal schema, not an external one",
+            "Joining tables is only possible at the conceptual level"
+          ],
+          "correct_index": 1,
+          "explanation": "External schemas are not limited to a single table; they can join and reshape multiple conceptual entities.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-2-external-schema-5",
+          "test_id": "pt-dbms-sql-2-external-schema",
+          "question_text": "Result Portal and Accounts Portal both have external schemas over the same Student conceptual schema. What does this show?",
+          "options": [
+            "Only one external schema can exist per conceptual schema at a time",
+            "Multiple external schemas can coexist over the same conceptual schema, each restricted differently",
+            "The conceptual schema must be duplicated for each external schema",
+            "External schemas must always include every conceptual column"
+          ],
+          "correct_index": 1,
+          "explanation": "Many external schemas can be defined simultaneously over one shared conceptual schema, each tailored to a different audience.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-2-external-schema-6",
+          "test_id": "pt-dbms-sql-2-external-schema",
+          "question_text": "Restricting which columns an external schema shows versus restricting which rows it shows (e.g., only a teacher's own department) are examples of what two different techniques?",
+          "options": [
+            "Column-level restriction and row-level restriction, which solve different access needs",
+            "Both are the same technique applied twice",
+            "Internal schema tuning and external schema tuning",
+            "Middleware routing and connection pooling"
+          ],
+          "correct_index": 0,
+          "explanation": "Column restriction limits which fields are visible, while row restriction limits which records are visible — both are used in external schemas but address different concerns.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-2-external-schema-7",
+          "test_id": "pt-dbms-sql-2-external-schema",
+          "question_text": "A MySQL view still selects Marks after the base column has been renamed Score. No replacement mapping is installed. What is the dependency problem?",
+          "options": [
+            "Nothing, external schemas are automatically immune to conceptual renames",
+            "The view still refers to the missing base column and needs a compatible definition",
+            "The conceptual schema automatically reverts the rename",
+            "The internal schema silently fixes the mismatch"
+          ],
+          "correct_index": 1,
+          "explanation": "The dependent definition must be updated, for example by projecting Score AS Marks when the measurement is unchanged.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-2-external-schema-8",
+          "test_id": "pt-dbms-sql-2-external-schema",
+          "question_text": "A new external schema is created that shows the same columns as the Result Portal's view but only for students with `Marks >= 90`. Why is this a meaningfully different external schema even though the columns are identical?",
+          "options": [
+            "It isn't different — external schemas are defined by columns only",
+            "Because it applies a row-level restriction, so a different subset of records is visible even though the column set matches",
+            "Because it requires a separate conceptual schema",
+            "Because it must be implemented at the internal schema level instead"
+          ],
+          "correct_index": 1,
+          "explanation": "External schemas can differ by row restrictions as well as column restrictions; identical columns with different row filters are still distinct external schemas.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-2-external-schema-new-9",
+          "test_id": "pt-dbms-sql-2-external-schema",
+          "question_text": "What does the grain of an external result describe?",
+          "options": [
+            "The physical page size",
+            "What one output row represents",
+            "The number of disk files",
+            "The network packet format"
+          ],
+          "correct_index": 1,
+          "explanation": "A student-course perspective may have one row per enrollment rather than one per student.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-2-external-schema-new-10",
+          "test_id": "pt-dbms-sql-2-external-schema",
+          "question_text": "Which mapping explains the source of a portal field?",
+          "options": [
+            "Disk-sector mapping",
+            "Connection-pool routing",
+            "External-to-conceptual mapping",
+            "Buffer replacement mapping"
+          ],
+          "correct_index": 2,
+          "explanation": "It links the task-facing attribute to conceptual facts and calculations.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-2-external-schema-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-2-external-schema-application-new-1",
+          "test_id": "pt-dbms-sql-2-external-schema-application",
+          "question_text": "Mira has 92 marks and Kabir has 76. A perspective keeps Marks >= 90. Who appears?",
+          "options": [
+            "Both students",
+            "Kabir only",
+            "Mira only",
+            "Neither student"
+          ],
+          "correct_index": 2,
+          "explanation": "Ninety-two meets the inclusive threshold; seventy-six does not.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-2-external-schema-application-new-2",
+          "test_id": "pt-dbms-sql-2-external-schema-application",
+          "question_text": "A score is NULL. Does Marks >= 90 retain that row?",
+          "options": [
+            "Yes; NULL means a perfect score",
+            "Yes; NULL equals ninety",
+            "Only if the name is unique",
+            "No; the comparison is unknown"
+          ],
+          "correct_index": 3,
+          "explanation": "WHERE retains true conditions; unknown does not pass the filter.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-2-external-schema-application-new-3",
+          "test_id": "pt-dbms-sql-2-external-schema-application",
+          "question_text": "A teacher perspective returns two courses for the same student. What should be checked before removing a row?",
+          "options": [
+            "Whether the intended grain is one enrollment per row",
+            "Whether the student name is short",
+            "Whether the database uses an SSD",
+            "Whether the view name contains Portal"
+          ],
+          "correct_index": 0,
+          "explanation": "Multiple courses can correctly produce multiple rows for one student.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-2-external-schema-application-new-4",
+          "test_id": "pt-dbms-sql-2-external-schema-application",
+          "question_text": "Two students have the same name but different identifiers. Which join is safer for matching enrollments?",
+          "options": [
+            "Join on the name alone",
+            "Join on the declared student identifier",
+            "Join on the name length",
+            "Use an unconstrained cross join"
+          ],
+          "correct_index": 1,
+          "explanation": "Identifiers express the intended relationship without confusing people who share a name.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-2-external-schema-application-new-5",
+          "test_id": "pt-dbms-sql-2-external-schema-application",
+          "question_text": "An old interface promises Marks; the equivalent base attribute is now Score. Which projection preserves the promised label?",
+          "options": [
+            "Marks AS Score when Marks no longer exists",
+            "SELECT * with no dependency review",
+            "Score AS Marks",
+            "Remove the score from the output"
+          ],
+          "correct_index": 2,
+          "explanation": "An alias can retain the external label when the underlying meaning remains equivalent.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-2-external-schema-application-new-6",
+          "test_id": "pt-dbms-sql-2-external-schema-application",
+          "question_text": "A portal hides FeeBalance on screen but its response includes it. What conclusion follows?",
+          "options": [
+            "The fee information is certainly inaccessible",
+            "The database must contain no fee column",
+            "An index automatically encrypts the field",
+            "Visual hiding has not removed the field from the response"
+          ],
+          "correct_index": 3,
+          "explanation": "Access and data minimization must be assessed at the trusted query and response boundaries.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-2-external-schema-application-new-7",
+          "test_id": "pt-dbms-sql-2-external-schema-application",
+          "question_text": "A ResultPortal view excludes DOB, but a user can directly SELECT the base Student table. Is the view alone a sufficient access boundary?",
+          "options": [
+            "No; the direct base-table permission permits bypass",
+            "Yes; view names override all permissions",
+            "Yes; omitting DOB deletes it",
+            "Only the browser theme determines access"
+          ],
+          "correct_index": 0,
+          "explanation": "The actual privileges and available access paths must enforce the intended restriction.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-2-external-schema-application-new-8",
+          "test_id": "pt-dbms-sql-2-external-schema-application",
+          "question_text": "A report requires StudentID order. Where should that requirement be explicit?",
+          "options": [
+            "In the insertion sequence alone",
+            "In the consuming query ORDER BY StudentID",
+            "In an assumption about disk placement",
+            "In the view title"
+          ],
+          "correct_index": 1,
+          "explanation": "A consumer requiring order should request it explicitly.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-2-external-schema-application-new-9",
+          "test_id": "pt-dbms-sql-2-external-schema-application",
+          "question_text": "An inner-join teacher perspective omits an unenrolled student. What explains that result?",
+          "options": [
+            "The student must have been deleted",
+            "The view has copied the wrong physical page",
+            "There is no matching enrollment for the inner join",
+            "Every view must exclude the youngest student"
+          ],
+          "correct_index": 2,
+          "explanation": "Inner joins keep matching combinations; preserving unmatched students requires a suitable alternative.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-2-external-schema-application-new-10",
+          "test_id": "pt-dbms-sql-2-external-schema-application",
+          "question_text": "A new formula converts raw marks into percentages but keeps the old field name. What must compatibility review examine?",
+          "options": [
+            "Only the spelling of the column",
+            "Only the total number of views",
+            "Only whether the SQL ends in a semicolon",
+            "Measurement meaning and scale as well as the name"
+          ],
+          "correct_index": 3,
+          "explanation": "Matching labels do not establish that old consumers receive the same kind of value.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "dsa-dbms-sql-external-schema-result-projection",
+      "slug": "external-schema-result-projection",
+      "title": "Expose a result portal projection",
+      "difficulty": "Easy",
+      "task": "Write a SELECT producing student_id, name, marks for every student. Omit fee_balance and order by student_id. This query models an external perspective; do not create users or alter privileges.",
+      "schema_sql": "CREATE TABLE students (student_id INT PRIMARY KEY, name VARCHAR(40) NOT NULL, marks INT NULL CHECK (marks BETWEEN 0 AND 100), fee_balance DECIMAL(8,2) NOT NULL CHECK (fee_balance >= 0));",
+      "seed_sql": "INSERT INTO students VALUES (32,'Kabir',76,0.00),(31,'Mira',92,500.00),(33,'Mira',NULL,0.00);",
+      "expected": "student_id\tname\tmarks\n31\tMira\t92\n32\tKabir\t76\n33\tMira\tNULL",
+      "ordering": "student_id ascending",
+      "constraints": [
+        "student_id is unique and non-null",
+        "marks can be NULL or between 0 and 100",
+        "names are not unique"
+      ],
+      "edge_cases": [
+        "Repeated names must remain separate students",
+        "Preserve NULL scores",
+        "An empty input returns no result rows"
+      ],
+      "hints": [
+        "List only the three promised fields",
+        "Use the identifier for deterministic ordering"
+      ],
+      "solution_sql": "SELECT student_id, name, marks FROM students ORDER BY student_id;",
+      "explanation": "An explicit projection omits fee balances while retaining identity and the original score, including missing scores. Ordering by the key gives a deterministic presentation.",
+      "validation_cases": [
+        {
+          "seed_sql": "",
+          "expected": ""
+        },
+        {
+          "seed_sql": "INSERT INTO students VALUES (9,'Isha',0,10.00);",
+          "expected": "student_id\tname\tmarks\n9\tIsha\t0"
+        }
+      ]
+    },
+    {
+      "id": "dsa-dbms-sql-external-schema-course-perspective",
+      "slug": "external-schema-course-perspective",
+      "title": "Build a high-score course perspective",
+      "difficulty": "Medium",
+      "task": "Return student_id, name, course_name, marks for enrollments with marks >= 90. Join students to enrollments on student_id. One output row represents one enrollment; order by student_id then course_name. Do not expose fee balances or include students without a qualifying enrollment.",
+      "schema_sql": "CREATE TABLE students (student_id INT PRIMARY KEY, name VARCHAR(40) NOT NULL, marks INT NULL CHECK (marks BETWEEN 0 AND 100), fee_balance DECIMAL(8,2) NOT NULL CHECK (fee_balance >= 0));\nCREATE TABLE enrollments (student_id INT NOT NULL, course_name VARCHAR(40) NOT NULL, marks INT NULL CHECK (marks BETWEEN 0 AND 100), PRIMARY KEY (student_id, course_name));",
+      "seed_sql": "INSERT INTO students VALUES (31,'Mira',92,500.00),(32,'Kabir',76,0.00),(33,'Mira',NULL,0.00);\nINSERT INTO enrollments VALUES (31,'Databases',92),(31,'Networks',90),(32,'Databases',89),(33,'Databases',NULL);",
+      "expected": "student_id\tname\tcourse_name\tmarks\n31\tMira\tDatabases\t92\n31\tMira\tNetworks\t90",
+      "ordering": "student_id ascending, then course_name ascending",
+      "constraints": [
+        "Each student-course pair is unique",
+        "Every enrollment in the fixtures references an existing student; the query must join identifiers",
+        "Enrollment marks can be NULL",
+        "Use the enrollment score, not the simplified student score"
+      ],
+      "edge_cases": [
+        "Exactly 90 qualifies",
+        "NULL and 89 do not qualify",
+        "Two qualifying enrollments for one student produce two rows",
+        "Students without enrollments are excluded"
+      ],
+      "hints": [
+        "Qualify marks with the enrollment alias",
+        "Filter enrollment marks after defining the identifier join"
+      ],
+      "solution_sql": "SELECT s.student_id, s.name, e.course_name, e.marks FROM students s JOIN enrollments e ON e.student_id = s.student_id WHERE e.marks >= 90 ORDER BY s.student_id, e.course_name;",
+      "explanation": "The identifier join preserves student identity, while the enrollment predicate selects qualifying course scores. One row per enrollment preserves both courses for a qualifying student.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO students VALUES (1,'Noor',100,0.00);",
+          "expected": ""
+        },
+        {
+          "seed_sql": "INSERT INTO students VALUES (2,'Sam',20,0.00),(1,'Sam',100,0.00); INSERT INTO enrollments VALUES (2,'Logic',90),(1,'Logic',NULL);",
+          "expected": "student_id\tname\tcourse_name\tmarks\n2\tSam\tLogic\t90"
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-2-external-schema-1",
+      "test_id": "pt-dbms-sql-2-external-schema",
+      "question_text": "What does the External Schema represent in the three-schema architecture?",
+      "options": [
+        "The physical storage layout of the database",
+        "A user- or application-specific subset or reshaping of the conceptual schema",
+        "The complete organization-wide logical design",
+        "The network protocol used between client and server"
+      ],
+      "correct_index": 1,
+      "explanation": "The external schema is the view-level abstraction tailored to what a specific user or application needs to see.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-2-external-schema-2",
+      "test_id": "pt-dbms-sql-2-external-schema",
+      "question_text": "In the Student example, what does the Result Portal's external schema expose?",
+      "options": [
+        "(StudentID, Name, FeeBalance)",
+        "(StudentID, Name, Marks)",
+        "(StudentID, DOB, FeeBalance)",
+        "All columns of the Student table"
+      ],
+      "correct_index": 1,
+      "explanation": "The Result Portal is described as seeing only StudentID, Name, and Marks — never fee data.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-2-external-schema-3",
+      "test_id": "pt-dbms-sql-2-external-schema",
+      "question_text": "What database mechanism is typically used to implement an external schema?",
+      "options": [
+        "Indexes",
+        "Views",
+        "Connection pools",
+        "Disk partitions"
+      ],
+      "correct_index": 1,
+      "explanation": "Views are the concrete SQL construct commonly used to realize the abstract external-schema concept.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-2-external-schema-4",
+      "test_id": "pt-dbms-sql-2-external-schema",
+      "question_text": "The Class Teacher Portal's external schema exposes `(StudentID, Name, CourseName, Marks)` by combining Student and Enrollment data. What does this demonstrate?",
+      "options": [
+        "An external schema can only ever expose one table at a time",
+        "An external schema can be built by joining multiple conceptual entities into one simplified view",
+        "This is actually an internal schema, not an external one",
+        "Joining tables is only possible at the conceptual level"
+      ],
+      "correct_index": 1,
+      "explanation": "External schemas are not limited to a single table; they can join and reshape multiple conceptual entities.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-2-external-schema-5",
+      "test_id": "pt-dbms-sql-2-external-schema",
+      "question_text": "Result Portal and Accounts Portal both have external schemas over the same Student conceptual schema. What does this show?",
+      "options": [
+        "Only one external schema can exist per conceptual schema at a time",
+        "Multiple external schemas can coexist over the same conceptual schema, each restricted differently",
+        "The conceptual schema must be duplicated for each external schema",
+        "External schemas must always include every conceptual column"
+      ],
+      "correct_index": 1,
+      "explanation": "Many external schemas can be defined simultaneously over one shared conceptual schema, each tailored to a different audience.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-2-external-schema-6",
+      "test_id": "pt-dbms-sql-2-external-schema",
+      "question_text": "Restricting which columns an external schema shows versus restricting which rows it shows (e.g., only a teacher's own department) are examples of what two different techniques?",
+      "options": [
+        "Column-level restriction and row-level restriction, which solve different access needs",
+        "Both are the same technique applied twice",
+        "Internal schema tuning and external schema tuning",
+        "Middleware routing and connection pooling"
+      ],
+      "correct_index": 0,
+      "explanation": "Column restriction limits which fields are visible, while row restriction limits which records are visible — both are used in external schemas but address different concerns.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-2-external-schema-7",
+      "test_id": "pt-dbms-sql-2-external-schema",
+      "question_text": "The conceptual schema's `Marks` column is renamed to `Score`, but the Result Portal's external view was never updated. What happens?",
+      "options": [
+        "Nothing, external schemas are automatically immune to conceptual renames",
+        "The Result Portal's view breaks, because it still references the old column name `Marks`",
+        "The conceptual schema automatically reverts the rename",
+        "The internal schema silently fixes the mismatch"
+      ],
+      "correct_index": 1,
+      "explanation": "An external schema depends on the conceptual schema's structure; an unmanaged rename breaks any view still referencing the old name.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-2-external-schema-8",
+      "test_id": "pt-dbms-sql-2-external-schema",
+      "question_text": "A new external schema is created that shows the same columns as the Result Portal's view but only for students with `Marks >= 90`. Why is this a meaningfully different external schema even though the columns are identical?",
+      "options": [
+        "It isn't different — external schemas are defined by columns only",
+        "Because it applies a row-level restriction, so a different subset of records is visible even though the column set matches",
+        "Because it requires a separate conceptual schema",
+        "Because it must be implemented at the internal schema level instead"
+      ],
+      "correct_index": 1,
+      "explanation": "External schemas can differ by row restrictions as well as column restrictions; identical columns with different row filters are still distinct external schemas.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "coordinator",
+    "independent_review": "unavailable; no agent tools",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Definitions and examples checked against questions; no plagiarism certification.",
+    "existing_question_corrections": [
+      "tq-dbms-sql-2-external-schema-7"
+    ],
+    "canonical_answer_indices_preserved": true
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-2-external-schema",
+    "original_note_sha256": "76974a555fe0c9215b8864ef70508bfba51fa85bd245faed21576ba95c2d2085",
+    "status": "paired migration prepared; not applied"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Different external perspectives over student data",
+      "description": "The result and accounts perspectives share student identity but expose different attributes. A teacher perspective has one row per enrollment and can therefore repeat student identifiers.",
+      "columns": [
+        "Consumer",
+        "Exposed attributes",
+        "Row meaning"
+      ],
+      "rows": [
+        [
+          "Result Portal",
+          "StudentID, Name, Marks",
+          "One simplified assessment record per student"
+        ],
+        [
+          "Accounts Portal",
+          "StudentID, Name, FeeBalance",
+          "One account balance per student"
+        ],
+        [
+          "Class Teacher Portal",
+          "StudentID, Name, CourseName, Marks",
+          "One enrollment result"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "coordinator review",
+    "server_rendering": "passed",
+    "browser_rendering": "unverified",
+    "independent_review": "unavailable; no agent tools",
+    "rendering_check": "2026-10-28: actual LessonBlock/TopicDiagrams server rendering; 25 authored-package tests passed. Desktop/mobile browser rendering unverified."
+  },
+  "sql_verification": {
+    "engine": "11.8.6-MariaDB-0+deb13u1 from Debian",
+    "scope": "MariaDB compatibility execution; exact MySQL 8.4/provider execution unverified",
+    "fingerprint": "5cbaf52aaea4bbc71e9f9caff9069e2240690a92923bc35217409757110798b4",
+    "cases": [
+      {
+        "problem": "external-schema-result-projection",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "external-schema-result-projection",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "external-schema-result-projection",
+        "case": 2,
+        "passed": true
+      },
+      {
+        "problem": "external-schema-course-perspective",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "external-schema-course-perspective",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "external-schema-course-perspective",
+        "case": 2,
+        "passed": true
+      }
+    ],
+    "all_passed": true
+  }
+}

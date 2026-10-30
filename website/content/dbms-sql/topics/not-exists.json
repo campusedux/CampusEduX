@@ -1,0 +1,606 @@
+{
+  "source_ref": "chapter-17-subqueries/not-exists",
+  "slug": "not-exists",
+  "title": "NOT EXISTS",
+  "description": "Find rows without a qualifying relationship using correlated NOT EXISTS, with null-safe reasoning, empty-input cases and careful comparisons to NOT IN and outer joins.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Ask which entities have no qualifying relationship\n\nNOT EXISTS keeps an outer row when a subquery returns no rows. A campus equipment desk can use it to find devices with no active loan, students with no accepted enrollment, or rooms with no unresolved maintenance request. The important phrase is qualifying relationship. A device with an old returned loan may still have no active loan and therefore belong in the result.\n\nThis is an absence test, not a count of missing values. A child row whose optional comment is null still exists. A child row with the wrong status might not satisfy the business relationship being tested. Define that relationship in ordinary language before translating it into a correlation predicate. Otherwise a correct SQL construct can answer the wrong absence question.\n\n## Build the correlation from the outer identity\n\nAssume devices has one row per physical device and loans has one row per borrowing event. The following query returns each device that has no active loan referencing its identity. Different devices can share a model name, so device_id is the relationship key.\n\n```sql\nSELECT d.device_id, d.model_name\nFROM devices AS d\nWHERE NOT EXISTS (\n  SELECT 1\n  FROM loans AS l\n  WHERE l.device_id = d.device_id\n    AND l.returned_at IS NULL\n)\nORDER BY d.device_id;\n```\n\nFor a candidate device, imagine collecting all loan rows satisfying both predicates. If that collection is empty, the device survives. If even one row qualifies, it is excluded. Two qualifying loans do not exclude it twice or create a second output row. The outer relation determines which candidate rows can be returned, and the subquery supplies a Boolean existence decision.\n\n## Read the projected expression correctly\n\nSELECT 1 is a conventional way to show that the subquery's selected value is not the requested output. SELECT NULL in this same simple subquery would still return a row when the predicates match. EXISTS and NOT EXISTS test whether rows exist, rather than testing whether the projected value is true, nonnull or numerically positive.\n\nDo not replace that projection with a bare COUNT(*) and assume the meaning remains unchanged. An ungrouped aggregate produces a summary row even over empty input. Consequently NOT EXISTS over SELECT COUNT(*) is false because the summary row exists. The count might be zero, but its numeric value is not what the existence operator examines.\n\n## Keep all qualifying conditions inside the test\n\nSuppose a loan table includes cancelled reservations and completed returns. The equipment question concerns active physical loans only. If the subquery tests merely whether any historical loan exists, it incorrectly excludes devices that have long since been returned. Conversely, leaving out the relationship key tests whether anyone has an active loan anywhere, making every candidate device depend on the same unrelated global condition.\n\nAn uncorrelated subquery can be intentional. For example, a global feature gate may require that no maintenance shutdown is scheduled. Most entity-by-entity absence queries, however, require an explicit link between the child relationship and the current outer identity. During review, point to that link and verify that every component of a composite identity is included.\n\n## Understand nullable keys without changing the domain\n\nUnder ordinary equality, comparing a child device_id of NULL with a real device key is unknown rather than true. That child row does not qualify for the correlation. NOT EXISTS therefore avoids the familiar NOT IN issue where a null in the compared list can make the overall predicate unknown. This does not mean that NOT EXISTS magically repairs missing relationship data.\n\nIf a null child key represents an unassigned borrowing event, it usually should not exclude every real device. If two nullable business fields should match when both are absent, ordinary equality does not express that policy. MySQL has null-safe equality, but using it changes which relationships qualify. Decide the business meaning first; do not add null-safe matching simply because a fixture contains nulls.\n\n## Compare NOT IN using a concrete counterexample\n\nImagine devices with identities one and two, and loan keys containing one and NULL. The intended anti-match is device two. NOT IN compares two against the known one and the unknown null. Because there is no true equality but there is an unknown comparison, the predicate is unknown and the WHERE clause removes the row. The correlated absence query finds no matching loan for two and keeps it.\n\n```sql\nSELECT d.device_id\nFROM devices AS d\nWHERE NOT EXISTS (\n  SELECT 1 FROM loans AS l\n  WHERE l.device_id = d.device_id\n)\nORDER BY d.device_id;\n```\n\nBoth forms can be equivalent under suitable nonnull guarantees, but those guarantees must come from the contract or explicit filtering. A one-line rewrite that changes null behavior is a correctness change even if the new query appears faster on a small sample. Test an actual null child key when auditing equivalence.\n\n## Relate absence to an outer join carefully\n\nAn alternative anti-match can use a LEFT JOIN followed by a null test on a right-side column that is guaranteed nonnull for real matches. Testing an optional description instead is unsafe: a real matching row could legitimately have no description and would then look unmatched. Place the active-loan condition in the join predicate so that returned historical loans do not count as matches.\n\nNOT EXISTS often expresses the absence requirement directly and avoids exposing right-side duplicates in the result shape. That readability is a design advantage, not proof of superior runtime. MySQL may optimize eligible absence predicates using antijoin strategies. The actual plan depends on query shape, nullability, indexes, table size and statistics, so measure on representative data.\n\n## Make the candidate population explicit\n\nAn equipment desk might care only about devices marked available for circulation. That restriction belongs to the outer population, while the loan status belongs to the child qualification. A retired device with no loans should not appear merely because the absence test is true. Conversely, putting the circulation restriction only inside the subquery could make a retired device pass by preventing any child from qualifying. Label these two scopes when reading a nested predicate aloud. The first chooses which entities are eligible for consideration; the second decides whether evidence exists against each eligible entity. This distinction also matters for date ranges: no active loan today differs from no loan ever, even when both queries use the same keys.\n\n## Keep empty input and duplicate candidates distinct\n\nIf loans is empty, every device satisfies the absence test. If devices is empty, no device can be returned. These are separate boundary cases. A result with no rows can mean there were no candidates or every candidate had a qualifying relationship. Logging an aggregate result alone might not explain which situation occurred.\n\nIf the outer input already contains duplicate candidates, NOT EXISTS does not remove them. A query beginning with a repeated derived relation can therefore emit the same projected identity more than once. Start from the intended entity relation when the output contract requires one row per device. Add DISTINCT only when duplicate elimination is itself the intended result policy, rather than as a blanket repair.\n\n## Test the relationship before tuning the access path\n\nFor each synthetic candidate include no history, one active relationship, multiple active relationships, and only inactive history. Include a null child key and a child for a different candidate. Predict membership before running the query. These cases distinguish missing correlation, misplaced status filtering and mistaken duplicate handling more clearly than a large random fixture.\n\nAn index beginning with the correlated foreign key can help locate related rows, and additional conditions may justify a composite index after workload review. Do not create one solely because this tutorial shows the predicate. Compare the selected plan, estimated and actual row counts where available, and the write cost of the proposed index. Performance work must preserve the same qualifying relationship.\n\nContinue with [anti joins](/learning/dbms-sql-tutorial/anti-join) for related formulations and [semi joins](/learning/dbms-sql-tutorial/semi-join) for the opposite existence question. When explaining a final query, state the outer candidate, the relationship key, the qualifying child conditions and the empty-result rule. That short explanation makes the absence contract reviewable by someone who does not know the table names.\n",
+  "references": [
+    {
+      "title": "MySQL 8.4 reference manual",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/exists-and-not-exists-subqueries.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-17-not-exists",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-17-not-exists-1",
+          "test_id": "pt-dbms-sql-17-not-exists",
+          "question_text": "When does NOT EXISTS evaluate true?",
+          "options": [
+            "When a selected column is NULL",
+            "When its subquery returns no rows",
+            "When its count is positive",
+            "When the outer key is zero"
+          ],
+          "correct_index": 1,
+          "explanation": "It is an absence test over rows.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-17-not-exists-2",
+          "test_id": "pt-dbms-sql-17-not-exists",
+          "question_text": "What links the example loan to the current device?",
+          "options": [
+            "SELECT 1",
+            "l.device_id = d.device_id",
+            "ORDER BY d.device_id",
+            "The alias spelling alone"
+          ],
+          "correct_index": 1,
+          "explanation": "The equality is the correlation predicate.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-17-not-exists-3",
+          "test_id": "pt-dbms-sql-17-not-exists",
+          "question_text": "Does SELECT NULL make EXISTS false for a qualifying row?",
+          "options": [
+            "No, the row still exists",
+            "Yes, always",
+            "Only for numeric keys",
+            "Only with an index"
+          ],
+          "correct_index": 0,
+          "explanation": "Existence ignores the projected scalar value here.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-17-not-exists-4",
+          "test_id": "pt-dbms-sql-17-not-exists",
+          "question_text": "Why is SELECT COUNT(*) dangerous inside NOT EXISTS?",
+          "options": [
+            "COUNT cannot return zero",
+            "COUNT always throws",
+            "The table is deleted",
+            "An ungrouped aggregate returns a summary row on empty input"
+          ],
+          "correct_index": 3,
+          "explanation": "The row exists even when its count is zero.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-17-not-exists-5",
+          "test_id": "pt-dbms-sql-17-not-exists",
+          "question_text": "Which device belongs in the active-loan absence result?",
+          "options": [
+            "A device with an active loan",
+            "A device with only returned loans",
+            "A device with two active loans",
+            "Every device regardless of loans"
+          ],
+          "correct_index": 1,
+          "explanation": "Returned history does not satisfy the active condition.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-17-not-exists-6",
+          "test_id": "pt-dbms-sql-17-not-exists",
+          "question_text": "What happens if the correlation key is omitted accidentally?",
+          "options": [
+            "The engine infers the missing relationship",
+            "All candidates can depend on the same global child condition",
+            "Each alias automatically joins by name",
+            "Only one candidate is tested"
+          ],
+          "correct_index": 1,
+          "explanation": "The subquery no longer tests each device relationship.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-17-not-exists-7",
+          "test_id": "pt-dbms-sql-17-not-exists",
+          "question_text": "How many output copies arise from two matching child rows?",
+          "options": [
+            "Two copies",
+            "Zero copies for that candidate",
+            "One copy",
+            "Four copies"
+          ],
+          "correct_index": 1,
+          "explanation": "Any qualifying child makes NOT EXISTS false.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-17-not-exists-8",
+          "test_id": "pt-dbms-sql-17-not-exists",
+          "question_text": "Which input supplies candidate rows?",
+          "options": [
+            "The SELECT 1 constant",
+            "The subquery alias only",
+            "The outer query",
+            "The ORDER BY list"
+          ],
+          "correct_index": 2,
+          "explanation": "The subquery decides whether a candidate survives.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "cx-q-not-exists-9",
+          "test_id": "pt-dbms-sql-17-not-exists",
+          "question_text": "How does ordinary equality treat a NULL child key?",
+          "options": [
+            "It does not produce a true match to a real key",
+            "It matches all keys",
+            "It matches zero only",
+            "It rejects the query syntax"
+          ],
+          "correct_index": 0,
+          "explanation": "An unknown equality is not a qualifying WHERE condition.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "cx-q-not-exists-10",
+          "test_id": "pt-dbms-sql-17-not-exists",
+          "question_text": "What happens when the child relation is empty?",
+          "options": [
+            "No candidate passes",
+            "Every outer candidate passes the absence test",
+            "The query fails",
+            "One arbitrary candidate passes"
+          ],
+          "correct_index": 1,
+          "explanation": "No candidate has a matching child row.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "cx-test-not-exists-2",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "cx-q-not-exists-11",
+          "test_id": "cx-test-not-exists-2",
+          "question_text": "What happens when the outer relation is empty?",
+          "options": [
+            "Every child is returned",
+            "One NULL row is synthesized",
+            "The result is empty",
+            "The absence predicate errors"
+          ],
+          "correct_index": 2,
+          "explanation": "There are no candidate rows to retain.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "cx-q-not-exists-12",
+          "test_id": "cx-test-not-exists-2",
+          "question_text": "Why can NOT IN differ when its list contains NULL?",
+          "options": [
+            "NULL always equals every number",
+            "NOT IN creates missing records",
+            "NOT EXISTS always removes all nulls",
+            "Its comparison can be unknown instead of true"
+          ],
+          "correct_index": 3,
+          "explanation": "WHERE retains only true predicates.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "cx-q-not-exists-13",
+          "test_id": "cx-test-not-exists-2",
+          "question_text": "Which right-side column is safe for an outer-join absence test?",
+          "options": [
+            "A column guaranteed nonnull in every real match",
+            "An optional comment",
+            "Any nullable label",
+            "A computed NULL constant"
+          ],
+          "correct_index": 0,
+          "explanation": "A nonnull match marker distinguishes unmatched rows.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "cx-q-not-exists-14",
+          "test_id": "cx-test-not-exists-2",
+          "question_text": "Does NOT EXISTS remove duplicates from the outer relation?",
+          "options": [
+            "Yes, always",
+            "No",
+            "Only for text keys",
+            "Only without ORDER BY"
+          ],
+          "correct_index": 1,
+          "explanation": "It filters candidates without automatic deduplication.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "cx-q-not-exists-15",
+          "test_id": "cx-test-not-exists-2",
+          "question_text": "Where should an active child condition normally appear?",
+          "options": [
+            "Only in ORDER BY",
+            "In the output column alias",
+            "Inside the qualifying relationship test",
+            "In a comment instead of SQL"
+          ],
+          "correct_index": 2,
+          "explanation": "The condition determines which child rows count as evidence.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "cx-q-not-exists-16",
+          "test_id": "cx-test-not-exists-2",
+          "question_text": "What is a useful boundary fixture?",
+          "options": [
+            "Only candidates with identical active children",
+            "A table without keys or relationships",
+            "Only one already matching row",
+            "One candidate with only inactive history"
+          ],
+          "correct_index": 3,
+          "explanation": "It verifies that historical relationships do not exclude candidates.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "cx-q-not-exists-17",
+          "test_id": "cx-test-not-exists-2",
+          "question_text": "Does NOT EXISTS guarantee the fastest query?",
+          "options": [
+            "No, inspect the actual workload and plan",
+            "Yes, on every engine",
+            "Yes, if SELECT 1 appears",
+            "Only when the result is sorted"
+          ],
+          "correct_index": 0,
+          "explanation": "Equivalent SQL shapes can have different eligible plans.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "cx-q-not-exists-18",
+          "test_id": "cx-test-not-exists-2",
+          "question_text": "What must a composite-key correlation include?",
+          "options": [
+            "Only the easiest column",
+            "Every component needed for the relationship identity",
+            "Only a display label",
+            "No columns when names match"
+          ],
+          "correct_index": 1,
+          "explanation": "An incomplete key can mix different owners or tenants.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "cx-q-not-exists-19",
+          "test_id": "cx-test-not-exists-2",
+          "question_text": "Why retain a child with another device in the fixture?",
+          "options": [
+            "To force an error",
+            "To make all candidates match",
+            "To detect missing or incorrect correlation",
+            "To remove the need for empty cases"
+          ],
+          "correct_index": 2,
+          "explanation": "Unrelated relationships must not exclude the candidate.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "cx-q-not-exists-20",
+          "test_id": "cx-test-not-exists-2",
+          "question_text": "Which expression asks the opposite membership question?",
+          "options": [
+            "COUNT(*) without FROM",
+            "ORDER BY in reverse",
+            "CAST of the outer key",
+            "EXISTS with the same qualifying relationship"
+          ],
+          "correct_index": 3,
+          "explanation": "EXISTS retains candidates with at least one qualifying child.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cx-absence-any-loan",
+      "slug": "absence-any-loan",
+      "title": "Find devices with no loan history",
+      "difficulty": "Easy",
+      "task": "Return device_id for devices with no matching loan, ordered by device_id.",
+      "schema_sql": "CREATE TABLE devices(device_id INT PRIMARY KEY); CREATE TABLE loans(loan_id INT PRIMARY KEY,device_id INT NULL,returned_at DATE NULL);",
+      "seed_sql": "INSERT INTO devices VALUES (1),(2),(3); INSERT INTO loans VALUES (10,1,NULL),(11,1,NULL),(12,2,'2026-04-01'),(13,NULL,NULL);",
+      "solution_sql": "SELECT d.device_id FROM devices d WHERE NOT EXISTS (SELECT 1 FROM loans l WHERE l.device_id=d.device_id) ORDER BY d.device_id;",
+      "expected": "device_id\n3",
+      "ordering": "Use explicit ORDER BY when the task requests ordered rows.",
+      "constraints": [
+        "Return only outer devices with no matching loan of any status.",
+        "Correlate loans.device_id to devices.device_id; a NULL child key matches no device.",
+        "Order by devices.device_id; retain one result per device identity."
+      ],
+      "edge_cases": [
+        "Empty input.",
+        "Missing and repeated values where permitted."
+      ],
+      "hints": [
+        "A null child key does not match a device under ordinary equality."
+      ],
+      "explanation": "A null child key does not match a device under ordinary equality.",
+      "validation_cases": [
+        {
+          "name": "empty outer relation",
+          "seed_sql": "INSERT INTO loans VALUES (10,1,NULL);",
+          "expected": ""
+        },
+        {
+          "name": "empty child relation",
+          "seed_sql": "INSERT INTO devices VALUES (1),(2);",
+          "expected": "device_id\n1\n2"
+        },
+        {
+          "name": "unrelated and null child keys",
+          "seed_sql": "INSERT INTO devices VALUES (1),(2); INSERT INTO loans VALUES (10,99,NULL),(11,NULL,NULL);",
+          "expected": "device_id\n1\n2"
+        },
+        {
+          "name": "active duplicate and returned-only histories",
+          "seed_sql": "INSERT INTO devices VALUES (1),(2),(3); INSERT INTO loans VALUES (10,1,NULL),(11,1,NULL),(12,2,'2026-04-01');",
+          "expected": "device_id\n3"
+        }
+      ]
+    },
+    {
+      "id": "cx-absence-active-loan",
+      "slug": "absence-active-loan",
+      "title": "Find devices with no active loan",
+      "difficulty": "Medium",
+      "task": "Return device_id for devices with no matching loan whose returned_at is NULL, ordered by device_id.",
+      "schema_sql": "CREATE TABLE devices(device_id INT PRIMARY KEY); CREATE TABLE loans(loan_id INT PRIMARY KEY,device_id INT NULL,returned_at DATE NULL);",
+      "seed_sql": "INSERT INTO devices VALUES (1),(2),(3); INSERT INTO loans VALUES (10,1,NULL),(11,1,NULL),(12,2,'2026-04-01'),(13,NULL,NULL);",
+      "solution_sql": "SELECT d.device_id FROM devices d WHERE NOT EXISTS (SELECT 1 FROM loans l WHERE l.device_id=d.device_id AND l.returned_at IS NULL) ORDER BY d.device_id;",
+      "expected": "device_id\n2\n3",
+      "ordering": "Use explicit ORDER BY when the task requests ordered rows.",
+      "constraints": [
+        "Return only outer devices with no matching active loan; returned_at IS NULL identifies active loans.",
+        "Correlate loans.device_id to devices.device_id; a NULL child key matches no device.",
+        "Order by devices.device_id; retain one result per device identity."
+      ],
+      "edge_cases": [
+        "Empty input.",
+        "Missing and repeated values where permitted."
+      ],
+      "hints": [
+        "Inactive history is not evidence of an active loan."
+      ],
+      "explanation": "Inactive history is not evidence of an active loan.",
+      "validation_cases": [
+        {
+          "name": "empty outer relation",
+          "seed_sql": "INSERT INTO loans VALUES (10,1,NULL);",
+          "expected": ""
+        },
+        {
+          "name": "empty child relation",
+          "seed_sql": "INSERT INTO devices VALUES (1),(2);",
+          "expected": "device_id\n1\n2"
+        },
+        {
+          "name": "unrelated and null child keys",
+          "seed_sql": "INSERT INTO devices VALUES (1),(2); INSERT INTO loans VALUES (10,99,NULL),(11,NULL,NULL);",
+          "expected": "device_id\n1\n2"
+        },
+        {
+          "name": "active duplicate and returned-only histories",
+          "seed_sql": "INSERT INTO devices VALUES (1),(2),(3); INSERT INTO loans VALUES (10,1,NULL),(11,1,NULL),(12,2,'2026-04-01');",
+          "expected": "device_id\n2\n3"
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-17-not-exists-1",
+      "test_id": "pt-dbms-sql-17-not-exists",
+      "question_text": "NOT EXISTS(subquery) is TRUE when:",
+      "options": [
+        "The subquery returns at least one row",
+        "The subquery returns zero rows",
+        "The subquery returns NULL",
+        "The subquery errors"
+      ],
+      "correct_index": 1,
+      "explanation": "NOT EXISTS is the mirror of EXISTS: TRUE only when no rows come back.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-17-not-exists-2",
+      "test_id": "pt-dbms-sql-17-not-exists",
+      "question_text": "Why is NOT IN dangerous when the subquery's column can contain NULL?",
+      "options": [
+        "It causes a runtime error immediately",
+        "A single NULL among the subquery's rows can make the whole NOT IN condition evaluate to UNKNOWN, silently returning zero rows",
+        "NULL values are automatically skipped, so there's no effect",
+        "NOT IN converts NULLs to zero"
+      ],
+      "correct_index": 1,
+      "explanation": "NOT IN is internally `<> ALL`, and one UNKNOWN comparison poisons the entire chain to UNKNOWN.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-17-not-exists-3",
+      "test_id": "pt-dbms-sql-17-not-exists",
+      "question_text": "Why is NOT EXISTS immune to the NULL problem that affects NOT IN?",
+      "options": [
+        "NOT EXISTS only checks row existence per correlated comparison, not equality against a list that could include NULL",
+        "NOT EXISTS ignores NULLs by deleting them first",
+        "NOT EXISTS cannot be used with correlated subqueries",
+        "NOT EXISTS always returns TRUE"
+      ],
+      "correct_index": 0,
+      "explanation": "A NULL just fails to match in one comparison; it doesn't corrupt the whole existence test.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-17-not-exists-4",
+      "test_id": "pt-dbms-sql-17-not-exists",
+      "question_text": "Using the sample data, which single department has NOT EXISTS(matching employees) = TRUE?",
+      "options": [
+        "Engineering",
+        "Sales",
+        "Marketing",
+        "HR"
+      ],
+      "correct_index": 3,
+      "explanation": "HR has zero employees, so it's the only department with no matching row.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-17-not-exists-5",
+      "test_id": "pt-dbms-sql-17-not-exists",
+      "question_text": "What is a safer alternative if you must use NOT IN with a possibly-NULL column?",
+      "options": [
+        "Nothing can be done",
+        "Filter the subquery's column with IS NOT NULL",
+        "Use ORDER BY in the subquery",
+        "Add DISTINCT to the subquery"
+      ],
+      "correct_index": 1,
+      "explanation": "Explicitly excluding NULLs from the subquery's result removes the poisoning risk.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-17-not-exists-6",
+      "test_id": "pt-dbms-sql-17-not-exists",
+      "question_text": "Does NOT EXISTS ever produce NULL or UNKNOWN as a result?",
+      "options": [
+        "Yes, whenever the subquery has NULLs",
+        "No — it's always a clean TRUE or FALSE",
+        "Only with correlated subqueries",
+        "Only when combined with NOT IN"
+      ],
+      "correct_index": 1,
+      "explanation": "Like EXISTS, NOT EXISTS is a pure existence test and never yields UNKNOWN.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-17-not-exists-7",
+      "test_id": "pt-dbms-sql-17-not-exists",
+      "question_text": "A NOT EXISTS subquery that itself contains another NOT EXISTS implements which classic pattern?",
+      "options": [
+        "A simple join",
+        "A \"for all\" / relational-division style pattern",
+        "A cartesian product",
+        "An aggregate function"
+      ],
+      "correct_index": 1,
+      "explanation": "Nested NOT EXISTS clauses are the classic way to express universal (\"for all\") conditions in SQL.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-17-not-exists-8",
+      "test_id": "pt-dbms-sql-17-not-exists",
+      "question_text": "Which statement correctly contrasts NOT IN and NOT EXISTS?",
+      "options": [
+        "They are always 100% interchangeable regardless of NULLs",
+        "NOT IN is safer with NULLs than NOT EXISTS",
+        "NOT EXISTS is generally safer with NULLs; NOT IN can silently return an empty result set if the subquery yields any NULL",
+        "Both always error on NULLs"
+      ],
+      "correct_index": 2,
+      "explanation": "NOT EXISTS avoids the NULL-poisoning trap that NOT IN is vulnerable to.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "worker_3",
+    "independent_review": "passed",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "author review; independent review pending",
+    "canonical_answer_indices_preserved": true,
+    "editorial_record": "Original prose and assessments; seeded identities and answer positions retained. No external originality clearance.",
+    "independent_reviewer": "/root",
+    "independent_review_scope": "Full notes,20 MCQs/options/explanations,two exercises with ten sample/alternative fixture outputs, diagram, metadata and links. Verified empty outer/child distinctions, inactive history, NULL and unrelated child keys, duplicate child rows and aggregate-in-EXISTS trap. Repeated sample-only validation replaced with meaningful independent fixtures. Engine/browser verification separate and pending."
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-17-not-exists",
+    "original_note_sha256": "8947862a95fffde80716a09db572bfc65cfe1bb3e5d71177edfd0a63e56c8afd",
+    "status": "drafted; not included in prepared paired migrations"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Absence depends on qualifying history",
+      "description": "Returned history is different from an active loan; duplicate active loans still exclude only their own candidate.",
+      "columns": [
+        "Device",
+        "Loan history",
+        "No active loan?"
+      ],
+      "rows": [
+        [
+          "1",
+          "Two active loans",
+          "No"
+        ],
+        [
+          "2",
+          "Returned loan only",
+          "Yes"
+        ],
+        [
+          "3",
+          "No loans",
+          "Yes"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "coordinator independent manual review passed",
+    "server_rendering": "passed",
+    "browser_rendering": "unverified",
+    "independent_review": "passed",
+    "server_rendering_evidence": "2026-10-29 full Vitest:1310 passed/12 skipped; actual LessonBlock/TopicDiagrams render over230 packages. Browser visual QA remains unverified."
+  },
+  "authoring_status": "drafted; verification pending",
+  "sql_verification": {
+    "scope": "not executed; exact MySQL/provider execution pending",
+    "all_passed": false,
+    "cases": []
+  }
+}

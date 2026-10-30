@@ -1,0 +1,573 @@
+{
+  "slug": "subquery-in-select",
+  "source_ref": "chapter-17-subqueries/subquery-in-select",
+  "title": "Subquery in SELECT",
+  "description": "Build scalar report expressions safely with correlated aggregates, empty-result rules, deterministic top rows, and summary-join rewrites.",
+  "dialect": "MySQL 8.4; engine-specific behavior labeled",
+  "references": [
+    {
+      "title": "MySQL scalar subqueries",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/scalar-subqueries.html"
+    },
+    {
+      "title": "MySQL correlated subqueries",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/correlated-subqueries.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-17-subquery-in-select",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-17-subquery-in-select-1",
+          "test_id": "pt-dbms-sql-17-subquery-in-select",
+          "question_text": "A subquery placed in the SELECT list must be:",
+          "options": [
+            "Multi-row",
+            "Scalar (one row, one column)",
+            "Always uncorrelated",
+            "Always an aggregate with GROUP BY"
+          ],
+          "correct_index": 1,
+          "explanation": "SELECT-list subqueries fill in a single computed value per outer row, so they must be scalar.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-17-subquery-in-select-2",
+          "test_id": "pt-dbms-sql-17-subquery-in-select",
+          "question_text": "For employees e with correlated subquery SELECT COUNT(*) FROM employees e2 WHERE e2.department=e.department, why use distinct aliases?",
+          "options": [
+            "SQL requires all subqueries to use the alias e2",
+            "To distinguish it from the outer alias `e` so the correlation `e2.department = e.department` isn't ambiguous",
+            "`e2` executes faster than `e`",
+            "It's purely cosmetic and has no effect on correctness"
+          ],
+          "correct_index": 1,
+          "explanation": "A reused alias in the inner scope can shadow the outer alias, losing the intended correlation or producing a self-comparison. Distinct aliases make the outer and inner references explicit.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-17-subquery-in-select-3",
+          "test_id": "pt-dbms-sql-17-subquery-in-select",
+          "question_text": "If Marketing contains exactly Grace and Heidi, and the correlated department count uses that complete population, what headcount appears for each?",
+          "options": [
+            "3",
+            "2",
+            "8",
+            "1"
+          ],
+          "correct_index": 1,
+          "explanation": "Marketing has exactly two employees: Grace and Heidi.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-17-subquery-in-select-4",
+          "test_id": "pt-dbms-sql-17-subquery-in-select",
+          "question_text": "Why can a correlated scalar subquery in SELECT be a performance concern on large tables?",
+          "options": [
+            "It can't use indexes ever",
+            "It conceptually runs once per outer row, scaling with table size",
+            "SELECT subqueries are always disallowed in production",
+            "It always returns NULL on large tables"
+          ],
+          "correct_index": 1,
+          "explanation": "Naive execution re-runs the inner aggregate once per output row, which scales poorly as the table grows.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-17-subquery-in-select-5",
+          "test_id": "pt-dbms-sql-17-subquery-in-select",
+          "question_text": "Which alternative can compute same-population per-partition counts when its filtering and NULL semantics preserve the intended result?",
+          "options": [
+            "A window function like COUNT(*) OVER (PARTITION BY ...)",
+            "Removing the SELECT list entirely",
+            "Using ANY instead",
+            "Wrapping it in NOT EXISTS"
+          ],
+          "correct_index": 0,
+          "explanation": "A window COUNT over a matching partition can express the result. A correlated equality lookup excludes NULL-equality matches while a window NULL partition groups them, so prove equivalence and measure the actual plan rather than promise a single pass.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-17-subquery-in-select-6",
+          "test_id": "pt-dbms-sql-17-subquery-in-select",
+          "question_text": "What happens if a SELECT-list subquery returns more than one row for some outer row?",
+          "options": [
+            "It silently picks the first row",
+            "A runtime error",
+            "It returns NULL",
+            "It returns a comma-separated list"
+          ],
+          "correct_index": 1,
+          "explanation": "Just like any scalar subquery, exceeding one row triggers a runtime error.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-17-subquery-in-select-7",
+          "test_id": "pt-dbms-sql-17-subquery-in-select",
+          "question_text": "Can multiple independent subqueries appear in the same SELECT list?",
+          "options": [
+            "No, only one per query",
+            "Yes, each can be independently correlated or uncorrelated",
+            "Only if they're identical",
+            "Only in the WHERE clause, not SELECT"
+          ],
+          "correct_index": 1,
+          "explanation": "SQL allows any number of scalar subqueries as separate computed columns.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-17-subquery-in-select-8",
+          "test_id": "pt-dbms-sql-17-subquery-in-select",
+          "question_text": "If a correlated SELECT subquery finds zero matching rows for one particular outer row, what happens to that row's result?",
+          "options": [
+            "The whole query fails",
+            "That row's computed column is NULL, other rows are unaffected",
+            "That entire row is dropped from the output",
+            "It defaults to 0 always"
+          ],
+          "correct_index": 1,
+          "explanation": "A zero-row scalar subquery result is NULL for that specific row, not a query-wide failure.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "cx-subquery-in-select-fundamentals-9",
+          "test_id": "pt-dbms-sql-17-subquery-in-select",
+          "question_text": "What happens when a scalar SELECT-list subquery returns no rows?",
+          "options": [
+            "Its value is NULL",
+            "It removes the outer row",
+            "It returns zero in every case",
+            "It always raises an error"
+          ],
+          "correct_index": 0,
+          "explanation": "An empty scalar result becomes null without removing the outer row.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "cx-subquery-in-select-fundamentals-10",
+          "test_id": "pt-dbms-sql-17-subquery-in-select",
+          "question_text": "What happens when a scalar subquery returns two rows?",
+          "options": [
+            "The first row is always selected",
+            "A cardinality error",
+            "The values are concatenated",
+            "Two outer rows are automatically created"
+          ],
+          "correct_index": 1,
+          "explanation": "Scalar positions require at most one row.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "cx-subquery-in-select-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "cx-subquery-in-select-application-1",
+          "test_id": "cx-subquery-in-select-application",
+          "question_text": "What does an ungrouped COUNT(*) return when no loan matches?",
+          "options": [
+            "No rows",
+            "One row containing zero",
+            "One row containing NULL",
+            "One row for each member"
+          ],
+          "correct_index": 1,
+          "explanation": "Aggregate COUNT without grouping still returns one row.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "cx-subquery-in-select-application-2",
+          "test_id": "cx-subquery-in-select-application",
+          "question_text": "Which expression is the correlation in WHERE l.member_id=m.id?",
+          "options": [
+            "The alias l alone",
+            "COUNT(*)",
+            "The reference m.id from the outer query",
+            "ORDER BY m.id"
+          ],
+          "correct_index": 2,
+          "explanation": "The inner predicate depends on the current outer member.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "cx-subquery-in-select-application-3",
+          "test_id": "cx-subquery-in-select-application",
+          "question_text": "Why is adding GROUP BY category inside a scalar loan subquery dangerous?",
+          "options": [
+            "It always removes all loans",
+            "It forbids indexes",
+            "It forces every fee to zero",
+            "It may return multiple groups"
+          ],
+          "correct_index": 3,
+          "explanation": "Several groups violate the scalar row count contract.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "cx-subquery-in-select-application-4",
+          "test_id": "cx-subquery-in-select-application",
+          "question_text": "A member has one loan with NULL fee. What are COUNT(*) and COUNT(fee)?",
+          "options": [
+            "1 and 0",
+            "0 and 0",
+            "1 and 1",
+            "NULL and NULL"
+          ],
+          "correct_index": 0,
+          "explanation": "Row counting and known-value counting differ.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "cx-subquery-in-select-application-5",
+          "test_id": "cx-subquery-in-select-application",
+          "question_text": "Why can COALESCE(SUM(fee), 0) hide missing information?",
+          "options": [
+            "It deletes null loans",
+            "It merges absent or all-null totals with zero",
+            "It makes every fee nonnull in storage",
+            "It changes SUM into COUNT"
+          ],
+          "correct_index": 1,
+          "explanation": "The displayed zero can represent several distinct source situations.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "cx-subquery-in-select-application-6",
+          "test_id": "cx-subquery-in-select-application",
+          "question_text": "How should a latest-row scalar subquery handle equal timestamps?",
+          "options": [
+            "Assume physical row order",
+            "Use DISTINCT fee",
+            "Add a deterministic unique tie breaker",
+            "Remove ORDER BY"
+          ],
+          "correct_index": 2,
+          "explanation": "A complete ordering establishes which tied row is chosen.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "cx-subquery-in-select-application-7",
+          "test_id": "cx-subquery-in-select-application",
+          "question_text": "Does a scalar subquery deduplicate rows already produced by the outer FROM?",
+          "options": [
+            "Yes, always",
+            "Only if it contains COUNT",
+            "Only if it returns NULL",
+            "No"
+          ],
+          "correct_index": 3,
+          "explanation": "It calculates one value for each existing outer row.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "cx-subquery-in-select-application-8",
+          "test_id": "cx-subquery-in-select-application",
+          "question_text": "Which aggregate includes repeated equal fees as separate contributions?",
+          "options": [
+            "SUM(fee)",
+            "SUM(DISTINCT fee)",
+            "COUNT(DISTINCT fee)",
+            "MAX(fee)"
+          ],
+          "correct_index": 0,
+          "explanation": "SUM without DISTINCT adds every known fee occurrence.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "cx-subquery-in-select-application-9",
+          "test_id": "cx-subquery-in-select-application",
+          "question_text": "Why can a preaggregated LEFT JOIN need COALESCE for its count?",
+          "options": [
+            "COUNT always returns NULL",
+            "An unmatched summary row supplies NULL",
+            "LEFT JOIN deletes zero counts",
+            "GROUP BY is forbidden"
+          ],
+          "correct_index": 1,
+          "explanation": "Missing summary rows differ from an ungrouped COUNT scalar result.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "cx-subquery-in-select-application-10",
+          "test_id": "cx-subquery-in-select-application",
+          "question_text": "What is the best way to assess whether a correlated expression is too expensive?",
+          "options": [
+            "Assume every subquery is slow",
+            "Count SQL characters",
+            "Inspect plans and measure representative workloads",
+            "Remove all predicates"
+          ],
+          "correct_index": 2,
+          "explanation": "Execution strategies and data distribution determine cost.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-17-subquery-in-select-1",
+      "test_id": "pt-dbms-sql-17-subquery-in-select",
+      "question_text": "A subquery placed in the SELECT list must be:",
+      "options": [
+        "Multi-row",
+        "Scalar (one row, one column)",
+        "Always uncorrelated",
+        "Always an aggregate with GROUP BY"
+      ],
+      "correct_index": 1,
+      "explanation": "SELECT-list subqueries fill in a single computed value per outer row, so they must be scalar.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-17-subquery-in-select-2",
+      "test_id": "pt-dbms-sql-17-subquery-in-select",
+      "question_text": "In the headcount example, why is the inner table aliased `e2` instead of reusing `e`?",
+      "options": [
+        "SQL requires all subqueries to use the alias e2",
+        "To distinguish it from the outer alias `e` so the correlation `e2.department = e.department` isn't ambiguous",
+        "`e2` executes faster than `e`",
+        "It's purely cosmetic and has no effect on correctness"
+      ],
+      "correct_index": 1,
+      "explanation": "Without distinct aliases, the correlated reference to the outer row's department would be ambiguous.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-17-subquery-in-select-3",
+      "test_id": "pt-dbms-sql-17-subquery-in-select",
+      "question_text": "Using the sample data, what dept_headcount value is shown for Grace and Heidi (Marketing)?",
+      "options": [
+        "3",
+        "2",
+        "8",
+        "1"
+      ],
+      "correct_index": 1,
+      "explanation": "Marketing has exactly two employees: Grace and Heidi.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-17-subquery-in-select-4",
+      "test_id": "pt-dbms-sql-17-subquery-in-select",
+      "question_text": "Why can a correlated scalar subquery in SELECT be a performance concern on large tables?",
+      "options": [
+        "It can't use indexes ever",
+        "It conceptually runs once per outer row, scaling with table size",
+        "SELECT subqueries are always disallowed in production",
+        "It always returns NULL on large tables"
+      ],
+      "correct_index": 1,
+      "explanation": "Naive execution re-runs the inner aggregate once per output row, which scales poorly as the table grows.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-17-subquery-in-select-5",
+      "test_id": "pt-dbms-sql-17-subquery-in-select",
+      "question_text": "What is a commonly recommended alternative to a correlated per-row COUNT(*) subquery in SELECT, for better performance?",
+      "options": [
+        "A window function like COUNT(*) OVER (PARTITION BY ...)",
+        "Removing the SELECT list entirely",
+        "Using ANY instead",
+        "Wrapping it in NOT EXISTS"
+      ],
+      "correct_index": 0,
+      "explanation": "A window function computes all per-partition counts in a single pass instead of once per row.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-17-subquery-in-select-6",
+      "test_id": "pt-dbms-sql-17-subquery-in-select",
+      "question_text": "What happens if a SELECT-list subquery returns more than one row for some outer row?",
+      "options": [
+        "It silently picks the first row",
+        "A runtime error",
+        "It returns NULL",
+        "It returns a comma-separated list"
+      ],
+      "correct_index": 1,
+      "explanation": "Just like any scalar subquery, exceeding one row triggers a runtime error.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-17-subquery-in-select-7",
+      "test_id": "pt-dbms-sql-17-subquery-in-select",
+      "question_text": "Can multiple independent subqueries appear in the same SELECT list?",
+      "options": [
+        "No, only one per query",
+        "Yes, each can be independently correlated or uncorrelated",
+        "Only if they're identical",
+        "Only in the WHERE clause, not SELECT"
+      ],
+      "correct_index": 1,
+      "explanation": "SQL allows any number of scalar subqueries as separate computed columns.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-17-subquery-in-select-8",
+      "test_id": "pt-dbms-sql-17-subquery-in-select",
+      "question_text": "If a correlated SELECT subquery finds zero matching rows for one particular outer row, what happens to that row's result?",
+      "options": [
+        "The whole query fails",
+        "That row's computed column is NULL, other rows are unaffected",
+        "That entire row is dropped from the output",
+        "It defaults to 0 always"
+      ],
+      "correct_index": 1,
+      "explanation": "A zero-row scalar subquery result is NULL for that specific row, not a query-wide failure.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cx-member-scalar-loan-count",
+      "slug": "member-scalar-loan-count",
+      "title": "Count each member loans",
+      "difficulty": "Easy",
+      "task": "Return id and loan_count for every member using a SELECT-list subquery. Order by id.",
+      "schema_sql": "CREATE TABLE members(id INT PRIMARY KEY); CREATE TABLE loans(id INT PRIMARY KEY,member_id INT,fee INT);",
+      "seed_sql": "INSERT INTO members VALUES(1),(2); INSERT INTO loans VALUES(10,1,4),(11,1,6);",
+      "solution_sql": "SELECT m.id,(SELECT COUNT(*) FROM loans l WHERE l.member_id=m.id) AS loan_count FROM members m ORDER BY m.id;",
+      "expected": "id\tloan_count\n1\t2\n2\t0",
+      "ordering": "Ascending member id.",
+      "edge_cases": [
+        "Member without loans.",
+        "Repeated fee values.",
+        "Unknown fees."
+      ],
+      "hints": [
+        "Keep one outer row per member.",
+        "Use ungrouped aggregates for scalar values."
+      ],
+      "explanation": "A correlated aggregate returns one derived value per member; null presentation follows the task.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO members VALUES(5);",
+          "expected": "id\tloan_count\n5\t0"
+        }
+      ]
+    },
+    {
+      "id": "cx-member-newest-loan-fee",
+      "slug": "member-newest-loan-fee",
+      "title": "Retrieve fee from greatest loan ID",
+      "difficulty": "Medium",
+      "task": "Return id and newest_fee for each member. Choose that member loan with greatest id; return NULL when none. Order by member id.",
+      "schema_sql": "CREATE TABLE members(id INT PRIMARY KEY); CREATE TABLE loans(id INT PRIMARY KEY,member_id INT,fee INT);",
+      "seed_sql": "INSERT INTO members VALUES(1),(2); INSERT INTO loans VALUES(10,1,4),(11,1,6);",
+      "solution_sql": "SELECT m.id,(SELECT l.fee FROM loans l WHERE l.member_id=m.id ORDER BY l.id DESC LIMIT 1) AS newest_fee FROM members m ORDER BY m.id;",
+      "expected": "id\tnewest_fee\n1\t6\n2\tNULL",
+      "ordering": "Ascending member id.",
+      "edge_cases": [
+        "Member without loans.",
+        "Repeated fee values.",
+        "Unknown fees."
+      ],
+      "hints": [
+        "Keep one outer row per member.",
+        "Use ungrouped aggregates for scalar values."
+      ],
+      "explanation": "The ordered scalar lookup chooses the loan with greatest id under the task’s stated newest-loan rule. It is a top-one selection, not an aggregate; no matching row yields NULL.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO members VALUES(7),(8); INSERT INTO loans VALUES(30,7,9),(31,7,NULL),(32,8,2);",
+          "expected": "id\tnewest_fee\n7\tNULL\n8\t2"
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "review": {
+    "reviewer": "/root/finish_f",
+    "independent_review": "passed",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Independent manual content review passed within independent_review_scope; engine/browser/release gates separate.",
+    "editorial_record": "Original scenario-led prose and assessments. External originality and AdSense review unperformed.",
+    "canonical_answer_indices_preserved": true,
+    "independent_reviewer": "/root/review_f_and_foundations",
+    "independent_review_scope": "Full notes,20MCQs with every option,canonical answer position and explanation,original diagrams,and all exercise contracts/fixtures or solved conceptual labs. Original identities/indices checked against public seed cache where applicable. Reported substantive findings corrected by coordinator and filtered recheck accepted;identified learner-facing spacing polished. Manual technical/editorial reasoning only;engine,provider,browser,external originality and AdSense evidence separate."
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-17-subquery-in-select",
+    "original_note_sha256": "b8a5628039009c4696fc78b6531682d56a90e806a8345193a296053dcb8ed12d",
+    "status": "drafted; not included in prepared paired migrations"
+  },
+  "notes": "## Add one derived value per outer row\n\nA subquery in the SELECT list supplies a value for an output expression. In the ordinary scalar form it must return one column and at most one row. One returned row supplies its value; no returned rows supply null; more than one returned row causes a cardinality error. This contract matters more than the size of the underlying table: a table with a million rows can still produce a safe scalar aggregate.\n\nA campus library report needs one row per member, including the number of books currently borrowed. Joining members directly to loans changes the report grain to one row per matching loan. A scalar subquery can instead calculate a count alongside each member without multiplying the outer member row. The report remains understandable because each output expression has a clear role and a defined cardinality.\n\n## A complete counting example\n\nMembers 1, 2, and 3 are Asha, Bao, and Chen. Loans 10 and 11 belong to member 1, loan 12 belongs to member 2, and member 3 has none. The inner query correlates its member_id with the current outer member identifier. Different aliases make the two scopes visible and prevent an accidental comparison of a column with itself.\n\n```sql\nCREATE TABLE members(id INT PRIMARY KEY,name VARCHAR(30));\nCREATE TABLE loans(id INT PRIMARY KEY,member_id INT,fee INT);\nINSERT INTO members VALUES(1,'Asha'),(2,'Bao'),(3,'Chen');\nINSERT INTO loans VALUES(10,1,4),(11,1,6),(12,2,8);\nSELECT m.id,\n       (SELECT COUNT(*) FROM loans l WHERE l.member_id=m.id) AS loan_count\nFROM members m ORDER BY m.id;\n```\n\nThe result is (1, 2), (2, 1), and (3, 0). COUNT without GROUP BY returns one aggregate row even when no loan qualifies. That row contains zero rather than null. The empty aggregate behavior is why this example is safe for members with no loans and does not need a special branch to manufacture a count.\n\n## Correlated and independent expressions\n\nA correlated subquery references a column from an outer query scope. Here m.id is the correlation key. An independent subquery references only its own tables and can provide a report wide value such as the total number of loans. Both forms are scalar when their result shape satisfies the one value contract. Correlation describes dependency, not the number of returned rows.\n\nSuppose the report displays each member's loan count and the total count across all members. The first expression filters by m.id; the second does not. For the fixture the total is 3 on every row. Repeating that report wide total is intentional. Forgetting the correlation in the first expression would also repeat 3, but that repetition would be a defect because the intended question was different.\n\n```sql\nSELECT m.id,\n (SELECT COUNT(*) FROM loans l WHERE l.member_id=m.id) AS member_loans,\n (SELECT COUNT(*) FROM loans) AS all_loans\nFROM members m ORDER BY m.id;\n```\n\nReview inner predicates as carefully as join predicates. A query can run successfully and still calculate a global value where a per member value was required. Use members with different numbers of loans in tests; a fixture where everyone has one loan can conceal a missing correlation.\n\n## Aggregate nulls and grouped results\n\nSUM, AVG, MIN, and MAX generally return null when no qualifying nonnull value exists. Thus a scalar fee total returns null for Chen in the original fixture. COALESCE can present zero when the requirement interprets no fees as a zero total. That presentation also merges the case of loans whose fee values are all unknown, so decide whether that loss of distinction is acceptable.\n\nCOUNT(*) counts rows even when fee is null, while COUNT(fee) counts only known fees. A member with one loan carrying an unknown fee therefore has a loan count of one and a known fee count of zero. Keeping these measures separate is useful for detecting incomplete data rather than silently treating every missing fee as a real zero.\n\nAdding GROUP BY inside a scalar subquery can destroy its one row guarantee. Grouping loans by category may produce several categories for one member and trigger an error. Grouping by member_id while filtering one member can produce no group for an unmatched member, which yields scalar null instead of the zero returned by an ungrouped COUNT. These similar looking queries have different empty input behavior.\n\n## Choosing a single detail row\n\nSelecting a raw loan fee without aggregation is unsafe when a member may have several loans. If the requirement asks for the latest fee, define what latest means and choose deterministically. With a timestamp, order by timestamp descending and a unique loan identifier descending to break ties. LIMIT 1 is then a deliberate top row operation rather than a way to conceal unexpected multiplicity.\n\n```sql\nSELECT m.id,\n (SELECT l.fee FROM loans l WHERE l.member_id=m.id\n  ORDER BY l.id DESC LIMIT 1) AS newest_id_fee\nFROM members m ORDER BY m.id;\n```\n\nThis fixture uses largest identifier as an explicitly stated ordering rule, producing fees 6, 8, and null. A generated identifier does not universally establish event time. If business recency matters, store and order by the appropriate event timestamp. Equal timestamps need a stable secondary ordering whenever the chosen row affects user visible output.\n\n## Worked exercise: total and missing fees\n\nReturn member identifier, loan_count, and fee_total, including members without loans. Use an ungrouped COUNT subquery for the count and an ungrouped SUM wrapped in COALESCE for the total. On the fixture, the rows are (1, 2, 10), (2, 1, 8), and (3, 0, 0). The requirement explicitly defines missing fee totals as zero, so the COALESCE is justified here.\n\n```sql\nSELECT m.id,\n (SELECT COUNT(*) FROM loans l WHERE l.member_id=m.id) AS loan_count,\n COALESCE((SELECT SUM(l.fee) FROM loans l WHERE l.member_id=m.id),0) AS fee_total\nFROM members m ORDER BY m.id;\n```\n\nNow insert another loan for member 1 with fee 6. The count becomes 3 and the total becomes 16. Equal fee values are legitimate separate contributions. SUM(DISTINCT fee) would incorrectly report 10. Insert a loan with null fee for member 3 and discuss whether the zero displayed total remains an acceptable representation of incomplete fee information.\n\n## Worked exercise: rewrite as a summary join\n\nFor a report containing many independent measures, repeatedly writing correlated subqueries may obscure the shared grouping. Aggregate loans once by member_id and left join that summary to members. COALESCE is needed for the summary count because an unmatched summary row is absent, unlike the ungrouped COUNT subquery that returns zero directly. The rewrite should produce exactly the same requested report.\n\nDo not join the raw loans table and then assume scalar expressions protect against outer duplication. A scalar expression supplies one value for each outer result row, including duplicate outer rows. If the outer FROM already contains several rows per member, the report remains multiplied. Establish the outer grain independently before calculating additional scalar values.\n\n## Diagnose scope errors with asymmetric fixtures\n\nAn unqualified member_id inside a nested query may resolve to the nearest matching scope, which can differ from the author's intention. Qualify identifiers consistently, especially when both tables contain columns with similar names. A tautology such as l.member_id=l.member_id is true for every nonnull member identifier and calculates a broad total instead of a member total. This failure can survive basic syntax checks because the SQL itself is valid.\n\nBuild a fixture with one member having two loans, one having a single loan, and one having none. Then change only one member's data and verify that only its correlated measure changes. The global aggregate should change on every output row, while unrelated member aggregates should stay fixed. This paired observation is stronger evidence of correct correlation than checking one populated example with equal counts everywhere.\n\n## Performance and related study\n\nAn index on loans.member_id can support correlated lookups, but the optimizer may transform or otherwise optimize the expression. Avoid asserting that the inner query always runs literally once per member. Inspect an execution plan on representative data, compare actual results, and measure the relevant workload. A shorter query is not automatically faster, and a join rewrite is not automatically equivalent.\n\nWhen filtering by a derived value, use a suitable outer query or repeat the expression according to the dialect's alias visibility rules; do not assume a SELECT alias is available in WHERE. Continue with [Multiple Row Subquery](/learning/dbms-sql-tutorial/multiple-row-subquery), [Join Cardinality](/learning/dbms-sql-tutorial/join-cardinality), and [Complex Views](/learning/dbms-sql-tutorial/complex-views) to compare membership, result grain, and reusable report definitions.\n",
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "One member row with scalar measures",
+      "description": "Ungrouped COUNT returns zero for no loans, while SUM returns null unless explicitly coalesced.",
+      "columns": [
+        "Member",
+        "Loan rows",
+        "COUNT result",
+        "SUM result"
+      ],
+      "rows": [
+        [
+          "1",
+          "fees 4 and 6",
+          "2",
+          "10"
+        ],
+        [
+          "2",
+          "fee 8",
+          "1",
+          "8"
+        ],
+        [
+          "3",
+          "none",
+          "0",
+          "NULL"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "technical_review": "Independent manual diagram/content consistency review passed;actual static/browser rendering tracked separately.",
+    "server_rendering": "pending",
+    "browser_rendering": "unverified",
+    "independent_review": "passed"
+  },
+  "sql_verification": {
+    "scope": "not executed; concurrency/recovery/provider verification separate",
+    "all_passed": false,
+    "cases": []
+  }
+}

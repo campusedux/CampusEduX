@@ -2,7 +2,7 @@ import Link from "next/link";
 import { cn } from "@/lib/cn";
 
 type Padding = "none" | "sm" | "md" | "lg";
-const PADDING: Record<Padding, string> = { none: "", sm: "p-4", md: "p-5 sm:p-6", lg: "p-6 sm:p-8" };
+const PADDING: Record<Padding, string> = { none: "", sm: "p-4", md: "card-pad", lg: "p-5 md:p-6" };
 
 /**
  * Raised surface — the `.card` recipe as a component. Pass `href` to make the

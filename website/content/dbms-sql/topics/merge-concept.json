@@ -1,0 +1,655 @@
+{
+  "source_ref": "chapter-11-dml-and-data-modification/merge-concept",
+  "slug": "merge-concept",
+  "title": "MERGE Concept",
+  "description": "Reason about matched and unmatched source identities, distinguish native MERGE from a narrow MySQL upsert, and avoid treating one statement as a universal synchronization or concurrency guarantee.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Matching decides which transition applies\n\nMERGE combines supported actions according to how source rows correspond to target rows. A campus inventory feed can contain an item already stored in the target and another item that is new. The first may need an update, while the second may need an insert. The match condition defines that classification, and the supported action clauses define the resulting changes.\n\nThe concept is broader than a blanket instruction to copy everything. A matched source might require no change under a particular condition, and some dialects support additional actions. Begin with the business identity and accepted action for each case. A statement can be syntactically valid while matching on the wrong role and modifying the wrong population.\n\n## The source needs a defined identity and scope\n\nFor the exercises, item_id identifies one inventory item and incoming contains at most one proposed row per item_id. This removes ambiguity about several source rows trying to supply different quantities for the same target. A repeated display label would not be a suitable substitute for identity unless the domain explicitly made it unique.\n\nReal feeds can include retries, duplicate proposals or conflicting versions. They need an explicit precedence or rejection policy before synchronization. Do not let an arbitrary source ordering choose which value wins and then describe the result as a deterministic MERGE. Source quality and identity rules remain part of the contract even when the database offers a convenient combined statement.\n\n## Native MERGE syntax belongs to the actual product\n\nSQL Server, Oracle and modern PostgreSQL provide their own native MERGE features and supported clauses. Their exact options, action ordering, return facilities and concurrency behaviour differ. A tutorial should not assume every product implements all variants merely because it recognizes the keyword. PostgreSQL's support begins in a particular version, with later versions extending features.\n\nMySQL 8.4 does not provide that native MERGE statement. Its INSERT ON DUPLICATE KEY UPDATE supports a narrower insert-or-update pattern based on protected key conflicts. That is useful related functionality, but it is not a textual substitute for every MERGE condition or deletion clause. The executable medium task clearly uses MySQL's native upsert form rather than claiming to execute standard MERGE.\n\n## The match predicate is not merely a filter decoration\n\nA native MERGE ON condition establishes source-to-target correspondence. Including an unrelated target-state filter there can change whether a source row is classified as matched, not merely restrict a subsequent update. That distinction can create an unexpected insert attempt or affect clauses for missing source matches. Read matching and action predicates as separate semantic decisions.\n\nThe simple classification exercise matches item_id only and reports insert or update intent for each incoming identity. It does not mutate data. Existing target identities absent from the incoming source do not appear in that report. This makes the incoming scope explicit before introducing the write operation and avoids accidentally treating every missing feed row as authorization to remove accepted data.\n\n## Matched does not automatically mean update everything\n\nA source might contain only some properties or a version that is older than the accepted target. Updating every field blindly can erase meaningful information. State which supplied properties are authoritative for this operation. In the medium exercise, incoming.quantity replaces the matching current quantity exactly; it is not an increment and does not change any other identity.\n\nThat distinction matters on retries. Applying replacement quantity 7 again can preserve the same accepted value under the stated contract, while adding 7 again changes it. Neither policy is universally correct. A transaction's wider side effects and conflict reporting still need review, so a stable replacement value alone does not prove an entire application workflow executes exactly once.\n\n## Missing-source actions require a complete source contract\n\nSome dialects support an applicable WHEN NOT MATCHED BY SOURCE clause, which can drive actions on target rows without corresponding source rows. A deletion action there is meaningful only when the source represents the intended authoritative scope. A partial feed or incremental batch must not be mistaken for a complete inventory snapshot.\n\nFor example, a feed containing changed items 1 and 3 says nothing about whether item 2 should still exist unless the task explicitly defines that absence as removal. Both exercises preserve unrelated target rows. The MySQL upsert has no automatic delete-missing-source step, and the notes do not claim that an insert-or-update operation alone performs full three-way synchronization.\n\n## A combined statement does not erase concurrency design\n\nA native combined operation can reduce application coordination between separate commands, but it is not a universal proof that every race or uniqueness conflict disappears. Matching, locking, isolation, indexes and the exact product's semantics still matter under concurrent writers. A slogan that MERGE is always safer than every explicit transaction is too broad.\n\nA separate update-and-insert workflow can also be correct when designed under supported locking and conflict rules. Choose the established implementation that preserves the intended invariant, then verify its actual concurrency behaviour. The isolated exercises do not benchmark competing designs or simulate every concurrent arrival; they establish the stated transformation over supplied synthetic input.\n\n## MySQL upsert follows protected key conflicts\n\nINSERT ON DUPLICATE KEY UPDATE takes its update branch when the proposed write encounters the relevant protected key conflict under MySQL's rules. It is not an arbitrary ON join predicate matching any descriptive condition. Multiple unique rules can introduce additional conflict considerations, so a simple primary-key example should not be generalized to every table with several independent uniqueness constraints.\n\nThe medium fixture has one explicit primary item identity and compatible input. Its reference uses the selected source quantity directly in the update clause, avoiding a need to teach deprecated VALUES(column) references as the only form. Exact provider support still needs verification on the target; recorded compatible-engine syntax is evidence for the local case, not a substitute for that check.\n\n## Integrity still constrains both action paths\n\nAn insert path must satisfy the target's required values and checks. An update path must leave a valid accepted row too. A combined syntax is not permission to ignore a missing quantity or negative value when the definition rejects it. The database's actual constraints remain the trusted integrity boundary rather than the source classification label alone.\n\nThe lab includes a nonnegative quantity check and strict required-value rules. Positive incoming rows satisfy that domain, while selected invalid later writes are rejected. A valid source-to-target match does not make an otherwise invalid payload acceptable, and a successful classification query does not authorize applying the proposed write to application inventory.\n\n## Explain preserved target state explicitly\n\nA full post-state read should show both touched and untouched target rows. If only the updated item is inspected, a mistaken implementation that removed unrelated items could appear correct. The reference expected output includes item 2, which is absent from the incoming batch and must remain at its original quantity.\n\nEmpty incoming input provides another useful boundary. It should leave the target unchanged rather than interpret absence as an empty authoritative snapshot. An initially empty target with supplied incoming rows should take only insertion paths. These cases distinguish a narrow upsert contract from an accidental destructive synchronization policy.\n\n## Source multiplicity can make native actions invalid\n\nSome native MERGE forms reject ambiguous repeated source matches or have restrictions on changing the same target more than allowed. The precise outcome is dialect specific. That is a reason to define source cardinality before writing SQL, not to assume a single statement chooses the desired result from contradictory proposals automatically.\n\nThe exercises enforce incoming item_id as a primary key so one proposed quantity corresponds to each identity. A larger workflow with versioned events might instead aggregate or select the accepted latest event under an explicit order. Such a transformation needs its own ties, missing-version and retry cases. Do not introduce silent deduplication without a domain rule for which fact survives.\n\n## Validate the narrower operation you actually implemented\n\nThe introductory task reports update for an incoming identity already present and insert for a new identity. The medium task applies the stated replacement quantities through MySQL upsert and reads the full target in id order. Cases cover empty incoming input, empty target and preservation of unrelated existing rows. These are separate meaningful observations of the declared scope.\n\nRecorded MariaDB compatibility execution verifies those query and upsert fixtures, not native PostgreSQL, Oracle or SQL Server MERGE, exact MySQL/provider execution or production concurrency. The prepared content migration stores the learning package without applying its inventory changes to application data. Complete explanatory content can teach the shared matching idea while keeping every product's actual syntax and unverified guarantees distinct.\n",
+  "references": [
+    {
+      "title": "MySQL 8.4 INSERT ON DUPLICATE KEY UPDATE",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/insert-on-duplicate.html"
+    },
+    {
+      "title": "PostgreSQL 18 MERGE",
+      "url": "https://www.postgresql.org/docs/18/sql-merge.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-11-merge-concept",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-11-merge-concept-1",
+          "test_id": "pt-dbms-sql-11-merge-concept",
+          "question_text": "What does the MERGE statement combine into one operation?",
+          "options": [
+            "Only SELECT and INSERT",
+            "INSERT (for new rows) and UPDATE (for existing rows), based on a matching condition, sometimes DELETE too",
+            "Only CREATE and DROP",
+            "Only two SELECT queries"
+          ],
+          "correct_index": 1,
+          "explanation": "MERGE's defining feature is combining insert-if-absent and update-if-present logic in one statement.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-11-merge-concept-2",
+          "test_id": "pt-dbms-sql-11-merge-concept",
+          "question_text": "What real-world problem does MERGE solve well?",
+          "options": [
+            "Sorting a table's rows",
+            "Syncing a target table with a batch of incoming data, without knowing in advance which rows are new versus already existing",
+            "Renaming a table's columns",
+            "Compressing a table's storage"
+          ],
+          "correct_index": 1,
+          "explanation": "MERGE is designed exactly for this 'sync with unknown new-vs-existing' scenario.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-11-merge-concept-3",
+          "test_id": "pt-dbms-sql-11-merge-concept",
+          "question_text": "How is MySQL 8.4 related to native standard-style MERGE?",
+          "options": [
+            "Yes, identically to SQL Server and Oracle",
+            "It lacks that native statement; INSERT ON DUPLICATE KEY UPDATE supports a narrower related upsert pattern",
+            "MySQL has no way to achieve upsert behavior at all",
+            "MySQL requires a stored procedure for any upsert logic"
+          ],
+          "correct_index": 1,
+          "explanation": "The alternative is not equivalent to every MERGE action and match clause.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-11-merge-concept-4",
+          "test_id": "pt-dbms-sql-11-merge-concept",
+          "question_text": "What can an applicable WHEN NOT MATCHED BY SOURCE clause support?",
+          "options": [
+            "Nothing — this clause doesn't exist",
+            "Actions on target rows without source matches, such as explicitly authorized deletion in a supporting dialect",
+            "Insert duplicate rows intentionally",
+            "Skip all update logic entirely"
+          ],
+          "correct_index": 1,
+          "explanation": "A partial source must not be treated as a complete authoritative snapshot automatically.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-11-merge-concept-5",
+          "test_id": "pt-dbms-sql-11-merge-concept",
+          "question_text": "Does using one MERGE statement universally eliminate concurrency races and conflicts?",
+          "options": [
+            "There is no real difference between the two approaches",
+            "No; actual matching, isolation, locking and product rules still need verification",
+            "Manual two-statement approaches are always faster",
+            "MERGE cannot be used with WHERE conditions at all"
+          ],
+          "correct_index": 1,
+          "explanation": "A combined command is not a blanket concurrency guarantee.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-11-merge-concept-6",
+          "test_id": "pt-dbms-sql-11-merge-concept",
+          "question_text": "In the standard MERGE syntax, what does the ON clause specify?",
+          "options": [
+            "The final sort order of the result",
+            "The condition used to match source rows against target rows (e.g. matching ids)",
+            "A CHECK constraint to validate",
+            "The name of the resulting merged table"
+          ],
+          "correct_index": 1,
+          "explanation": "ON defines how source rows are matched to target rows, determining which branch (MATCHED/NOT MATCHED) applies.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-11-merge-concept-7",
+          "test_id": "pt-dbms-sql-11-merge-concept",
+          "question_text": "Which products provide native MERGE features relevant to this comparison?",
+          "options": [
+            "Only MySQL",
+            "SQL Server, Oracle and PostgreSQL 15+, with exact clauses depending on product and version",
+            "No real database supports MERGE",
+            "Only SQLite"
+          ],
+          "correct_index": 1,
+          "explanation": "Do not assume identical feature sets across all native implementations.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-11-merge-concept-8",
+          "test_id": "pt-dbms-sql-11-merge-concept",
+          "question_text": "Is 'upsert' a different concept from what MERGE achieves, or another name for a closely related idea?",
+          "options": [
+            "Completely different, unrelated concepts",
+            "Upsert is essentially the insert-or-update half of what MERGE can do, often used as informal/dialect-specific terminology for that pattern",
+            "Upsert only refers to deleting rows",
+            "Upsert is a synonym for TRUNCATE"
+          ],
+          "correct_index": 1,
+          "explanation": "Upsert (covered further in 11.7) refers to the same insert-or-update idea, often via dialect-specific syntax rather than full MERGE.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-11-merge-concept-new-9",
+          "test_id": "pt-dbms-sql-11-merge-concept",
+          "question_text": "What identifies matching items in these exercises?",
+          "options": [
+            "Any repeated description",
+            "item_id",
+            "The largest quantity",
+            "Alphabetic table order"
+          ],
+          "correct_index": 1,
+          "explanation": "Identity must reflect the actual business role.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-11-merge-concept-new-10",
+          "test_id": "pt-dbms-sql-11-merge-concept",
+          "question_text": "Does an incremental feed omitting item 2 authorize deleting it automatically?",
+          "options": [
+            "Yes",
+            "Only if sorted",
+            "No",
+            "Only with a combined statement"
+          ],
+          "correct_index": 2,
+          "explanation": "Source completeness is an explicit contract.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-11-merge-concept-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-11-merge-concept-application-new-1",
+          "test_id": "pt-dbms-sql-11-merge-concept-application",
+          "question_text": "What does replacement quantity 7 do on a repeated identical update?",
+          "options": [
+            "It necessarily adds seven again",
+            "It deletes the item",
+            "It assigns the same stated value again",
+            "It changes its id"
+          ],
+          "correct_index": 2,
+          "explanation": "Replacement and accumulation are different policies.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-11-merge-concept-application-new-2",
+          "test_id": "pt-dbms-sql-11-merge-concept-application",
+          "question_text": "Does a classification SELECT apply its proposed writes?",
+          "options": [
+            "Yes",
+            "Only for matched rows",
+            "Only if no errors are returned",
+            "No"
+          ],
+          "correct_index": 3,
+          "explanation": "Observation and accepted mutation differ.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-11-merge-concept-application-new-3",
+          "test_id": "pt-dbms-sql-11-merge-concept-application",
+          "question_text": "Why require one incoming row per item identity?",
+          "options": [
+            "To avoid ambiguous competing source quantities",
+            "To create a backup",
+            "To guarantee all concurrency outcomes",
+            "To grant inventory access"
+          ],
+          "correct_index": 0,
+          "explanation": "Source multiplicity needs a policy.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-11-merge-concept-application-new-4",
+          "test_id": "pt-dbms-sql-11-merge-concept-application",
+          "question_text": "What governs a MySQL duplicate-key update branch?",
+          "options": [
+            "Any arbitrary descriptive ON predicate",
+            "The applicable protected key conflict rules",
+            "Only output aliases",
+            "A missing source row"
+          ],
+          "correct_index": 1,
+          "explanation": "It is not the same matching mechanism as every MERGE form.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-11-merge-concept-application-new-5",
+          "test_id": "pt-dbms-sql-11-merge-concept-application",
+          "question_text": "Can an invalid payload become acceptable merely because it matched?",
+          "options": [
+            "Yes",
+            "Only on an update path",
+            "No",
+            "Only if the source is small"
+          ],
+          "correct_index": 2,
+          "explanation": "Target integrity still applies.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-11-merge-concept-application-new-6",
+          "test_id": "pt-dbms-sql-11-merge-concept-application",
+          "question_text": "Why inspect the entire target afterward?",
+          "options": [
+            "Only the changed count matters",
+            "Unmatched rows are always removed",
+            "A SELECT grants permissions",
+            "Untouched rows must remain as well as changed rows"
+          ],
+          "correct_index": 3,
+          "explanation": "The postcondition includes preserved identities.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-11-merge-concept-application-new-7",
+          "test_id": "pt-dbms-sql-11-merge-concept-application",
+          "question_text": "What should empty incoming input do in the stated narrow upsert?",
+          "options": [
+            "Leave the existing target unchanged",
+            "Delete every target row",
+            "Insert a dummy item",
+            "Reset every quantity"
+          ],
+          "correct_index": 0,
+          "explanation": "No delete-missing-source policy exists here.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-11-merge-concept-application-new-8",
+          "test_id": "pt-dbms-sql-11-merge-concept-application",
+          "question_text": "Does native support in one product prove identical clauses in another?",
+          "options": [
+            "Yes",
+            "No",
+            "Only if all use SQL",
+            "Only with integer keys"
+          ],
+          "correct_index": 1,
+          "explanation": "Dialect and version boundaries remain.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-11-merge-concept-application-new-9",
+          "test_id": "pt-dbms-sql-11-merge-concept-application",
+          "question_text": "What should be established before automatic missing-source deletion?",
+          "options": [
+            "Only a short SQL statement",
+            "Only the word MERGE",
+            "The authoritative source population and intended action scope",
+            "Only an output alias"
+          ],
+          "correct_index": 2,
+          "explanation": "A partial batch is not automatically a full snapshot.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-11-merge-concept-application-new-10",
+          "test_id": "pt-dbms-sql-11-merge-concept-application",
+          "question_text": "What is not proven by these compatibility fixtures?",
+          "options": [
+            "The supplied classification",
+            "The local replacement quantities",
+            "The preserved unrelated item",
+            "Native MERGE and production concurrency behaviour"
+          ],
+          "correct_index": 3,
+          "explanation": "Evidence is attached to the operation actually executed.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cx-merge-classify-input",
+      "slug": "merge-classify-input",
+      "title": "Classify incoming identities before a proposed synchronization",
+      "difficulty": "Easy",
+      "task": "For each incoming item_id, report action=update when target_items already has that identity and action=insert otherwise. Do not write any rows. Target rows absent from the incoming batch are outside this report, not candidates for deletion.",
+      "schema_sql": "CREATE TABLE target_items (item_id INT PRIMARY KEY,label VARCHAR(40) NOT NULL); CREATE TABLE incoming (item_id INT PRIMARY KEY,label VARCHAR(40) NOT NULL);",
+      "seed_sql": "INSERT INTO target_items VALUES (1,'Old'),(2,'Keep'); INSERT INTO incoming VALUES (1,'New'),(3,'Add');",
+      "expected": "item_id\taction\n1\tupdate\n3\tinsert",
+      "ordering": "Ascending incoming item_id.",
+      "constraints": [
+        "Each incoming identity appears once.",
+        "Classification only, no accepted-state mutation."
+      ],
+      "edge_cases": [
+        "An empty target classifies every supplied input as insert.",
+        "Empty incoming input produces no action row."
+      ],
+      "hints": [
+        "Match identity with a preserving join.",
+        "Use the target’s non-NULL primary key as the match marker."
+      ],
+      "solution_sql": "SELECT s.item_id,CASE WHEN t.item_id IS NULL THEN 'insert' ELSE 'update' END AS action FROM incoming s LEFT JOIN target_items t ON t.item_id=s.item_id ORDER BY s.item_id;",
+      "explanation": "The diagnostic makes source membership and identity-based branch choice visible without applying a native MERGE.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO incoming VALUES (8,'Only');",
+          "expected": "item_id\taction\n8\tinsert"
+        },
+        {
+          "seed_sql": "INSERT INTO target_items VALUES (7,'Keep');",
+          "expected": ""
+        }
+      ]
+    },
+    {
+      "id": "cx-merge-mysql-upsert",
+      "slug": "merge-mysql-upsert",
+      "title": "Apply a narrow MySQL insert-or-replace-quantity policy",
+      "difficulty": "Medium",
+      "task": "Use MySQL INSERT ON DUPLICATE KEY UPDATE to copy incoming item_id,quantity into inventory. A primary-key match replaces quantity exactly; a new identity is inserted. Preserve inventory identities absent from incoming. This is a narrow upsert, not native MERGE or full synchronization. Return item_id,quantity.",
+      "schema_sql": "SET SESSION sql_mode='STRICT_ALL_TABLES'; CREATE TABLE inventory (item_id INT PRIMARY KEY,quantity INT NOT NULL CHECK(quantity>=0)) ENGINE=InnoDB; CREATE TABLE incoming (item_id INT PRIMARY KEY,quantity INT NOT NULL);",
+      "seed_sql": "INSERT INTO inventory VALUES (1,10),(2,8); INSERT INTO incoming VALUES (1,7),(3,4);",
+      "expected": "item_id\tquantity\n1\t7\n2\t8\n3\t4",
+      "ordering": "Ascending item_id.",
+      "constraints": [
+        "One source row per identity and only one protected key in this fixture.",
+        "Positive incoming quantities are nonnegative."
+      ],
+      "edge_cases": [
+        "Unrelated item 2 remains.",
+        "Empty incoming leaves all targets unchanged.",
+        "Empty inventory takes insertion paths."
+      ],
+      "hints": [
+        "Map source roles explicitly.",
+        "Use the selected source quantity for replacement, not addition."
+      ],
+      "solution_sql": "INSERT INTO inventory (item_id,quantity) SELECT s.item_id,s.quantity FROM incoming s ON DUPLICATE KEY UPDATE quantity=s.quantity; SELECT item_id,quantity FROM inventory ORDER BY item_id;",
+      "explanation": "Protected identity selects the supported MySQL update branch while the source quantity supplies the explicit replacement value.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO inventory VALUES (7,5);",
+          "expected": "item_id\tquantity\n7\t5"
+        },
+        {
+          "seed_sql": "INSERT INTO incoming VALUES (8,0);",
+          "expected": "item_id\tquantity\n8\t0"
+        }
+      ],
+      "negative_validation_cases": [
+        {
+          "sql": "INSERT INTO inventory VALUES (99,-1);",
+          "error_codes": [
+            3819,
+            4025
+          ]
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-11-merge-concept-1",
+      "test_id": "pt-dbms-sql-11-merge-concept",
+      "question_text": "What does the MERGE statement combine into one operation?",
+      "options": [
+        "Only SELECT and INSERT",
+        "INSERT (for new rows) and UPDATE (for existing rows), based on a matching condition, sometimes DELETE too",
+        "Only CREATE and DROP",
+        "Only two SELECT queries"
+      ],
+      "correct_index": 1,
+      "explanation": "MERGE's defining feature is combining insert-if-absent and update-if-present logic in one statement.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-11-merge-concept-2",
+      "test_id": "pt-dbms-sql-11-merge-concept",
+      "question_text": "What real-world problem does MERGE solve well?",
+      "options": [
+        "Sorting a table's rows",
+        "Syncing a target table with a batch of incoming data, without knowing in advance which rows are new versus already existing",
+        "Renaming a table's columns",
+        "Compressing a table's storage"
+      ],
+      "correct_index": 1,
+      "explanation": "MERGE is designed exactly for this 'sync with unknown new-vs-existing' scenario.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-11-merge-concept-3",
+      "test_id": "pt-dbms-sql-11-merge-concept",
+      "question_text": "Does MySQL support the standard SQL MERGE statement?",
+      "options": [
+        "Yes, identically to SQL Server and Oracle",
+        "No — MySQL uses a different syntax, INSERT ... ON DUPLICATE KEY UPDATE, to achieve the same upsert effect",
+        "MySQL has no way to achieve upsert behavior at all",
+        "MySQL requires a stored procedure for any upsert logic"
+      ],
+      "correct_index": 1,
+      "explanation": "MySQL's dialect achieves the same concept with different syntax, a good example of the same idea spelled differently across vendors.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-11-merge-concept-4",
+      "test_id": "pt-dbms-sql-11-merge-concept",
+      "question_text": "What does a WHEN NOT MATCHED BY SOURCE clause allow MERGE to do (in dialects that support it)?",
+      "options": [
+        "Nothing — this clause doesn't exist",
+        "Delete target rows that no longer appear in the source at all, turning MERGE into a full three-way sync",
+        "Insert duplicate rows intentionally",
+        "Skip all update logic entirely"
+      ],
+      "correct_index": 1,
+      "explanation": "This clause extends MERGE beyond insert-or-update into a full sync that also removes stale target rows.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-11-merge-concept-5",
+      "test_id": "pt-dbms-sql-11-merge-concept",
+      "question_text": "Why is a single MERGE statement preferable to manually running a separate UPDATE and INSERT WHERE NOT EXISTS?",
+      "options": [
+        "There is no real difference between the two approaches",
+        "MERGE is one indivisible atomic operation, reducing the risk of a race condition between the two separate steps under concurrent access",
+        "Manual two-statement approaches are always faster",
+        "MERGE cannot be used with WHERE conditions at all"
+      ],
+      "correct_index": 1,
+      "explanation": "Atomicity is the key advantage — MERGE avoids the window of inconsistency that two separate statements could introduce.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-11-merge-concept-6",
+      "test_id": "pt-dbms-sql-11-merge-concept",
+      "question_text": "In the standard MERGE syntax, what does the ON clause specify?",
+      "options": [
+        "The final sort order of the result",
+        "The condition used to match source rows against target rows (e.g. matching ids)",
+        "A CHECK constraint to validate",
+        "The name of the resulting merged table"
+      ],
+      "correct_index": 1,
+      "explanation": "ON defines how source rows are matched to target rows, determining which branch (MATCHED/NOT MATCHED) applies.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-11-merge-concept-7",
+      "test_id": "pt-dbms-sql-11-merge-concept",
+      "question_text": "Which SQL dialects natively support the standard MERGE syntax?",
+      "options": [
+        "Only MySQL",
+        "SQL Server, Oracle, and PostgreSQL 15+ among others",
+        "No real database supports MERGE",
+        "Only SQLite"
+      ],
+      "correct_index": 1,
+      "explanation": "These are notable examples of engines with native MERGE support, unlike MySQL's different approach.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-11-merge-concept-8",
+      "test_id": "pt-dbms-sql-11-merge-concept",
+      "question_text": "Is 'upsert' a different concept from what MERGE achieves, or another name for a closely related idea?",
+      "options": [
+        "Completely different, unrelated concepts",
+        "Upsert is essentially the insert-or-update half of what MERGE can do, often used as informal/dialect-specific terminology for that pattern",
+        "Upsert only refers to deleting rows",
+        "Upsert is a synonym for TRUNCATE"
+      ],
+      "correct_index": 1,
+      "explanation": "Upsert (covered further in 11.7) refers to the same insert-or-update idea, often via dialect-specific syntax rather than full MERGE.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "coordinator",
+    "independent_review": "unavailable; no agent tools",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Definitions and examples checked against questions; no plagiarism certification.",
+    "existing_question_corrections": [
+      "tq-dbms-sql-11-merge-concept-3",
+      "tq-dbms-sql-11-merge-concept-4",
+      "tq-dbms-sql-11-merge-concept-5",
+      "tq-dbms-sql-11-merge-concept-7"
+    ],
+    "canonical_answer_indices_preserved": true,
+    "batch_review": {
+      "reviewer": "coordinator",
+      "independent": false,
+      "scope": "This new package: explained definitions and boundaries, retained source question identities/canonical indices, new correct answers and explanations, exercise solutions and recorded fixtures, diagram trace and prepared integration.",
+      "execution_evidence": "Focused MariaDB reference cases and selected actual LessonBlock rendering passed; no browser QA or exact MySQL/provider execution.",
+      "source_preservation": "Original snapshots retained; eight retained exercises across this continuation matched source identity, difficulty, schema, seed and trailing checker.",
+      "limits": "No independent worker available. Output fixtures do not prove arbitrary student submissions used a requested technique. Native PostgreSQL/other-engine concepts remain documented or explicitly mirrored, not verified by MariaDB."
+    }
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-11-merge-concept",
+    "original_note_sha256": "f44543af2beb2644fac33301d0e59b5ef0f0454998f753cc1495b65b9e2f8624",
+    "status": "paired migration prepared; not applied"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "A narrow incoming upsert preserves targets absent from the batch",
+      "description": "The source defines update or insert candidates only; absence is not deletion without an explicit authoritative synchronization contract.",
+      "columns": [
+        "Identity",
+        "In target?",
+        "In incoming?",
+        "Stated result"
+      ],
+      "rows": [
+        [
+          "1",
+          "Yes, quantity 10",
+          "Yes, quantity 7",
+          "Replace quantity with 7"
+        ],
+        [
+          "2",
+          "Yes, quantity 8",
+          "No",
+          "Preserve quantity 8"
+        ],
+        [
+          "3",
+          "No",
+          "Yes, quantity 4",
+          "Insert quantity 4"
+        ],
+        [
+          "Missing-source deletion",
+          "Separate possible native feature",
+          "Requires authoritative scope",
+          "Not implemented by this narrow upsert"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "coordinator checked match identity, source scope, replacement versus increment and native MERGE versus MySQL upsert distinction",
+    "server_rendering": "passed",
+    "browser_rendering": "unverified",
+    "independent_review": "unavailable; no agent tools",
+    "server_rendering_evidence": "Selected actual LessonBlock Vitest rendering passed for this batch; no browser QA."
+  },
+  "sql_verification": {
+    "engine": "11.8.6-MariaDB-0+deb13u1 from Debian",
+    "scope": "MariaDB compatibility execution; exact MySQL 8.4/provider execution unverified",
+    "fingerprint": "92a98c851af462c301186c2fc532a2a42130653b6869e754851545e381421fc2",
+    "cases": [
+      {
+        "problem": "merge-classify-input",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "merge-classify-input",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "merge-classify-input",
+        "case": 2,
+        "passed": true
+      },
+      {
+        "problem": "merge-mysql-upsert",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "merge-mysql-upsert",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "merge-mysql-upsert",
+        "case": 2,
+        "passed": true
+      },
+      {
+        "problem": "merge-mysql-upsert",
+        "negative_case": 0,
+        "error_code": 4025,
+        "passed": true
+      }
+    ],
+    "all_passed": true
+  }
+}

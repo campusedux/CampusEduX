@@ -1,0 +1,582 @@
+{
+  "source_ref": "chapter-14-sql-functions/time-functions",
+  "slug": "time-functions",
+  "title": "Time Functions",
+  "description": "Calculate SQL time differences and session durations with complete endpoints, explicit time zones, half-open windows and careful missing-value handling.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Separate a clock reading from an elapsed duration\n\nA time value can answer two different questions: what did a clock show, or how long did something take? A campus tutoring session beginning at nine in the morning has a clock reading. Its ninety-minute duration is an amount of time. Confusing those meanings produces attractive reports with incorrect totals, particularly when work crosses midnight or lasts more than a day.\n\nLearn [date functions](/learning/dbms-sql-tutorial/date-functions) and [null semantics](/learning/dbms-sql-tutorial/null-semantics) alongside these examples. The examples use MySQL 8.4 syntax. A function with a similar name in another database may follow different time-zone or current-time rules, so translate the contract as well as the spelling when moving a query.\n\n## Choose a representation before choosing a function\n\nMySQL TIME can represent a clock-style value or an elapsed interval within its supported range. DATETIME records calendar fields together with a time. TIMESTAMP has conversion behavior involving the session time zone. A string merely resembling a time does not establish any of those meanings. Store values using a documented type and interpretation rather than relying on display formatting.\n\nFor a meeting spanning midnight, keep both the starting date-time and ending date-time. Two isolated clock readings cannot establish whether the meeting ended the same day, the next day, or several days later. A duration field can be useful when the duration itself is the recorded fact, but it cannot reconstruct the original instants or their time-zone context.\n\n## Read the current clock with a stated time zone\n\nCURRENT_TIME returns the current time without a calendar date. CURRENT_TIMESTAMP and NOW provide a date-time value. In MySQL, repeated current-time references within a statement generally use the statement's starting time. This makes one statement's values coherent; it does not promise identical values across separate requests or transactions.\n\n```sql\nSELECT CURRENT_TIME AS clock_now,\n       CURRENT_TIMESTAMP AS observed_at;\n```\n\nThese results depend on the session context. A server in one region and a learner in another may see different local clocks at the same instant. Do not use a screenshot's changing current time as an exercise's fixed expected output. Use literal date-times in deterministic examples and reserve live-clock functions for demonstrations whose output is explicitly variable.\n\n## Extract fields without turning them into elapsed time\n\nHOUR, MINUTE and SECOND expose components of a time-like value. The minute component of a ninety-minute duration is not necessarily ninety: it is the remaining minutes after complete hours. To compare entire durations, use an appropriate duration conversion or a date-time difference rather than comparing one component.\n\n```sql\nSELECT HOUR('01:30:45') AS hours,\n       MINUTE('01:30:45') AS minute_component,\n       SECOND('01:30:45') AS second_component;\n```\n\nThis returns one hour, thirty minutes and forty-five seconds. A filter based only on minute_component can accidentally put a short session and a much longer session in the same bucket. Field extraction is suitable for questions such as start-hour distribution, provided the intended local clock has already been established.\n\n## Calculate a difference using complete endpoints\n\nTIMESTAMPDIFF accepts a requested output unit followed by the start and end values. Reversing the endpoints reverses the sign for ordinary differences. The function returns an integer count in that unit, so choosing minutes can discard a remaining fraction of a minute. Choose seconds when the distinction matters and apply an explicit reporting policy afterward.\n\n```sql\nSELECT TIMESTAMPDIFF(SECOND,\n '2026-04-12 23:50:00', '2026-04-13 00:20:00') AS elapsed_seconds;\n```\n\nThe result is eighteen hundred seconds, even though the clock appears to move backward at midnight. Both dates are present. This calculation assumes the two literals share the intended time interpretation; literal local calendar fields alone do not resolve ambiguous daylight-saving transitions. Establish normalized instants before claiming actual elapsed time across such transitions.\n\n## Convert durations with their range in mind\n\nTIME_TO_SEC converts a time value to seconds, while SEC_TO_TIME converts seconds into a time representation subject to MySQL's TIME range. This is convenient for bounded durations such as a tutoring slot. It is unsuitable as an unlimited duration storage strategy for accumulated years of machine activity. Numeric seconds with a documented scale can be clearer for very large totals.\n\nA result displayed as hours, minutes and seconds is still a representation. Formatting a duration does not validate that its endpoints were ordered correctly, that a pause was subtracted, or that the clock was synchronized. Define which intervals count as active work before converting a difference into a business measure such as billable time.\n\n## Distinguish absent endpoints from zero duration\n\nIf an ending timestamp is null, the session may still be open or the data may be incomplete. A difference involving that null does not describe a completed zero-length session. Replacing every missing endpoint with the starting timestamp invents a zero duration and can distort average completion time. Separate ongoing sessions from completed-session statistics.\n\nThe beginner exercise includes a session that starts and ends at exactly the same instant. That is a known zero under the provided data contract. It also includes an unfinished session whose duration remains null. Preserving both results teaches the difference between a measurement of zero and the absence of a finished measurement.\n\n## Filter time windows with precise boundaries\n\nA half-open interval includes its beginning and excludes its end. For a report covering one date, compare the original timestamp to that date's midnight and the next midnight. This avoids guessing the last representable fraction of a second. It also leaves the indexed column directly available to a range comparison rather than wrapping it in a formatting function.\n\n```sql\nSELECT session_id\nFROM tutoring_sessions\nWHERE started_at >= '2026-04-12 00:00:00'\n  AND started_at <  '2026-04-13 00:00:00'\nORDER BY session_id;\n```\n\nIf the report means a learner's local day, calculate those boundaries in the correct zone before comparing consistently represented instants. A universal fixed offset is not a substitute for a regional daylight-saving rule. Named-zone conversion also depends on the server having suitable time-zone data; do not silently treat an unavailable conversion as a valid value.\n\n## Aggregate comparable completed durations\n\nTo summarize completed sessions, compute a numeric duration from each valid endpoint pair and then aggregate that numeric measure. State whether negative durations are rejected as data errors, excluded for a reporting purpose, or retained for diagnosis. Silently taking an absolute value hides reversed endpoints and can reward invalid records with plausible positive durations.\n\nThe intermediate exercise counts only completed nonnegative sessions and sums their seconds per tutor. A completed zero-length session remains in the count. Open sessions and reversed endpoints are excluded by an explicit task rule, rather than quietly repaired. An operational system should separately expose rejected records so reporting filters do not conceal an ingestion defect.\n\n## Verify the difficult boundaries deliberately\n\nCheck same-instant endpoints, midnight crossings, missing endings and reversed endpoints. Add fractional seconds if the schema supports them, then decide whether whole-unit truncation is acceptable. A query that works for two afternoon timestamps has not demonstrated that it handles calendar boundaries. Prefer a small contrasting fixture whose intended durations can be calculated independently.\n\nTime functions also do not provide authorization. A duration report must still limit which tutoring records the caller may inspect. Likewise, choosing UTC does not settle retention, clock accuracy or cancellation policy. Keep representation, arithmetic and educational reporting rules explicit so learners can explain both the SQL result and the meaning it actually supports.\n\n## Keep precision and display policy separate\n\nA schema using whole-second DATETIME values cannot recover fractional seconds that were never stored. Where finer measurement is required, choose the appropriate fractional precision when designing the data contract. Adding decimal digits during display does not make an older measurement more precise. Conversely, rounding a precise duration for a dashboard should not silently replace the underlying observation used in a later calculation.\n\nFor an average tutoring duration, specify whether sessions or tutors receive equal weight. Averaging every session's seconds differs from averaging tutor-level averages when tutors have different numbers of sessions. Keep the numeric duration until the desired population and weighting are settled, then format the final value. This also makes it easier to check that an unusually long session is a real event rather than an omitted ending date. Record such policy choices near the report so a future query rewrite preserves the same meaning.\n",
+  "references": [
+    {
+      "title": "MySQL 8.4 reference manual",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/date-and-time-functions.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-14-time-functions",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-14-time-functions-1",
+          "test_id": "pt-dbms-sql-14-time-functions",
+          "question_text": "What must accompany clock readings to calculate a meeting that crosses midnight?",
+          "options": [
+            "Only their minute components",
+            "The associated calendar dates",
+            "A formatted caption",
+            "A row count"
+          ],
+          "correct_index": 1,
+          "explanation": "Two identical clock readings could lie on different days, so dates are necessary to establish the interval.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-14-time-functions-2",
+          "test_id": "pt-dbms-sql-14-time-functions",
+          "question_text": "Which MySQL expression returns the current date and time?",
+          "options": [
+            "CURRENT_DATE alone",
+            "CURRENT_TIMESTAMP",
+            "MINUTE(0)",
+            "COUNT(*)"
+          ],
+          "correct_index": 1,
+          "explanation": "CURRENT_TIMESTAMP includes date and time; CURRENT_TIME supplies only the clock component.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-14-time-functions-3",
+          "test_id": "pt-dbms-sql-14-time-functions",
+          "question_text": "What does CURRENT_TIME omit?",
+          "options": [
+            "The hour",
+            "The minute",
+            "The calendar date",
+            "The second in every case"
+          ],
+          "correct_index": 2,
+          "explanation": "A current clock value does not identify which calendar day it belongs to.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-14-time-functions-4",
+          "test_id": "pt-dbms-sql-14-time-functions",
+          "question_text": "What is MINUTE('01:30:45')?",
+          "options": [
+            "90",
+            "30",
+            "1",
+            "45"
+          ],
+          "correct_index": 1,
+          "explanation": "MINUTE extracts the remainder component, not the entire ninety-minute duration.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-14-time-functions-5",
+          "test_id": "pt-dbms-sql-14-time-functions",
+          "question_text": "What is the purpose of TIMESTAMPDIFF SECOND?",
+          "options": [
+            "Return only the second component",
+            "Calculate an integer difference in seconds",
+            "Format a date as text",
+            "Count matching rows"
+          ],
+          "correct_index": 1,
+          "explanation": "Choosing SECOND requests a whole numeric difference in seconds instead of extracting a component.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-14-time-functions-6",
+          "test_id": "pt-dbms-sql-14-time-functions",
+          "question_text": "Which argument order belongs to TIMESTAMPDIFF?",
+          "options": [
+            "Start, unit, end",
+            "Unit, start, end",
+            "End, start, unit",
+            "Unit, table, alias"
+          ],
+          "correct_index": 1,
+          "explanation": "The first argument names the unit; the following two establish the direction of subtraction.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-14-time-functions-7",
+          "test_id": "pt-dbms-sql-14-time-functions",
+          "question_text": "How many seconds separate 23:50 on April 12 and 00:20 on April 13?",
+          "options": [
+            "-84600",
+            "1800",
+            "30",
+            "1200"
+          ],
+          "correct_index": 1,
+          "explanation": "The crossing spans thirty minutes, and thirty multiplied by sixty is eighteen hundred.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-14-time-functions-8",
+          "test_id": "pt-dbms-sql-14-time-functions",
+          "question_text": "What does a missing ending timestamp imply for a duration calculation?",
+          "options": [
+            "Its completed duration is certainly zero",
+            "Its completed duration is unknown",
+            "The start is midnight",
+            "The row must be deleted"
+          ],
+          "correct_index": 1,
+          "explanation": "Without an end, the difference is unknown; it cannot establish a completed measurement of zero.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-14-time-functions-new-9",
+          "test_id": "pt-dbms-sql-14-time-functions",
+          "question_text": "What does TIME_TO_SEC calculate?",
+          "options": [
+            "A numeric seconds representation of a time value",
+            "A local calendar date",
+            "A row identifier",
+            "A time-zone database"
+          ],
+          "correct_index": 0,
+          "explanation": "TIME_TO_SEC changes the representation of a bounded time value into numeric seconds.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-14-time-functions-new-10",
+          "test_id": "pt-dbms-sql-14-time-functions",
+          "question_text": "Why should SEC_TO_TIME not represent unlimited accumulated duration?",
+          "options": [
+            "It can represent only whole days",
+            "Its result is bounded by the supported TIME range",
+            "It is a row-count function",
+            "It always returns UTC"
+          ],
+          "correct_index": 1,
+          "explanation": "Converting large totals into TIME can exceed that type’s range even when the numeric seconds remain valid.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-14-time-functions-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-14-time-functions-application-new-1",
+          "test_id": "pt-dbms-sql-14-time-functions-application",
+          "question_text": "Which interval convention avoids guessing the last instant of a day?",
+          "options": [
+            "Exclude both midnights",
+            "Include the next noon",
+            "Inclusive start and exclusive next-day start",
+            "Compare only minute fields"
+          ],
+          "correct_index": 2,
+          "explanation": "The next midnight is a precise exclusive endpoint regardless of stored fractional precision.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-14-time-functions-application-new-2",
+          "test_id": "pt-dbms-sql-14-time-functions-application",
+          "question_text": "Does formatting an elapsed value validate its endpoints?",
+          "options": [
+            "Yes; formatting repairs reversed times",
+            "Yes; it fills missing dates",
+            "Only if the caption contains seconds",
+            "No; endpoint validity is a separate requirement"
+          ],
+          "correct_index": 3,
+          "explanation": "Formatting changes presentation and cannot determine whether an underlying observation is correct.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-14-time-functions-application-new-3",
+          "test_id": "pt-dbms-sql-14-time-functions-application",
+          "question_text": "What does reversing ordinary TIMESTAMPDIFF endpoints change?",
+          "options": [
+            "The sign of the difference",
+            "The number of output columns",
+            "The table key",
+            "The session permissions"
+          ],
+          "correct_index": 0,
+          "explanation": "Swapping start and end changes which endpoint is subtracted from which.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-14-time-functions-application-new-4",
+          "test_id": "pt-dbms-sql-14-time-functions-application",
+          "question_text": "What can a whole-minute result lose?",
+          "options": [
+            "All calendar dates in storage",
+            "The remaining fraction of a minute",
+            "The SQL table name",
+            "The ability to count rows"
+          ],
+          "correct_index": 1,
+          "explanation": "Whole-minute precision omits any remaining seconds that do not form another minute.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-14-time-functions-application-new-5",
+          "test_id": "pt-dbms-sql-14-time-functions-application",
+          "question_text": "Which case distinguishes missing measurement from known zero?",
+          "options": [
+            "Two identical tutor names",
+            "Two positive totals",
+            "Null ending versus identical known endpoints",
+            "Two aliases for the same column"
+          ],
+          "correct_index": 2,
+          "explanation": "Identical endpoints establish zero; a missing endpoint supplies no completed difference.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-14-time-functions-application-new-6",
+          "test_id": "pt-dbms-sql-14-time-functions-application",
+          "question_text": "Why use fixed literals in a duration exercise?",
+          "options": [
+            "They prove server clocks are synchronized",
+            "They eliminate null semantics",
+            "They activate time-zone tables",
+            "They provide deterministic expected results"
+          ],
+          "correct_index": 3,
+          "explanation": "Fixed inputs allow the expected difference to be calculated independently and repeated.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-14-time-functions-application-new-7",
+          "test_id": "pt-dbms-sql-14-time-functions-application",
+          "question_text": "Can local calendar fields alone resolve an ambiguous daylight-saving instant?",
+          "options": [
+            "No; the time-zone interpretation must also be established",
+            "Yes; the minute component identifies the instant",
+            "Yes; every region has a fixed offset",
+            "Only when an index exists"
+          ],
+          "correct_index": 0,
+          "explanation": "Local times can be ambiguous during a clock transition; a regional or normalized-instant interpretation is needed.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-14-time-functions-application-new-8",
+          "test_id": "pt-dbms-sql-14-time-functions-application",
+          "question_text": "Why is ABS on every duration potentially misleading?",
+          "options": [
+            "It reveals the original time zone",
+            "It can conceal reversed endpoints",
+            "It rejects every zero duration",
+            "It returns a row count"
+          ],
+          "correct_index": 1,
+          "explanation": "Making a negative difference positive can hide that the end was recorded before the start.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-14-time-functions-application-new-9",
+          "test_id": "pt-dbms-sql-14-time-functions-application",
+          "question_text": "Which sessions count in the stated intermediate exercise?",
+          "options": [
+            "Only sessions longer than a day",
+            "All sessions with a null ending",
+            "Completed sessions with nonnegative duration",
+            "Only reversed sessions"
+          ],
+          "correct_index": 2,
+          "explanation": "The task explicitly excludes open and reversed intervals while retaining measured zero.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-14-time-functions-application-new-10",
+          "test_id": "pt-dbms-sql-14-time-functions-application",
+          "question_text": "What authorization does a time function provide?",
+          "options": [
+            "Read access to every tutor",
+            "Permission to edit clocks",
+            "Automatic privacy protection",
+            "None; access rules must be enforced separately"
+          ],
+          "correct_index": 3,
+          "explanation": "Date-time arithmetic operates on rows already available to the query; trusted access checks remain necessary.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cx-time-functions-session-seconds",
+      "slug": "time-functions-session-seconds",
+      "title": "Measure complete endpoint differences",
+      "difficulty": "Easy",
+      "task": "Return session_id and elapsed_seconds for every session using complete endpoints; preserve NULL and negative differences. Order by session_id.",
+      "schema_sql": "CREATE TABLE tutoring_sessions(session_id INT PRIMARY KEY,tutor_id INT NOT NULL,started_at DATETIME NOT NULL,ended_at DATETIME NULL);",
+      "seed_sql": "INSERT INTO tutoring_sessions VALUES (1,7,'2026-04-12 23:50:00','2026-04-13 00:20:00'),(2,7,'2026-04-12 09:00:00','2026-04-12 09:00:00'),(3,8,'2026-04-12 10:00:00',NULL),(4,8,'2026-04-12 12:00:00','2026-04-12 11:00:00');",
+      "solution_sql": "SELECT session_id,TIMESTAMPDIFF(SECOND,started_at,ended_at) AS elapsed_seconds FROM tutoring_sessions ORDER BY session_id;",
+      "expected": "session_id\telapsed_seconds\n1\t1800\n2\t0\n3\tNULL\n4\t-3600",
+      "validation_cases": [
+        {
+          "seed_sql": "",
+          "expected": ""
+        }
+      ],
+      "ordering": "Order by the keys explicitly required in the task.",
+      "constraints": [
+        "Use the supplied synthetic tables.",
+        "Return only the requested columns."
+      ],
+      "edge_cases": [
+        "Midnight crossing",
+        "Missing endpoint",
+        "Known zero",
+        "Reversed endpoints"
+      ],
+      "hints": [
+        "Use TIMESTAMPDIFF with the start before the end."
+      ],
+      "explanation": "Use TIMESTAMPDIFF with the start before the end."
+    },
+    {
+      "id": "cx-time-functions-valid-tutor-totals",
+      "slug": "time-functions-valid-tutor-totals",
+      "title": "Summarize valid completed tutoring time",
+      "difficulty": "Medium",
+      "task": "Return tutor_id,completed_count,total_seconds for completed sessions whose end is at or after the start. Include known zero durations; exclude open and reversed sessions. Order by tutor_id.",
+      "schema_sql": "CREATE TABLE tutoring_sessions(session_id INT PRIMARY KEY,tutor_id INT NOT NULL,started_at DATETIME NOT NULL,ended_at DATETIME NULL);",
+      "seed_sql": "INSERT INTO tutoring_sessions VALUES (1,7,'2026-04-12 23:50:00','2026-04-13 00:20:00'),(2,7,'2026-04-12 09:00:00','2026-04-12 09:00:00'),(3,8,'2026-04-12 10:00:00',NULL),(4,8,'2026-04-12 12:00:00','2026-04-12 11:00:00');",
+      "solution_sql": "SELECT tutor_id,COUNT(*) AS completed_count,SUM(TIMESTAMPDIFF(SECOND,started_at,ended_at)) AS total_seconds FROM tutoring_sessions WHERE ended_at IS NOT NULL AND ended_at>=started_at GROUP BY tutor_id ORDER BY tutor_id;",
+      "expected": "tutor_id\tcompleted_count\ttotal_seconds\n7\t2\t1800",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO tutoring_sessions VALUES (1,2,'2026-04-12 09:00:00','2026-04-12 09:00:00');",
+          "expected": "tutor_id\tcompleted_count\ttotal_seconds\n2\t1\t0"
+        },
+        {
+          "seed_sql": "",
+          "expected": ""
+        }
+      ],
+      "ordering": "Order by the keys explicitly required in the task.",
+      "constraints": [
+        "Use the supplied synthetic tables.",
+        "Return only the requested columns."
+      ],
+      "edge_cases": [
+        "Zero counts as completed",
+        "Open sessions are excluded"
+      ],
+      "hints": [
+        "Filter valid endpoints before grouping and sum numeric seconds."
+      ],
+      "explanation": "Filter valid endpoints before grouping and sum numeric seconds."
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-14-time-functions-1",
+      "test_id": "pt-dbms-sql-14-time-functions",
+      "question_text": "What does the DATE type store, in contrast to TIMESTAMP?",
+      "options": [
+        "Only a time-of-day value",
+        "Only a calendar date, with no time-of-day component",
+        "Both date and time together",
+        "A time zone offset only"
+      ],
+      "correct_index": 1,
+      "explanation": "DATE stores just a calendar date (e.g. 2024-01-05); TIMESTAMP/DATETIME combines both date and time.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-14-time-functions-2",
+      "test_id": "pt-dbms-sql-14-time-functions",
+      "question_text": "Which function is a common MySQL/PostgreSQL convenience alias for CURRENT_TIMESTAMP?",
+      "options": [
+        "TODAY()",
+        "NOW()",
+        "GETDATE()",
+        "SYSDATE()"
+      ],
+      "correct_index": 1,
+      "explanation": "NOW() is widely supported in MySQL and PostgreSQL as an equivalent to CURRENT_TIMESTAMP. SQL Server instead uses GETDATE().",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-14-time-functions-3",
+      "test_id": "pt-dbms-sql-14-time-functions",
+      "question_text": "Which SQL Server function returns the current date and time?",
+      "options": [
+        "NOW()",
+        "CURRENT_DATE()",
+        "GETDATE()",
+        "TODAY()"
+      ],
+      "correct_index": 2,
+      "explanation": "SQL Server's convenience function for the current date and time is GETDATE().",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-14-time-functions-4",
+      "test_id": "pt-dbms-sql-14-time-functions",
+      "question_text": "What does CURRENT_TIME return?",
+      "options": [
+        "Just the date",
+        "Just the time-of-day, with no date component",
+        "Date and time together",
+        "A Unix timestamp integer"
+      ],
+      "correct_index": 1,
+      "explanation": "CURRENT_TIME returns only the time-of-day portion, with no calendar date.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-14-time-functions-5",
+      "test_id": "pt-dbms-sql-14-time-functions",
+      "question_text": "Why might WHERE placed_at <= '2024-01-05' unexpectedly exclude orders placed later in the day on January 5th?",
+      "options": [
+        "Because TIMESTAMP columns cannot be compared with strings",
+        "Because the bare date string is implicitly treated as midnight (00:00:00) of that day, so anything later on the same day fails the <= comparison",
+        "Because <= is not a valid operator for date comparisons",
+        "Because placed_at is always stored in a different time zone"
+      ],
+      "correct_index": 1,
+      "explanation": "A bare date compared against a TIMESTAMP column is implicitly midnight of that date, so any time later than 00:00:00 on the 5th is excluded from a <= filter intended to cover the whole day.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-14-time-functions-6",
+      "test_id": "pt-dbms-sql-14-time-functions",
+      "question_text": "In MySQL, what does TIMESTAMPDIFF(MINUTE, '2024-01-05 14:30:00', '2024-01-05 16:30:00') return?",
+      "options": [
+        "2",
+        "120",
+        "7200",
+        "-120"
+      ],
+      "correct_index": 1,
+      "explanation": "The two timestamps are 2 hours apart, which is 120 minutes.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-14-time-functions-7",
+      "test_id": "pt-dbms-sql-14-time-functions",
+      "question_text": "What is the key difference between a plain TIMESTAMP and PostgreSQL's TIMESTAMPTZ (TIMESTAMP WITH TIME ZONE)?",
+      "options": [
+        "They are always functionally identical",
+        "Plain TIMESTAMP is 'naive' with no time zone awareness, while TIMESTAMPTZ stores/normalizes a time zone-aware instant",
+        "TIMESTAMPTZ cannot store a time-of-day component",
+        "Plain TIMESTAMP is only usable for dates before 2000"
+      ],
+      "correct_index": 1,
+      "explanation": "Plain TIMESTAMP has no concept of time zone, while TIMESTAMPTZ is aware of and normalizes for time zones — an important distinction in distributed or multi-region applications.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-14-time-functions-8",
+      "test_id": "pt-dbms-sql-14-time-functions",
+      "question_text": "When CURRENT_TIMESTAMP is referenced multiple times within the same SQL statement across many rows, what generally happens?",
+      "options": [
+        "Each row gets a slightly different timestamp reflecting real elapsed execution time",
+        "CURRENT_TIMESTAMP is typically evaluated once per statement, so every row sees the identical value",
+        "CURRENT_TIMESTAMP causes a syntax error if used more than once per statement",
+        "CURRENT_TIMESTAMP always returns NULL after the first row"
+      ],
+      "correct_index": 1,
+      "explanation": "Most engines evaluate CURRENT_TIME/CURRENT_TIMESTAMP once per statement execution, not once per row, so all rows see a consistent 'now' value.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "/root/worker_2",
+    "independent_review": "passed",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "independent editorial and manual fixture review passed; engine/browser verification pending",
+    "canonical_answer_indices_preserved": true,
+    "editorial_record": "Original prose and assessments. Seed snapshots and canonical answer indices retained; external originality clearance pending.",
+    "independent_reviewer": "/root",
+    "independent_review_scope": "Full notes, all20 MCQs with options and reasoning, both exercise contracts and predicted fixtures, original diagram, metadata and internal links. Complete endpoints, integer-unit differences, midnight, NULL/zero, reversed intervals and valid tutor totals are consistent. All20 explanations now give reasons. Five sample/alternative outputs manually traced."
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-14-time-functions",
+    "original_note_sha256": "ef15c49fea58cf463a5ec4daf30f1d4f3a0e641ddee69bd32c1822dce81bb262",
+    "status": "drafted; not included in prepared paired migrations"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "A clock reading is not a complete elapsed interval",
+      "description": "The dates and endpoint status determine whether a signed duration is known.",
+      "columns": [
+        "Start",
+        "End",
+        "Seconds"
+      ],
+      "rows": [
+        [
+          "Apr 12 23:50",
+          "Apr 13 00:20",
+          "1800"
+        ],
+        [
+          "Apr 12 09:00",
+          "Apr 12 09:00",
+          "0"
+        ],
+        [
+          "Apr 12 10:00",
+          "Unknown",
+          "NULL"
+        ],
+        [
+          "Apr 12 12:00",
+          "Apr 12 11:00",
+          "-3600"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "technical_review": "coordinator independent manual review passed",
+    "browser_rendering": "unverified",
+    "independent_review": "passed",
+    "server_rendering": "passed",
+    "server_rendering_evidence": "2026-10-29 full Vitest:1310 passed/12 skipped; actual LessonBlock/TopicDiagrams render over230 packages. Browser visual QA remains unverified."
+  },
+  "authoring_status": "drafted; verification pending",
+  "sql_verification": {
+    "scope": "not executed; exact MySQL/provider execution pending",
+    "all_passed": false,
+    "cases": []
+  }
+}

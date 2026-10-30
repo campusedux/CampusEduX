@@ -1,0 +1,522 @@
+{
+  "source_ref": "chapter-23-concurrency-control/lost-update",
+  "slug": "lost-update",
+  "title": "Lost Update",
+  "description": "Prevent stale read-modify-write overwrites with relative updates, locking reads or optimistic versions, using clear business contracts and reproducible concurrency labs.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Recognize an overwritten business effect\n\nA lost update occurs when an operation overwrites another operation's intended change, often because both compute a replacement value from the same stale read. The database can accept both writes while the final value represents only one effect. This is a concurrency correctness problem rather than a syntax mistake. It is especially common when an application reads a value, computes a new value in memory and later sends an unconditional absolute assignment.\n\nSuppose an educational account starts at one thousand. Transaction one withdraws one hundred, and transaction two deposits five hundred. If both effects apply, the correct final value is fourteen hundred in either serial order. This arithmetic example explains the anomaly; a complete account service would also need authorization, request identity, suitable numeric types and its own business validation. The concurrency mechanism does not replace those responsibilities.\n\n## Trace the stale read sequence\n\nBoth transactions first read one thousand. T1 computes nine hundred and writes it. T2 has already computed fifteen hundred from its earlier read and writes that value afterward. The final fifteen hundred omits the withdrawal. Each local calculation was arithmetically correct for its stale input, yet their combined execution violated the required composition of effects.\n\n| Step | Transaction one | Transaction two | Stored value |\n|---|---|---|---|\n| Initial | | | 1000 |\n| Read | Reads 1000 | | 1000 |\n| Read | | Reads 1000 | 1000 |\n| Write | Assigns 900 | | 900 |\n| Write | | Assigns 1500 | 1500 |\n\nThe table is an abstract admitted history, not a claim that every isolation mode on every engine permits that exact sequence. A controlled SQL experiment must state its transaction boundaries, read type and isolation settings. Some configurations block an operation, reject a conflicting attempt or require a retry instead of allowing the illustrated final state.\n\n## Understand why ordinary write locks are insufficient\n\nA row update can acquire a lock while it executes, but that does not automatically protect an earlier unlocked read and the application calculation that followed it. If a later writer waits for the first writer to finish and then assigns a stale absolute number, it can still overwrite the committed result. Serialization of the two write statements alone does not necessarily serialize their earlier read-compute-write workflows.\n\n```sql\n-- Both application requests previously read balance = 1000.\nUPDATE lab_accounts SET balance = 900 WHERE account_id = 1;\n-- A later stale assignment can erase that request's effect.\nUPDATE lab_accounts SET balance = 1500 WHERE account_id = 1;\n```\n\nA successful final query showing fifteen hundred cannot tell the reader whether it represents an intended replacement or a lost effect. Define the business operation first. Replacing a draft description with an explicitly chosen latest version has a different contract from composing a debit and a deposit. The anomaly is about violating that contract, not merely observing two writes to one row.\n\n## Prefer an atomic relative update when it matches the operation\n\nFor a simple quantity adjustment, updating relative to the currently stored value can avoid the stale replacement pattern. One statement can subtract one hundred and another add five hundred. Under the appropriate transactional row update semantics, each adjustment applies to the row state used by its actual update rather than to an old application copy. This is often simpler than reading an entire row solely to calculate one arithmetic change.\n\n```sql\nUPDATE lab_accounts SET balance = balance - 100 WHERE account_id = 1;\nUPDATE lab_accounts SET balance = balance + 500 WHERE account_id = 1;\n```\n\nThat choice still needs the real invariant. An inventory decrement may require quantity to be at least the requested amount in the same statement predicate. Inspect affected rows and handle a missing item or rejected condition deliberately. Relative arithmetic alone does not ensure sufficient stock, permission, a valid destination or coherent changes across several rows.\n\n## Use locking reads for a protected decision sequence\n\nWhen several reads and decisions must precede the write, a suitable locking read inside an explicit transaction can protect the relevant row while the decision is made. In MySQL, SELECT FOR UPDATE is a locking read. Acquire the appropriate locks before using the protected values, keep the work on the same connection and ensure every exit path completes the transaction.\n\n```sql\nSTART TRANSACTION;\nSELECT account_id, balance\nFROM lab_accounts WHERE account_id = 1 FOR UPDATE;\n-- Trusted code validates its operation using the protected value.\nUPDATE lab_accounts SET balance = balance - 100 WHERE account_id = 1;\nCOMMIT;\n```\n\nOrdinary consistent reads in a multiversion engine can observe older committed versions rather than block behind every writer. Do not teach that any SELECT automatically participates in the locking protocol. Lock coverage also depends on predicates, indexes and isolation behavior. A multirow invariant may require a broader design than locking whichever one row happens to be displayed in the interface.\n\n## Reject stale edits with an optimistic version\n\nAnother approach stores a version number beside the value. The reader receives both, and its later update includes the version it originally observed. A successful update increments the version. If another request changed the row first, the stale version predicate matches no row, letting the application reject or recompute the attempted edit instead of silently overwriting the newer value.\n\n```sql\nUPDATE lab_accounts\nSET balance = 900, version_no = version_no + 1\nWHERE account_id = 1 AND version_no = 4;\n```\n\nThe version column must have a defined initialization and update contract, and every relevant writer must follow it. Otherwise a bypassing writer can change the value without changing the token. A zero-row result is an outcome to interpret: the row may be missing, inaccessible under the trusted access model or stale. Do not expose unauthorized row existence while explaining conflicts to a user.\n\n## Separate related concurrency anomalies\n\nA dirty read observes another transaction's uncommitted value. The illustrated lost update can happen even when both readers observed a previously committed value. A nonrepeatable read concerns two reads returning different values after another commit; lost update concerns an overwritten effect. These labels describe different aspects of a history, so replacing one with another makes the repair discussion less precise.\n\nBlind replacement writes can also overwrite an intended earlier change without a prior application read. Whether that is an error depends on the operation's contract. Two sessions deliberately assigning the same configured constant do not automatically prove a lost business effect. Ask whether the application required composing both changes, rejecting stale replacement or simply accepting a defined last writer.\n\n## Evaluate retries and broader invariants\n\nA detected concurrency conflict may require retrying the complete business decision with fresh state. Retrying only the stale final assignment repeats the problem. Use bounded attempts and preserve request identity so an uncertain already committed operation is not duplicated. A user-facing edit conflict may instead require explicit reconciliation because automatically recomputing a human choice would change its meaning.\n\nSerializable execution can help enforce serial-equivalent behavior, but the application still needs to handle retries and choose the correct transaction boundary. It does not make incorrect arithmetic or unauthorized actions correct. Likewise, avoiding a lost update on one counter does not prove a cross-row capacity rule is safe against write skew or predicate changes.\n\n## Run two focused reasoning labs\n\nBeginner exercise: start with stock ten. Two requests each read ten and compute nine. Predict the final value after two unconditional assignments, then compare two relative decrements. The first history can leave nine; the intended composition leaves eight. Record the admitted interleaving instead of treating a single sequential script as a complete concurrent proof.\n\nAdvanced exercise: give the stock row version four. Two clients attempt updates conditioned on that version. The first succeeds and changes the version to five; the second must observe zero affected rows under the controlled fixture. The solution rejects or recomputes the stale action and does not silently declare it successful. Add cases for missing rows, insufficient quantity and failed transaction cleanup.\n\nBefore selecting a repair, list every writer of the affected data: background jobs, import tools, administrative operations and ordinary requests. An optimistic update used by only one screen cannot protect against another path that still performs unconditional stale replacements. The same review should identify the trusted boundary where access and business constraints are enforced. Interface warnings can help users reconcile edits, but hiding a save button does not establish concurrency control. Record whether each rejected attempt was safe to retry automatically or required a human choice, since those are different recovery contracts.\n\nContinue with [conflict serializability](/learning/dbms-sql-tutorial/conflict-serializability), [isolation](/learning/dbms-sql-tutorial/isolation) and [concurrent execution](/learning/dbms-sql-tutorial/concurrent-execution). Keep symbolic history reasoning, single-session SQL observations and actual two-session engine verification as separate evidence.",
+  "references": [
+    {
+      "title": "MySQL 8.4 InnoDB locking reads",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/innodb-locking-reads.html"
+    },
+    {
+      "title": "MySQL 8.4 InnoDB transaction model",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/innodb-transaction-model.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-23-lost-update",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-23-lost-update-1",
+          "test_id": "pt-dbms-sql-23-lost-update",
+          "question_text": "In the worked lost-update example, what is the correct final balance of A if T1's withdrawal and T2's deposit both apply, run in either serial order?",
+          "options": [
+            "1000",
+            "1500",
+            "1400",
+            "900"
+          ],
+          "correct_index": 2,
+          "explanation": "1000 - 100 (T1's withdrawal) + 500 (T2's deposit) = 1400, regardless of which order the two operations are applied in serially.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-23-lost-update-2",
+          "test_id": "pt-dbms-sql-23-lost-update",
+          "question_text": "In the interleaved schedule shown, why does T1's withdrawal end up 'lost'?",
+          "options": [
+            "T1 never actually committed",
+            "T2 read A's stale value (1000) before T1's write landed, so T2 computed 1500 from the stale value and its write overwrote T1's 900",
+            "T1's write caused a constraint violation",
+            "The database automatically reverted T1's change"
+          ],
+          "correct_index": 1,
+          "explanation": "T2 computed its replacement from the earlier committed1000, then assigned1500 after T1 assigned900. The later stale replacement omits the withdrawal.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-23-lost-update-3",
+          "test_id": "pt-dbms-sql-23-lost-update",
+          "question_text": "In the illustrated admitted stale-assignment history, can both writes complete without a database error while one effect is lost?",
+          "options": [
+            "Yes, it always triggers a constraint violation",
+            "Yes; this history can complete successfully with the wrong final business value",
+            "Yes, it always causes a deadlock",
+            "Only if the isolation level is set to SERIALIZABLE"
+          ],
+          "correct_index": 1,
+          "explanation": "The illustrated history can be silent; other engines or isolation configurations may block or reject a competing attempt.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-23-lost-update-4",
+          "test_id": "pt-dbms-sql-23-lost-update",
+          "question_text": "What is the fundamental pattern that causes a lost update?",
+          "options": [
+            "A transaction reads a value, and another transaction later reads the same original (stale) value and writes back a result computed from it, overwriting the first transaction's write",
+            "A transaction commits before another transaction starts",
+            "Two transactions read the same value but neither ever writes",
+            "A transaction rolls back after writing"
+          ],
+          "correct_index": 0,
+          "explanation": "The classic read-compute-write race: both transactions base their computed write on the same original read, so the later write erases the earlier one's effect.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-23-lost-update-5",
+          "test_id": "pt-dbms-sql-23-lost-update",
+          "question_text": "How does an appropriate locking-read protocol protect the read-compute-write sequence?",
+          "options": [
+            "It prevents any transaction from ever reading A",
+            "It obtains protection before the dependent read and holds it through the decision and write; actual competing read behavior follows the engine protocol",
+            "It automatically merges both transactions' updates",
+            "It converts the schedule into a non-serial schedule"
+          ],
+          "correct_index": 1,
+          "explanation": "A plain multiversion consistent read may still see an older committed version. Only participating locking accesses follow the stated blocking protocol.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-23-lost-update-6",
+          "test_id": "pt-dbms-sql-23-lost-update",
+          "question_text": "What does the precedence graph of the interleaved lost-update schedule reveal?",
+          "options": [
+            "It has no edges at all",
+            "It contains a cycle — T2's read precedes T1's write (one edge) while T1's read precedes T2's write (the opposite edge) — confirming the schedule is not conflict-serializable",
+            "It proves the schedule is conflict-serializable",
+            "Precedence graphs cannot be built for lost-update schedules"
+          ],
+          "correct_index": 1,
+          "explanation": "The conflicting read/write pairs impose contradictory orderings between T1 and T2, producing a 2-node cycle — exactly the signature of a non-conflict-serializable (and here, incorrect) schedule.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-23-lost-update-7",
+          "test_id": "pt-dbms-sql-23-lost-update",
+          "question_text": "How does a lost update differ from a dirty read?",
+          "options": [
+            "They are the same phenomenon",
+            "In a lost update, both transactions' writes are eventually committed, but the second silently overwrites the first's effect; a dirty read involves reading a value from a transaction that has NOT yet committed (and may later abort)",
+            "A lost update always involves an abort, but a dirty read never does",
+            "A dirty read only happens with SELECT statements, lost update only with UPDATE"
+          ],
+          "correct_index": 1,
+          "explanation": "Lost update is about two committed writes racing (the second erasing the first's effect); dirty read is about reading uncommitted data that might later be rolled back — different mechanisms entirely.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-23-lost-update-8",
+          "test_id": "pt-dbms-sql-23-lost-update",
+          "question_text": "Which blind replacement can overwrite an intended earlier change when the application contract requires preserving that change?",
+          "options": [
+            "A stale whole-row import blindly assigns stock50 after an authorized increment changed it from 50to55, although the contract requires preserving the increment or rejecting stale imports",
+            "A transaction that only ever reads data, never writes",
+            "A transaction that commits immediately after starting",
+            "A transaction that reads the same value twice"
+          ],
+          "correct_index": 0,
+          "explanation": "This explicit contract requires retaining or detecting the earlier adjustment. Two intentional identical constant assignments alone would not establish a lost business effect.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-23-lost-update-new-9",
+          "test_id": "pt-dbms-sql-23-lost-update",
+          "question_text": "Why can two locked UPDATE statements still lose an earlier application calculation?",
+          "options": [
+            "The later statement can assign a value computed from a stale unlocked read",
+            "Every UPDATE ignores row locks",
+            "Locks repair all application calculations",
+            "Commit always combines arithmetic"
+          ],
+          "correct_index": 0,
+          "explanation": "Protecting only each write is narrower than protecting the decision sequence.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-23-lost-update-new-10",
+          "test_id": "pt-dbms-sql-23-lost-update",
+          "question_text": "What final balance composes a withdrawal of 100 and deposit of 500 from 1000?",
+          "options": [
+            "900",
+            "1400",
+            "1000",
+            "1500"
+          ],
+          "correct_index": 1,
+          "explanation": "Both business effects must be included.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-23-lost-update-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-23-lost-update-application-new-1",
+          "test_id": "pt-dbms-sql-23-lost-update-application",
+          "question_text": "Which update avoids computing a decrement from an old application copy?",
+          "options": [
+            "SET quantity = 9 after an old read",
+            "SET quantity = old_client_value",
+            "SET quantity = quantity - 1",
+            "SET quantity = 10 regardless of state"
+          ],
+          "correct_index": 2,
+          "explanation": "Relative arithmetic uses the row state at the update.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-23-lost-update-application-new-2",
+          "test_id": "pt-dbms-sql-23-lost-update-application",
+          "question_text": "A stock decrement includes quantity >= requested. What must the caller inspect?",
+          "options": [
+            "Only whether SQL was uppercase",
+            "Only the table alias",
+            "Only the result column count",
+            "Whether the required row was actually changed"
+          ],
+          "correct_index": 3,
+          "explanation": "An unmet predicate can affect zero rows without an SQL exception.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-23-lost-update-application-new-3",
+          "test_id": "pt-dbms-sql-23-lost-update-application",
+          "question_text": "When should SELECT FOR UPDATE obtain protection for a read-compute-write decision?",
+          "options": [
+            "Before making the decision from the protected row",
+            "After the stale final write",
+            "On an unrelated connection",
+            "Only after COMMIT"
+          ],
+          "correct_index": 0,
+          "explanation": "Protection must cover the relevant read and subsequent action.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-23-lost-update-application-new-4",
+          "test_id": "pt-dbms-sql-23-lost-update-application",
+          "question_text": "A row version changed from 4 to 5. What should an update requiring version 4 do?",
+          "options": [
+            "Silently overwrite version 5",
+            "Match no row in the controlled fixture",
+            "Reset every row version",
+            "Delete the row"
+          ],
+          "correct_index": 1,
+          "explanation": "The stale predicate rejects replacement.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-23-lost-update-application-new-5",
+          "test_id": "pt-dbms-sql-23-lost-update-application",
+          "question_text": "What is required for an optimistic version protocol to work?",
+          "options": [
+            "Only the interface displays a number",
+            "Only one test uses the version",
+            "All relevant writers follow the version contract",
+            "The version never changes"
+          ],
+          "correct_index": 2,
+          "explanation": "Bypassing writers can defeat stale detection.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-23-lost-update-application-new-6",
+          "test_id": "pt-dbms-sql-23-lost-update-application",
+          "question_text": "Can lost update occur without a dirty read?",
+          "options": [
+            "No, the labels are identical",
+            "Only on text columns",
+            "Only after an abort",
+            "Yes, both clients may read the same committed value"
+          ],
+          "correct_index": 3,
+          "explanation": "Overwriting stale computations differs from reading uncommitted data.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-23-lost-update-application-new-7",
+          "test_id": "pt-dbms-sql-23-lost-update-application",
+          "question_text": "Do two blind writes prove a lost business effect without knowing the contract?",
+          "options": [
+            "No, intended replacement semantics must be established",
+            "Yes, all replacements are forbidden",
+            "Only if their SQL is lowercase",
+            "Only if no row exists"
+          ],
+          "correct_index": 0,
+          "explanation": "Last writer semantics can be intentional.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-23-lost-update-application-new-8",
+          "test_id": "pt-dbms-sql-23-lost-update-application",
+          "question_text": "After detecting a stale computed update, what retry is useful?",
+          "options": [
+            "Repeat the same stale assignment forever",
+            "Recompute the complete decision with fresh state when permitted",
+            "Ignore the affected row result",
+            "Commit an unrelated row"
+          ],
+          "correct_index": 1,
+          "explanation": "Fresh state and bounded retry are necessary.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-23-lost-update-application-new-9",
+          "test_id": "pt-dbms-sql-23-lost-update-application",
+          "question_text": "What does one protected counter fail to prove?",
+          "options": [
+            "That the counter has a value",
+            "That UPDATE is valid SQL",
+            "Safety of every cross-row business invariant",
+            "That two arithmetic operations exist"
+          ],
+          "correct_index": 2,
+          "explanation": "Write skew and predicate invariants can need a broader design.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-23-lost-update-application-new-10",
+          "test_id": "pt-dbms-sql-23-lost-update-application",
+          "question_text": "What evidence is needed to claim the shown interleaving was admitted by an engine?",
+          "options": [
+            "Only a final screenshot",
+            "Only the database product name",
+            "Only the application function name",
+            "Controlled sessions, read types, isolation settings and outcomes"
+          ],
+          "correct_index": 3,
+          "explanation": "A theoretical history and observed execution are distinct.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [],
+  "coding_not_applicable": "Lost-update behavior needs controlled competing-session execution and affected-row observation. Two worked SQL/history labs cover stale assignments and optimistic rejection; a single deterministic result-only problem would not prove concurrency safety.",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-23-lost-update-1",
+      "test_id": "pt-dbms-sql-23-lost-update",
+      "question_text": "In the worked lost-update example, what is the correct final balance of A if T1's withdrawal and T2's deposit both apply, run in either serial order?",
+      "options": [
+        "1000",
+        "1500",
+        "1400",
+        "900"
+      ],
+      "correct_index": 2,
+      "explanation": "1000 - 100 (T1's withdrawal) + 500 (T2's deposit) = 1400, regardless of which order the two operations are applied in serially.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-23-lost-update-2",
+      "test_id": "pt-dbms-sql-23-lost-update",
+      "question_text": "In the interleaved schedule shown, why does T1's withdrawal end up 'lost'?",
+      "options": [
+        "T1 never actually committed",
+        "T2 read A's stale value (1000) before T1's write landed, so T2 computed 1500 from the stale value and its write overwrote T1's 900",
+        "T1's write caused a constraint violation",
+        "The database automatically reverted T1's change"
+      ],
+      "correct_index": 1,
+      "explanation": "T2's read at step 2 happened before T1's write at step 4, so T2's subsequent write is based on outdated data and blindly overwrites T1's already-applied change.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-23-lost-update-3",
+      "test_id": "pt-dbms-sql-23-lost-update",
+      "question_text": "Does a lost update raise any error or exception in the database?",
+      "options": [
+        "Yes, it always triggers a constraint violation",
+        "No — both transactions complete and commit successfully; the database ends up with a silently wrong final value with no error raised",
+        "Yes, it always causes a deadlock",
+        "Only if the isolation level is set to SERIALIZABLE"
+      ],
+      "correct_index": 1,
+      "explanation": "This is what makes lost update dangerous — nothing fails visibly; the anomaly is purely in the silently incorrect final data value.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-23-lost-update-4",
+      "test_id": "pt-dbms-sql-23-lost-update",
+      "question_text": "What is the fundamental pattern that causes a lost update?",
+      "options": [
+        "A transaction reads a value, and another transaction later reads the same original (stale) value and writes back a result computed from it, overwriting the first transaction's write",
+        "A transaction commits before another transaction starts",
+        "Two transactions read the same value but neither ever writes",
+        "A transaction rolls back after writing"
+      ],
+      "correct_index": 0,
+      "explanation": "The classic read-compute-write race: both transactions base their computed write on the same original read, so the later write erases the earlier one's effect.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-23-lost-update-5",
+      "test_id": "pt-dbms-sql-23-lost-update",
+      "question_text": "How does locking (e.g., holding an exclusive lock on A from first touch until commit) prevent lost updates?",
+      "options": [
+        "It prevents any transaction from ever reading A",
+        "It forces a competing transaction's read (and thus its whole read-compute-write cycle) to block until the lock holder commits, so the second transaction always reads the FIRST transaction's already-applied result rather than a stale value",
+        "It automatically merges both transactions' updates",
+        "It converts the schedule into a non-serial schedule"
+      ],
+      "correct_index": 1,
+      "explanation": "By making T1's entire read-write sequence atomic with respect to others, T2 is forced to wait, so its eventual read reflects T1's committed change rather than the stale pre-update value.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-23-lost-update-6",
+      "test_id": "pt-dbms-sql-23-lost-update",
+      "question_text": "What does the precedence graph of the interleaved lost-update schedule reveal?",
+      "options": [
+        "It has no edges at all",
+        "It contains a cycle — T2's read precedes T1's write (one edge) while T1's read precedes T2's write (the opposite edge) — confirming the schedule is not conflict-serializable",
+        "It proves the schedule is conflict-serializable",
+        "Precedence graphs cannot be built for lost-update schedules"
+      ],
+      "correct_index": 1,
+      "explanation": "The conflicting read/write pairs impose contradictory orderings between T1 and T2, producing a 2-node cycle — exactly the signature of a non-conflict-serializable (and here, incorrect) schedule.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-23-lost-update-7",
+      "test_id": "pt-dbms-sql-23-lost-update",
+      "question_text": "How does a lost update differ from a dirty read?",
+      "options": [
+        "They are the same phenomenon",
+        "In a lost update, both transactions' writes are eventually committed, but the second silently overwrites the first's effect; a dirty read involves reading a value from a transaction that has NOT yet committed (and may later abort)",
+        "A lost update always involves an abort, but a dirty read never does",
+        "A dirty read only happens with SELECT statements, lost update only with UPDATE"
+      ],
+      "correct_index": 1,
+      "explanation": "Lost update is about two committed writes racing (the second erasing the first's effect); dirty read is about reading uncommitted data that might later be rolled back — different mechanisms entirely.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-23-lost-update-8",
+      "test_id": "pt-dbms-sql-23-lost-update",
+      "question_text": "Which scenario is a 'blind write' variant of lost update?",
+      "options": [
+        "Two sessions both run UPDATE stock SET qty = 50 without reading the current value first, so the second UPDATE simply overwrites the first's result regardless of the row's actual state",
+        "A transaction that only ever reads data, never writes",
+        "A transaction that commits immediately after starting",
+        "A transaction that reads the same value twice"
+      ],
+      "correct_index": 0,
+      "explanation": "Even without an explicit prior read, two competing blind writes to the same item produce the same 'last write wins, earlier write silently vanishes' effect as the classic read-compute-write lost update.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "/root/content_b",
+    "independent_review": "passed",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "canonical_answer_indices_preserved": true,
+    "independent_reviewer": "/root",
+    "independent_review_scope": "Full notes,20MCQs/options/explanations,diagram and stale-read/version labs. Recomputed1400 versus stale1500,relative updates,locking-read boundary,optimistic version rejection and all-writer participation sound. Stale numbering and ambiguous identical blind replacement corrected. Manual editorial/fixture reasoning only; SQL engine,browser,originality and AdSense verification separate."
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-23-lost-update",
+    "original_note_sha256": "a24d0a87be163824f22b803ed5db6784156c97cf39f69aed88d4d796267b74fc",
+    "status": "drafted; not included in prepared paired migrations"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Two stale calculations can omit one intended effect",
+      "description": "Both clients read1000; T2 later assigns1500 and overwrites T1withdrawal. Correct composition would be1400.",
+      "columns": [
+        "Step",
+        "T1",
+        "T2",
+        "Stored balance"
+      ],
+      "rows": [
+        [
+          "1",
+          "Reads1000",
+          "",
+          "1000"
+        ],
+        [
+          "2",
+          "",
+          "Reads1000",
+          "1000"
+        ],
+        [
+          "3",
+          "Writes900",
+          "",
+          "900"
+        ],
+        [
+          "4",
+          "",
+          "Writes1500",
+          "1500"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "provided",
+    "technical_review": "author review; independent review pending",
+    "server_rendering": "unverified",
+    "browser_rendering": "unverified",
+    "independent_review": "pending"
+  },
+  "authoring_status": "drafted; verification pending",
+  "sql_verification": {
+    "scope": "not executed; exact MySQL/provider verification pending",
+    "all_passed": false,
+    "cases": []
+  }
+}

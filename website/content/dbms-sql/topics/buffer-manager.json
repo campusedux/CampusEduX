@@ -1,0 +1,520 @@
+{
+  "source_ref": "chapter-1-database-foundations/buffer-manager",
+  "slug": "buffer-manager",
+  "title": "Buffer Manager",
+  "description": "Understand buffer pools, page hits and misses, replacement policies, working sets, thrashing, competing scans, and dirty-page coordination without unsupported latency or durability claims.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Managing a working copy of database pages\n\nA database often needs the same pages repeatedly. Fetching each page from persistent storage every time would add unnecessary work when a suitable copy can be kept in memory. The buffer-management responsibility manages that page memory, commonly called a buffer pool. It tracks which pages are present, which can be reused, and which contain changes requiring appropriate persistence handling.\n\nBuffering is not the same thing as storing an application's final formatted response. A page buffer holds database-managed physical content used by execution and storage facilities. An application cache might instead hold a computed timetable or an API response. Both use memory to avoid repeated work, but they cache different things and have different correctness responsibilities. Do not assume a page-cache observation proves that an entire application response is current or authorized.\n\nThis topic uses a generic responsibility model and refers to MySQL InnoDB where product behavior matters. Products can organize memory, replacement decisions, and persistence differently. A teaching diagram with one buffer-manager box does not mean all engines implement a single isolated module or use an identical algorithm for every page type and operation.\n\n## Distinguishing a hit from a completed request\n\nA cache hit means the required valid page is already available in the relevant buffer pool. The engine can avoid fetching that page again from persistent storage for that access. This can save useful I/O work, but it does not establish zero latency for the whole query. The request may still need additional pages, visibility decisions, locks or synchronization, computation, and result transfer.\n\nA cache miss means the needed page is not available there in the required state. The system must obtain it through the appropriate storage path and arrange suitable memory. There may also be other caching layers, so a database buffer miss is not a universal measurement of the physical device's final access latency. Define the observation being discussed before drawing a numerical performance conclusion.\n\nSuppose a small departments table is accessed repeatedly by common reports. Its pages may be good candidates for reuse because the useful working set is small and frequently revisited. That is a workload explanation, not a promise that the pages remain resident forever. Replacement policy, pressure from other work, configuration, and the actual access pattern can change which pages remain available.\n\n## Choosing pages for replacement carefully\n\nMemory is finite. When the pool needs space, the engine must decide which existing page contents may be replaced. Least recently used, or LRU, is a familiar teaching example: recent use helps estimate which pages may be valuable again. Real products can use variants and additional information, so do not interpret the example as a literal complete implementation of every buffer pool.\n\nA page's replacement eligibility also matters. Some pages are actively in use or have state that prevents immediate reuse. A dirty page contains modifications relative to its persistent representation and needs suitable handling before those changes can be safely discarded or the space reused. Choosing an eviction candidate therefore involves correctness constraints as well as a guess about future usefulness.\n\nMySQL InnoDB uses a managed LRU organization with mechanisms intended to reduce the impact of certain access patterns. This is one reason a large sequential scan should not be described as necessarily evicting every useful hot page. The actual effect depends on the policy, workload, and settings. Explain the possibility of cache pressure without turning a simplified LRU story into a universal performance prediction.\n\n## Understanding the working set and thrashing\n\nA working set is the data a workload needs repeatedly over the relevant period. It is not necessarily the size of the entire database. A large database can serve a workload that mostly revisits a small set of pages, while a smaller database can support requests that sweep through much of its contents. Memory requirements must be considered against the actual access pattern.\n\nThrashing describes repeated replacement and reloading that prevents the system from retaining the useful working set effectively. A page is evicted, needed again soon, fetched again, and then displaced once more. This can add substantial I/O and waiting. The term identifies a pattern to investigate, not a diagnosis established merely because a database has less memory than its total data size.\n\nIf increasing buffer capacity improves a workload, previous cache pressure is one plausible explanation. It is not the only possible cause, and the improvement should be supported by relevant observations. Compare the workload, cache behavior, I/O, and other conditions rather than infer a complete explanation from one changed setting and one faster-looking request.\n\n## Considering competing workloads\n\nA single large report can request many pages that are not frequently reused. That work may compete with the pages used by common short requests. Depending on replacement behavior and the workload, useful pages can be displaced and other users may incur additional fetches later. The report's effect can therefore outlast the time spent returning its own rows.\n\nThe appropriate response is not automatically a larger pool or a new index. Investigate whether the report's access strategy is suitable, what it actually reads, and how the memory policy handles those accesses. A product may have protections against scan-related pollution, and another bottleneck may dominate the observed latency. Performance changes need evidence about the actual shared workload.\n\nCapacity changes also have broader consequences. Memory used by the buffer pool is not the only memory the process or host needs. Connections, query execution, other database structures, and other services may need resources too. A setting that helps one isolated query can introduce pressure elsewhere. A course explanation should not recommend a universal memory value without the system's actual requirements and measurements.\n\n## Tracking dirty pages and recovery responsibilities\n\nA changed in-memory page is commonly called dirty because its persistent copy still needs to be brought into the appropriate state. Dirty does not mean corrupted. The page may be part of an active transaction or may contain changes whose recovery requirements are handled through the database's mechanisms. Page state alone does not establish that an application has received a durable successful commit.\n\nIn systems using write-ahead logging, required log information must be durable before the corresponding changed data page is persisted under the recovery protocol. This coordination allows the engine to manage data-page writes without requiring every row change to flush its whole page immediately. However, logging alone is not the complete durability guarantee: acknowledgement settings, storage behavior, and the failure being considered still matter.\n\nThe buffer manager therefore cooperates with transaction and storage facilities rather than independently promising durability. It must not discard required changes as though they were an unchanged cache copy. Conversely, it need not treat every modified page as a demand for an immediate, isolated physical write. The product's coordinated protocol determines the valid persistence and replacement behavior.\n\n## Keeping identity, correctness, and speed separate\n\nA buffered page is a copy of a database-managed physical representation, not a new independent logical record. If it contains student identifiers 101 and 102, caching does not create two additional students. The system must also ensure it uses the appropriate valid contents and visibility rules. A fast access to an unsuitable version or unauthorized record would not become correct merely because it avoided a disk read.\n\nThe same separation helps explain a restart. Memory contents may disappear when a process stops. Recovery must use the persistent state and relevant recovery information under the actual guarantees. Do not describe a buffer pool as a backup, or assume that retaining a page in RAM is enough to survive a failure that loses that memory. Caching and recoverability address different responsibilities.\n\n## Explaining a buffer observation with useful evidence\n\nFor a performance investigation, state which page or workload was accessed, what the observed hit or miss means, and what other work may remain. Identify whether the issue concerns repeated fetches, replacement pressure, dirty-page handling, or another responsibility. A cache-hit percentage without workload context can be less informative than a focused account of the requests that miss and the cost those misses create.\n\nA strong explanation connects memory reuse to the system's wider guarantees. The buffer pool can avoid repeated persistent reads, replacement must respect page state, and dirty pages require coordinated persistence and recovery. These ideas explain both the benefit of caching and its limits without promising instant queries, permanent residency, or durability merely because data happened to be present in memory.",
+  "references": [
+    {
+      "title": "MySQL InnoDB buffer pool",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/innodb-buffer-pool.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-1-buffer-manager",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-1-buffer-manager-1",
+          "test_id": "pt-dbms-sql-1-buffer-manager",
+          "question_text": "What is the core purpose of the Buffer Manager?",
+          "options": [
+            "To cache disk pages in memory (the buffer pool) so frequently accessed data can be served from RAM instead of slow disk I/O",
+            "To parse and optimize SQL statements",
+            "To enforce foreign-key constraints between tables",
+            "To authenticate database user accounts"
+          ],
+          "correct_index": 0,
+          "explanation": "The notes define the Buffer Manager's purpose as caching disk pages in memory to avoid slow disk I/O.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-1-buffer-manager-2",
+          "test_id": "pt-dbms-sql-1-buffer-manager",
+          "question_text": "What happens on a 'cache hit' in the Buffer Manager?",
+          "options": [
+            "The valid requested page can be served without that new persistent fetch, while other work or waits may remain",
+            "The whole request is guaranteed to finish with zero latency",
+            "Every page in the database becomes cached automatically",
+            "All permission checks are eliminated"
+          ],
+          "correct_index": 0,
+          "explanation": "A hit concerns one relevant page access, not a guarantee about all work in the complete query.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-1-buffer-manager-3",
+          "test_id": "pt-dbms-sql-1-buffer-manager",
+          "question_text": "Which replacement policy is given as an example of how the Buffer Manager decides which cached page to evict when the pool is full?",
+          "options": [
+            "LRU (Least Recently Used)",
+            "FIFO ordering of user logins",
+            "Alphabetical order of table names",
+            "Random selection of the DBA's choice each morning"
+          ],
+          "correct_index": 0,
+          "explanation": "The notes name LRU (or a clock algorithm) as an example replacement policy for evicting pages from a full buffer pool.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-1-buffer-manager-4",
+          "test_id": "pt-dbms-sql-1-buffer-manager",
+          "question_text": "Why can a small, repeatedly accessed departments table be a useful buffer-reuse candidate without guaranteeing permanent residency?",
+          "options": [
+            "Its working set can be small and frequently revisited, but policy and competing pressure still matter",
+            "Every small table is pinned forever by definition",
+            "Table names determine permanent cache residency",
+            "All queries stop reading storage once the table is cached"
+          ],
+          "correct_index": 0,
+          "explanation": "Repeated access and fit can favor reuse. Actual residency depends on the workload and implementation.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-1-buffer-manager-5",
+          "test_id": "pt-dbms-sql-1-buffer-manager",
+          "question_text": "What is 'thrashing' as described in the notes?",
+          "options": [
+            "Pages being repeatedly evicted from an undersized buffer pool and then immediately re-read from disk",
+            "A type of SQL injection attack",
+            "A method for compressing dirty pages before writing them to disk",
+            "The process of renaming a table while it is being queried"
+          ],
+          "correct_index": 0,
+          "explanation": "The notes define thrashing exactly this way: repeated eviction and re-reading of pages because the pool is too small for the working set.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-1-buffer-manager-6",
+          "test_id": "pt-dbms-sql-1-buffer-manager",
+          "question_text": "How can a single large, unindexed report query over a huge table affect other users' queries running at the same time, per the notes?",
+          "options": [
+            "It can create cache pressure and displace useful pages, depending on workload and replacement protections",
+            "It always evicts every useful page in every engine",
+            "It has no possible interaction with any other work",
+            "It automatically proves every query is unauthorized"
+          ],
+          "correct_index": 0,
+          "explanation": "Large accesses can affect shared memory behavior, but products can use scan-resistant policies and the actual effect needs evidence.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-1-buffer-manager-7",
+          "test_id": "pt-dbms-sql-1-buffer-manager",
+          "question_text": "Why does dirty-page handling need coordination with transaction, storage, and recovery facilities?",
+          "options": [
+            "Buffered modifications are not necessarily persisted yet; log ordering and the other durability conditions must be coordinated",
+            "A dirty page is always already durable",
+            "Logging alone proves survival of every possible failure",
+            "Every cache page is a complete independent backup"
+          ],
+          "correct_index": 0,
+          "explanation": "Write-ahead logging can support recovery, but acknowledgement settings, storage behavior and the failure assumptions also matter.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-1-buffer-manager-8",
+          "test_id": "pt-dbms-sql-1-buffer-manager",
+          "question_text": "A DBA notices that increasing buffer pool memory by a modest amount dramatically improves performance on a workload that was previously very slow. What does the notes suggest was likely happening before the change?",
+          "options": [
+            "Previous cache pressure or thrashing is a plausible cause to test against workload, cache and I/O observations",
+            "A faster request alone proves every aspect of thrashing",
+            "Every larger buffer setting is correct for every host",
+            "No measurements are needed after any memory change"
+          ],
+          "correct_index": 0,
+          "explanation": "A performance change can suggest a hypothesis without proving it. Compare the relevant conditions and measurements.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "question_text": "Is a database page buffer the same thing as a cached formatted API response?",
+          "options": [
+            "Yes; every page is already a complete web response",
+            "Yes; page residency proves every response is current and authorized",
+            "No; they cache different representations and have different correctness responsibilities",
+            "No; applications can never use caches"
+          ],
+          "correct_index": 2,
+          "explanation": "A page pool manages physical database content. An application cache can hold a higher-level computed result.",
+          "marks": 1,
+          "id": "tq-dbx2-buffer-manager-1-9",
+          "test_id": "pt-dbms-sql-1-buffer-manager",
+          "sort_order": 8
+        },
+        {
+          "question_text": "Does a database buffer miss by itself specify the final storage-device latency?",
+          "options": [
+            "Yes; every miss has identical latency",
+            "Yes; all hosts have the same storage device",
+            "No; misses can never involve I/O",
+            "No; the observation concerns that buffer layer and other layers or work may matter"
+          ],
+          "correct_index": 3,
+          "explanation": "Define the cache layer and workload before making a performance claim.",
+          "marks": 1,
+          "id": "tq-dbx2-buffer-manager-1-10",
+          "test_id": "pt-dbms-sql-1-buffer-manager",
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbx2-buffer-manager-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "question_text": "The required valid page is in the buffer pool. What does that hit establish?",
+          "options": [
+            "That every query finishes instantly",
+            "That every user is authorized for the page",
+            "That all other required pages are present",
+            "That this access can avoid fetching that page again from persistent storage"
+          ],
+          "correct_index": 3,
+          "explanation": "A hit is about a particular access; the complete request can still have other work or waits.",
+          "marks": 1,
+          "id": "tq-dbx2-buffer-manager-2-1",
+          "test_id": "pt-dbx2-buffer-manager-application",
+          "sort_order": 0
+        },
+        {
+          "question_text": "A frequently read small departments table fits in the working memory. What is a reasonable explanation?",
+          "options": [
+            "Its pages are guaranteed never to be replaced",
+            "Its pages can be useful reuse candidates, subject to policy and pressure",
+            "It proves the whole database fits in RAM",
+            "It needs no visibility or access rules"
+          ],
+          "correct_index": 1,
+          "explanation": "Repeated use and a small working set can favor reuse without guaranteeing permanent residency.",
+          "marks": 1,
+          "id": "tq-dbx2-buffer-manager-2-2",
+          "test_id": "pt-dbx2-buffer-manager-application",
+          "sort_order": 1
+        },
+        {
+          "question_text": "A page has unpersisted modifications relative to its stored representation. What must replacement respect?",
+          "options": [
+            "A rule that the page is necessarily corrupt",
+            "The required persistence and recovery handling for those changes",
+            "A rule that all dirty pages can be discarded immediately",
+            "The assumption that every modification already has durable commit status"
+          ],
+          "correct_index": 1,
+          "explanation": "Dirty state adds correctness constraints to memory replacement.",
+          "marks": 1,
+          "id": "tq-dbx2-buffer-manager-2-3",
+          "test_id": "pt-dbx2-buffer-manager-application",
+          "sort_order": 2
+        },
+        {
+          "question_text": "Which pattern is consistent with thrashing?",
+          "options": [
+            "Useful pages are repeatedly evicted and reloaded soon afterward",
+            "The whole workload stays in memory with no relevant replacement",
+            "An index is named differently",
+            "Every client has the same account title"
+          ],
+          "correct_index": 0,
+          "explanation": "Thrashing concerns ineffective retention of the working set and repeated fetch work.",
+          "marks": 1,
+          "id": "tq-dbx2-buffer-manager-2-4",
+          "test_id": "pt-dbx2-buffer-manager-application",
+          "sort_order": 3
+        },
+        {
+          "question_text": "The database is larger than RAM. Does that fact alone prove thrashing?",
+          "options": [
+            "Yes; total size alone diagnoses every query",
+            "Yes; every page must be read for every request",
+            "No; buffer pools never have finite capacity",
+            "No; the workload may repeatedly use only a small part of the data"
+          ],
+          "correct_index": 3,
+          "explanation": "The relevant working set and access pattern determine whether replacement is harming useful reuse.",
+          "marks": 1,
+          "id": "tq-dbx2-buffer-manager-2-5",
+          "test_id": "pt-dbx2-buffer-manager-application",
+          "sort_order": 4
+        },
+        {
+          "question_text": "A large scan runs alongside common short lookups. What should be investigated?",
+          "options": [
+            "A guarantee that every hot page must be evicted",
+            "A guarantee that no shared workload can ever be affected",
+            "Whether it creates cache pressure or displaces useful pages under the actual policy",
+            "Only the report's title length"
+          ],
+          "correct_index": 2,
+          "explanation": "Competing access patterns can matter, but scan-resistance and other product behavior affect the outcome.",
+          "marks": 1,
+          "id": "tq-dbx2-buffer-manager-2-6",
+          "test_id": "pt-dbx2-buffer-manager-application",
+          "sort_order": 5
+        },
+        {
+          "question_text": "Increasing the pool coincides with better performance. What is justified?",
+          "options": [
+            "Investigate whether previous cache pressure explains the measured change",
+            "Declare thrashing proven without any other evidence",
+            "Assume every unrelated bottleneck disappeared",
+            "Use the same setting for every deployment"
+          ],
+          "correct_index": 0,
+          "explanation": "A plausible cause still needs evidence about comparable workload conditions, cache behavior and I/O.",
+          "marks": 1,
+          "id": "tq-dbx2-buffer-manager-2-7",
+          "test_id": "pt-dbx2-buffer-manager-application",
+          "sort_order": 6
+        },
+        {
+          "question_text": "Required recovery logging has not reached its necessary durable state. What must not be inferred from a dirty page in RAM?",
+          "options": [
+            "That an in-memory representation can exist",
+            "That memory and persistent storage are different",
+            "That the intended durable commit guarantee is already established",
+            "That coordinated recovery protocols can matter"
+          ],
+          "correct_index": 2,
+          "explanation": "Buffer presence is not durable persistence. Logging, acknowledgement, storage and failure assumptions need to align.",
+          "marks": 1,
+          "id": "tq-dbx2-buffer-manager-2-8",
+          "test_id": "pt-dbx2-buffer-manager-application",
+          "sort_order": 7
+        },
+        {
+          "question_text": "A process restart loses its page memory. What does recovery rely on?",
+          "options": [
+            "The vanished RAM pages acting as a permanent backup",
+            "Persistent state and recovery information under the actual configured guarantees",
+            "A claim that caches are equivalent to backups",
+            "Automatically invented copies of every missing value"
+          ],
+          "correct_index": 1,
+          "explanation": "Caching improves access behavior; recoverability requires appropriate persistent information and procedures.",
+          "marks": 1,
+          "id": "tq-dbx2-buffer-manager-2-9",
+          "test_id": "pt-dbx2-buffer-manager-application",
+          "sort_order": 8
+        },
+        {
+          "question_text": "Which buffer-pool explanation is strongest?",
+          "options": [
+            "State the observed layer and workload, identify replacement/page state, and consider other required work",
+            "Promise zero query latency whenever one page hits",
+            "Infer universal settings from one faster request",
+            "Treat every dirty page as corruption"
+          ],
+          "correct_index": 0,
+          "explanation": "A useful explanation connects memory reuse, correctness constraints, and measured context without unsupported guarantees.",
+          "marks": 1,
+          "id": "tq-dbx2-buffer-manager-2-10",
+          "test_id": "pt-dbx2-buffer-manager-application",
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [],
+  "coding_not_applicable": "A conceptual memory-management topic; programming tasks belong to query, indexing and transaction topics rather than forcing an artificial cache implementation exercise.",
+  "review": {
+    "reviewer": "coordinator",
+    "independent_review": "unavailable; no agent tools",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "definitions, worked examples and question coverage checked; no external plagiarism certification",
+    "existing_question_corrections": [
+      "tq-dbms-sql-1-buffer-manager-2",
+      "tq-dbms-sql-1-buffer-manager-4",
+      "tq-dbms-sql-1-buffer-manager-6",
+      "tq-dbms-sql-1-buffer-manager-7",
+      "tq-dbms-sql-1-buffer-manager-8"
+    ],
+    "canonical_answer_indices_preserved": true,
+    "answer_position_policy": "Original indices retained; new canonical positions shuffled; website display order also shuffled per attempt."
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-1-buffer-manager",
+    "original_note_sha256": "1607181ddb886092c73a77819a4a6d12f1439eaab043c0ae42e2c6e2a090dc79",
+    "status": "paired migration prepared; not applied"
+  },
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-1-buffer-manager-1",
+      "test_id": "pt-dbms-sql-1-buffer-manager",
+      "question_text": "What is the core purpose of the Buffer Manager?",
+      "options": [
+        "To cache disk pages in memory (the buffer pool) so frequently accessed data can be served from RAM instead of slow disk I/O",
+        "To parse and optimize SQL statements",
+        "To enforce foreign-key constraints between tables",
+        "To authenticate database user accounts"
+      ],
+      "correct_index": 0,
+      "explanation": "The notes define the Buffer Manager's purpose as caching disk pages in memory to avoid slow disk I/O.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-1-buffer-manager-2",
+      "test_id": "pt-dbms-sql-1-buffer-manager",
+      "question_text": "What happens on a 'cache hit' in the Buffer Manager?",
+      "options": [
+        "The requested page is already in the buffer pool and is returned immediately with no disk access",
+        "The Storage Manager must always be contacted regardless",
+        "The page is permanently deleted from memory",
+        "The Transaction Manager rolls back the current query"
+      ],
+      "correct_index": 0,
+      "explanation": "The notes describe a cache hit as returning an already-cached page immediately, with no disk access needed.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-1-buffer-manager-3",
+      "test_id": "pt-dbms-sql-1-buffer-manager",
+      "question_text": "Which replacement policy is given as an example of how the Buffer Manager decides which cached page to evict when the pool is full?",
+      "options": [
+        "LRU (Least Recently Used)",
+        "FIFO ordering of user logins",
+        "Alphabetical order of table names",
+        "Random selection of the DBA's choice each morning"
+      ],
+      "correct_index": 0,
+      "explanation": "The notes name LRU (or a clock algorithm) as an example replacement policy for evicting pages from a full buffer pool.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-1-buffer-manager-4",
+      "test_id": "pt-dbms-sql-1-buffer-manager",
+      "question_text": "Why does the small departments table tend to stay resident in the buffer pool almost permanently, per the notes?",
+      "options": [
+        "It is read constantly and easily fits in memory",
+        "It is never queried by any user",
+        "It is stored in a separate, dedicated DBMS",
+        "The Storage Manager marks it as permanently dirty"
+      ],
+      "correct_index": 0,
+      "explanation": "The notes explain that frequent access plus small size keeps the departments table resident in the buffer pool.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-1-buffer-manager-5",
+      "test_id": "pt-dbms-sql-1-buffer-manager",
+      "question_text": "What is 'thrashing' as described in the notes?",
+      "options": [
+        "Pages being repeatedly evicted from an undersized buffer pool and then immediately re-read from disk",
+        "A type of SQL injection attack",
+        "A method for compressing dirty pages before writing them to disk",
+        "The process of renaming a table while it is being queried"
+      ],
+      "correct_index": 0,
+      "explanation": "The notes define thrashing exactly this way: repeated eviction and re-reading of pages because the pool is too small for the working set.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-1-buffer-manager-6",
+      "test_id": "pt-dbms-sql-1-buffer-manager",
+      "question_text": "How can a single large, unindexed report query over a huge table affect other users' queries running at the same time, per the notes?",
+      "options": [
+        "It can flush the buffer pool's normally-cached, frequently-used pages out to make room for its own pages, degrading performance for others",
+        "It has no effect on other users since each query gets its own private buffer pool",
+        "It automatically pauses all other queries until it completes",
+        "It permanently disables the Buffer Manager for the rest of the session"
+      ],
+      "correct_index": 0,
+      "explanation": "The notes describe this exact scenario: a large scan can evict other users' cached pages, hurting their subsequent query performance.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-1-buffer-manager-7",
+      "test_id": "pt-dbms-sql-1-buffer-manager",
+      "question_text": "Why does the notes say Buffer Manager durability 'depends entirely' on the Transaction Manager's write-ahead log?",
+      "options": [
+        "Because dirty pages are not written to disk immediately, so if a crash happens first, correct recovery relies on the WAL having already recorded the change",
+        "Because the Buffer Manager never interacts with the Transaction Manager in any way",
+        "Because the Buffer Manager writes every change to disk instantly, making the WAL unnecessary",
+        "Because the WAL is stored inside the buffer pool itself and is lost on eviction"
+      ],
+      "correct_index": 0,
+      "explanation": "The notes explicitly tie Buffer Manager caching behavior (delayed flush of dirty pages) to the Transaction Manager's WAL for correct crash recovery.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-1-buffer-manager-8",
+      "test_id": "pt-dbms-sql-1-buffer-manager",
+      "question_text": "A DBA notices that increasing buffer pool memory by a modest amount dramatically improves performance on a workload that was previously very slow. What does the notes suggest was likely happening before the change?",
+      "options": [
+        "Thrashing — the pool was too small for the working set, causing repeated eviction and re-reading of the same pages from disk",
+        "The Query Processor was refusing to generate any execution plan at all",
+        "The Transaction Manager was blocking all reads due to a SERIALIZABLE isolation level",
+        "The Storage Manager had run out of disk space entirely"
+      ],
+      "correct_index": 0,
+      "explanation": "The notes state that thrashing from an undersized buffer pool hurts performance far more than a moderate memory increase would cost to fix, matching this scenario.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "What a page-buffer observation does and does not establish",
+      "description": "This comparison uses page-level observations. It does not measure a deployment or guarantee whole-query latency, authorization, commit status, or recovery.",
+      "columns": [
+        "Observation",
+        "Meaning",
+        "Limit"
+      ],
+      "rows": [
+        [
+          "Valid page hit",
+          "The page is available for reuse in this buffer",
+          "Other pages, checks and computation can still be needed"
+        ],
+        [
+          "Page miss",
+          "The needed page is not available here in the required state",
+          "Other cache layers and storage behavior can affect cost"
+        ],
+        [
+          "Dirty page",
+          "Memory differs from the persistent representation to be maintained",
+          "Not proof of corruption or durable commit"
+        ],
+        [
+          "Replacement pressure",
+          "Useful working pages may compete for finite memory",
+          "Actual policy and workload determine effects"
+        ],
+        [
+          "Repeated eviction/reload",
+          "A pattern consistent with thrashing",
+          "Needs context and measurements rather than a size-only diagnosis"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "coordinator review",
+    "server_rendering": "passed",
+    "browser_rendering": "unverified",
+    "independent_review": "unavailable; no agent tools",
+    "rendering_check": "Actual LessonBlock/TopicDiagrams in React server rendering; 18 authored package checks passed; desktop/mobile browser QA remains unverified"
+  }
+}

@@ -1,0 +1,607 @@
+{
+  "source_ref": "chapter-14-sql-functions/max",
+  "slug": "max",
+  "title": "MAX",
+  "description": "Use SQL MAX for upper boundaries and latest times; handle negative values, NULL, grouping, and every tied latest eligible record.",
+  "dialect": "MySQL 8.4",
+  "notes": "## A maximum summarizes the upper observed boundary\n\nMAX returns the greatest known value of an expression among the rows a query includes. A campus workshop can ask for its highest recorded sensor reading or the latest accepted inspection time. The result describes an observed boundary. It does not predict the next measurement, establish a safe operating threshold, or explain why the maximum occurred.\n\nBegin with [SELECT](/learning/dbms-sql-tutorial/select), basic predicates, and the meaning of a missing value. Decide what one source row represents. Comparing one measurement per device is different from comparing every historical measurement. Both questions can use MAX, but they describe different populations and can support different operational decisions.\n\n## Start with one reproducible measurement question\n\nSuppose the workshop records the following synthetic temperature observations. The approved filter excludes a rejected reading before the maximum is calculated. The expression inside MAX supplies the measured quantity, while its output alias names the resulting summary. Neither the input ordering nor the numeric size of a reading identifier determines the greatest temperature.\n\n```sql\nCREATE TABLE readings (\n  reading_id INT PRIMARY KEY,\n  temperature DECIMAL(5,2),\n  approved INT NOT NULL\n);\nINSERT INTO readings VALUES\n  (41, 18.50, 1), (7, 22.00, 1), (99, 90.00, 0);\n\nSELECT MAX(temperature) AS peak_temperature\nFROM readings\nWHERE approved = 1;\n```\n\nA manual trace anticipates twenty-two as the peak among approved readings. Ninety does not qualify, despite being the largest stored temperature. That anticipated result still requires actual execution for engine verification. If rejected measurements must be investigated, build a separate report rather than silently change the accepted-population definition.\n\n## Negative measurements expose incorrect starting assumptions\n\nThe largest value need not be positive. If a cold-storage sensor records negative eight, negative three, and negative six, the maximum is negative three. Starting an application accumulator at zero would invent a value outside that population. SQL MAX does not insert such a zero merely because all observed values are negative.\n\nThe same reasoning applies to credits, differences, and deviations when negative values are legitimate. Declare units and domain before interpreting a result. A maximum negative deviation can be numerically greatest while having a smaller absolute magnitude than another reading. Largest value and largest distance from zero are different questions requiring different expressions.\n\n## Unknown readings are excluded without becoming zero\n\nA [NULL](/learning/dbms-sql-tutorial/null-values) temperature does not compete with known temperatures. MAX ignores that missing expression value. An all-missing population produces a NULL maximum, as does an empty input to an ungrouped aggregate. A genuine zero remains a known candidate and can outrank every negative measurement.\n\nReplacing unknown inputs with zero before aggregation changes that behavior. A cold-storage report could suddenly claim an observed peak of zero even though no sensor reported it. If the interface needs a label for unavailable data, keep that presentation decision separate from the measurement calculation and preserve the reason the value is unavailable.\n\n## Preserve evidence about the summarized population\n\nReturn counts when a NULL maximum needs interpretation. Counting rows and counting known expression values provide different information. A workshop with no inspection records needs a different explanation from a workshop whose inspections exist but lack recorded times. The maximum alone cannot distinguish these cases or tell how complete the underlying data is.\n\n```sql\nSELECT COUNT(*) AS inspected_rows,\n       COUNT(temperature) AS known_readings,\n       MAX(temperature) AS peak_temperature\nFROM readings\nWHERE approved = 1;\n```\n\nThese counters describe the admitted population, not the number of all possible devices or inspections. A filtered report can exclude records legitimately. Name its scope in the interface and documentation so a reader does not mistake a peak among approved observations for a peak across every physical event.\n\n## Dates can identify the latest recorded time\n\nMAX on a suitable date or datetime column finds its latest known value. That supports questions such as the most recent accepted inspection per laboratory. It does not prove that the record was inserted last. Backfilled events can have old occurrence times and new insertion times, so choose the timestamp representing the actual question.\n\nDistinguish the latest occurrence, latest receipt, and latest revision. If a timestamp includes an interpreted time zone, define the reporting context and use compatible types. A larger imported identifier is not automatically a later event. If clocks from different devices are unreliable, a perfectly computed maximum can still reflect flawed source timestamps.\n\n## A latest time does not identify one complete record\n\nSeveral inspections can share the same latest timestamp. MAX yields that timestamp, without choosing one inspector, comment, or result. Adding an arbitrary detail column beside an ungrouped maximum does not establish that the detail belongs to the latest observation. MySQL grouping rules reject many such combinations under normal settings.\n\nDecide whether the report needs all tied latest observations or exactly one. For all ties, calculate the maximum within the intended scope and compare qualifying detail rows with it. For one record, order by the event time and an explicit distinguishing identity. A deterministic tie rule is a product requirement, not a property supplied automatically by MAX.\n\n## Group boundaries prevent unrelated records from competing\n\nA maximum per laboratory requires grouping by laboratory identity. A global maximum instead allows every laboratory's readings to compete in one population. Giving the global result a laboratory label afterward cannot recover separate per-laboratory boundaries. Establish the output grain before choosing the grouping expression.\n\nWhen retrieving all latest rows per laboratory, both the summary and detail sides must retain eligibility restrictions. Otherwise a rejected row sharing an accepted timestamp can appear through the comparison. Include fixtures with tied timestamps and mixed acceptance states; they expose scope mismatches that a simple one-row-per-laboratory sample would hide.\n\n## Filtering a summary differs from filtering its source\n\nWHERE determines which observations contribute to the aggregate. HAVING restricts completed groups according to a group result. Excluding rejected readings before grouping and retaining laboratories whose accepted peak exceeds a threshold are separate steps. Swapping them can change both which measurements compete and which laboratory summaries remain.\n\nAn expression such as MAX of a conditional CASE can summarize one category while preserving other rows for companion calculations. Missing branches then matter: omitting ELSE supplies NULL, whereas ELSE zero introduces a known zero candidate. For negative measurements, that invented candidate can dominate the real category maximum.\n\n## Comparing two boundaries does not describe a distribution\n\nMAX minus MIN gives the spread between the greatest and smallest known values in the same admitted population. It says nothing by itself about how frequently readings cluster near either end. Two laboratories can have the same spread but very different patterns of ordinary measurements. Use additional summaries or the actual observations when the distribution matters.\n\nKeep the units consistent and consider numeric representation. DECIMAL preserves its declared decimal scale, while floating-point types approximate many values. An aggregate compares the stored representations; it cannot recover precision lost before storage. Avoid claiming that a chosen type removes every measurement error, rounding policy, or overflow concern.\n\n## Text and duplicate handling follow their own contracts\n\nFor text, greatest means greatest under the applicable collation, not necessarily the last English word a person would expect. Numeric-looking codes stored as strings can compare differently from numeric quantities. Verify specialized type behavior; MySQL MIN and MAX compare ENUM and SET using their string values rather than their enumeration positions.\n\nDuplicate occurrences of the same known value do not move the maximum, so DISTINCT inside MAX does not change this boundary. However, a join multiplying measurements can still corrupt companion counts or totals. An unchanged peak cannot certify the correctness of a whole multi-aggregate report or the detail records later retrieved.\n\n## Test the upper boundary before tuning its access path\n\nA useful fixture includes only negative readings, an unknown reading, an excluded high reading, and several tied greatest accepted readings. Also test an empty population and a represented group containing only missing measurements. These cases distinguish incorrect zero fallbacks, missing filters, lost ties, and misunderstood output row counts.\n\nIndexes can accelerate suitable maximum queries, but filters, groups, and expressions affect available plans. Measure representative queries after the meaning is correct. The beginner exercise finds a known approved peak; the intermediate exercise returns all latest accepted inspections within each laboratory. Explain eligibility, comparison value, tie policy, and output ordering before interpreting any performance result.\n\n\nA windowed MAX with an OVER clause preserves source rows while calculating a boundary for each partition. This is useful when the result must retain every inspection tied at its laboratory's latest accepted time. A derived query can filter the annotated rows afterward. Place acceptance conditions before the window calculation so rejected observations do not establish that boundary.\n",
+  "references": [
+    {
+      "title": "MySQL 8.4 aggregate function descriptions",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/aggregate-functions.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-14-max",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-14-max-1",
+          "test_id": "pt-dbms-sql-14-max",
+          "question_text": "For observations 7, NULL, 14, and -2, what is MAX(value)?",
+          "options": [
+            "7",
+            "14",
+            "NULL",
+            "0"
+          ],
+          "correct_index": 1,
+          "explanation": "The greatest known numeric value is fourteen; absence contributes no candidate.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-14-max-2",
+          "test_id": "pt-dbms-sql-14-max",
+          "question_text": "What does MAX(occurred_at) identify among comparable known event timestamps?",
+          "options": [
+            "The row inserted last regardless of event time",
+            "The latest occurrence timestamp",
+            "The earliest timestamp",
+            "The current time"
+          ],
+          "correct_index": 1,
+          "explanation": "Choose occurrence time deliberately; insertion order is a different property.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-14-max-3",
+          "test_id": "pt-dbms-sql-14-max",
+          "question_text": "Under a collation ordering Birch before Maple before Willow, what is MAX(name) for Maple, Birch, Willow, Maple?",
+          "options": [
+            "Birch",
+            "Maple",
+            "Willow",
+            "NULL"
+          ],
+          "correct_index": 2,
+          "explanation": "The greatest candidate follows the stated string ordering.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-14-max-4",
+          "test_id": "pt-dbms-sql-14-max",
+          "question_text": "Which expression calculates the observed spread of one admitted numeric population?",
+          "options": [
+            "MAX(value) + MIN(value)",
+            "MAX(value) - MIN(value)",
+            "AVG(value) / COUNT(*)",
+            "MAX(value) * COUNT(*)"
+          ],
+          "correct_index": 1,
+          "explanation": "Subtracting its lower boundary from its upper boundary gives the range.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-14-max-5",
+          "test_id": "pt-dbms-sql-14-max",
+          "question_text": "What does an ungrouped MAX(value) return when its input has no rows?",
+          "options": [
+            "0",
+            "NULL",
+            "An automatic largest integer",
+            "A guaranteed error"
+          ],
+          "correct_index": 1,
+          "explanation": "No known candidate produces a missing boundary, not an invented zero.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-14-max-6",
+          "test_id": "pt-dbms-sql-14-max",
+          "question_text": "What does DISTINCT change about MAX over the same values?",
+          "options": [
+            "It does not change the maximum",
+            "It removes the greatest value",
+            "It changes MAX into an average",
+            "It makes the syntax invalid in ordinary aggregate form"
+          ],
+          "correct_index": 0,
+          "explanation": "Repeated copies of a candidate cannot move the greatest boundary.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-14-max-7",
+          "test_id": "pt-dbms-sql-14-max",
+          "question_text": "Why consider DECIMAL rather than FLOAT for declared exact decimal quantities?",
+          "options": [
+            "FLOAT cannot be aggregated",
+            "FLOAT approximates many decimal values before comparisons occur",
+            "MAX always rounds FLOAT to integers",
+            "DECIMAL eliminates every possible domain or measurement error"
+          ],
+          "correct_index": 1,
+          "explanation": "The aggregate compares stored representations; a type cannot repair every source-data issue.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-14-max-8",
+          "test_id": "pt-dbms-sql-14-max",
+          "question_text": "If approved values are 10, 25, and 40, what is MAX(value)-MIN(value)?",
+          "options": [
+            "30",
+            "15",
+            "40",
+            "75"
+          ],
+          "correct_index": 0,
+          "explanation": "The largest value is forty and the smallest is ten.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-14-max-new-9",
+          "test_id": "pt-dbms-sql-14-max",
+          "question_text": "What is MAX(value) for -12, -4, and -9?",
+          "options": [
+            "-4",
+            "0",
+            "-12",
+            "12"
+          ],
+          "correct_index": 0,
+          "explanation": "The largest observed number can be negative.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-14-max-new-10",
+          "test_id": "pt-dbms-sql-14-max",
+          "question_text": "A rejected reading is higher than every approved reading. What should MAX over approved input return?",
+          "options": [
+            "The rejected value because it is globally largest",
+            "The greatest approved reading",
+            "NULL whenever any rejected reading exists",
+            "The last inserted approved row's value"
+          ],
+          "correct_index": 1,
+          "explanation": "WHERE establishes the population before the aggregate compares candidates.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-14-max-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-14-max-application-new-1",
+          "test_id": "pt-dbms-sql-14-max-application",
+          "question_text": "Why is MAX(event_id) not a general replacement for MAX(occurred_at)?",
+          "options": [
+            "Timestamps cannot be aggregated",
+            "Every imported id is a timestamp",
+            "Identifier magnitude need not represent event chronology",
+            "MAX ignores all integer values"
+          ],
+          "correct_index": 2,
+          "explanation": "Backfills, imports, and independent generators can separate identity order from event time.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-14-max-application-new-2",
+          "test_id": "pt-dbms-sql-14-max-application",
+          "question_text": "Two accepted inspections share the latest time. Does MAX choose an inspector?",
+          "options": [
+            "Yes, the first inserted inspector",
+            "Yes, the alphabetically last inspector",
+            "Only if the timestamp has seconds",
+            "No; it returns the time boundary alone"
+          ],
+          "correct_index": 3,
+          "explanation": "Retrieving sibling details requires a defined tie and row-selection policy.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-14-max-application-new-3",
+          "test_id": "pt-dbms-sql-14-max-application",
+          "question_text": "What does MAX(COALESCE(value,0)) risk when all known measurements are negative?",
+          "options": [
+            "Returning an invented zero from missing input",
+            "Always returning the most negative value",
+            "Mutating every negative source value to NULL",
+            "Counting missing observations"
+          ],
+          "correct_index": 0,
+          "explanation": "Replacing an unknown candidate before aggregation changes the comparison population.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-14-max-application-new-4",
+          "test_id": "pt-dbms-sql-14-max-application",
+          "question_text": "Which evidence helps distinguish an all-NULL population from no matching rows?",
+          "options": [
+            "MAX(value) alone",
+            "COUNT(*) and COUNT(value) beside MAX(value)",
+            "The maximum identifier alone",
+            "Sorting the summary descending"
+          ],
+          "correct_index": 1,
+          "explanation": "The two counts describe row existence and known measurement coverage.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-14-max-application-new-5",
+          "test_id": "pt-dbms-sql-14-max-application",
+          "question_text": "A represented laboratory group has only NULL inspection times. What is its grouped MAX?",
+          "options": [
+            "A current-time default",
+            "No group can exist",
+            "NULL for that represented group",
+            "The earliest date supported by MySQL"
+          ],
+          "correct_index": 2,
+          "explanation": "Missing measurements do not remove a group already represented in the input.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-14-max-application-new-6",
+          "test_id": "pt-dbms-sql-14-max-application",
+          "question_text": "A report needs all latest accepted rows per laboratory. Where should acceptance be applied for a windowed solution?",
+          "options": [
+            "Only after calculating a boundary that includes rejected rows",
+            "Only inside the final ORDER BY",
+            "It is unnecessary when ids are unique",
+            "Before calculating MAX over each laboratory partition"
+          ],
+          "correct_index": 3,
+          "explanation": "Rejected observations must not set the accepted population's latest boundary.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-14-max-application-new-7",
+          "test_id": "pt-dbms-sql-14-max-application",
+          "question_text": "Which clause can retain groups whose calculated peak exceeds a threshold?",
+          "options": [
+            "HAVING",
+            "A column DEFAULT",
+            "An unqualified ordinary WHERE MAX call in the same block",
+            "RENAME TABLE"
+          ],
+          "correct_index": 0,
+          "explanation": "HAVING can test completed group summaries.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-14-max-application-new-8",
+          "test_id": "pt-dbms-sql-14-max-application",
+          "question_text": "Can two measurement populations share a range while having different distributions?",
+          "options": [
+            "No, equal ranges imply identical observations",
+            "Yes; the endpoints do not describe frequencies inside the range",
+            "Only when every value is NULL",
+            "No, MAX also returns a histogram"
+          ],
+          "correct_index": 1,
+          "explanation": "The spread summarizes endpoints, leaving clustering and frequency unreported.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-14-max-application-new-9",
+          "test_id": "pt-dbms-sql-14-max-application",
+          "question_text": "Does a duplicate-producing join necessarily change MAX?",
+          "options": [
+            "Yes, MAX adds repeated values",
+            "No, so the entire joined report is proven correct",
+            "No, but it can still corrupt accompanying counts and detail rows",
+            "It converts MAX to a window function"
+          ],
+          "correct_index": 2,
+          "explanation": "An unchanged boundary is insufficient evidence about the report's multiplicity.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-14-max-application-new-10",
+          "test_id": "pt-dbms-sql-14-max-application",
+          "question_text": "What does MAX(time) OVER (PARTITION BY laboratory) provide?",
+          "options": [
+            "A mandatory single row for the whole table",
+            "A guarantee of distinct event times",
+            "A lock preventing future inspections",
+            "A per-laboratory boundary on each retained input row"
+          ],
+          "correct_index": 3,
+          "explanation": "The window calculation annotates detail; filtering and consistency policies remain separate.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cx-max-approved-reading",
+      "slug": "max-approved-reading",
+      "title": "Find the greatest approved reading",
+      "difficulty": "Easy",
+      "task": "Return one column named peak_reading containing MAX(reading_value) among rows whose approved value is 1. Unknown readings do not compete. Preserve negative values and return one summary row even if no known approved reading exists.",
+      "schema_sql": "CREATE TABLE sensor_readings(reading_id INT PRIMARY KEY,reading_value INT,approved INT NOT NULL);",
+      "seed_sql": "INSERT INTO sensor_readings VALUES (1,-8,1),(2,-3,1),(3,NULL,1),(4,99,0),(5,-6,1);",
+      "expected": "peak_reading\n-3",
+      "ordering": "One aggregate summary row; no row ordering is needed.",
+      "constraints": [
+        "Use the approved population only.",
+        "Preserve source rows and their recorded values."
+      ],
+      "edge_cases": [
+        "All known approved values can be negative.",
+        "An unapproved extreme is not eligible.",
+        "Empty and all-missing approved populations yield NULL."
+      ],
+      "hints": [
+        "Apply approval in WHERE before MAX.",
+        "Do not introduce a zero candidate with an input fallback."
+      ],
+      "solution_sql": "SELECT MAX(reading_value) AS peak_reading FROM sensor_readings WHERE approved=1;",
+      "explanation": "The approved known candidates are negative eight, negative three, and negative six. Negative three is their greatest value. The unapproved ninety-nine and the missing measurement do not participate.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO sensor_readings VALUES (1,NULL,1),(2,90,0);",
+          "expected": "peak_reading\nNULL"
+        },
+        {
+          "seed_sql": "",
+          "expected": "peak_reading\nNULL"
+        },
+        {
+          "seed_sql": "INSERT INTO sensor_readings VALUES (1,-5,1),(2,0,1),(3,12,0);",
+          "expected": "peak_reading\n0"
+        }
+      ]
+    },
+    {
+      "id": "cx-max-latest-accepted-inspections",
+      "slug": "max-latest-accepted-inspections",
+      "title": "Return all latest accepted inspections by laboratory",
+      "difficulty": "Medium",
+      "task": "Return inspection_id,lab_code,inspected_at for every accepted inspection tied at the latest known inspected_at within its laboratory. accepted=1 means accepted. Exclude rejected inspections and unknown times. Include every accepted tie, ordered by lab_code ascending then inspection_id ascending. DATETIME values are synthetic clock values with no conversion required.",
+      "schema_sql": "CREATE TABLE lab_inspections(inspection_id INT PRIMARY KEY,lab_code VARCHAR(12) NOT NULL,inspected_at DATETIME,accepted INT NOT NULL);",
+      "seed_sql": "INSERT INTO lab_inspections VALUES (1,'BIO','2026-01-10 10:00:00',1),(2,'BIO','2026-01-12 09:00:00',1),(3,'BIO','2026-01-12 09:00:00',1),(4,'BIO','2026-01-20 10:00:00',0),(5,'CHEM','2026-01-11 08:00:00',1),(6,'CHEM',NULL,1),(7,'CHEM','2026-01-11 08:00:00',0),(8,'EMPTY',NULL,1);",
+      "expected": "inspection_id\tlab_code\tinspected_at\n2\tBIO\t2026-01-12 09:00:00\n3\tBIO\t2026-01-12 09:00:00\n5\tCHEM\t2026-01-11 08:00:00",
+      "ordering": "lab_code ASC, then inspection_id ASC.",
+      "constraints": [
+        "Use accepted event times, not the magnitude of inspection_id.",
+        "Read the synthetic data without modifying it."
+      ],
+      "edge_cases": [
+        "A rejected later inspection must not set the boundary.",
+        "A rejected row tied with an accepted time remains excluded.",
+        "Every accepted latest tie must survive."
+      ],
+      "hints": [
+        "Filter acceptance before annotating each laboratory partition.",
+        "Compare known times with the partition's MAX in a surrounding query."
+      ],
+      "solution_sql": "SELECT inspection_id,lab_code,inspected_at FROM (SELECT inspection_id,lab_code,inspected_at,MAX(inspected_at) OVER (PARTITION BY lab_code) AS latest_time FROM lab_inspections WHERE accepted=1) AS ranked WHERE inspected_at=latest_time ORDER BY lab_code ASC,inspection_id ASC;",
+      "explanation": "Each accepted row receives its laboratory's latest known accepted time. The outer comparison preserves all matching accepted ties. Unknown-only laboratories produce no qualifying detail, and rejection is enforced before the boundary is calculated.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO lab_inspections VALUES (1,'A',NULL,1),(2,'A','2026-01-01 00:00:00',0);",
+          "expected": ""
+        },
+        {
+          "seed_sql": "INSERT INTO lab_inspections VALUES (99,'A','2026-01-01 00:00:00',1),(2,'A','2026-01-02 00:00:00',1),(7,'A','2026-01-02 00:00:00',1),(8,'A','2026-01-02 00:00:00',0);",
+          "expected": "inspection_id\tlab_code\tinspected_at\n2\tA\t2026-01-02 00:00:00\n7\tA\t2026-01-02 00:00:00"
+        },
+        {
+          "seed_sql": "",
+          "expected": ""
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-14-max-1",
+      "test_id": "pt-dbms-sql-14-max",
+      "question_text": "Given order amounts 250.00, NULL, 400.00, 150.00, 300.00, what does MAX(amount) return?",
+      "options": [
+        "300.00",
+        "400.00",
+        "NULL",
+        "1100.00"
+      ],
+      "correct_index": 1,
+      "explanation": "MAX ignores the NULL and finds the largest of the non-NULL values: 400.00.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-14-max-2",
+      "test_id": "pt-dbms-sql-14-max",
+      "question_text": "What does MAX(order_date) conceptually return?",
+      "options": [
+        "The earliest order date",
+        "The most recent (latest) order date",
+        "The current date",
+        "A random order date"
+      ],
+      "correct_index": 1,
+      "explanation": "Later dates are chronologically 'larger', so MAX(date) returns the most recent date in the column.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-14-max-3",
+      "test_id": "pt-dbms-sql-14-max",
+      "question_text": "Given the names Alice, Bob, Alice, Charlie, Bob, what does MAX(customer_name) return?",
+      "options": [
+        "'Alice'",
+        "'Bob'",
+        "'Charlie'",
+        "NULL"
+      ],
+      "correct_index": 2,
+      "explanation": "'Charlie' is alphabetically last among the names present.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-14-max-4",
+      "test_id": "pt-dbms-sql-14-max",
+      "question_text": "What single query correctly computes the range between the highest and lowest order amounts (150.00 to 400.00)?",
+      "options": [
+        "SELECT AVG(amount) FROM orders;",
+        "SELECT MAX(amount) - MIN(amount) FROM orders;",
+        "SELECT MAX(amount) + MIN(amount) FROM orders;",
+        "SELECT COUNT(amount) FROM orders;"
+      ],
+      "correct_index": 1,
+      "explanation": "MAX(amount) - MIN(amount) = 400.00 - 150.00 = 250.00, the spread between the largest and smallest values.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-14-max-5",
+      "test_id": "pt-dbms-sql-14-max",
+      "question_text": "What does MAX(amount) return over a query that matches zero rows?",
+      "options": [
+        "0",
+        "NULL",
+        "-1",
+        "An error"
+      ],
+      "correct_index": 1,
+      "explanation": "Like MIN, SUM, and AVG, MAX returns NULL when there is nothing to aggregate, rather than a placeholder value.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-14-max-6",
+      "test_id": "pt-dbms-sql-14-max",
+      "question_text": "How does MAX(DISTINCT amount) compare to MAX(amount) on the same column?",
+      "options": [
+        "They always produce the identical result",
+        "MAX(DISTINCT amount) is always smaller because duplicates are removed",
+        "MAX(DISTINCT amount) is always larger",
+        "MAX(DISTINCT amount) is invalid syntax"
+      ],
+      "correct_index": 0,
+      "explanation": "Removing duplicate values never changes which value is the largest, so MAX(DISTINCT x) always equals MAX(x).",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-14-max-7",
+      "test_id": "pt-dbms-sql-14-max",
+      "question_text": "Why is storing monetary amounts as FLOAT (rather than DECIMAL) risky when using MAX or other comparisons?",
+      "options": [
+        "FLOAT columns cannot be used with aggregate functions at all",
+        "Floating-point representation can introduce tiny rounding errors that make comparisons between very close values unreliable",
+        "MAX always rounds FLOAT values down to the nearest integer",
+        "FLOAT columns are automatically converted to strings before comparison"
+      ],
+      "correct_index": 1,
+      "explanation": "Floating-point binary representation cannot exactly store many decimal fractions, which can cause subtly incorrect comparisons — DECIMAL avoids this and is the standard choice for money.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-14-max-8",
+      "test_id": "pt-dbms-sql-14-max",
+      "question_text": "For completed orders with amounts 250.00, 400.00, and 300.00, what does MAX(amount) - MIN(amount) evaluate to?",
+      "options": [
+        "150.00",
+        "50.00",
+        "950.00",
+        "400.00"
+      ],
+      "correct_index": 0,
+      "explanation": "MAX = 400.00, MIN = 250.00 among the completed orders, so 400.00 - 250.00 = 150.00.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "/root/integration_seo author",
+    "independent_review": "passed",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Independent manual review passed; native MySQL fixture evidence recorded separately; provider/browser/Supabase release gates remain separate.",
+    "existing_question_corrections": [
+      "tq-dbms-sql-14-max-1",
+      "tq-dbms-sql-14-max-2",
+      "tq-dbms-sql-14-max-3",
+      "tq-dbms-sql-14-max-4",
+      "tq-dbms-sql-14-max-5",
+      "tq-dbms-sql-14-max-6",
+      "tq-dbms-sql-14-max-7",
+      "tq-dbms-sql-14-max-8"
+    ],
+    "canonical_answer_indices_preserved": true,
+    "editorial_record": "Original seed snapshots retained. Questions independently rewritten using new examples while preserving original IDs and canonical answer positions. No pre-existing MIN/MAX coding problem found in the inspected seed.",
+    "independent_reviewer": "Codex reviewer, current 2026-10-30 session",
+    "independent_review_scope": "Read full notes, all 640 MCQ stems/options/canonical answers/explanations, 64 exercise contracts/solutions/fixtures, and all 32 diagrams. Verified retained identities/answers through source-continuity tests; SQL execution evidence is recorded separately. No external originality, provider, live application or Supabase authorization clearance.",
+    "independent_review_record": "reports/independent-review-2026-10-30.json",
+    "content_sha256": "45bc1b15f9c9a5c7029439d3f586810afb6b92b6c9acfd6c892003c0372b66ad"
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-14-max",
+    "original_note_sha256": "5168b50174a1362046bbb0e1d21d682897b031e07113894a0d0486de50187397",
+    "status": "drafted; not included in prepared paired migrations"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Latest accepted times preserve all matching details",
+      "description": "Each laboratory's accepted inspection times establish its latest known boundary; later rejected times are excluded.",
+      "columns": [
+        "Laboratory",
+        "Latest known accepted time",
+        "Matching accepted identities",
+        "Excluded evidence"
+      ],
+      "rows": [
+        [
+          "BIO",
+          "2026-01-12 09:00:00",
+          "2 and 3",
+          "Later rejected inspection 4"
+        ],
+        [
+          "CHEM",
+          "2026-01-11 08:00:00",
+          "5",
+          "Rejected tie 7 and missing time 6"
+        ],
+        [
+          "EMPTY",
+          "NULL",
+          "None",
+          "Only an unknown accepted time"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required; comparison and detail-selection table",
+    "technical_review": "authored draft; independent check pending",
+    "server_rendering": "pending",
+    "browser_rendering": "unverified",
+    "independent_review": "pending"
+  },
+  "authoring_status": "drafted; verification pending",
+  "sql_verification": {
+    "scope": "not executed; exact MySQL 8.4/provider and compatibility execution pending",
+    "all_passed": false,
+    "cases": []
+  }
+}

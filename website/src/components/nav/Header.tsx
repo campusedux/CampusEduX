@@ -23,8 +23,8 @@ import { BrandMark } from "./BrandMark";
  */
 export function Header() {
   return (
-    <header className="sticky top-0 z-50 border-b border-line/70 bg-card/80 backdrop-blur-xl supports-[backdrop-filter]:bg-card/70">
-      <div className="container-page flex h-16 items-center gap-2 sm:gap-3">
+    <header className="sticky top-0 z-header border-b border-line/70 bg-card/80 backdrop-blur-xl supports-[backdrop-filter]:bg-card/70">
+      <div className="container-page flex h-14 items-center gap-2 max-sm:px-3 sm:h-16 sm:gap-3">
         <Link href="/" className="flex h-11 shrink-0 items-center rounded-xl transition-opacity hover:opacity-90" aria-label={`${BRAND.name} home`}>
           <BrandMark compact />
         </Link>
@@ -33,7 +33,7 @@ export function Header() {
           <HeaderLinks />
         </div>
 
-        <div className="flex shrink-0 items-center justify-end gap-1 sm:gap-2">
+        <div className="flex shrink-0 items-center justify-end gap-2">
           <div className="hidden xl:block">
             <GlobalSearchField variant="header" />
           </div>

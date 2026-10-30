@@ -1,0 +1,598 @@
+{
+  "source_ref": "chapter-17-subqueries/subquery-in-from",
+  "slug": "subquery-in-from",
+  "title": "Subquery in FROM",
+  "description": "Use MySQL derived tables to expose calculated rows, aggregate at an explicit grain, compose summaries safely, and avoid alias, ordering and join-cardinality mistakes.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Turn a query result into a row source\n\nA subquery in FROM supplies rows to an enclosing query. This result is commonly called a derived table. It can summarize source facts, calculate expressions or select a candidate population before the outer query combines or filters those rows. A placement report might first calculate one application count per department, then compare those counts with a threshold or join them to department names.\n\nA derived table is a query boundary with an output contract. The outer query can see the columns projected by the inner query, under the derived table's alias. It cannot directly reach columns that the inner query did not expose. Review [GROUP BY](/learning/dbms-sql-tutorial/group-by) and [HAVING](/learning/dbms-sql-tutorial/having) before composing several layers. Each layer should have a clear purpose rather than merely make SQL look sophisticated.\n\n## Name the result and its columns\n\nMySQL requires an alias for a derived table. Choose a name that describes the produced rows, such as department_totals. Give calculated expressions meaningful column aliases as well. An outer condition can then refer to a calculated total as an ordinary input column, because that total already belongs to the inner result.\n\n```sql\nSELECT totals.department_id, totals.application_count\nFROM (\n  SELECT department_id, COUNT(*) AS application_count\n  FROM applications\n  WHERE status = 'eligible'\n  GROUP BY department_id\n) AS totals\nWHERE totals.application_count >= 3\nORDER BY totals.department_id;\n```\n\nThe inner result has one row per department represented among eligible applications. The outer query retains departments whose count reaches three. Departments without eligible applications do not appear in that inner grouped result at all. If the report needs every department, including zero-count departments, start from the department list and join the summary with the appropriate outer-join and missing-value policy.\n\nA calculated alias is particularly useful when it would otherwise be unavailable to a same-level WHERE clause. Repeating a large calculation several times can obscure its purpose. A derived boundary makes the calculation an explicit column, but it should not be introduced merely to conceal a rule that would be clearer in a direct HAVING predicate.\n\n## Trace the output grain before adding joins\n\nSuppose department 1 has three eligible applications and department 2 has one. The inner query emits exactly two rows with counts three and one. This one-row-per-department guarantee comes from GROUP BY department_id. Joining that result to a department table whose department_id is unique preserves at most one summary row for each matching department.\n\nIf the summary instead groups by department and application category, it can emit several rows per department. Joining it as though department alone were unique multiplies the parent department rows. The derived table alias does not enforce a key. Verify which projected columns identify one result row and use all necessary keys in later joins.\n\n```sql\nSELECT d.department_id, d.department_name, t.application_count\nFROM departments AS d\nLEFT JOIN (\n  SELECT department_id, COUNT(*) AS application_count\n  FROM applications\n  WHERE status = 'eligible'\n  GROUP BY department_id\n) AS t ON t.department_id = d.department_id\nORDER BY d.department_id;\n```\n\nAn unmatched department has NULL application_count in this result. COALESCE can turn that absence into zero when the contract says no eligible application facts means zero applications. A missing financial amount has a different meaning from a missing count summary, so do not generalize that replacement to every aggregate column.\n\n## Preaggregate independent fact sources\n\nA department can have many applications and many workshops. Joining both detail sources before counting creates application-workshop pairs, which can inflate both measures. Two derived summaries, each reduced to one row per department, allow the report to combine counts without that independent-child multiplication.\n\nThis is a correctness pattern before it is a performance pattern. The summary filters must define the intended populations consistently, and the summary keys must match the joining grain. If workshops are counted by academic year, the applications summary and join may also need that year. Leaving it out can join several historical summaries to a single current department row.\n\nThe same reasoning applies to totals. Summing a source amount after joining it to a multiplying child does not become correct merely because the multiplication happened inside a derived table. Summarize the authoritative fact grain first, or use an existence condition when the child only determines eligibility. Query boundaries organize logic; they do not automatically repair incorrect input populations.\n\n## Understand visibility and correlation rules\n\nAn ordinary derived table is not automatically allowed to refer to any preceding FROM item. MySQL provides lateral derived tables for particular cross-item dependencies, with syntax and placement rules that differ from an independent derived table. A correlated subquery in WHERE is another construct with its own scope behavior. Do not move an outer reference into FROM without verifying the target dialect's rules.\n\nName collisions also deserve attention. If both the inner source and the derived result use an alias named x, scope can become difficult to read even when parsing succeeds. Use names that distinguish source facts from summaries. Qualify columns in the outer query when joining derived outputs with base tables that contain similarly named identifiers.\n\nOnly projected columns are visible outside the inner query. An outer ORDER BY referencing an unprojected source column cannot reach through the boundary by intuition. Expose a meaningful sort key when it belongs to the output contract, or perform the ordering where the complete information is available and then preserve the intended final ordering explicitly.\n\n## Separate ordering from row membership\n\nAn ORDER BY inside a derived table does not generally establish the outer query's display order. The outer query needs its own ORDER BY for a guaranteed result sequence. This remains true if a small test happens to preserve the inner order. Relational row sources should be treated as unordered unless the final output contract specifies ordering.\n\nAn inner LIMIT can change which rows exist in the derived result, particularly when paired with a deterministic inner ORDER BY. Applying an outer filter after selecting the top ten rows is different from filtering all rows before selecting the top ten. Describe the intended sequence in words and include a fixture where those two interpretations yield different populations.\n\nLikewise, LIMIT without a deterministic ordering does not choose a meaningful representative row. If several rows tie on a score and exactly one winner is required, include a stable tie-breaker. If all ties should survive, a simple row limit may be the wrong operation. The derived table should expose the intended membership, not a convenient sample that changes from plan to plan.\n\n## Do not equate a boundary with materialization\n\nThe optimizer may merge a derived table into its enclosing query or materialize an intermediate result, depending on query features and settings. GROUP BY, DISTINCT and LIMIT can affect transformation choices. A derived table in SQL text is therefore not evidence that a temporary table was physically created, nor proof that the base data was scanned exactly once.\n\nInspect EXPLAIN and representative execution measurements when evaluating performance. A concise direct query may be easier to optimize or review, while a carefully chosen derived boundary can make a complex grain contract much clearer. Avoid claims that one form is universally faster. Keep any measured conclusion attached to its data volume, indexes and engine version.\n\nA boundary review should also name which filters belong to the inner population and which conditions act on its completed summaries.\n\n## Test the boundary as a contract\n\nTest an empty application source, one department exactly at the threshold and another just below it. Add a department with no eligible applications and confirm whether it should disappear or remain with a missing or zero summary. Include a duplicate category or year grouping to expose an incomplete join key. For top-row calculations, test ties and a row that becomes eligible only after an outer filter.\n\nWrite down the derived output columns and the meaning of one derived row before using that result elsewhere. This short contract catches hidden source-column assumptions and accidental multiplicity. Continue with [common table expressions](/learning/dbms-sql-tutorial/common-table-expressions) for a named query form that can improve readability, and [subquery versus join](/learning/dbms-sql-tutorial/subquery-vs-join) for equivalence reviews that preserve population and grain.",
+  "references": [
+    {
+      "title": "MySQL 8.4 derived tables",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/derived-tables.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-17-subquery-in-from",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-17-subquery-in-from-1",
+          "test_id": "pt-dbms-sql-17-subquery-in-from",
+          "question_text": "A subquery in the FROM clause is commonly called a:",
+          "options": [
+            "Correlated subquery",
+            "Derived table",
+            "Scalar subquery",
+            "Window function"
+          ],
+          "correct_index": 1,
+          "explanation": "A subquery used as a row source in FROM is called a derived table.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-17-subquery-in-from-2",
+          "test_id": "pt-dbms-sql-17-subquery-in-from",
+          "question_text": "In MySQL 8.4, what is mandatory for a derived table in FROM?",
+          "options": [
+            "It must use GROUP BY",
+            "It must be aliased",
+            "It must be correlated",
+            "It must return exactly one row"
+          ],
+          "correct_index": 1,
+          "explanation": "Every derived table needs an alias so the outer query can address its columns.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-17-subquery-in-from-3",
+          "test_id": "pt-dbms-sql-17-subquery-in-from",
+          "question_text": "In MySQL 8.4, what happens when a FROM-clause subquery has no alias?",
+          "options": [
+            "No error, it works fine",
+            "A syntax error like \"subquery in FROM must have an alias\"",
+            "A runtime \"too many rows\" error",
+            "It silently returns zero rows"
+          ],
+          "correct_index": 1,
+          "explanation": "MySQL requires a derived-table alias and rejects a missing one. Other engines and versions have different alias rules.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-17-subquery-in-from-4",
+          "test_id": "pt-dbms-sql-17-subquery-in-from",
+          "question_text": "Using department totals Engineering=235000, Sales=203000, Marketing=132000, how many departments pass `WHERE dept_totals.total > 150000`?",
+          "options": [
+            "3",
+            "2",
+            "1",
+            "0"
+          ],
+          "correct_index": 1,
+          "explanation": "Only Engineering and Sales exceed 150000; Marketing's 132000 does not.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-17-subquery-in-from-5",
+          "test_id": "pt-dbms-sql-17-subquery-in-from",
+          "question_text": "Why does a MySQL derived table need an alias?",
+          "options": [
+            "It doesn't relate at all",
+            "The derived result needs an addressable row-source name for column references",
+            "Aliases are only cosmetic in both cases",
+            "An alias automatically adds a persistent primary-key constraint"
+          ],
+          "correct_index": 1,
+          "explanation": "Unlike a named base table, an inline derived result has no persistent table name. Its alias provides a row-source name in the enclosing query.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-17-subquery-in-from-6",
+          "test_id": "pt-dbms-sql-17-subquery-in-from",
+          "question_text": "A derived table can be:",
+          "options": [
+            "Only selected from, never joined",
+            "Joined to real tables just like any other table",
+            "Only used with SELECT *",
+            "Only used once per database"
+          ],
+          "correct_index": 1,
+          "explanation": "Derived tables behave like ordinary tables for join purposes.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-17-subquery-in-from-7",
+          "test_id": "pt-dbms-sql-17-subquery-in-from",
+          "question_text": "What SQL feature is most similar in purpose to a FROM-clause subquery?",
+          "options": [
+            "A trigger",
+            "A common table expression (CTE / WITH clause)",
+            "An index",
+            "A stored procedure"
+          ],
+          "correct_index": 1,
+          "explanation": "CTEs and derived tables define logical row sources used within a statement. Neither name alone guarantees physical materialization.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-17-subquery-in-from-8",
+          "test_id": "pt-dbms-sql-17-subquery-in-from",
+          "question_text": "Which statement describes a derived table result and its possible execution strategies?",
+          "options": [
+            "It's permanently stored as a new table",
+            "It does not create a persistent user table; the optimizer may merge it or materialize an intermediate result",
+            "It replaces the original table permanently",
+            "It requires a separate CREATE TABLE statement"
+          ],
+          "correct_index": 1,
+          "explanation": "A FROM subquery defines a row source. Whether a temporary intermediate is materialized or the query is merged is plan-dependent.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-17-subquery-in-from-new-9",
+          "test_id": "pt-dbms-sql-17-subquery-in-from",
+          "question_text": "Which columns can an outer query directly use from a derived table?",
+          "options": [
+            "Every column in every base table",
+            "Only columns exposed by the inner SELECT",
+            "Only the first inner column",
+            "Only primary keys"
+          ],
+          "correct_index": 1,
+          "explanation": "The inner projection defines the derived output contract.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-17-subquery-in-from-new-10",
+          "test_id": "pt-dbms-sql-17-subquery-in-from",
+          "question_text": "What happens to departments with no eligible rows in an inner GROUP BY department_id summary?",
+          "options": [
+            "They get an automatic zero row",
+            "They cause a syntax error",
+            "They do not produce a summary group",
+            "They are merged into department zero"
+          ],
+          "correct_index": 2,
+          "explanation": "Grouped aggregation does not invent absent keys.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-17-subquery-in-from-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-17-subquery-in-from-application-new-1",
+          "test_id": "pt-dbms-sql-17-subquery-in-from-application",
+          "question_text": "What can preserve departments absent from a count summary?",
+          "options": [
+            "INNER JOIN from the summary only",
+            "An outer WHERE rejecting summary NULL",
+            "Adding DISTINCT to the summary count",
+            "LEFT JOIN from departments to the summary"
+          ],
+          "correct_index": 3,
+          "explanation": "The authoritative department list supplies the preserved population.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-17-subquery-in-from-application-new-2",
+          "test_id": "pt-dbms-sql-17-subquery-in-from-application",
+          "question_text": "Does a derived table alias enforce uniqueness of its department_id?",
+          "options": [
+            "No",
+            "Yes, always",
+            "Only when the alias ends in totals",
+            "Only for numeric keys"
+          ],
+          "correct_index": 0,
+          "explanation": "The inner grouping and source constraints determine result cardinality.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-17-subquery-in-from-application-new-3",
+          "test_id": "pt-dbms-sql-17-subquery-in-from-application",
+          "question_text": "Why preaggregate applications and workshops independently?",
+          "options": [
+            "To make every department have workshops",
+            "To avoid multiplying two independent child populations",
+            "To remove all NULLs automatically",
+            "To guarantee a single physical scan"
+          ],
+          "correct_index": 1,
+          "explanation": "One summary row per join key avoids application-workshop pairing.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-17-subquery-in-from-application-new-4",
+          "test_id": "pt-dbms-sql-17-subquery-in-from-application",
+          "question_text": "Does inner ORDER BY alone guarantee the outer display order?",
+          "options": [
+            "Yes, always",
+            "Only with VARCHAR columns",
+            "No",
+            "Only when aliases are unique"
+          ],
+          "correct_index": 2,
+          "explanation": "The final output query needs its own ordering contract.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-17-subquery-in-from-application-new-5",
+          "test_id": "pt-dbms-sql-17-subquery-in-from-application",
+          "question_text": "How can filtering after an inner top-ten selection differ from filtering first?",
+          "options": [
+            "It cannot differ",
+            "Filtering never changes rows",
+            "LIMIT always ignores filters",
+            "The eligible population is chosen at a different stage"
+          ],
+          "correct_index": 3,
+          "explanation": "Membership-changing operations are not freely interchangeable.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-17-subquery-in-from-application-new-6",
+          "test_id": "pt-dbms-sql-17-subquery-in-from-application",
+          "question_text": "What can be required for a FROM subquery to reference a preceding FROM item in MySQL?",
+          "options": [
+            "LATERAL syntax and its applicable scope rules",
+            "Only a shorter alias",
+            "A WHERE keyword inside a string",
+            "DISTINCT in every query"
+          ],
+          "correct_index": 0,
+          "explanation": "Ordinary independent derived tables do not have unrestricted outer visibility.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-17-subquery-in-from-application-new-7",
+          "test_id": "pt-dbms-sql-17-subquery-in-from-application",
+          "question_text": "Does a FROM subquery prove a physical temporary table exists?",
+          "options": [
+            "Yes, always",
+            "No, merging or materialization is plan-dependent",
+            "Only when SELECT star is used",
+            "Only with an alias"
+          ],
+          "correct_index": 1,
+          "explanation": "Written query boundaries and physical execution are different levels.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-17-subquery-in-from-application-new-8",
+          "test_id": "pt-dbms-sql-17-subquery-in-from-application",
+          "question_text": "A summary groups by department and year. What key may be needed in a later matching join?",
+          "options": [
+            "Only the displayed total",
+            "Only the alias text",
+            "Both department and year",
+            "No key when SUM is used"
+          ],
+          "correct_index": 2,
+          "explanation": "Omitting a grain dimension can multiply or mix summaries.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-17-subquery-in-from-application-new-9",
+          "test_id": "pt-dbms-sql-17-subquery-in-from-application",
+          "question_text": "When can a missing count summary reasonably display zero?",
+          "options": [
+            "Whenever any numeric value is NULL",
+            "Only if a title is missing",
+            "Never in an outer join",
+            "When absence of eligible facts is explicitly defined as zero count"
+          ],
+          "correct_index": 3,
+          "explanation": "Missingness policy depends on the measure and report contract.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-17-subquery-in-from-application-new-10",
+          "test_id": "pt-dbms-sql-17-subquery-in-from-application",
+          "question_text": "What should be specified when an inner LIMIT chooses one winner among equal scores?",
+          "options": [
+            "A stable tie-breaker or an explicit all-ties policy",
+            "Only the number of base tables",
+            "The alias length",
+            "An arbitrary insertion order"
+          ],
+          "correct_index": 0,
+          "explanation": "Deterministic membership requires a complete selection rule.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cp-dbms-sql-departments-with-high-total-payroll",
+      "slug": "departments-with-high-total-payroll",
+      "title": "Departments With High Total Payroll",
+      "difficulty": "Medium",
+      "task": "Using a subquery in the FROM clause, write a query returning `department` and `total` (sum of salaries) only for departments whose total payroll exceeds 100000, ordered by `department`.",
+      "schema_sql": "CREATE TABLE employees (\n  id INTEGER PRIMARY KEY,\n  name TEXT NOT NULL,\n  department TEXT NOT NULL,\n  salary INTEGER NOT NULL\n);",
+      "seed_sql": "INSERT INTO employees (id, name, department, salary) VALUES\n(1, 'Asha', 'Engineering', 90000),\n(2, 'Rohan', 'Engineering', 60000),\n(3, 'Neha', 'Sales', 70000),\n(4, 'Vikram', 'Sales', 50000),\n(5, 'Priya', 'Engineering', 75000);",
+      "expected": "department\ttotal\nEngineering\t225000\nSales\t120000",
+      "ordering": "Retain the ordering stated in the original task.",
+      "constraints": [
+        "Preserve the original fixture and requested output."
+      ],
+      "edge_cases": [
+        "Verify the alternative seeded fixture."
+      ],
+      "hints": [
+        "Trace the required output grain and conditions."
+      ],
+      "solution_sql": "SELECT department, total FROM (SELECT department, SUM(salary) AS total FROM employees GROUP BY department) AS dept_totals WHERE total > 100000 ORDER BY department;",
+      "explanation": "A derived table (subquery in FROM) must be aliased, then queried like any other table. Reference: `SELECT department, total FROM (SELECT department, SUM(salary) AS total FROM employees GROUP BY department) AS dept_totals WHERE total > 100000 ORDER BY department;`",
+      "validation_cases": [
+        {
+          "hidden": true,
+          "seed_sql": "INSERT INTO employees (id, name, department, salary) VALUES\n(1, 'Zara', 'Finance', 80000),\n(2, 'Omar', 'Finance', 40000),\n(3, 'Leo', 'Finance', 90000);",
+          "expected": "department\ttotal\nFinance\t210000"
+        }
+      ],
+      "existing_problem": true,
+      "original_description_md5": "cfe310dee99f77eb1fa3be15dfa5b0f4",
+      "original_problem": {
+        "id": "cp-dbms-sql-departments-with-high-total-payroll",
+        "topic_id": null,
+        "title": "Departments With High Total Payroll",
+        "difficulty": "Medium",
+        "slug": "departments-with-high-total-payroll",
+        "description": "Using a subquery in the FROM clause, write a query returning `department` and `total` (sum of salaries) only for departments whose total payroll exceeds 100000, ordered by `department`.\n\n```sql\nCREATE TABLE employees (\n  id INTEGER PRIMARY KEY,\n  name TEXT NOT NULL,\n  department TEXT NOT NULL,\n  salary INTEGER NOT NULL\n);\n```\n\n**Sample data**:\n\n```sql\nINSERT INTO employees (id, name, department, salary) VALUES\n(1, 'Asha', 'Engineering', 90000),\n(2, 'Rohan', 'Engineering', 60000),\n(3, 'Neha', 'Sales', 70000),\n(4, 'Vikram', 'Sales', 50000),\n(5, 'Priya', 'Engineering', 75000);\n```\n",
+        "examples": "[{\"input\": \"\", \"output\": \"department\\ttotal\\nEngineering\\t225000\\nSales\\t120000\"}]",
+        "test_cases": "[{\"hidden\": true, \"seed_sql\": \"INSERT INTO employees (id, name, department, salary) VALUES\\n(1, 'Zara', 'Finance', 80000),\\n(2, 'Omar', 'Finance', 40000),\\n(3, 'Leo', 'Finance', 90000);\", \"expected\": \"department\\ttotal\\nFinance\\t210000\"}]",
+        "starter_code": null,
+        "editorial": "A derived table (subquery in FROM) must be aliased, then queried like any other table. Reference: `SELECT department, total FROM (SELECT department, SUM(salary) AS total FROM employees GROUP BY department) AS dept_totals WHERE total > 100000 ORDER BY department;`",
+        "supported_languages": null,
+        "sql_schema_sql": "CREATE TABLE employees (\n  id INTEGER PRIMARY KEY,\n  name TEXT NOT NULL,\n  department TEXT NOT NULL,\n  salary INTEGER NOT NULL\n);",
+        "sql_seed_sql": "INSERT INTO employees (id, name, department, salary) VALUES\n(1, 'Asha', 'Engineering', 90000),\n(2, 'Rohan', 'Engineering', 60000),\n(3, 'Neha', 'Sales', 70000),\n(4, 'Vikram', 'Sales', 50000),\n(5, 'Priya', 'Engineering', 75000);",
+        "sql_check_sql": "",
+        "learning_topic_id": null,
+        "status": "published",
+        "is_premium": null,
+        "show_on_website": null,
+        "show_on_mobile": null,
+        "sort_order": 1
+      },
+      "check_sql": "",
+      "original_check_sql": ""
+    },
+    {
+      "id": "cx-derived-workshop-counts",
+      "slug": "derived-workshop-counts",
+      "title": "Expose workshop counts as derived rows",
+      "difficulty": "Easy",
+      "task": "Use a derived table to return department_id,workshop_count for departments with at least two workshop rows, ordered by department_id.",
+      "schema_sql": "CREATE TABLE workshops(id INT PRIMARY KEY,department_id INT NOT NULL);",
+      "seed_sql": "INSERT INTO workshops VALUES (1,2),(2,2),(3,7);",
+      "solution_sql": "SELECT t.department_id,t.workshop_count FROM (SELECT department_id,COUNT(*) AS workshop_count FROM workshops GROUP BY department_id) AS t WHERE t.workshop_count>=2 ORDER BY t.department_id;",
+      "expected": "department_id\tworkshop_count\n2\t2",
+      "explanation": "The inner result exposes one count per department and the outer query filters that column.",
+      "ordering": "Apply the ORDER BY explicitly required by the task; scalar results contain one row.",
+      "constraints": [
+        "Only synthetic fixture tables are in scope."
+      ],
+      "edge_cases": [
+        "Check empty input and the supplied contrasting fixtures."
+      ],
+      "hints": [
+        "The inner result exposes one count per department and the outer query filters that column."
+      ],
+      "validation_cases": [
+        {
+          "seed_sql": "",
+          "expected": ""
+        },
+        {
+          "seed_sql": "INSERT INTO workshops VALUES (1,9),(2,9),(3,9);",
+          "expected": "department_id\tworkshop_count\n9\t3"
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-17-subquery-in-from-1",
+      "test_id": "pt-dbms-sql-17-subquery-in-from",
+      "question_text": "A subquery in the FROM clause is commonly called a:",
+      "options": [
+        "Correlated subquery",
+        "Derived table",
+        "Scalar subquery",
+        "Window function"
+      ],
+      "correct_index": 1,
+      "explanation": "A subquery used as a row source in FROM is called a derived table.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-17-subquery-in-from-2",
+      "test_id": "pt-dbms-sql-17-subquery-in-from",
+      "question_text": "What is mandatory for a subquery used in FROM?",
+      "options": [
+        "It must use GROUP BY",
+        "It must be aliased",
+        "It must be correlated",
+        "It must return exactly one row"
+      ],
+      "correct_index": 1,
+      "explanation": "Every derived table needs an alias so the outer query can address its columns.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-17-subquery-in-from-3",
+      "test_id": "pt-dbms-sql-17-subquery-in-from",
+      "question_text": "What error typically occurs if you omit the alias on a FROM-clause subquery?",
+      "options": [
+        "No error, it works fine",
+        "A syntax error like \"subquery in FROM must have an alias\"",
+        "A runtime \"too many rows\" error",
+        "It silently returns zero rows"
+      ],
+      "correct_index": 1,
+      "explanation": "Most engines require an alias on a derived table and will refuse to parse the query without one.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-17-subquery-in-from-4",
+      "test_id": "pt-dbms-sql-17-subquery-in-from",
+      "question_text": "Using department totals Engineering=235000, Sales=203000, Marketing=132000, how many departments pass `WHERE dept_totals.total > 150000`?",
+      "options": [
+        "3",
+        "2",
+        "1",
+        "0"
+      ],
+      "correct_index": 1,
+      "explanation": "Only Engineering and Sales exceed 150000; Marketing's 132000 does not.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-17-subquery-in-from-5",
+      "test_id": "pt-dbms-sql-17-subquery-in-from",
+      "question_text": "Why does the aliasing requirement for derived tables mirror the aliasing rules from Chapter 7?",
+      "options": [
+        "It doesn't relate at all",
+        "SQL needs an addressable name for every row source, whether a real or derived table, to resolve column references unambiguously",
+        "Aliases are only cosmetic in both cases",
+        "Chapter 7's aliasing only applies to columns, never tables"
+      ],
+      "correct_index": 1,
+      "explanation": "Both cases stem from the same underlying binding rule: every row source needs a name.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-17-subquery-in-from-6",
+      "test_id": "pt-dbms-sql-17-subquery-in-from",
+      "question_text": "A derived table can be:",
+      "options": [
+        "Only selected from, never joined",
+        "Joined to real tables just like any other table",
+        "Only used with SELECT *",
+        "Only used once per database"
+      ],
+      "correct_index": 1,
+      "explanation": "Derived tables behave like ordinary tables for join purposes.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-17-subquery-in-from-7",
+      "test_id": "pt-dbms-sql-17-subquery-in-from",
+      "question_text": "What SQL feature is most similar in purpose to a FROM-clause subquery?",
+      "options": [
+        "A trigger",
+        "A common table expression (CTE / WITH clause)",
+        "An index",
+        "A stored procedure"
+      ],
+      "correct_index": 1,
+      "explanation": "CTEs and derived tables both create named, temporary result sets for a query.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-17-subquery-in-from-8",
+      "test_id": "pt-dbms-sql-17-subquery-in-from",
+      "question_text": "Which of these correctly describes materialization of a derived table?",
+      "options": [
+        "It's permanently stored as a new table",
+        "It's typically computed fresh each time the outer query runs; nothing persists afterward",
+        "It replaces the original table permanently",
+        "It requires a separate CREATE TABLE statement"
+      ],
+      "correct_index": 1,
+      "explanation": "A derived table is a temporary result computed during query execution, not a stored object.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "/root/worker_1",
+    "independent_review": "passed",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "author semantic review; independent review pending",
+    "canonical_answer_indices_preserved": true,
+    "independent_reviewer": "/root",
+    "independent_review_scope": "Full notes,20 MCQs/options/reasoning,both exercises with five predicted outputs and diagram reviewed. Inner projection, grain, outer filtering, preaggregation, lateral scope and ordering/materialization distinctions correct. Scoped alias requirements to MySQL8.4 and removed inherited chapter-specific distractor and implied guaranteed temporary result. Exact MySQL/provider, browser and release validation remain separate."
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-17-subquery-in-from",
+    "original_note_sha256": "ba30be699923763ef78b59127a9ebd4d282117e1245799ee70104c1c7cf237c5",
+    "status": "drafted; not included in prepared paired migrations"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "The inner projection becomes the outer input",
+      "description": "The outer filter sees summary rows rather than individual applications.",
+      "columns": [
+        "Stage",
+        "Row grain",
+        "Example columns"
+      ],
+      "rows": [
+        [
+          "Applications",
+          "One application",
+          "application_id, department_id, status"
+        ],
+        [
+          "Derived totals",
+          "One eligible department",
+          "department_id, application_count"
+        ],
+        [
+          "Outer result",
+          "One qualifying department",
+          "department_id, application_count"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "provided",
+    "technical_review": "coordinator independent manual review passed",
+    "server_rendering": "passed",
+    "browser_rendering": "unverified",
+    "independent_review": "passed",
+    "server_rendering_evidence": "2026-10-29 full Vitest:1310 passed/12 skipped; actual LessonBlock/TopicDiagrams render over230 packages. Browser visual QA remains unverified."
+  },
+  "authoring_status": "drafted; verification pending",
+  "sql_verification": {
+    "scope": "not executed; exact MySQL/provider verification pending",
+    "all_passed": false,
+    "cases": []
+  }
+}

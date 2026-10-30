@@ -1,0 +1,603 @@
+{
+  "source_ref": "chapter-12-select-and-filtering/pattern-matching",
+  "slug": "pattern-matching",
+  "title": "Pattern Matching",
+  "description": "Use MySQL regular expressions with anchors, grouped alternatives, character classes, and matching modes; compare regex rules with SQL LIKE.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Choose a pattern language for the shape\n\nA regular expression describes text structure using a richer language than [LIKE](/learning/dbms-sql-tutorial/like)'s percent and underscore wildcards. A campus inventory code might require three uppercase ASCII letters, a hyphen and four decimal digits. A prefix test alone cannot establish that shape. A regular expression can state the character classes and repetition counts explicitly, making the accepted naming grammar visible in one expression.\n\nUse that extra expressive power when the requirement needs it. A simple starts-with search is often easier to explain with LIKE. Equality is clearer when the requirement names one exact value. Choosing the simplest adequate tool improves readability and keeps the difference between exact matching, simple wildcard search and structured-pattern validation apparent to the next reader.\n\n## MySQL supplies named regex operations\n\nMySQL 8.4 offers REGEXP_LIKE for a matching predicate and REGEXP or RLIKE operator forms for related matching use. It also offers operations for finding positions, extracting matched text and replacing matches. Those operations have different result shapes. A condition asking whether a code matches should not be confused with a function returning the matching substring or a transformed replacement string.\n\nMySQL's regular-expression implementation uses ICU. Other databases can use different regex engines and invocation syntax. A MariaDB result is therefore not exact MySQL regex evidence, even if a short pattern looks familiar. PostgreSQL also has its own operators and rules. Porting a pattern requires checking both the SQL call and the regex language, not simply changing one keyword.\n\n## Unanchored patterns search within text\n\nA regex pattern can match a substring unless its boundaries are restricted. A pattern containing three letters can succeed inside a longer string that contains those letters. That is appropriate for finding a fragment but insufficient for validating an entire inventory identifier. Decide whether the feature searches within a value or requires the whole value to follow a grammar.\n\nBeginning and end anchors help express full-value intent under the relevant matching mode. Line-mode settings and line terminators can affect anchor behaviour, so a production identifier validator should also define whether newlines are allowed. The exercises use single-line ASCII inputs and explicit expected lengths where needed; they do not rely on unexamined multiline behaviour to reject every possible malformed string.\n\n```sql\nSELECT equipment_id, equipment_code\nFROM tagged_equipment\nWHERE REGEXP_LIKE(equipment_code, '^[A-Z]{3}-[0-9]{4}$', 'c')\n  AND CHAR_LENGTH(equipment_code) = 8\nORDER BY equipment_id;\n```\n\n## Character classes state permitted positions\n\nA bracketed class can describe one permitted character at a position. The range from uppercase A to Z expresses the ASCII letter range used by the exercise, while the range from zero to nine expresses its decimal digit characters. A quantifier applies a repetition rule to the preceding element. Three letters followed by four digits is different from any number of letters or digits in any order.\n\nNamed Unicode-aware classes can represent broader sets than explicit ASCII ranges. That can be useful for human-language text but inappropriate for an identifier whose external specification permits only ASCII. Decide which domain the code belongs to before choosing a class. A pattern that accepts additional visually similar characters can violate the contract even when the displayed identifier appears reasonable.\n\n## Group alternatives before repeating or anchoring\n\nAlternation represents a choice between forms. If a location code allows either LAB or STORE followed by a hyphen and two digits, group the alternatives so the shared suffix applies to both. Without the intended grouping, an anchor or suffix may constrain only one branch. Parentheses describe the regex structure; they do not automatically create SQL grouping outside the pattern string.\n\nA bounded quantifier defines how many repetitions are allowed. Exactly two digits excludes one digit and three digits. A range of repetition counts would intentionally admit several lengths. Explain the grammar token by token, then test a near miss at each position. A single valid sample cannot reveal that one branch accidentally bypasses the suffix or admits a longer surrounding string.\n\n## Punctuation can be syntax or data\n\nThe dot normally represents a wildcard character under its documented matching rules, rather than a literal period. If a filename grammar requires a period before an extension, express that period literally using an appropriate escape or character class. A bracketed literal dot can make a small teaching example readable while avoiding an extra layer of backslash handling.\n\nThere are two languages to consider: SQL string-literal syntax and the regex language inside the resulting string. An escape can be processed before the regex engine receives the pattern. Application-language strings can introduce yet another layer. Use supported parameters to pass values safely and inspect the intended pattern itself rather than count backslashes by visual intuition across several string encodings.\n\n## Case and matching modes are explicit choices\n\nREGEXP_LIKE accepts a match-type argument that can request case-sensitive or case-insensitive matching. Other flags influence line and dot behaviour. The examples request case-sensitive matching explicitly because uppercase identifier rules should not depend on a default that might change with collation. Preserve the type and character-set contract as well; a binary string is not interchangeable with ordinary textual input to every MySQL regex function.\n\nDo not infer all Unicode behaviour from an ASCII example. Case relationships and character categories can involve more than the English alphabet. If the feature accepts human names or multilingual labels, establish representative language requirements and test them under the actual engine. If the feature accepts a restricted machine identifier, keep its narrower grammar clearly labeled and reject ambiguous normalization rather than silently invent it.\n\n## Missing values and malformed patterns differ\n\nWhen a source expression or pattern is [NULL](/learning/dbms-sql-tutorial/null-values), MySQL matching functions can return NULL, which acts as UNKNOWN in a WHERE condition. A missing code therefore does not qualify as a valid formatted identifier. An invalid regex pattern is different: it can produce an execution error. A user-facing search needs a controlled error path rather than treat malformed syntax as an ordinary empty result.\n\nA system that accepts user-authored regexes should validate their use and bound the work they can request. Complex repetition and long inputs can be expensive. MySQL exposes regex resource controls, but application limits and a narrowly scoped feature are still useful. Do not give unrestricted pattern execution merely because the input is parameterized; binding prevents SQL injection without guaranteeing cheap matching.\n\n## Regex shape is not complete business validity\n\nA code matching three letters and four digits is structurally well formed. It may still name no existing equipment, belong to another campus or be unavailable to the caller. Database relationships and trusted access rules enforce those separate facts. Passing a regex should never become proof that a caller is authorized to borrow or edit the referenced item.\n\nSimilarly, a filename extension pattern does not prove a file's actual content type or that an upload is safe to process. The pattern answers a text question. A trustworthy application follows that check with the relevant authoritative checks at the actual boundary. Keeping those responsibilities separate makes both the regex and the surrounding service easier to review and test.\n\n## Build a small grammar-focused test matrix\n\nThe first exercise selects exact uppercase inventory codes with a fixed length. It rejects lowercase letters, too few digits and an otherwise valid code embedded in a longer string. The second recognizes two grouped location prefixes with a shared two-digit suffix. It rejects an incomplete first branch and a three-digit suffix, exposing mistakes in grouping and repetition.\n\nFor each candidate, identify the token that succeeds or fails. Test missing input separately from malformed known text, and return source identities in a deterministic order. Before transferring the pattern to another engine, repeat the same matrix there and check any additional mode or Unicode requirements. A regex is maintainable when its accepted grammar, invocation dialect and tested boundaries can all be explained without relying on a mysterious string of punctuation.\n",
+  "references": [
+    {
+      "title": "MySQL 8.4 regular expressions and resource controls",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/regexp.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-12-pattern-matching",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-12-pattern-matching-1",
+          "test_id": "pt-dbms-sql-12-pattern-matching",
+          "question_text": "What does regex add beyond LIKE wildcards?",
+          "options": [
+            "Automatic authorization",
+            "Character classes, grouped alternatives and controlled repetition",
+            "Automatic reference integrity",
+            "Only exact equality"
+          ],
+          "correct_index": 1,
+          "explanation": "It can express a richer text grammar.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-12-pattern-matching-2",
+          "test_id": "pt-dbms-sql-12-pattern-matching",
+          "question_text": "Why must PostgreSQL regex examples be checked before use in MySQL?",
+          "options": [
+            "All regex syntax is identical everywhere",
+            "Invocation syntax and regex-engine details can differ",
+            "Only SQL capitalization differs",
+            "PostgreSQL patterns are always invalid text"
+          ],
+          "correct_index": 1,
+          "explanation": "Portability includes the call and matching semantics.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-12-pattern-matching-3",
+          "test_id": "pt-dbms-sql-12-pattern-matching",
+          "question_text": "Which named MySQL function tests regex matching?",
+          "options": [
+            "REGEX_ONLY",
+            "REGEXP_LIKE",
+            "MATCHES_SQL",
+            "LIKE_REGEX_TABLE"
+          ],
+          "correct_index": 1,
+          "explanation": "Use the actual documented MySQL operation.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-12-pattern-matching-4",
+          "test_id": "pt-dbms-sql-12-pattern-matching",
+          "question_text": "What should a tutorial promise about regex performance compared with LIKE?",
+          "options": [
+            "Regex is always faster",
+            "Measure the actual pattern and workload instead of asserting a universal cost order",
+            "Regex is always exactly twice as slow",
+            "Every regex can use a prefix index"
+          ],
+          "correct_index": 1,
+          "explanation": "Complexity and data shape determine work.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-12-pattern-matching-5",
+          "test_id": "pt-dbms-sql-12-pattern-matching",
+          "question_text": "Why does changing only the regex keyword not establish portability?",
+          "options": [
+            "All engines share one implementation",
+            "Engines, flags, escaping and character semantics may also differ",
+            "Only identifiers differ",
+            "Regex is not supported by databases"
+          ],
+          "correct_index": 1,
+          "explanation": "The same-looking string can have a different contract.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-12-pattern-matching-6",
+          "test_id": "pt-dbms-sql-12-pattern-matching",
+          "question_text": "Why does a required literal period need deliberate syntax?",
+          "options": [
+            "Dot is never allowed",
+            "Dot normally has wildcard meaning in regex",
+            "Dot means literal only in every regex",
+            "Only LIKE can match punctuation"
+          ],
+          "correct_index": 1,
+          "explanation": "Use an appropriate literal escape or bracketed dot.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-12-pattern-matching-7",
+          "test_id": "pt-dbms-sql-12-pattern-matching",
+          "question_text": "When is LIKE a good choice?",
+          "options": [
+            "When arbitrary nested grammars are needed",
+            "When simple prefix, suffix or containment wildcards express the requirement",
+            "When every digit count must be checked",
+            "When a complex alternation is essential"
+          ],
+          "correct_index": 1,
+          "explanation": "Use the simplest adequate language.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-12-pattern-matching-8",
+          "test_id": "pt-dbms-sql-12-pattern-matching",
+          "question_text": "What does grouped alternation represent?",
+          "options": [
+            "A SQL join",
+            "A choice between permitted pattern branches",
+            "A guarantee that every branch matches",
+            "A numeric sum"
+          ],
+          "correct_index": 1,
+          "explanation": "Grouping controls where shared suffixes and anchors apply.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-12-pattern-matching-new-9",
+          "test_id": "pt-dbms-sql-12-pattern-matching",
+          "question_text": "Why anchor an identifier-validation pattern?",
+          "options": [
+            "To restrict matching to the intended complete value rather than a fragment",
+            "To make every matching request authorized",
+            "To guarantee constant runtime",
+            "To remove the need for character rules"
+          ],
+          "correct_index": 0,
+          "explanation": "Boundary mode and line policy still need definition.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-12-pattern-matching-new-10",
+          "test_id": "pt-dbms-sql-12-pattern-matching",
+          "question_text": "What does [0-9]{4} describe in the exercise grammar?",
+          "options": [
+            "Any four bytes",
+            "Exactly four ASCII decimal digit characters",
+            "At least one arbitrary Unicode character",
+            "A number greater than four"
+          ],
+          "correct_index": 1,
+          "explanation": "The class defines the permitted characters and the quantifier defines length.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-12-pattern-matching-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-12-pattern-matching-application-new-1",
+          "test_id": "pt-dbms-sql-12-pattern-matching-application",
+          "question_text": "What should be checked for full-value matching with possible newlines?",
+          "options": [
+            "Only the SQL table name",
+            "Anchor and line-mode semantics plus the input contract",
+            "Only the first character",
+            "Whether the output is sorted"
+          ],
+          "correct_index": 1,
+          "explanation": "The exercises deliberately use single-line inputs.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-12-pattern-matching-application-new-2",
+          "test_id": "pt-dbms-sql-12-pattern-matching-application",
+          "question_text": "What does the c match-type request in MySQL REGEXP_LIKE?",
+          "options": [
+            "Concatenation",
+            "A committed transaction",
+            "Case-sensitive matching",
+            "Character counting only"
+          ],
+          "correct_index": 2,
+          "explanation": "The exercise explicitly requires uppercase forms.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-12-pattern-matching-application-new-3",
+          "test_id": "pt-dbms-sql-12-pattern-matching-application",
+          "question_text": "What does a NULL source code normally produce under REGEXP_LIKE?",
+          "options": [
+            "A valid empty match automatically",
+            "A permission grant",
+            "Always a malformed-pattern error",
+            "NULL, so it does not qualify in an ordinary WHERE"
+          ],
+          "correct_index": 3,
+          "explanation": "Missing input differs from known invalid syntax.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-12-pattern-matching-application-new-4",
+          "test_id": "pt-dbms-sql-12-pattern-matching-application",
+          "question_text": "What can a malformed regex pattern cause?",
+          "options": [
+            "An execution error needing a controlled response",
+            "Only a harmless no-match result",
+            "Automatic pattern correction",
+            "An implicit commit"
+          ],
+          "correct_index": 0,
+          "explanation": "Validate the feature and handle the documented failure path.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-12-pattern-matching-application-new-5",
+          "test_id": "pt-dbms-sql-12-pattern-matching-application",
+          "question_text": "Does binding an untrusted regex guarantee low execution cost?",
+          "options": [
+            "Yes, binding makes every match constant time",
+            "No, pattern complexity and input size still matter",
+            "Only for named parameters",
+            "Only when no literal appears"
+          ],
+          "correct_index": 1,
+          "explanation": "SQL injection protection and resource control are separate.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-12-pattern-matching-application-new-6",
+          "test_id": "pt-dbms-sql-12-pattern-matching-application",
+          "question_text": "Why can a named Unicode character class differ from [A-Z]?",
+          "options": [
+            "It always means exactly uppercase ASCII",
+            "It only applies to numbers",
+            "It may represent a broader character domain",
+            "It disables repetition"
+          ],
+          "correct_index": 2,
+          "explanation": "Choose classes that match the identifier specification.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-12-pattern-matching-application-new-7",
+          "test_id": "pt-dbms-sql-12-pattern-matching-application",
+          "question_text": "What does an inventory code passing a shape regex fail to prove?",
+          "options": [
+            "That its text matched the pattern",
+            "That uppercase letters occurred",
+            "That the length condition passed",
+            "That the code exists and the caller may use it"
+          ],
+          "correct_index": 3,
+          "explanation": "Reference and authority checks remain separate.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-12-pattern-matching-application-new-8",
+          "test_id": "pt-dbms-sql-12-pattern-matching-application",
+          "question_text": "Why group LAB and STORE before their shared suffix?",
+          "options": [
+            "Both branches must receive the same suffix and boundary rules",
+            "Grouping automatically creates a lookup table",
+            "Only STORE can ever have digits",
+            "Ungrouped alternatives always raise syntax errors"
+          ],
+          "correct_index": 0,
+          "explanation": "An ungrouped branch can accidentally bypass shared structure.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-12-pattern-matching-application-new-9",
+          "test_id": "pt-dbms-sql-12-pattern-matching-application",
+          "question_text": "What engine implements MySQL 8.4 regex support?",
+          "options": [
+            "The same implementation guaranteed in every MariaDB version",
+            "ICU",
+            "A browser JavaScript engine",
+            "The SQL optimizer alone"
+          ],
+          "correct_index": 1,
+          "explanation": "Exact MySQL tests are distinct from another engine’s compatibility results.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-12-pattern-matching-application-new-10",
+          "test_id": "pt-dbms-sql-12-pattern-matching-application",
+          "question_text": "Which near miss best tests a fixed two-digit suffix?",
+          "options": [
+            "Only a valid two-digit value",
+            "An unrelated empty table",
+            "A value with the correct prefix but three suffix digits",
+            "A row with an unrelated quantity"
+          ],
+          "correct_index": 2,
+          "explanation": "Vary one grammar boundary at a time.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cx-regex-uppercase-inventory-code",
+      "slug": "regex-uppercase-inventory-code",
+      "title": "Recognize the exact inventory code grammar",
+      "difficulty": "Easy",
+      "task": "Return equipment_id,equipment_code for codes containing exactly three uppercase ASCII letters, one hyphen and four ASCII digits, total length 8. Inputs are single-line text without line terminators. Use case-sensitive MySQL REGEXP_LIKE and order by equipment_id.",
+      "schema_sql": "CREATE TABLE tagged_equipment(equipment_id INT PRIMARY KEY,equipment_code VARCHAR(40) CHARACTER SET utf8mb4);",
+      "seed_sql": "INSERT INTO tagged_equipment VALUES (1,'CAM-0042'),(2,'cam-0042'),(3,'CAM-042'),(4,'XCAM-0042'),(5,NULL),(6,'MIC-0000');",
+      "expected": "equipment_id\tequipment_code\n1\tCAM-0042\n6\tMIC-0000",
+      "ordering": "As explicitly ordered in the result query.",
+      "constraints": [
+        "Use only the supplied synthetic tables and requested transition.",
+        "Preserve unrelated rows."
+      ],
+      "edge_cases": [
+        "Leading zero digits remain valid characters.",
+        "A valid-looking fragment inside a larger value does not qualify."
+      ],
+      "hints": [
+        "Anchor the allowed grammar.",
+        "Request case-sensitive matching explicitly."
+      ],
+      "solution_sql": "SELECT equipment_id,equipment_code FROM tagged_equipment WHERE REGEXP_LIKE(equipment_code,'^[A-Z]{3}-[0-9]{4}$','c') AND CHAR_LENGTH(equipment_code)=8 ORDER BY equipment_id;",
+      "explanation": "Anchors, exact character classes and repetition counts express the single-line grammar. The explicit case mode and length check make the intended restricted domain visible.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO tagged_equipment VALUES (8,'TRI-9999'),(9,'TRI-99999');",
+          "expected": "equipment_id\tequipment_code\n8\tTRI-9999"
+        },
+        {
+          "seed_sql": "INSERT INTO tagged_equipment VALUES (1,'CAM0042'),(2,'CAM-ABCD');",
+          "expected": ""
+        }
+      ]
+    },
+    {
+      "id": "cx-regex-grouped-location-forms",
+      "slug": "regex-grouped-location-forms",
+      "title": "Share a suffix across two location prefixes",
+      "difficulty": "Medium",
+      "task": "Return location_id,location_code for exactly LAB- followed by two digits or STORE- followed by two digits. ASCII digits and uppercase prefixes are required. Inputs are single-line text without line terminators. Use case-sensitive MySQL REGEXP_LIKE and order by location_id.",
+      "schema_sql": "CREATE TABLE locations(location_id INT PRIMARY KEY,location_code VARCHAR(40) CHARACTER SET utf8mb4);",
+      "seed_sql": "INSERT INTO locations VALUES (1,'LAB-01'),(2,'STORE-99'),(3,'LAB'),(4,'STORE-100'),(5,'lab-01'),(6,'XSTORE-01'),(7,NULL);",
+      "expected": "location_id\tlocation_code\n1\tLAB-01\n2\tSTORE-99",
+      "ordering": "As explicitly ordered in the result query.",
+      "constraints": [
+        "Use only the supplied synthetic tables and requested transition.",
+        "Preserve unrelated rows."
+      ],
+      "edge_cases": [
+        "Both prefixes require exactly two digits.",
+        "A shorter first branch cannot bypass the shared suffix."
+      ],
+      "hints": [
+        "Group the alternatives before attaching the common suffix.",
+        "Do not leave the LAB branch unanchored or suffix-free."
+      ],
+      "solution_sql": "SELECT location_id,location_code FROM locations WHERE REGEXP_LIKE(location_code,'^(LAB|STORE)-[0-9]{2}$','c') AND CHAR_LENGTH(location_code) IN (6,8) ORDER BY location_id;",
+      "explanation": "The grouped alternatives both receive the hyphen, exact digit count and full-value anchors. The length check is consistent with the two permitted prefixes.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO locations VALUES (8,'LAB-00'),(9,'STORE-00'),(10,'LAB-0');",
+          "expected": "location_id\tlocation_code\n8\tLAB-00\n9\tSTORE-00"
+        },
+        {
+          "seed_sql": "INSERT INTO locations VALUES (1,'LAB-anything'),(2,'STORE-AB');",
+          "expected": ""
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-12-pattern-matching-1",
+      "test_id": "pt-dbms-sql-12-pattern-matching",
+      "question_text": "What can regular expressions express that LIKE's simple wildcards cannot?",
+      "options": [
+        "Nothing — they are equivalent in power",
+        "More complex pattern logic, like character classes, alternatives, and precise repetition rules",
+        "Only exact string matches",
+        "Only numeric comparisons"
+      ],
+      "correct_index": 1,
+      "explanation": "Regex is a strictly more expressive pattern language than LIKE's two wildcards.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-12-pattern-matching-2",
+      "test_id": "pt-dbms-sql-12-pattern-matching",
+      "question_text": "Which operator/function does PostgreSQL use for regex matching?",
+      "options": [
+        "REGEXP",
+        "~",
+        "RLIKE",
+        "MATCH"
+      ],
+      "correct_index": 1,
+      "explanation": "PostgreSQL uses the ~ operator (and ~* for case-insensitive) for regex matching.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-12-pattern-matching-3",
+      "test_id": "pt-dbms-sql-12-pattern-matching",
+      "question_text": "Which keyword does MySQL use for regex matching?",
+      "options": [
+        "~",
+        "REGEXP (or its synonym RLIKE)",
+        "SIMILAR TO",
+        "MATCHES"
+      ],
+      "correct_index": 1,
+      "explanation": "MySQL's REGEXP (and RLIKE as a synonym) performs regex matching.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-12-pattern-matching-4",
+      "test_id": "pt-dbms-sql-12-pattern-matching",
+      "question_text": "Is regex matching generally more or less expensive than a simple LIKE pattern?",
+      "options": [
+        "Always less expensive",
+        "Generally more computationally expensive, especially on large tables without supporting indexes",
+        "Exactly the same cost in every case",
+        "Regex matching cannot be used on any indexed column"
+      ],
+      "correct_index": 1,
+      "explanation": "The added expressive power of regex comes with real additional computational cost.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-12-pattern-matching-5",
+      "test_id": "pt-dbms-sql-12-pattern-matching",
+      "question_text": "Why is regex syntax described as one of the least portable areas of SQL?",
+      "options": [
+        "It is actually perfectly standardized across all dialects",
+        "Both the invocation keyword (REGEXP/~/RLIKE/SIMILAR TO) and details of the regex dialect itself vary significantly across database engines",
+        "Regex is not supported by any mainstream database",
+        "Portability issues only affect LIKE, not regex"
+      ],
+      "correct_index": 1,
+      "explanation": "This dialect fragmentation is more pronounced for regex than for most other SQL features.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-12-pattern-matching-6",
+      "test_id": "pt-dbms-sql-12-pattern-matching",
+      "question_text": "Why might `.` need special handling in a regex pattern if you want to match a literal period?",
+      "options": [
+        "`.` has no special meaning in regex",
+        "`.` normally means 'any single character' in regex, so matching a literal period requires escaping it",
+        "Periods are never allowed in regex patterns",
+        "`.` only has special meaning in LIKE, not regex"
+      ],
+      "correct_index": 1,
+      "explanation": "Regex special characters like `.` need escaping to be matched literally — a common gotcha.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-12-pattern-matching-7",
+      "test_id": "pt-dbms-sql-12-pattern-matching",
+      "question_text": "When should you prefer LIKE over a full regular expression?",
+      "options": [
+        "Always use regex regardless of complexity",
+        "When a simple wildcard pattern genuinely suffices — it's simpler and typically cheaper than regex",
+        "LIKE should never be used if regex is available",
+        "There's no meaningful difference in when to use each"
+      ],
+      "correct_index": 1,
+      "explanation": "Reaching for the simpler, generally cheaper tool when it's sufficient is good practice.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-12-pattern-matching-8",
+      "test_id": "pt-dbms-sql-12-pattern-matching",
+      "question_text": "Can regex patterns express alternation (matching one of several alternative forms)?",
+      "options": [
+        "No, this is impossible with regex",
+        "Yes — this is a classic example of pattern logic regex supports that LIKE fundamentally cannot express",
+        "Only LIKE can express alternation",
+        "Alternation requires a separate UNION query instead"
+      ],
+      "correct_index": 1,
+      "explanation": "Alternation (e.g. matching 'cat' or 'dog') is a standard regex capability beyond LIKE's simple wildcards.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "coordinator",
+    "independent_review": "passed",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Independent manual review passed; native MySQL fixture evidence recorded separately; provider/browser/Supabase release gates remain separate.",
+    "existing_question_corrections": [
+      "tq-dbms-sql-12-pattern-matching-1",
+      "tq-dbms-sql-12-pattern-matching-2",
+      "tq-dbms-sql-12-pattern-matching-3",
+      "tq-dbms-sql-12-pattern-matching-4",
+      "tq-dbms-sql-12-pattern-matching-5",
+      "tq-dbms-sql-12-pattern-matching-6",
+      "tq-dbms-sql-12-pattern-matching-7",
+      "tq-dbms-sql-12-pattern-matching-8"
+    ],
+    "canonical_answer_indices_preserved": true,
+    "editorial_record": "Original snapshots retained. Questions rewritten for precise dialect and topic coverage while preserving identities and canonical answer positions; technical and independent review pending.",
+    "independent_reviewer": "Codex reviewer, current 2026-10-30 session",
+    "independent_review_scope": "Read full notes, all 640 MCQ stems/options/canonical answers/explanations, 64 exercise contracts/solutions/fixtures, and all 32 diagrams. Verified retained identities/answers through source-continuity tests; SQL execution evidence is recorded separately. No external originality, provider, live application or Supabase authorization clearance.",
+    "independent_review_record": "reports/independent-review-2026-10-30.json",
+    "content_sha256": "7fc2cfe360567e8697c05e12ffe8a338a5477ad6aae841ffa37e08d1bb7ace2f"
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-12-pattern-matching",
+    "original_note_sha256": "6a75bb1701447169b0ed9882fa7987babea0d0195dce1ab56f29897112408bbb",
+    "status": "drafted; not yet included in prepared paired migrations"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "The inventory grammar assigns each position a role",
+      "description": "Single-line codes must satisfy every token and the total length of eight.",
+      "columns": [
+        "Position",
+        "Required form",
+        "Valid example",
+        "Rejected near miss"
+      ],
+      "rows": [
+        [
+          "1 through 3",
+          "Uppercase ASCII letter",
+          "CAM",
+          "cam"
+        ],
+        [
+          "4",
+          "Literal hyphen",
+          "-",
+          "Underscore"
+        ],
+        [
+          "5 through 8",
+          "Four ASCII digits",
+          "0042",
+          "042"
+        ],
+        [
+          "Whole value",
+          "No surrounding text",
+          "CAM-0042",
+          "XCAM-0042"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "drafted — verification pending",
+    "server_rendering": "pending",
+    "browser_rendering": "unverified",
+    "independent_review": "pending"
+  },
+  "authoring_status": "drafted — verification pending",
+  "sql_verification": {
+    "scope": "not executed; exact MySQL/provider verification pending",
+    "all_passed": false,
+    "cases": []
+  }
+}

@@ -1,0 +1,633 @@
+{
+  "source_ref": "chapter-5-keys-and-integrity/foreign-key",
+  "slug": "foreign-key",
+  "title": "Foreign Key",
+  "description": "Understand parent-child references, optional relationships and referential actions, then audit proposed references without confusing query results with constraint enforcement.",
+  "dialect": "MySQL 8.4",
+  "notes": "## A reference connects one fact to another\n\nA foreign key constrains attributes that refer to an allowed identifying key. In a campus system, Enrollment.student_id can reference Student.student_id. The enrollment is the referencing child fact, while Student supplies the referenced parent identity. A valid nonmissing reference identifies an allowed parent under the constraint's definition. The child does not need to copy the student's full name and programme to express this relationship.\n\nThe word foreign does not require a different database or even a different table. An advisor_id attribute can reference a student identity in the same Student relation. Such a self-reference still needs referential integrity. It may also need other rules, such as prohibiting self-advising or cycles, but those additional business conditions do not follow automatically from existence of the referenced identity.\n\n## Parent and child describe reference roles\n\nThe child owns the referencing attributes. A department table can supply department_id identities, while employees.department_id refers to them. Many employees can share one department reference. The foreign key therefore does not normally identify an employee uniquely; it constrains which department identity the employee may name. Employee identity needs its own primary or other appropriate key.\n\nA table can play both roles in different relationships. A course can reference a department and be referenced by enrollments. Read each constraint independently rather than assigning one permanent parent or child category to the table for the entire database. This makes a diagram of several relationships easier to interpret without inventing ownership rules from the position of a box.\n\n## Types and labels do not enforce existence\n\nAn integer column named department_id can contain a number without a matching department unless the intended rule is actually enforced. A CHECK that the number is positive also does not establish existence. Likewise, a drawn arrow is a design description rather than executable protection. Inspect the actual foreign-key declaration, engine support, and enabled enforcement behaviour before claiming the relationship is protected.\n\nThe referenced attributes must satisfy the target engine's supported key and indexing requirements, and the referencing attributes need compatible definitions. Appropriate unique alternate keys can be reference targets where supported. It is too broad to claim that every arbitrary UNIQUE expression or column in every dialect can be referenced without further conditions. The actual definition determines whether the relationship is legal and enforceable.\n\n## Optional references differ from invalid references\n\nA nullable single-column department reference can represent an employee who is not assigned to a department. That absence is different from a nonmissing department identifier that does not exist. An audit intended to find invalid references should exclude permitted NULL references before reporting unmatched parents. Otherwise legitimate unassigned employees are incorrectly described as orphaned records.\n\nA required relationship also needs the corresponding nonmissing policy. The foreign key alone does not imply NOT NULL on every child column. Composite foreign keys introduce additional missing-component semantics, so describe their actual definition rather than extending a single-column slogan to every case. If an all-or-none composite reference is intended, its missing-component policy may need an additional explicit rule.\n\n## Child writes must respect the relationship\n\nWith an enforced foreign key, adding a child that names an absent required parent should fail. Changing an existing child reference to another absent identity should also fail. A valid existing parent can be referenced by multiple children unless a separate uniqueness rule restricts that participation. These cases distinguish reference existence from local identity and from one-to-one relationship requirements.\n\nA form that only lists valid departments is helpful feedback but not the trusted enforcement boundary. Imports and other callers can submit values directly, and parents can change between a preliminary lookup and a later write. The actual accepted operation must preserve the invariant using supported database rules and appropriate transaction handling. UI choices alone do not establish enduring reference validity.\n\n## Parent changes need deliberate actions\n\nDeleting a referenced parent can be rejected or handled by a configured supported action. RESTRICT prevents a deletion while relevant child references remain. CASCADE can remove corresponding child facts. SET NULL can detach an optional reference where the child definition permits it. These behaviours have different consequences and must match the intended lifecycle of the data.\n\nA course enrollment history may need to remain after a course stops accepting students. That does not imply deleting the course and cascading away all history is correct. A status change, retention policy, or other design may better preserve the facts. Choose referential actions from the domain requirements rather than presenting cascade as a universal convenience that makes every relationship safer.\n\n## Reference updates also affect related facts\n\nChanging a parent identifier can require coordinated handling of existing child references. An enforced definition can reject the change or apply a supported configured update action. Stable internal identifiers often reduce unnecessary reference changes when descriptive names or public codes change. A label update is therefore different from changing the actual referenced identity.\n\nIf references target a mutable alternate code, review the update policy carefully. One changed course code can affect many relationships even though the underlying course is the same. Conversely, a child reference can be updated to another valid parent if the business operation is authorized and the model permits it. Foreign-key validity is not itself permission to reassign a student's course or an employee's department.\n\n## An anti-join diagnoses unmatched proposals\n\nA staging table can intentionally contain proposals that have not yet passed final integrity rules. A preserving join can reveal nonmissing references with no parent match. Test a parent key known to be non-NULL for matched rows rather than an optional descriptive label. A parent can exist while its description is missing, so checking that description would create false orphan reports.\n\n```sql\nSELECT e.employee_id, e.department_id\nFROM proposed_employees e\nLEFT JOIN departments d\n  ON d.department_id = e.department_id\nWHERE e.department_id IS NOT NULL\n  AND d.department_id IS NULL\nORDER BY e.employee_id;\n```\n\nThe child nonmissing condition distinguishes invalid references from permitted unassigned proposals. The query reports current unmatched proposals; it does not install a foreign key or prevent a later invalid write. Keep audit evidence separate from accepted and rejected constraint operations when reporting what has been verified.\n\n## Grouped reports can preserve optional parents\n\nA department summary may need every department, including those with no employees. Start from departments and preserve unmatched parents when joining employee facts. Count a non-NULL child identity to measure actual employees. COUNT(*) can otherwise count the preserved unmatched output row and report one employee for a department that has none.\n\nIf the fixture intentionally includes invalid proposals, those unmatched child references should not be silently counted as employees of some other department. An audit can report them separately. A summary of valid matching references and an orphan report answer complementary questions, but neither proves a real database constraint rejected invalid operations. State which population each report covers.\n\n## Verify constraints on the appropriate engine\n\nActual foreign-key tests should include a valid child, an invalid child insert, an invalid child update, a restricted parent deletion, and any deliberately configured referential action. Use compatible persistent test tables in an authorized isolated database when required: temporary-table support is not interchangeable with actual foreign-key support. Never assume that a query mirror with no foreign keys verifies those enforcement paths.\n\nA missing parent from an inconsistent export may also reflect how related relations were copied at different moments. Establish the source and snapshot boundary before diagnosing a live integrity failure. The exercises here use temporary SQL fixtures to check audit and reporting semantics. They do not themselves verify native foreign-key enforcement. Separate synthetic native MariaDB checks are recorded in the review evidence; exact MySQL provider behaviour and production authorization remain unverified. A useful foreign-key explanation connects referenced identities, optionality, and parent-change policy, then describes the evidence at its true scope. That distinction keeps a correct relationship query from becoming an unsupported claim that every database write is protected.\n",
+  "references": [
+    {
+      "title": "MySQL 8.4 foreign-key constraints",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/create-table-foreign-keys.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-5-foreign-key",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-5-foreign-key-1",
+          "test_id": "pt-dbms-sql-5-foreign-key",
+          "question_text": "What does a foreign key do?",
+          "options": [
+            "It makes a column impossible to update",
+            "It constrains a supported reference to an allowed parent key, including a possible reference within the same table",
+            "It automatically encrypts a column",
+            "It creates a new primary key in the same table"
+          ],
+          "correct_index": 1,
+          "explanation": "A foreign key constrains reference validity; its definition supplies nullability and supported target requirements.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-5-foreign-key-2",
+          "test_id": "pt-dbms-sql-5-foreign-key",
+          "question_text": "In a departments/employees relationship where employees.department_id references departments.id, which table is the 'child' table?",
+          "options": [
+            "departments",
+            "employees",
+            "Both are children of each other",
+            "Neither — this terminology doesn't apply"
+          ],
+          "correct_index": 1,
+          "explanation": "employees holds the foreign key and depends on departments, making it the child/referencing table.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-5-foreign-key-3",
+          "test_id": "pt-dbms-sql-5-foreign-key",
+          "question_text": "With an enforced MySQL foreign key using ON DELETE RESTRICT, what happens when a referenced department is deleted?",
+          "options": [
+            "The department is deleted and employees.department_id becomes NULL automatically",
+            "The deletion is rejected while referencing child facts remain",
+            "All the referencing employees are silently deleted too",
+            "Nothing — foreign keys don't affect DELETE"
+          ],
+          "correct_index": 1,
+          "explanation": "The question specifies RESTRICT; other configured actions have different consequences.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-5-foreign-key-4",
+          "test_id": "pt-dbms-sql-5-foreign-key",
+          "question_text": "Can a single-column optional foreign reference contain NULL when all applicable constraints permit it?",
+          "options": [
+            "Never, under any circumstances",
+            "Yes, if the column allows NULL — it means 'no reference yet,' which is different from an invalid reference",
+            "Only if the column is also the primary key",
+            "Only in NoSQL databases"
+          ],
+          "correct_index": 1,
+          "explanation": "A NULL foreign key value simply means the relationship isn't set (e.g. not yet assigned), and is a perfectly valid, integrity-preserving state.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-5-foreign-key-5",
+          "test_id": "pt-dbms-sql-5-foreign-key",
+          "question_text": "How can an audit find nonmissing department references that lack a matching parent?",
+          "options": [
+            "This can never be detected",
+            "LEFT JOIN to the parent, then require a nonmissing child reference and a missing parent key",
+            "Only by manually inspecting every row",
+            "By running VACUUM on the table"
+          ],
+          "correct_index": 1,
+          "explanation": "Exclude permitted absent child references and test the non-NULL parent identity to identify unmatched values.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-5-foreign-key-6",
+          "test_id": "pt-dbms-sql-5-foreign-key",
+          "question_text": "What is 'referential integrity' most directly enforced by?",
+          "options": [
+            "The UNIQUE constraint",
+            "The foreign key constraint",
+            "The NOT NULL constraint",
+            "The CHECK constraint"
+          ],
+          "correct_index": 1,
+          "explanation": "Referential integrity — the guarantee that references point to real, existing rows — is exactly what the foreign key constraint enforces.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-5-foreign-key-7",
+          "test_id": "pt-dbms-sql-5-foreign-key",
+          "question_text": "Why might a real production database end up with orphaned foreign-key-style references despite no error being thrown?",
+          "options": [
+            "This is impossible if any foreign key constraint exists anywhere in the schema",
+            "The intended relationship may not have an actual enforced database constraint, or legacy/import paths may lack the required validation",
+            "Orphaned rows are automatically cleaned up nightly by every database",
+            "Foreign keys are enforced retroactively by SQL automatically"
+          ],
+          "correct_index": 1,
+          "explanation": "Investigate actual declarations and enforcement evidence. Adding a validated constraint normally requires compatible existing data rather than automatically tolerating old invalid references.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-5-foreign-key-8",
+          "test_id": "pt-dbms-sql-5-foreign-key",
+          "question_text": "Which key does a foreign key most commonly reference in the parent table?",
+          "options": [
+            "Any arbitrary column, chosen at random",
+            "The parent table's primary key (or occasionally a unique/alternate key)",
+            "The parent table's foreign key",
+            "A column that doesn't exist yet"
+          ],
+          "correct_index": 1,
+          "explanation": "Appropriate primary or alternate unique keys can be supported targets, subject to actual engine, type, index and definition requirements.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-5-foreign-key-new-9",
+          "test_id": "pt-dbms-sql-5-foreign-key",
+          "question_text": "Does employees.department_id normally identify an employee uniquely?",
+          "options": [
+            "Yes; every foreign key is locally unique",
+            "No; several employees can share a department",
+            "Only if it is integer",
+            "Only if sorted"
+          ],
+          "correct_index": 1,
+          "explanation": "Existence of a parent reference differs from child-row identity.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-5-foreign-key-new-10",
+          "test_id": "pt-dbms-sql-5-foreign-key",
+          "question_text": "Why exclude a permitted NULL department reference from an orphan audit?",
+          "options": [
+            "NULL automatically identifies department zero",
+            "Every missing value is invalid",
+            "Absence of an optional relationship is not a dangling nonmissing reference",
+            "It makes the query a foreign key"
+          ],
+          "correct_index": 2,
+          "explanation": "The audit must follow the stated optionality contract.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-5-foreign-key-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-5-foreign-key-application-new-1",
+          "test_id": "pt-dbms-sql-5-foreign-key-application",
+          "question_text": "Which attribute should test whether a parent matched?",
+          "options": [
+            "An optional parent description",
+            "The display row number",
+            "A parent identity guaranteed non-NULL for matched rows",
+            "The child’s name"
+          ],
+          "correct_index": 2,
+          "explanation": "A NULL optional description does not prove parent absence.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-5-foreign-key-application-new-2",
+          "test_id": "pt-dbms-sql-5-foreign-key-application",
+          "question_text": "Does a positive integer CHECK prove a referenced department exists?",
+          "options": [
+            "Yes; every positive number is a department",
+            "Only on weekdays",
+            "Only when COUNT is used",
+            "No; existence needs a reference rule"
+          ],
+          "correct_index": 3,
+          "explanation": "Local membership and cross-relation existence are different.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-5-foreign-key-application-new-3",
+          "test_id": "pt-dbms-sql-5-foreign-key-application",
+          "question_text": "What does ON DELETE CASCADE do under an applicable enforced relationship?",
+          "options": [
+            "It applies the configured child-deletion action when the parent is deleted",
+            "It preserves every history fact automatically",
+            "It grants deletion permission",
+            "It renames child keys"
+          ],
+          "correct_index": 0,
+          "explanation": "The action has lifecycle consequences and needs deliberate design.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-5-foreign-key-application-new-4",
+          "test_id": "pt-dbms-sql-5-foreign-key-application",
+          "question_text": "What is needed for a SET NULL action to be meaningful?",
+          "options": [
+            "A new primary key on every label",
+            "A compatible optional child definition permitting the resulting absence",
+            "A mandatory NOT NULL reference with no compatible policy",
+            "A screen sort order"
+          ],
+          "correct_index": 1,
+          "explanation": "The resulting child state must satisfy the intended definition.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-5-foreign-key-application-new-5",
+          "test_id": "pt-dbms-sql-5-foreign-key-application",
+          "question_text": "Does a self-referencing foreign key automatically prohibit cycles?",
+          "options": [
+            "Yes; every self-reference is a tree",
+            "No self-reference can be declared",
+            "No; parent existence and cycle policy differ",
+            "Only names can have cycles"
+          ],
+          "correct_index": 2,
+          "explanation": "Additional hierarchy requirements need separate enforcement.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-5-foreign-key-application-new-6",
+          "test_id": "pt-dbms-sql-5-foreign-key-application",
+          "question_text": "Does a valid foreign reference establish that reassignment is authorized?",
+          "options": [
+            "Yes; existence grants permission",
+            "Only if numeric",
+            "Only if the parent is first",
+            "No; access and business authority need their own checks"
+          ],
+          "correct_index": 3,
+          "explanation": "Reference integrity is distinct from caller authority.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-5-foreign-key-application-new-7",
+          "test_id": "pt-dbms-sql-5-foreign-key-application",
+          "question_text": "How should empty departments be counted after a preserving join?",
+          "options": [
+            "Count a non-NULL employee identity",
+            "Count every preserved result row as an employee",
+            "Count the department label only",
+            "Replace the parent id with NULL"
+          ],
+          "correct_index": 0,
+          "explanation": "The unmatched preserved row is not an actual employee.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-5-foreign-key-application-new-8",
+          "test_id": "pt-dbms-sql-5-foreign-key-application",
+          "question_text": "What does a temporary query mirror without a foreign key verify?",
+          "options": [
+            "Invalid child writes are rejected by a native FK",
+            "Its audit or reporting query semantics on the fixture",
+            "All parent deletion actions",
+            "Every provider configuration"
+          ],
+          "correct_index": 1,
+          "explanation": "An absent constraint cannot supply enforcement evidence.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-5-foreign-key-application-new-9",
+          "test_id": "pt-dbms-sql-5-foreign-key-application",
+          "question_text": "Why review references to a mutable alternate code?",
+          "options": [
+            "Every code change is forbidden universally",
+            "Every alternate key is unreferenceable",
+            "Changes may affect many child references under the configured policy",
+            "Mutable labels never matter"
+          ],
+          "correct_index": 2,
+          "explanation": "Reference lifecycle must match identity lifecycle.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-5-foreign-key-application-new-10",
+          "test_id": "pt-dbms-sql-5-foreign-key-application",
+          "question_text": "Which evidence would directly exercise reference enforcement?",
+          "options": [
+            "A diagram arrow only",
+            "A successful valid SELECT only",
+            "An application typecheck",
+            "An invalid child write rejected by the intended foreign-key constraint"
+          ],
+          "correct_index": 3,
+          "explanation": "The targeted rejected operation tests the actual boundary.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cx-foreign-key-orphans",
+      "slug": "foreign-key-orphans",
+      "title": "Audit nonmissing invalid department references",
+      "difficulty": "Easy",
+      "task": "Return employee_id and department_id for proposed employees whose non-NULL department reference has no parent. NULL is permitted as unassigned.",
+      "schema_sql": "CREATE TABLE departments (department_id INT PRIMARY KEY, department_name VARCHAR(50) NULL);\nCREATE TABLE proposed_employees (employee_id INT PRIMARY KEY, department_id INT NULL);",
+      "seed_sql": "INSERT INTO departments VALUES (1,NULL),(2,'Computing'); INSERT INTO proposed_employees VALUES (1,1),(2,NULL),(3,99),(4,2);",
+      "expected": "employee_id\tdepartment_id\n3\t99",
+      "ordering": "Ascending employee_id for the audit; ascending department_id for the summary.",
+      "constraints": [
+        "Fixtures intentionally contain proposals without an enforced foreign key.",
+        "SQL mirror execution verifies queries only; native FK rejection/actions remain unverified."
+      ],
+      "edge_cases": [
+        "A valid parent can have a NULL descriptive name.",
+        "An optional child reference can be absent without being invalid."
+      ],
+      "hints": [
+        "Test the parent identity rather than its optional name.",
+        "Keep permitted absence separate from invalid nonmissing references."
+      ],
+      "solution_sql": "SELECT e.employee_id, e.department_id FROM proposed_employees e LEFT JOIN departments d ON d.department_id = e.department_id WHERE e.department_id IS NOT NULL AND d.department_id IS NULL ORDER BY e.employee_id;",
+      "explanation": "The query follows the intended identities and absence policy. No native foreign-key enforcement is claimed for the unconstrained temporary fixtures.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO proposed_employees VALUES (1,NULL),(2,8);",
+          "expected": "employee_id\tdepartment_id\n2\t8"
+        },
+        {
+          "seed_sql": "INSERT INTO departments VALUES (1,NULL); INSERT INTO proposed_employees VALUES (2,1);",
+          "expected": ""
+        }
+      ]
+    },
+    {
+      "id": "cx-foreign-key-summary",
+      "slug": "foreign-key-summary",
+      "title": "Count matched employees while preserving empty departments",
+      "difficulty": "Medium",
+      "task": "Return department_id and employee_count for every department. Count matching proposed employees only, excluding unassigned and invalid-reference proposals. Include empty departments with zero.",
+      "schema_sql": "CREATE TABLE departments (department_id INT PRIMARY KEY, department_name VARCHAR(50) NULL);\nCREATE TABLE proposed_employees (employee_id INT PRIMARY KEY, department_id INT NULL);",
+      "seed_sql": "INSERT INTO departments VALUES (1,NULL),(2,'Computing'),(3,'History'); INSERT INTO proposed_employees VALUES (1,1),(2,1),(3,2),(4,NULL),(5,99);",
+      "expected": "department_id\temployee_count\n1\t2\n2\t1\n3\t0",
+      "ordering": "Ascending employee_id for the audit; ascending department_id for the summary.",
+      "constraints": [
+        "Fixtures intentionally contain proposals without an enforced foreign key.",
+        "SQL mirror execution verifies queries only; native FK rejection/actions remain unverified."
+      ],
+      "edge_cases": [
+        "A valid parent can have a NULL descriptive name.",
+        "An optional child reference can be absent without being invalid."
+      ],
+      "hints": [
+        "Test the parent identity rather than its optional name.",
+        "Keep permitted absence separate from invalid nonmissing references."
+      ],
+      "solution_sql": "SELECT d.department_id, COUNT(e.employee_id) AS employee_count FROM departments d LEFT JOIN proposed_employees e ON e.department_id = d.department_id GROUP BY d.department_id ORDER BY d.department_id;",
+      "explanation": "The query follows the intended identities and absence policy. No native foreign-key enforcement is claimed for the unconstrained temporary fixtures.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO departments VALUES (2,NULL),(1,'Art'); INSERT INTO proposed_employees VALUES (1,NULL),(2,99);",
+          "expected": "department_id\temployee_count\n1\t0\n2\t0"
+        },
+        {
+          "seed_sql": "INSERT INTO proposed_employees VALUES (1,99);",
+          "expected": ""
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-5-foreign-key-1",
+      "test_id": "pt-dbms-sql-5-foreign-key",
+      "question_text": "What does a foreign key do?",
+      "options": [
+        "It makes a column impossible to update",
+        "It references the primary/unique key of another table, ensuring the referenced value actually exists",
+        "It automatically encrypts a column",
+        "It creates a new primary key in the same table"
+      ],
+      "correct_index": 1,
+      "explanation": "A foreign key links to another table's key, enforcing that referenced values are valid.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-5-foreign-key-2",
+      "test_id": "pt-dbms-sql-5-foreign-key",
+      "question_text": "In a departments/employees relationship where employees.department_id references departments.id, which table is the 'child' table?",
+      "options": [
+        "departments",
+        "employees",
+        "Both are children of each other",
+        "Neither — this terminology doesn't apply"
+      ],
+      "correct_index": 1,
+      "explanation": "employees holds the foreign key and depends on departments, making it the child/referencing table.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-5-foreign-key-3",
+      "test_id": "pt-dbms-sql-5-foreign-key",
+      "question_text": "What happens by default if you try to DELETE a department row that still has employees referencing it?",
+      "options": [
+        "The department is deleted and employees.department_id becomes NULL automatically",
+        "The delete is rejected with a constraint violation, unless a cascading action is configured",
+        "All the referencing employees are silently deleted too",
+        "Nothing — foreign keys don't affect DELETE"
+      ],
+      "correct_index": 1,
+      "explanation": "The default foreign-key behavior blocks a delete that would orphan referencing rows, unless ON DELETE CASCADE/SET NULL is explicitly configured.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-5-foreign-key-4",
+      "test_id": "pt-dbms-sql-5-foreign-key",
+      "question_text": "Can a foreign key column contain NULL?",
+      "options": [
+        "Never, under any circumstances",
+        "Yes, if the column allows NULL — it means 'no reference yet,' which is different from an invalid reference",
+        "Only if the column is also the primary key",
+        "Only in NoSQL databases"
+      ],
+      "correct_index": 1,
+      "explanation": "A NULL foreign key value simply means the relationship isn't set (e.g. not yet assigned), and is a perfectly valid, integrity-preserving state.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-5-foreign-key-5",
+      "test_id": "pt-dbms-sql-5-foreign-key",
+      "question_text": "How can you detect 'orphaned' rows whose foreign key value doesn't match anything in the parent table (e.g. if the constraint was never actually enforced)?",
+      "options": [
+        "This can never be detected",
+        "With an anti-join query, e.g. a LEFT JOIN to the parent table filtered to WHERE parent.id IS NULL",
+        "Only by manually inspecting every row",
+        "By running VACUUM on the table"
+      ],
+      "correct_index": 1,
+      "explanation": "A LEFT JOIN from child to parent, filtered to rows where the parent side is NULL, reveals exactly the orphaned rows — a standard integrity-check query.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-5-foreign-key-6",
+      "test_id": "pt-dbms-sql-5-foreign-key",
+      "question_text": "What is 'referential integrity' most directly enforced by?",
+      "options": [
+        "The UNIQUE constraint",
+        "The foreign key constraint",
+        "The NOT NULL constraint",
+        "The CHECK constraint"
+      ],
+      "correct_index": 1,
+      "explanation": "Referential integrity — the guarantee that references point to real, existing rows — is exactly what the foreign key constraint enforces.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-5-foreign-key-7",
+      "test_id": "pt-dbms-sql-5-foreign-key",
+      "question_text": "Why might a real production database end up with orphaned foreign-key-style references despite no error being thrown?",
+      "options": [
+        "This is impossible if any foreign key constraint exists anywhere in the schema",
+        "The constraint may have been added after data already existed, or the relationship enforced only in application code rather than as a real database-level FOREIGN KEY",
+        "Orphaned rows are automatically cleaned up nightly by every database",
+        "Foreign keys are enforced retroactively by SQL automatically"
+      ],
+      "correct_index": 1,
+      "explanation": "A relationship not backed by an actual enforced FOREIGN KEY constraint can silently accumulate invalid references over time.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-5-foreign-key-8",
+      "test_id": "pt-dbms-sql-5-foreign-key",
+      "question_text": "Which key does a foreign key most commonly reference in the parent table?",
+      "options": [
+        "Any arbitrary column, chosen at random",
+        "The parent table's primary key (or occasionally a unique/alternate key)",
+        "The parent table's foreign key",
+        "A column that doesn't exist yet"
+      ],
+      "correct_index": 1,
+      "explanation": "Foreign keys conventionally reference the parent's primary key, and can technically reference any UNIQUE column.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "coordinator",
+    "independent_review": "unavailable; no agent tools",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Definitions and examples checked against questions; no plagiarism certification.",
+    "existing_question_corrections": [
+      "tq-dbms-sql-5-foreign-key-1",
+      "tq-dbms-sql-5-foreign-key-3",
+      "tq-dbms-sql-5-foreign-key-4",
+      "tq-dbms-sql-5-foreign-key-5",
+      "tq-dbms-sql-5-foreign-key-7",
+      "tq-dbms-sql-5-foreign-key-8"
+    ],
+    "canonical_answer_indices_preserved": true,
+    "verification_gaps": [
+      "Exact MySQL/provider execution, application authorization, rollback and concurrency remain unverified. Native synthetic MariaDB reference-action checks are recorded separately from these temporary query exercises."
+    ],
+    "native_reference_review": {
+      "date": "2026-10-29",
+      "engine": "11.8.6-MariaDB-0+deb13u1 from Debian",
+      "result": "13 synthetic native InnoDB checks passed; see progress.native_reference_verification for cases and verifier fingerprint.",
+      "scope": "Native InnoDB referential-action checks on synthetic persistent tables in isolated MariaDB scratch database; exact MySQL/provider, application authorization, rollback and concurrency unverified"
+    }
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-5-foreign-key",
+    "original_note_sha256": "172ac2a5767d80b7def13f05da38edca1723f842fe064ea44624375c97ebea8c",
+    "status": "paired migration prepared; not applied"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Optional absence is different from a nonmissing orphan reference",
+      "description": "Parent department 1 exists even if its name is missing. An orphan audit must inspect the identity and the child absence policy.",
+      "columns": [
+        "Child department reference",
+        "Parent state",
+        "Interpretation"
+      ],
+      "rows": [
+        [
+          "1",
+          "Department 1 exists; name may be NULL",
+          "Valid reference"
+        ],
+        [
+          "NULL",
+          "No relationship requested",
+          "Valid unassigned state if permitted"
+        ],
+        [
+          "99",
+          "No department 99 exists",
+          "Invalid nonmissing proposal"
+        ],
+        [
+          "Repeated 1 across employees",
+          "Department 1 exists",
+          "Many children can reference one parent"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "coordinator checked optional absence, parent identity tests and query-mirror/native-FK distinction",
+    "server_rendering": "passed",
+    "browser_rendering": "unverified",
+    "independent_review": "unavailable; no agent tools",
+    "server_rendering_evidence": "2026-10-29: actual LessonBlock rendering passed for all authored packages in focused Vitest suite."
+  },
+  "sql_verification": {
+    "engine": "11.8.6-MariaDB-0+deb13u1 from Debian",
+    "scope": "MariaDB compatibility execution; exact MySQL 8.4/provider execution unverified",
+    "fingerprint": "06b983945f411298295f3b303b3f8b2d0698047f52a803ca45801fdba2f45a97",
+    "cases": [
+      {
+        "problem": "foreign-key-orphans",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "foreign-key-orphans",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "foreign-key-orphans",
+        "case": 2,
+        "passed": true
+      },
+      {
+        "problem": "foreign-key-summary",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "foreign-key-summary",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "foreign-key-summary",
+        "case": 2,
+        "passed": true
+      }
+    ],
+    "all_passed": true
+  }
+}

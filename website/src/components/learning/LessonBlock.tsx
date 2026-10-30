@@ -3,6 +3,7 @@ import { classifyLessonHeading } from "@/lib/lessonSections";
 import type { TopicLinkEntry, TopicLinkState } from "@/lib/topicLinks";
 import { Markdown, slugId } from "./Markdown";
 import { LessonHeading, LessonSectionFrame } from "./LessonSection";
+import { TopicDiagrams } from "./TopicDiagrams";
 
 /**
  * One lesson content block: its own heading (as <h2>) + body. A block whose
@@ -16,7 +17,7 @@ export function LessonBlock({
   topicLinks,
   linkState,
 }: {
-  block: Pick<LearningContentBlock, "heading" | "body" | "content_format">;
+  block: Pick<LearningContentBlock, "heading" | "body" | "content_format"> & Partial<Pick<LearningContentBlock, "metadata">>;
   topicLinks?: TopicLinkEntry[];
   linkState?: TopicLinkState;
 }) {
@@ -28,6 +29,7 @@ export function LessonBlock({
           {block.heading}
         </LessonHeading>
         <Markdown source={block.body} topicLinks={topicLinks} linkState={linkState} callouts sectionBody={kind} />
+        <TopicDiagrams metadata={block.metadata} />
       </LessonSectionFrame>
     );
   }
@@ -43,6 +45,7 @@ export function LessonBlock({
       ) : (
         <Markdown source={block.body} topicLinks={topicLinks} linkState={linkState} callouts sections />
       )}
+      <TopicDiagrams metadata={block.metadata} />
     </>
   );
 }

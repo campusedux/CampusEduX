@@ -1,0 +1,615 @@
+{
+  "source_ref": "chapter-13-sorting-and-pagination/offset",
+  "slug": "offset",
+  "title": "OFFSET",
+  "description": "Use MySQL LIMIT OFFSET to page ordered results, calculate page positions, handle empty slices, and understand deep-page costs and changing data.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Offset describes a position in a result sequence\n\nOFFSET skips a specified number of rows before the query returns its limited slice. A campus catalogue using ten rows per page can skip the first ten ordered results to show the next page. The skipped quantity refers to positions in the qualifying result sequence, not a numeric threshold on a product identifier or the number of rows stored in the table.\n\nDefine the sequence before calculating positions. If the feature lists cheapest equipment first, the offset advances through that price order. If it lists newest requests first, it advances through the recency order instead. The same offset can therefore select different identities under different ranking policies, even when the underlying table and page size are unchanged.\n\n## MySQL combines offset with a row limit\n\nThe clear MySQL form used here specifies [LIMIT](/learning/dbms-sql-tutorial/limit) followed by OFFSET. A query with a limit of three and offset two skips the first two qualifying ordered rows, then returns at most the next three. Positions are described from one in ordinary explanation, so the admitted slice begins at the third row even though the offset value is two.\n\n```sql\nSELECT equipment_id, price\nFROM equipment_prices\nORDER BY price ASC, equipment_id ASC\nLIMIT 3 OFFSET 2;\n```\n\nMySQL also supports a comma form whose first argument is the offset and second is the row count. That order is easy to reverse when maintaining queries across dialects. Prefer the explicit keyword form for teaching and shared application code when it makes the meaning clearer. Verify the actual client's supported binding and query syntax rather than mix conventions from another database.\n\n## An offset is not an identity filter\n\nEquipment identifiers can contain gaps and need not align with result positions. Skipping two ordered rows does not mean require equipment_id greater than two. If the first identifiers are ten and ninety, those two identities are the skipped rows under ascending id order. A fixture with nonconsecutive identifiers exposes a solution that substitutes a numeric threshold for a positional slice.\n\nThe difference becomes stronger when sorting by price or timestamp instead of identity. The third position may have a smaller identifier than the first. A correct offset query follows the complete result order, while an identity predicate follows values in a different domain. Keyset pagination deliberately uses ordering-key comparisons, but it needs a matching continuation design rather than an arbitrary id condition.\n\n## Filtering determines the population being skipped\n\nA request page that includes only active rows should apply that eligibility before the requested slice is chosen. Closed requests do not consume positions in the active sequence. Limiting or skipping an unfiltered population and then applying status later can produce a short or incorrect page even when enough active requests exist to fill the intended slice.\n\nThe logical explanation is eligible rows, defined order, skipped prefix and returned maximum. An optimizer can implement equivalent work through different physical strategies. This model specifies the result meaning rather than require one exact materialization algorithm. Keep it visible when composing derived queries or joins so that an inner offset does not quietly answer a different question from the final UI page.\n\n## Page numbers need a stated convention\n\nFor one-based page numbers and a fixed page size, the usual offset is the number of earlier pages multiplied by the page size. Page one skips zero rows; page two skips one page; page three skips two. If the application uses zero-based indices internally, its conversion must be explicit. A mismatch produces repeated or missing slices without making the SQL invalid.\n\nValidate both inputs and their product at the trusted boundary. Require appropriate integers, reject unsupported negative pages and enforce a useful maximum size. Very large arithmetic can exceed the client or database representation even if each field looks numeric. Do not let malformed input silently remove restrictions or become a broad request. Use the supported parameter mechanism for accepted values.\n\n## Short and empty pages are normal outcomes\n\nAn offset beyond the qualifying population produces no result rows rather than an exception for the absent position. If seven rows qualify and a query skips five with room for five more, only the remaining two are returned. The limit is a maximum, not a request to repeat rows or pad the page until its expected visual height is reached.\n\nAn empty page does not independently classify why it is empty. The caller may have requested a page after the final one, filters may leave no qualifying rows or the visible population may have changed. Handle loading, query failure and permission denial separately. Do not automatically relax filters or reveal a broader population merely to avoid showing a valid empty result.\n\n## Ties make incomplete orders unstable\n\nOrdering only by a repeated price can leave equal-price identities in an unspecified relative sequence. An offset boundary through that tie can produce different membership even when the displayed prices remain sorted. Add a final distinguishing identity at the result grain so a static fixture has a fully defined ordered slice. Test several equal values on both sides of the boundary.\n\nA primary key from one table is not always unique after a join. If each equipment row appears once per tag, the result may need the tag relationship identity too, or the query may need a different grain. Decide what one displayed row represents before calculating offsets. Skipping joined rows is not the same operation as skipping whole equipment items with all their details.\n\n## Concurrent changes move positional boundaries\n\nA complete order makes a single observation deterministic; it does not freeze positions between requests. Suppose the first page shows the first three priced items and a new cheaper item is inserted before the second page is requested. Skipping the first three rows of the new sequence can repeat an identity already shown or omit another identity relative to the earlier view.\n\nDeletion and updates can cause similar shifts. Choose whether the feature accepts a live changing list, needs a snapshot or should use a keyset continuation policy. OFFSET is a positional operation rather than a cross-request consistency guarantee. Tests that run only one static SELECT cannot prove how a paginated UI behaves while the underlying data changes.\n\n## Deep offsets can require substantial extra work\n\nA request returning twenty rows after a very large skipped prefix can require the engine to traverse or otherwise account for many preceding candidates. An index can help with filtering and ordering, but the small output size does not guarantee a constant amount of work independent of offset depth. Actual cost depends on plan, data layout and query shape.\n\nAvoid asserting an exact scan count or universal slowdown multiplier without measurement. Inspect representative plans and timings for shallow and deep pages. A bounded maximum page size does not itself cap offset depth. Operational limits may therefore need a separate policy for deep navigation, especially when the feature permits arbitrary direct page jumps.\n\n## Keyset navigation addresses a different continuation need\n\nKeyset pagination advances from a remembered ordering tuple rather than counting past every earlier position. It can avoid some deep-offset costs and positional shift effects, but its comparison must match the complete sort directions, tie keys and missing-value policy. A price-descending list cannot be resumed correctly with a random ascending id threshold alone.\n\nDirect page-number navigation and keyset continuation offer different interaction tradeoffs. A small administrative table may reasonably use offsets, while a long live feed may prefer a cursor. Choose from measured needs and the user experience contract rather than declare every OFFSET query wrong. The current exercises isolate positional semantics without implementing a complete navigation service.\n\n## Verify slices using contrasting data\n\nThe beginner exercise skips two rows of a price-and-identity sequence and returns at most three. It uses nonconsecutive identifiers and includes a population shorter than the skipped prefix. The intermediate exercise first filters active requests, then uses a score-and-identity ranking before skipping one row and taking two. Inactive high-score rows must not consume page positions.\n\nWrite out the complete qualifying sequence when checking a small example, cross out the skipped prefix and retain the allowed suffix length. Explain both a returned identity and a skipped identity using their positions. Then distinguish static ordering correctness from changing-data behaviour and physical cost. This method makes offset pagination precise without confusing positions, identifiers and consistency guarantees.\n",
+  "references": [
+    {
+      "title": "MySQL 8.4 SELECT LIMIT and OFFSET forms",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/select.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-13-offset",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-13-offset-1",
+          "test_id": "pt-dbms-sql-13-offset",
+          "question_text": "What does OFFSET count?",
+          "options": [
+            "A minimum identifier value",
+            "Rows skipped in the qualifying result sequence",
+            "The number of table columns",
+            "The number of returned rows"
+          ],
+          "correct_index": 1,
+          "explanation": "Positions depend on eligibility and ordering.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-13-offset-2",
+          "test_id": "pt-dbms-sql-13-offset",
+          "question_text": "LIMIT 10 OFFSET 20 admits which positions if enough rows qualify?",
+          "options": [
+            "Positions 1 through 10",
+            "Positions 21 through 30",
+            "Positions 1 through 20",
+            "Always the last ten"
+          ],
+          "correct_index": 1,
+          "explanation": "The first twenty result rows are skipped.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-13-offset-3",
+          "test_id": "pt-dbms-sql-13-offset",
+          "question_text": "Why can deep offsets be costly despite small returned pages?",
+          "options": [
+            "Offsets above one hundred always fail",
+            "The engine can need substantial work accounting for the skipped prefix",
+            "OFFSET locks the whole table necessarily",
+            "The result must contain one million rows"
+          ],
+          "correct_index": 1,
+          "explanation": "Measure actual plans rather than assert a fixed physical count.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-13-offset-4",
+          "test_id": "pt-dbms-sql-13-offset",
+          "question_text": "What happens when the offset exceeds the qualifying row count?",
+          "options": [
+            "The offset is ignored",
+            "The result is empty",
+            "The table is deleted",
+            "A required exception is raised"
+          ],
+          "correct_index": 1,
+          "explanation": "No rows remain after the skipped prefix.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-13-offset-5",
+          "test_id": "pt-dbms-sql-13-offset",
+          "question_text": "Should identical page sizes imply identical work at shallow and deep offsets?",
+          "options": [
+            "Yes, output size fully determines work",
+            "No, depth and plan can materially affect cost",
+            "Only if rows have integers",
+            "Only if the limit is twenty"
+          ],
+          "correct_index": 1,
+          "explanation": "Returned size and preceding work are distinct.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-13-offset-6",
+          "test_id": "pt-dbms-sql-13-offset",
+          "question_text": "What does OFFSET without a defined order fail to provide for page navigation?",
+          "options": [
+            "Any valid SQL result",
+            "A specified sequence of identities to skip",
+            "A numeric row limit",
+            "The ability to return no rows"
+          ],
+          "correct_index": 1,
+          "explanation": "An arbitrary slice is insufficient for a defined page contract.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-13-offset-7",
+          "test_id": "pt-dbms-sql-13-offset",
+          "question_text": "Which continuation method can avoid counting a deep positional prefix?",
+          "options": [
+            "Removing all ordering",
+            "Keyset pagination using the actual ordering tuple",
+            "Increasing offset every time without a bound",
+            "Using any convenient id regardless of order"
+          ],
+          "correct_index": 1,
+          "explanation": "The key comparisons must match the ranking contract.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-13-offset-8",
+          "test_id": "pt-dbms-sql-13-offset",
+          "question_text": "Seven rows qualify, LIMIT 5 OFFSET 5. How many rows return?",
+          "options": [
+            "Five",
+            "Two",
+            "Zero",
+            "Seven"
+          ],
+          "correct_index": 1,
+          "explanation": "The cap admits only the remaining rows.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-13-offset-new-9",
+          "test_id": "pt-dbms-sql-13-offset",
+          "question_text": "Does skipping two rows mean equipment_id>2?",
+          "options": [
+            "No",
+            "Yes, identifiers always equal positions",
+            "Only in every sorted query",
+            "Only if the id has an index"
+          ],
+          "correct_index": 0,
+          "explanation": "Identifiers can have gaps and the result may use another order.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-13-offset-new-10",
+          "test_id": "pt-dbms-sql-13-offset",
+          "question_text": "For one-based page p with size s, what is the usual offset?",
+          "options": [
+            "p*s always",
+            "(p-1)*s",
+            "p+s",
+            "s-p"
+          ],
+          "correct_index": 1,
+          "explanation": "Page one skips zero earlier pages.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-13-offset-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-13-offset-application-new-1",
+          "test_id": "pt-dbms-sql-13-offset-application",
+          "question_text": "What can a zero-based versus one-based mismatch cause?",
+          "options": [
+            "Automatic schema correction",
+            "Repeated or missing page slices",
+            "An invalid primary key",
+            "A guaranteed SQL syntax error"
+          ],
+          "correct_index": 1,
+          "explanation": "The arithmetic can be valid while the navigation contract is wrong.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-13-offset-application-new-2",
+          "test_id": "pt-dbms-sql-13-offset-application",
+          "question_text": "Should closed requests consume positions in an active-only page?",
+          "options": [
+            "Yes, every table row counts",
+            "Only if they have high scores",
+            "No, eligibility defines the sequence first",
+            "Only if ids are consecutive"
+          ],
+          "correct_index": 2,
+          "explanation": "Filter scope must match the requested page population.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-13-offset-application-new-3",
+          "test_id": "pt-dbms-sql-13-offset-application",
+          "question_text": "Why add a unique final key around offset boundaries?",
+          "options": [
+            "To freeze every future update",
+            "To remove the skipped prefix permanently",
+            "To guarantee a constant-time plan",
+            "To specify equal-ranking row order for a fixed visible dataset"
+          ],
+          "correct_index": 3,
+          "explanation": "Incomplete ties can change slice membership.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-13-offset-application-new-4",
+          "test_id": "pt-dbms-sql-13-offset-application",
+          "question_text": "What can an insertion before the second-page boundary cause?",
+          "options": [
+            "An identity can repeat or shift relative to the earlier page",
+            "The first page becomes a transaction lock",
+            "Every offset remains tied to the original snapshot",
+            "The database always rejects the next request"
+          ],
+          "correct_index": 0,
+          "explanation": "Separate requests can observe different positions.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-13-offset-application-new-5",
+          "test_id": "pt-dbms-sql-13-offset-application",
+          "question_text": "Does a complete order guarantee stable cross-request membership?",
+          "options": [
+            "Yes, for every live dataset",
+            "No, visibility and continuation policy are separate",
+            "Only if all terms ascend",
+            "Only if every id is numeric"
+          ],
+          "correct_index": 1,
+          "explanation": "Determinism applies to the observed result.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-13-offset-application-new-6",
+          "test_id": "pt-dbms-sql-13-offset-application",
+          "question_text": "Why inspect result grain before offsetting joined rows?",
+          "options": [
+            "Joins cannot be sorted",
+            "Every join has unique equipment ids",
+            "Several joined rows can belong to one intended displayed item",
+            "OFFSET automatically groups whole items"
+          ],
+          "correct_index": 2,
+          "explanation": "A positional slice counts result rows, not implied entities.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-13-offset-application-new-7",
+          "test_id": "pt-dbms-sql-13-offset-application",
+          "question_text": "What should happen to unsupported negative paging input?",
+          "options": [
+            "Silently broaden the request",
+            "Concatenate it directly into SQL",
+            "Treat it as all pages",
+            "Reject or handle it through the explicit trusted validation contract"
+          ],
+          "correct_index": 3,
+          "explanation": "Malformed input should not remove limits or scope.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-13-offset-application-new-8",
+          "test_id": "pt-dbms-sql-13-offset-application",
+          "question_text": "How does MySQL’s comma LIMIT form order its two arguments?",
+          "options": [
+            "Offset first, row count second",
+            "Row count first, offset second",
+            "Both are sort keys",
+            "Both are filter thresholds"
+          ],
+          "correct_index": 0,
+          "explanation": "The keyword form can make their roles clearer.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-13-offset-application-new-9",
+          "test_id": "pt-dbms-sql-13-offset-application",
+          "question_text": "Is OFFSET always the wrong design?",
+          "options": [
+            "Yes, even for tiny static tables",
+            "No, choose according to scale, navigation needs and measured costs",
+            "Only if an index exists",
+            "Only if the UI uses page numbers"
+          ],
+          "correct_index": 1,
+          "explanation": "Offset and keyset offer different tradeoffs.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-13-offset-application-new-10",
+          "test_id": "pt-dbms-sql-13-offset-application",
+          "question_text": "How can a small fixture be checked manually?",
+          "options": [
+            "Filter id by the offset value",
+            "Ignore inactive rows only after slicing",
+            "List the qualified complete sequence, skip the prefix, take up to the limit",
+            "Count table rows without ordering"
+          ],
+          "correct_index": 2,
+          "explanation": "This directly models the query contract.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cx-offset-price-slice",
+      "slug": "offset-price-slice",
+      "title": "Skip two price-ranked rows",
+      "difficulty": "Easy",
+      "task": "Return equipment_id,price after skipping the first two rows ordered by price ascending then equipment_id ascending, taking at most three more. All prices are known. Preserve source data.",
+      "schema_sql": "CREATE TABLE equipment_prices(equipment_id INT PRIMARY KEY,price INT NOT NULL);",
+      "seed_sql": "INSERT INTO equipment_prices VALUES (90,1),(10,2),(70,3),(30,3),(50,4),(20,5);",
+      "expected": "equipment_id\tprice\n30\t3\n70\t3\n50\t4",
+      "ordering": "As explicitly ordered in the result query.",
+      "constraints": [
+        "Use only the supplied synthetic tables and requested transition.",
+        "Preserve unrelated rows."
+      ],
+      "edge_cases": [
+        "Nonconsecutive ids are positions only after sorting.",
+        "Skipping the entire population yields an empty result."
+      ],
+      "hints": [
+        "Calculate positions after the complete order.",
+        "Do not replace offset with an id threshold."
+      ],
+      "solution_sql": "SELECT equipment_id,price FROM equipment_prices ORDER BY price ASC,equipment_id ASC LIMIT 3 OFFSET 2;",
+      "explanation": "The first two positions are identities 90 and 10. The slice then admits the two equal-price rows in identity order followed by the next price.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO equipment_prices VALUES (100,1),(200,2);",
+          "expected": ""
+        },
+        {
+          "seed_sql": "INSERT INTO equipment_prices VALUES (8,5),(2,5),(7,5),(1,5);",
+          "expected": "equipment_id\tprice\n7\t5\n8\t5"
+        }
+      ]
+    },
+    {
+      "id": "cx-offset-active-ranked-page",
+      "slug": "offset-active-ranked-page",
+      "title": "Page only the active ranked population",
+      "difficulty": "Medium",
+      "task": "Return request_id,score for active requests ordered by score descending then request_id ascending, skipping one qualifying row and returning at most two more. Inactive rows must not consume positions. Scores are known.",
+      "schema_sql": "CREATE TABLE requests(request_id INT PRIMARY KEY,status VARCHAR(20) NOT NULL,score INT NOT NULL);",
+      "seed_sql": "INSERT INTO requests VALUES (8,'closed',100),(9,'active',90),(2,'active',90),(7,'active',80),(1,'active',70);",
+      "expected": "request_id\tscore\n9\t90\n7\t80",
+      "ordering": "As explicitly ordered in the result query.",
+      "constraints": [
+        "Use only the supplied synthetic tables and requested transition.",
+        "Preserve unrelated rows."
+      ],
+      "edge_cases": [
+        "One active row is entirely skipped.",
+        "An inactive top score does not move the active page boundary."
+      ],
+      "hints": [
+        "Put the status rule in the qualifying query.",
+        "Use identity to complete score ties before skipping."
+      ],
+      "solution_sql": "SELECT request_id,score FROM requests WHERE status='active' ORDER BY score DESC,request_id ASC LIMIT 2 OFFSET 1;",
+      "explanation": "Filtering creates the active-only sequence 2,9,7,1. Skipping identity 2 admits 9 and 7; closed identity 8 never consumes a position.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO requests VALUES (1,'closed',99),(8,'active',20);",
+          "expected": ""
+        },
+        {
+          "seed_sql": "INSERT INTO requests VALUES (7,'active',5),(2,'active',5),(9,'active',5);",
+          "expected": "request_id\tscore\n7\t5\n9\t5"
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-13-offset-1",
+      "test_id": "pt-dbms-sql-13-offset",
+      "question_text": "What does the OFFSET clause do?",
+      "options": [
+        "Limits the maximum number of rows returned",
+        "Skips a specified number of rows before returning results",
+        "Sorts rows in descending order",
+        "Groups rows by a shared value"
+      ],
+      "correct_index": 1,
+      "explanation": "OFFSET skips N rows from the (ordered) result set before the remaining rows (optionally capped by LIMIT) are returned.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-13-offset-2",
+      "test_id": "pt-dbms-sql-13-offset",
+      "question_text": "In `SELECT * FROM products ORDER BY id LIMIT 10 OFFSET 20;`, which rows are returned?",
+      "options": [
+        "The first 10 rows",
+        "Rows 21 through 30 in id order",
+        "Rows 1 through 20",
+        "The last 10 rows"
+      ],
+      "correct_index": 1,
+      "explanation": "OFFSET 20 skips the first 20 ordered rows, then LIMIT 10 takes the next 10 — rows 21-30.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-13-offset-3",
+      "test_id": "pt-dbms-sql-13-offset",
+      "question_text": "Why does a query like `... LIMIT 20 OFFSET 1000000` tend to get slower as the offset value grows, even though it only returns 20 rows?",
+      "options": [
+        "Because OFFSET values greater than 100,000 are rejected by most engines",
+        "Because the database must still generate and discard all 1,000,000 skipped rows before returning the next 20",
+        "Because LIMIT and OFFSET cannot be used together on large tables",
+        "Because OFFSET forces a full table lock"
+      ],
+      "correct_index": 1,
+      "explanation": "The engine cannot jump directly to the offset row; it must scan through and discard all preceding rows first, so cost grows with the offset size.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-13-offset-4",
+      "test_id": "pt-dbms-sql-13-offset",
+      "question_text": "What happens if OFFSET is larger than the number of rows the query matches?",
+      "options": [
+        "An error is thrown",
+        "The query returns an empty result set, with no error",
+        "The OFFSET value is silently capped to the row count",
+        "It returns all matching rows, ignoring OFFSET"
+      ],
+      "correct_index": 1,
+      "explanation": "If there are no rows left after skipping OFFSET rows, the result is simply empty — this is not an error condition.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-13-offset-5",
+      "test_id": "pt-dbms-sql-13-offset",
+      "question_text": "Comparing page 1 (`OFFSET 0`) and page 50,000 (`OFFSET 1000000`) of the same paginated query on a large table, which statement is generally true?",
+      "options": [
+        "Both pages execute in roughly the same time, since each returns the same number of rows",
+        "Page 50,000 is typically much slower, because far more rows must be scanned and discarded internally",
+        "Page 1 is always slower because it has no rows to skip",
+        "OFFSET performance is unrelated to how many rows are skipped"
+      ],
+      "correct_index": 1,
+      "explanation": "OFFSET cost scales with the number of rows skipped, so deep pages (high OFFSET) become progressively slower on large tables.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-13-offset-6",
+      "test_id": "pt-dbms-sql-13-offset",
+      "question_text": "Is `LIMIT ... OFFSET ...` pagination meaningful without an ORDER BY clause?",
+      "options": [
+        "Yes, OFFSET always operates on primary key order by default",
+        "No — without ORDER BY, there is no defined row order to skip through, so 'page 2' is not well-defined",
+        "Yes, because OFFSET implies ORDER BY internally",
+        "It depends only on whether an index exists on the table"
+      ],
+      "correct_index": 1,
+      "explanation": "OFFSET skips rows from whatever order the result happens to be in; without ORDER BY, that order is undefined, making pagination unreliable.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-13-offset-7",
+      "test_id": "pt-dbms-sql-13-offset",
+      "question_text": "Which technique is specifically designed to avoid OFFSET's performance degradation on deep pages?",
+      "options": [
+        "Adding more indexes to the OFFSET column only",
+        "Keyset (seek-method) pagination using WHERE on the last-seen sort key",
+        "Increasing the LIMIT value",
+        "Removing ORDER BY from the query"
+      ],
+      "correct_index": 1,
+      "explanation": "Keyset pagination replaces OFFSET's skip-and-discard approach with a WHERE condition that jumps directly past already-seen rows, avoiding the scan-and-discard cost.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-13-offset-8",
+      "test_id": "pt-dbms-sql-13-offset",
+      "question_text": "In `SELECT * FROM t ORDER BY id LIMIT 5 OFFSET 5;`, if the table has only 7 rows total, how many rows are returned?",
+      "options": [
+        "5",
+        "2",
+        "0",
+        "7"
+      ],
+      "correct_index": 1,
+      "explanation": "OFFSET 5 skips the first 5 rows, leaving only 2 remaining rows (rows 6 and 7), which is fewer than the LIMIT of 5, so only those 2 are returned.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "coordinator",
+    "independent_review": "passed",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Independent manual review passed; native MySQL fixture evidence recorded separately; provider/browser/Supabase release gates remain separate.",
+    "existing_question_corrections": [
+      "tq-dbms-sql-13-offset-1",
+      "tq-dbms-sql-13-offset-2",
+      "tq-dbms-sql-13-offset-3",
+      "tq-dbms-sql-13-offset-4",
+      "tq-dbms-sql-13-offset-5",
+      "tq-dbms-sql-13-offset-6",
+      "tq-dbms-sql-13-offset-7",
+      "tq-dbms-sql-13-offset-8"
+    ],
+    "canonical_answer_indices_preserved": true,
+    "editorial_record": "Original snapshots retained. Questions rewritten for precise dialect and topic coverage while preserving identities and canonical answer positions; technical and independent review pending.",
+    "independent_reviewer": "Codex reviewer, current 2026-10-30 session",
+    "independent_review_scope": "Read full notes, all 640 MCQ stems/options/canonical answers/explanations, 64 exercise contracts/solutions/fixtures, and all 32 diagrams. Verified retained identities/answers through source-continuity tests; SQL execution evidence is recorded separately. No external originality, provider, live application or Supabase authorization clearance.",
+    "independent_review_record": "reports/independent-review-2026-10-30.json",
+    "content_sha256": "55582a915539c0c16f791ade5a82d6c3343e8d09148bf65d2f273765e7b8035f"
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-13-offset",
+    "original_note_sha256": "3304dc1ab93e296400a387ed9ffba7d925433688b6c227a9f2d498d0c3341bde",
+    "status": "drafted; not yet included in prepared paired migrations"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "The offset counts positions rather than numeric identities",
+      "description": "Ascending price and identity define the sequence before two rows are skipped.",
+      "columns": [
+        "Position",
+        "Equipment id",
+        "Price",
+        "Slice outcome"
+      ],
+      "rows": [
+        [
+          "1",
+          "90",
+          "1",
+          "Skipped"
+        ],
+        [
+          "2",
+          "10",
+          "2",
+          "Skipped"
+        ],
+        [
+          "3",
+          "30",
+          "3",
+          "Returned"
+        ],
+        [
+          "4",
+          "70",
+          "3",
+          "Returned"
+        ],
+        [
+          "5",
+          "50",
+          "4",
+          "Returned"
+        ],
+        [
+          "6",
+          "20",
+          "5",
+          "Beyond row cap"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "drafted — verification pending",
+    "server_rendering": "pending",
+    "browser_rendering": "unverified",
+    "independent_review": "pending"
+  },
+  "authoring_status": "drafted — verification pending",
+  "sql_verification": {
+    "scope": "not executed; exact MySQL/provider verification pending",
+    "all_passed": false,
+    "cases": []
+  }
+}

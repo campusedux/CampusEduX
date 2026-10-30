@@ -1,0 +1,573 @@
+{
+  "source_ref": "chapter-17-subqueries/single-row-subquery",
+  "slug": "single-row-subquery",
+  "title": "Single-Row Subquery",
+  "description": "Prove scalar subquery cardinality, explain missing and NULL references, preserve maximum ties and distinguish intended aggregation from arbitrary LIMIT fixes.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Expect one value for a scalar comparison\n\nA single-row subquery used as a scalar comparison supplies at most one row and one column to an expression such as equals, greater than or less than. Its result becomes the comparison's operand. If no row is returned, the scalar value is NULL. If several rows are returned in MySQL, the expression raises a cardinality error rather than choosing whichever row happens to arrive first.\n\nThe phrase single-row can also describe a row subquery returning several columns for a row-valued comparison. This topic focuses on the one-column scalar form used by its examples and assessments. Naming the exact shape matters: row count and column count are independent constraints. A query can return one row with several columns and still be unsuitable where one scalar value is required.\n\n## Compare against one identified employee\n\nSuppose a report needs employees whose salary exceeds the salary of a particular employee identified by a primary key. That key restriction supports the at-most-one-row assumption. A human name may not have the same uniqueness guarantee. State whether the reference employee must exist and whether its salary is allowed to be missing before interpreting an empty report.\n\n```sql\nSELECT employee_id, employee_name\nFROM salary_staff\nWHERE salary > (\n  SELECT salary FROM salary_staff WHERE employee_id = 5\n)\nORDER BY employee_id;\n```\n\nIf employee five has salary sixty thousand, the report compares each outer salary to that value. If employee five does not exist, the subquery supplies NULL, so the greater-than comparison is unknown and the WHERE clause retains no rows on that basis. This can be the correct query behavior while still requiring the application to explain that the intended reference record was missing.\n\n## Distinguish zero rows from one NULL row\n\nA scalar subquery returning no rows and one returning a single row whose selected value is NULL both supply NULL to the comparison. The reason differs even though the scalar expression looks the same. If the product must distinguish no employee from an employee with unknown salary, use an explicit existence check or a result shape that preserves the record identity alongside its nullable value.\n\nDo not insert COALESCE with zero merely to make the report return something. That would replace missing reference information with a specific threshold and change the business question. A safe fallback is a documented reporting policy, not an automatic repair. Compare the desired behavior for a missing reference, an unknown salary and a known zero salary as three separate cases.\n\n## Reject accidental multiple rows loudly\n\nConsider employees Dave and Frank, both managed by manager five. A subquery selecting department where manager_id equals five returns two rows when both satisfy the predicate. It remains a two-row result even if Dave and Frank happen to share the same department text. A scalar equality comparison checks cardinality, not whether repeated values look equivalent to a person.\n\n```sql\n-- MySQL cardinality error if manager5has multiple qualifying employees.\nSELECT employee_id\nFROM staff_assignments\nWHERE department = (\n  SELECT department FROM staff_assignments WHERE manager_id = 5\n);\n```\n\nThe error is valuable because it exposes an assumption that the data does not support. A silently chosen arbitrary row could produce plausible yet unstable results. Handle the failure as a query or data-contract issue rather than hiding it with an unrelated catch-all empty state. If the real requirement concerns any department managed by that person, a multiple-row operator expresses a different and more appropriate relationship.\n\n## Choose IN or EXISTS when the question is set-valued\n\nIN asks whether a value belongs to the subquery's result collection, while EXISTS asks whether a qualifying row exists. Those are not merely ways to suppress a scalar error. They express different questions, including their own NULL behavior and correlation rules. Before replacing a scalar comparison, write the intended condition in words and ensure the rewritten query matches it on empty and missing inputs.\n\nFor example, membership in departments returned for manager five can legitimately include several departments. That does not mean a report comparing against one designated benchmark salary should suddenly accept any of several ambiguous benchmark employees. One case needs a set-valued condition; the other may need a stronger unique identifier or a clear rule for selecting the reference.\n\n## Use aggregates only when their meaning is intended\n\nAn ungrouped aggregate such as MAX or MIN, without a HAVING condition that removes the aggregate row, returns one aggregate row. This can safely supply a scalar threshold when the question really asks for the maximum or minimum. An empty input gives a NULL MIN or MAX result. GROUP BY changes the shape by allowing several aggregate rows, and HAVING can remove the result row.\n\n```sql\nSELECT employee_id, employee_name\nFROM salary_staff\nWHERE salary = (\n  SELECT MAX(salary) FROM salary_staff\n)\nORDER BY employee_id;\n```\n\nThis returns every employee tied for the highest known salary. The scalar subquery has one aggregate value, while the outer query can still return many employee rows. Do not confuse one scalar threshold with one final result row. If the table contains only NULL salaries, the comparison does not select a winner because equality to the resulting NULL is unknown.\n\n## Do not use arbitrary LIMIT as a semantic patch\n\nAdding LIMIT one can restrict the subquery's cardinality but may select an arbitrary row without a complete ordering rule. Even an ordered first row represents a specific choice, such as the latest effective benchmark, which may differ from the original requirement. State the tie-breaker and why the selected row is authoritative. A shorter result is not automatically a more correct result.\n\nDISTINCT can collapse identical values, yet it still permits several distinct values. It therefore does not generally prove scalar safety. It can also hide duplicate reference records that the application ought to detect. Prefer schema-enforced uniqueness when the domain genuinely defines one record, and explicit aggregation or ranking when the question deliberately chooses among several.\n\n## Correlate a scalar aggregate carefully\n\nA correlated scalar subquery can compute a value for each outer row's group. For instance, comparing each employee to the maximum salary in that employee's department can preserve ties and avoid duplicate-producing joins. Qualify both aliases so the inner department predicate really compares the inner row to the outer row rather than accidentally comparing a column to itself.\n\n```sql\nSELECT s.employee_id, s.department_id\nFROM salary_staff AS s\nWHERE s.salary = (\n  SELECT MAX(x.salary)\n  FROM salary_staff AS x\n  WHERE x.department_id = s.department_id\n)\nORDER BY s.employee_id;\n```\n\nFor nullable department identifiers, ordinary equality does not match two NULL departments as one group. Decide whether such employees are excluded or belong to a deliberately defined missing-department category. The query above uses ordinary equality; changing it to null-safe semantics changes its contract and requires separate tests.\n\n## Review type and engine boundaries\n\nThe comparison still follows the target engine's type conversion, collation and NULL rules. Comparing a salary number with a text scalar can invoke conversions that obscure mistakes. Keep the reference expression in a compatible domain and choose explicit casts only when the intended conversion is clear. A scalar subquery's shape guarantee does not validate its value's meaning.\n\nSQLite permits behavior for multiple-row scalar subqueries that differs from MySQL's cardinality error. A SQLite subset check can test simple successful results but must not be presented as proof of MySQL rejection behavior. Use actual MySQL or compatible engine negative cases for the expected multirow error, and record exact provider verification separately from those compatibility observations.\n\n## Solve two scalar-shape exercises\n\nBeginner exercise: return staff earning more than the employee with identifier five. Include a missing benchmark fixture and explain its empty result. Intermediate exercise: return all employees tied for the maximum known salary within each nonmissing department. Include ties and an all-NULL department salary group so the query cannot accidentally choose one arbitrary winner or invent a zero threshold.\n\nA useful review checklist asks what guarantees at most one row, what happens if the row is absent, whether the selected value can be NULL and whether more than one outer row may legitimately match. Answer those questions independently rather than treating successful parsing as a proof of every assumption.\n\nFor an additional failure exercise, deliberately replace the unique reference predicate with a nonunique manager predicate and predict the MySQL cardinality error. Continue with [scalar subqueries](/learning/dbms-sql-tutorial/scalar-subquery), [multiple row subqueries](/learning/dbms-sql-tutorial/multiple-row-subquery) and [correlated subqueries](/learning/dbms-sql-tutorial/correlated-subquery). A sound answer proves the subquery's shape and explains empty, NULL, duplicate and tie behavior.",
+  "references": [
+    {
+      "title": "MySQL 8.4 scalar subqueries",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/scalar-subqueries.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-17-single-row-subquery",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-17-single-row-subquery-1",
+          "test_id": "pt-dbms-sql-17-single-row-subquery",
+          "question_text": "A single-row subquery is intended to be used with which operators?",
+          "options": [
+            "IN only",
+            "=, <, >, and similar comparison operators",
+            "EXISTS only",
+            "UNION"
+          ],
+          "correct_index": 1,
+          "explanation": "Single-row subqueries pair with plain comparison operators because exactly one value is expected.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-17-single-row-subquery-2",
+          "test_id": "pt-dbms-sql-17-single-row-subquery",
+          "question_text": "What happens at runtime if a subquery used with `=` unexpectedly returns 3 rows?",
+          "options": [
+            "The database picks the first row automatically",
+            "The database raises a runtime error",
+            "The comparison silently becomes FALSE",
+            "The query returns NULL for all rows"
+          ],
+          "correct_index": 1,
+          "explanation": "Comparison operators like `=` require at most one row; more than one row is a runtime error, not a silent fallback.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-17-single-row-subquery-3",
+          "test_id": "pt-dbms-sql-17-single-row-subquery",
+          "question_text": "What happens if a single-row subquery used with `>` returns ZERO rows?",
+          "options": [
+            "A runtime error",
+            "The comparison evaluates to UNKNOWN, excluding the row",
+            "The comparison evaluates to TRUE",
+            "A syntax error"
+          ],
+          "correct_index": 1,
+          "explanation": "Zero rows makes the subquery NULL, and any comparison against NULL is UNKNOWN, so the row is excluded — no error.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-17-single-row-subquery-4",
+          "test_id": "pt-dbms-sql-17-single-row-subquery",
+          "question_text": "Given `WHERE department = (SELECT department FROM employees WHERE manager_id = 5)`, where manager_id=5 matches both Dave and Frank, what is the outcome?",
+          "options": [
+            "It returns rows for whichever department appears first",
+            "Runtime error: subquery returns more than one row",
+            "It silently returns zero rows",
+            "It automatically converts to IN"
+          ],
+          "correct_index": 1,
+          "explanation": "Two rows come back from the subquery, which `=` cannot handle, so the engine raises the more-than-one-row error.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-17-single-row-subquery-5",
+          "test_id": "pt-dbms-sql-17-single-row-subquery",
+          "question_text": "In the one-column comparison form used here, how does single-row comparison relate to a scalar subquery?",
+          "options": [
+            "Completely unrelated concepts",
+            "Both use an at-most-one-row, one-column scalar operand here; general row subqueries can instead compare multiple columns",
+            "Single-row subqueries can return multiple columns",
+            "Scalar subqueries can never be used in WHERE"
+          ],
+          "correct_index": 1,
+          "explanation": "The lesson focuses scalar comparisons without claiming that every possible single-row subquery must have one column.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-17-single-row-subquery-6",
+          "test_id": "pt-dbms-sql-17-single-row-subquery",
+          "question_text": "If a subquery returns two rows with the identical value (e.g., both 'Sales'), and it's compared with `=`, what happens in engines like PostgreSQL?",
+          "options": [
+            "It succeeds because the values are identical",
+            "It still raises \"more than one row\" — the check is on row count, not distinct values",
+            "It automatically deduplicates first",
+            "It returns 'Sales' twice as the result"
+          ],
+          "correct_index": 1,
+          "explanation": "The engine checks how many rows came back, not whether their values happen to match — two rows is still an error.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-17-single-row-subquery-7",
+          "test_id": "pt-dbms-sql-17-single-row-subquery",
+          "question_text": "When the requirement asks for the maximum, which shape provides one aggregate row even if several source rows qualify?",
+          "options": [
+            "Adding DISTINCT only",
+            "An ungrouped MAX expression without HAVING that removes the aggregate row",
+            "Using SELECT *",
+            "Adding ORDER BY"
+          ],
+          "correct_index": 1,
+          "explanation": "GROUP BY can create several rows and HAVING can remove the aggregate row; selecting MAX must also match the intended business question.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-17-single-row-subquery-8",
+          "test_id": "pt-dbms-sql-17-single-row-subquery",
+          "question_text": "Why is \"subquery returns more than one row\" considered a good failure mode compared to many SQL bugs?",
+          "options": [
+            "Because it silently returns wrong data",
+            "Because the database fails loudly instead of guessing which row to use",
+            "Because it prevents the query from ever running again",
+            "Because it converts the query to a join automatically"
+          ],
+          "correct_index": 1,
+          "explanation": "Rather than arbitrarily picking one of several rows and risking a wrong answer, the engine refuses to guess and errors instead.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-17-single-row-subquery-new-9",
+          "test_id": "pt-dbms-sql-17-single-row-subquery",
+          "question_text": "A subquery produces one scalar threshold. Can the outer query return several matching rows?",
+          "options": [
+            "Yes",
+            "No, scalar means one final row",
+            "Only after a rollback",
+            "Only if IDs repeat"
+          ],
+          "correct_index": 0,
+          "explanation": "The operand shape does not limit the outer match count.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-17-single-row-subquery-new-10",
+          "test_id": "pt-dbms-sql-17-single-row-subquery",
+          "question_text": "Why use a primary key to select one reference employee?",
+          "options": [
+            "It makes salary non-NULL automatically",
+            "It enforces at-most-one matching row",
+            "It guarantees the employee exists",
+            "It removes every type conversion"
+          ],
+          "correct_index": 1,
+          "explanation": "Uniqueness and existence are separate requirements.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-17-single-row-subquery-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-17-single-row-subquery-application-new-1",
+          "test_id": "pt-dbms-sql-17-single-row-subquery-application",
+          "question_text": "What does a missing reference employee produce in a scalar subquery?",
+          "options": [
+            "Zero",
+            "The first other employee",
+            "NULL",
+            "A new reference row"
+          ],
+          "correct_index": 2,
+          "explanation": "No row supplies a NULL scalar value.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-17-single-row-subquery-application-new-2",
+          "test_id": "pt-dbms-sql-17-single-row-subquery-application",
+          "question_text": "Why can one NULL row and no rows need different product messages?",
+          "options": [
+            "They always have different scalar SQL values",
+            "Only one can use WHERE",
+            "Both imply a syntax error",
+            "They represent missing value and missing record respectively"
+          ],
+          "correct_index": 3,
+          "explanation": "The scalar operand alone can erase that distinction.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-17-single-row-subquery-application-new-3",
+          "test_id": "pt-dbms-sql-17-single-row-subquery-application",
+          "question_text": "Does DISTINCT guarantee at most one scalar value?",
+          "options": [
+            "No, several distinct values may remain",
+            "Yes, it always returns one row",
+            "Only with text columns",
+            "Only when the outer query is ordered"
+          ],
+          "correct_index": 0,
+          "explanation": "Duplicate elimination is not uniqueness of the requested relation.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-17-single-row-subquery-application-new-4",
+          "test_id": "pt-dbms-sql-17-single-row-subquery-application",
+          "question_text": "What makes an ungrouped MAX a suitable scalar reference?",
+          "options": [
+            "It hides every missing record",
+            "The requirement actually asks for the maximum and its shape is controlled",
+            "It always chooses one employee row",
+            "It ignores domain meaning"
+          ],
+          "correct_index": 1,
+          "explanation": "Aggregation changes the question unless a maximum is intended.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-17-single-row-subquery-application-new-5",
+          "test_id": "pt-dbms-sql-17-single-row-subquery-application",
+          "question_text": "Can GROUP BY make an aggregate subquery return several rows?",
+          "options": [
+            "No, every aggregate is globally scalar",
+            "Only without SUM",
+            "Yes",
+            "Only after a join"
+          ],
+          "correct_index": 2,
+          "explanation": "One aggregate row can be produced per group.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-17-single-row-subquery-application-new-6",
+          "test_id": "pt-dbms-sql-17-single-row-subquery-application",
+          "question_text": "Why is LIMIT 1 without a complete selection rule risky?",
+          "options": [
+            "It always throws an error",
+            "It proves domain uniqueness",
+            "It converts to EXISTS",
+            "It can choose an arbitrary reference"
+          ],
+          "correct_index": 3,
+          "explanation": "Cardinality restriction alone does not define authority.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-17-single-row-subquery-application-new-7",
+          "test_id": "pt-dbms-sql-17-single-row-subquery-application",
+          "question_text": "A department has two employees tied at its maximum salary. What should the correlated equality report return?",
+          "options": [
+            "Both employees",
+            "Only the lowest ID",
+            "Neither employee",
+            "A synthetic average row"
+          ],
+          "correct_index": 0,
+          "explanation": "The scalar threshold is compatible with multiple outer ties.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-17-single-row-subquery-application-new-8",
+          "test_id": "pt-dbms-sql-17-single-row-subquery-application",
+          "question_text": "What happens when every salary in a group is NULL?",
+          "options": [
+            "Every salary becomes zero",
+            "MAX is NULL and ordinary equality selects no winner",
+            "Exactly one winner appears",
+            "The engine creates a salary"
+          ],
+          "correct_index": 1,
+          "explanation": "Missing measurements do not establish a maximum employee.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-17-single-row-subquery-application-new-9",
+          "test_id": "pt-dbms-sql-17-single-row-subquery-application",
+          "question_text": "Does a SQLite successful result prove MySQL multirow scalar rejection?",
+          "options": [
+            "Yes, every SQL engine behaves identically",
+            "Only if the fixture is sorted",
+            "No",
+            "Only with a primary key"
+          ],
+          "correct_index": 2,
+          "explanation": "The relevant error contract differs by engine.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-17-single-row-subquery-application-new-10",
+          "test_id": "pt-dbms-sql-17-single-row-subquery-application",
+          "question_text": "What should precede replacing a scalar comparison with IN?",
+          "options": [
+            "Assume every cardinality error is harmless",
+            "Remove all predicates",
+            "Rename the table",
+            "Confirm the intended question is set membership"
+          ],
+          "correct_index": 3,
+          "explanation": "A different operator expresses a different relationship.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cx-single-row-unique-benchmark",
+      "slug": "single-row-unique-benchmark",
+      "title": "Compare salaries with a unique employee benchmark",
+      "difficulty": "Easy",
+      "task": "Return employee_id for employees whose known salary is greater than employee 5 salary. If employee 5 is missing or its salary is NULL, return no rows. Order by employee_id.",
+      "schema_sql": "CREATE TABLE comparison_staff(employee_id INT PRIMARY KEY,department_id INT,salary INT);",
+      "seed_sql": "INSERT INTO comparison_staff VALUES (1,1,70),(2,1,50),(5,2,60);",
+      "expected": "employee_id\n1",
+      "ordering": "Use the explicit ORDER BY in the requested result.",
+      "edge_cases": [
+        "A missing benchmark does not become zero."
+      ],
+      "hints": [
+        "Use the unique employee identifier in the scalar subquery."
+      ],
+      "solution_sql": "SELECT employee_id FROM comparison_staff WHERE salary>(SELECT salary FROM comparison_staff WHERE employee_id=5) ORDER BY employee_id;",
+      "explanation": "The key selects at most one scalar reference; missing or NULL reference makes the ordinary comparison unknown.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO comparison_staff VALUES (1,1,100);",
+          "expected": ""
+        },
+        {
+          "seed_sql": "INSERT INTO comparison_staff VALUES (1,1,100),(5,2,NULL);",
+          "expected": ""
+        }
+      ]
+    },
+    {
+      "id": "cx-single-row-department-ties",
+      "slug": "single-row-department-ties",
+      "title": "Return every departmental maximum tie",
+      "difficulty": "Medium",
+      "task": "Return employee_id, department_id for employees tied at the maximum known salary within their non-NULL department. Exclude employees with missing department or salary. Order by employee_id.",
+      "schema_sql": "CREATE TABLE comparison_staff(employee_id INT PRIMARY KEY,department_id INT,salary INT);",
+      "seed_sql": "INSERT INTO comparison_staff VALUES (1,1,70),(2,1,70),(3,1,60),(4,2,NULL),(5,NULL,90);",
+      "expected": "employee_id\tdepartment_id\n1\t1\n2\t1",
+      "ordering": "Use the explicit ORDER BY in the requested result.",
+      "edge_cases": [
+        "Known zero can be a maximum.",
+        "All-NULL group has no winner."
+      ],
+      "hints": [
+        "Keep inner and outer aliases distinct."
+      ],
+      "solution_sql": "SELECT s.employee_id,s.department_id FROM comparison_staff s WHERE s.salary=(SELECT MAX(x.salary) FROM comparison_staff x WHERE x.department_id=s.department_id) ORDER BY s.employee_id;",
+      "explanation": "A correlated ungrouped MAX supplies one threshold per comparison and preserves all outer ties; ordinary equality excludes missing departments and salaries.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO comparison_staff VALUES (1,1,NULL),(2,2,0),(3,2,0);",
+          "expected": "employee_id\tdepartment_id\n2\t2\n3\t2"
+        },
+        {
+          "seed_sql": "",
+          "expected": ""
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": null,
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-17-single-row-subquery-1",
+      "test_id": "pt-dbms-sql-17-single-row-subquery",
+      "question_text": "A single-row subquery is intended to be used with which operators?",
+      "options": [
+        "IN only",
+        "=, <, >, and similar comparison operators",
+        "EXISTS only",
+        "UNION"
+      ],
+      "correct_index": 1,
+      "explanation": "Single-row subqueries pair with plain comparison operators because exactly one value is expected.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-17-single-row-subquery-2",
+      "test_id": "pt-dbms-sql-17-single-row-subquery",
+      "question_text": "What happens at runtime if a subquery used with `=` unexpectedly returns 3 rows?",
+      "options": [
+        "The database picks the first row automatically",
+        "The database raises a runtime error",
+        "The comparison silently becomes FALSE",
+        "The query returns NULL for all rows"
+      ],
+      "correct_index": 1,
+      "explanation": "Comparison operators like `=` require at most one row; more than one row is a runtime error, not a silent fallback.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-17-single-row-subquery-3",
+      "test_id": "pt-dbms-sql-17-single-row-subquery",
+      "question_text": "What happens if a single-row subquery used with `>` returns ZERO rows?",
+      "options": [
+        "A runtime error",
+        "The comparison evaluates to UNKNOWN, excluding the row",
+        "The comparison evaluates to TRUE",
+        "A syntax error"
+      ],
+      "correct_index": 1,
+      "explanation": "Zero rows makes the subquery NULL, and any comparison against NULL is UNKNOWN, so the row is excluded — no error.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-17-single-row-subquery-4",
+      "test_id": "pt-dbms-sql-17-single-row-subquery",
+      "question_text": "Given `WHERE department = (SELECT department FROM employees WHERE manager_id = 5)`, where manager_id=5 matches both Dave and Frank, what is the outcome?",
+      "options": [
+        "It returns rows for whichever department appears first",
+        "Runtime error: subquery returns more than one row",
+        "It silently returns zero rows",
+        "It automatically converts to IN"
+      ],
+      "correct_index": 1,
+      "explanation": "Two rows come back from the subquery, which `=` cannot handle, so the engine raises the more-than-one-row error.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-17-single-row-subquery-5",
+      "test_id": "pt-dbms-sql-17-single-row-subquery",
+      "question_text": "Which best describes the relationship between a scalar subquery and a single-row subquery?",
+      "options": [
+        "Completely unrelated concepts",
+        "Same underlying shape (one row, one column); \"single-row\" emphasizes safety for comparison operators",
+        "Single-row subqueries can return multiple columns",
+        "Scalar subqueries can never be used in WHERE"
+      ],
+      "correct_index": 1,
+      "explanation": "Both require exactly one row and one column; the terms just emphasize different use contexts.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-17-single-row-subquery-6",
+      "test_id": "pt-dbms-sql-17-single-row-subquery",
+      "question_text": "If a subquery returns two rows with the identical value (e.g., both 'Sales'), and it's compared with `=`, what happens in engines like PostgreSQL?",
+      "options": [
+        "It succeeds because the values are identical",
+        "It still raises \"more than one row\" — the check is on row count, not distinct values",
+        "It automatically deduplicates first",
+        "It returns 'Sales' twice as the result"
+      ],
+      "correct_index": 1,
+      "explanation": "The engine checks how many rows came back, not whether their values happen to match — two rows is still an error.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-17-single-row-subquery-7",
+      "test_id": "pt-dbms-sql-17-single-row-subquery",
+      "question_text": "Which technique guarantees a single-row result even when multiple matching rows exist?",
+      "options": [
+        "Adding DISTINCT only",
+        "Wrapping the column in an aggregate like MIN or MAX",
+        "Using SELECT *",
+        "Adding ORDER BY"
+      ],
+      "correct_index": 1,
+      "explanation": "An aggregate with no GROUP BY always collapses multiple candidate rows down to one.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-17-single-row-subquery-8",
+      "test_id": "pt-dbms-sql-17-single-row-subquery",
+      "question_text": "Why is \"subquery returns more than one row\" considered a good failure mode compared to many SQL bugs?",
+      "options": [
+        "Because it silently returns wrong data",
+        "Because the database fails loudly instead of guessing which row to use",
+        "Because it prevents the query from ever running again",
+        "Because it converts the query to a join automatically"
+      ],
+      "correct_index": 1,
+      "explanation": "Rather than arbitrarily picking one of several rows and risking a wrong answer, the engine refuses to guess and errors instead.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "/root/content_b",
+    "independent_review": "passed",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "canonical_answer_indices_preserved": true,
+    "independent_reviewer": "/root/review_d_and_programs",
+    "independent_review_scope": "Full notes,20MCQs with every option,canonical answer position and explanation,original diagrams,and all exercise contracts/fixtures or solved conceptual labs. Original identities/indices checked against public seed cache where applicable. Reported substantive findings corrected by coordinator and filtered recheck accepted;identified learner-facing spacing polished. Manual technical/editorial reasoning only;engine,provider,browser,external originality and AdSense evidence separate."
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-17-single-row-subquery",
+    "original_note_sha256": "a800967227f75913218699c22ba62c738c625ca192a53f0e2231660c2f6d5c66",
+    "status": "drafted; not included in prepared paired migrations"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Scalar shape and business meaning require separate checks",
+      "description": "Zero rows and one NULL row both supply NULL; multiple rows raise an error in MySQL even when their values repeat.",
+      "columns": [
+        "Subquery result",
+        "Scalar operand in MySQL",
+        "Comparison consequence"
+      ],
+      "rows": [
+        [
+          "One row:60000",
+          "60000",
+          "Ordinary compatible comparison"
+        ],
+        [
+          "Zero rows",
+          "NULL",
+          "Greater-than is unknown"
+        ],
+        [
+          "One row: NULL",
+          "NULL",
+          "Greater-than is unknown"
+        ],
+        [
+          "Two rows: Sales, Sales",
+          "Cardinality error",
+          "No arbitrary first value"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "provided",
+    "technical_review": "Independent manual diagram/content consistency review passed;actual static/browser rendering tracked separately.",
+    "server_rendering": "unverified",
+    "browser_rendering": "unverified",
+    "independent_review": "passed"
+  },
+  "authoring_status": "drafted; verification pending",
+  "sql_verification": {
+    "scope": "not executed; exact MySQL/provider verification pending",
+    "all_passed": false,
+    "cases": []
+  }
+}

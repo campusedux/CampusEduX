@@ -1,0 +1,579 @@
+{
+  "source_ref": "chapter-19-views/updatable-views",
+  "slug": "updatable-views",
+  "title": "Updatable Views",
+  "description": "Learn MySQL view update mappings, CHECK OPTION, join-view limits, insertability and permissions through accepted and rejected equipment edits.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Ask whether a displayed row identifies an editable fact\n\nAn updatable view lets a supported INSERT, UPDATE or DELETE against the view affect underlying table data. The view stores a query definition rather than an independent copy of those rows. Updatability is therefore a mapping question: can the database translate the requested change into permitted changes to identifiable base rows? A view that is useful for reading is not automatically a suitable write interface.\n\nImagine a workshop inventory table with item_id, label, available and category. A filtered view exposes only equipment ready for lending. An update to available for a particular item has a direct meaning in the base table. A grouped view displaying average availability per category describes many rows together, so assigning a new average does not specify which inventory rows should change.\n\n## Begin with a direct single-table mapping\n\nCreate the base table before the view in a disposable learning database. The primary key identifies the row to change, and the availability condition defines which rows readers can see. Selecting a subset of columns can make a focused interface, although omitted required columns matter when inserting new rows through that interface.\n\n```sql\nCREATE TABLE equipment(item_id INT PRIMARY KEY,label VARCHAR(40),available INT NOT NULL,category VARCHAR(20));\nINSERT INTO equipment VALUES(1,'Camera',3,'media'),(2,'Tripod',0,'media');\nCREATE VIEW lendable AS\nSELECT item_id,label,available,category FROM equipment\nWHERE available > 0;\nUPDATE lendable SET available=2 WHERE item_id=1;\nSELECT item_id,available FROM equipment ORDER BY item_id;\n```\n\nThe base result contains item one with availability two and item two with availability zero. The update did not change a detached spreadsheet. It targeted a base row through the definition. An update addressing item two through lendable affects no visible row because that item is excluded by the filter. Statement success therefore does not establish that a required business update actually occurred.\n\n## Understand rows leaving the visible set\n\nWithout a check option, setting item one's availability to zero can be allowed even though the row then disappears from lendable. It still exists in equipment. This behavior is often surprising to beginners who interpret the view as a container: the definition is evaluated over base data, so changing the data can change membership.\n\nThat visibility change can be intentional, as when completing a pending job removes it from an open-jobs view. It can also undermine a narrowly defined write interface. Decide whether callers should be able to move a row out of scope through this route. Do not attempt to solve the ambiguity with an application message alone; the database definition and trusted access rules need to express the required behavior.\n\n## Use WITH CHECK OPTION for the chosen write boundary\n\nWITH CHECK OPTION requires inserted or updated rows through the view to satisfy the applicable view condition. A lendable view using available greater than zero rejects an attempted change to zero through that view. It does not prevent an authorized direct update to the base table, and it does not create a universal nonnegative-stock invariant for every writing route.\n\n```sql\nCREATE VIEW checked_lendable AS\nSELECT item_id,label,available,category FROM equipment\nWHERE available > 0 WITH CHECK OPTION;\n```\n\nAfter this definition, updating a visible item to availability five preserves membership, while setting it to zero violates the check. A base CHECK constraint such as nonnegative stock serves a different purpose and can allow zero. The view condition describes interface membership; the base constraint describes permitted stored values. Distinguish these contracts instead of claiming either replaces the other.\n\n## Distinguish LOCAL and CASCADED checks\n\nNested views can have several filtering layers. A local check and a cascaded check differ in which underlying conditions must be tested during a write; their interaction also depends on check options on underlying views. MySQL defaults an unspecified check type to CASCADED. Read the actual chain rather than infer behavior from the outermost name.\n\nFor example, a media-only view over a positive-stock view has two predicates to consider. Ask whether a write could preserve the media category but change stock so the row no longer belongs to the underlying view. Then examine the declared check options at each layer. Draw the predicates as a chain and test a row that passes each possible combination. That procedure is safer than memorizing that local always checks exactly one condition in every nested arrangement.\n\n## Recognize expressions that do not have a direct write target\n\nA view column defined as available multiplied by replacement_cost is a calculated value. Updating that calculated column does not say whether available, replacement_cost or both should change. MySQL does not generally invert arbitrary expressions to invent an update. A view can contain both directly mapped columns and expressions, so inspect the specific requested column rather than treating every column alike.\n\nAggregates, GROUP BY, DISTINCT, UNION and certain other query features make MySQL views non-updatable. The restrictions are engine-specific. ORDER BY is not a requirement for updatability, and a sorted-looking display does not identify a base row. Use an explicit WHERE identity when changing data; an ORDER BY in the view is not a safety boundary.\n\n## Avoid a blanket rule that join views are never writable\n\nSome MySQL join views support updates to columns from one underlying table under documented restrictions. A single UPDATE through such a view cannot modify columns from multiple base tables. Join type, selected columns and the view processing rules matter. Merely seeing JOIN is insufficient to conclude either that every write is permitted or that every write is forbidden.\n\nThe relevant question is which base table and columns the intended statement changes. A read row may combine one equipment fact with one category label; changing only the equipment label differs from simultaneously changing the category table. Test the exact statement against the intended MySQL version. PostgreSQL supports INSTEAD OF triggers on views for custom behavior, but MySQL does not support triggers on views; do not transfer that workaround unchanged between engines.\n\n## Check insertability separately from updatability\n\nA view can permit some updates while failing an insertion that lacks required base columns. If equipment has another NOT NULL column without a default and the view omits it, an insert through the view cannot supply that required value. Expression columns and repeated column mappings add further restrictions. Updatable does not mean every possible DML operation and column combination succeeds.\n\nInspect INFORMATION_SCHEMA.VIEWS.IS_UPDATABLE as useful metadata, then validate the actual operation. The flag is not a complete promise that all inserts are possible. Create representative accepted and rejected statements in a disposable schema. Confirm the base results after each successful write and confirm that rejected statements did not produce the intended forbidden change.\n\n## Keep permissions distinct from view shape\n\nTechnical updatability does not grant permission. MySQL view access uses declared security context, privileges and object ownership rules. A filtered view is not automatically a complete authorization solution just because application navigation only displays it. Base-table grants, alternative views and privileged routines can create other access paths.\n\nLikewise, a check option does not authenticate the person issuing a statement or verify an external approval. Establish identity and permitted operations at the actual trusted boundary. For a lesson lab, use synthetic equipment data and ordinary object ownership; do not modify a real deployment's grants to make a demonstration convenient.\n\n## Plan for evolution and transactional cleanup\n\nA view depends on underlying object definitions. Renaming a selected base column or changing its meaning can invalidate the definition or alter caller expectations. Inspect direct consumers before evolving a view used as a write interface. Keep a reproducible definition and tests for the specific statements that applications issue. A metadata flag alone will not catch a label silently gaining a different business interpretation.\n\nTreat view DML errors like other database errors: the failed statement and the surrounding transaction can have different outcomes. Do not assume an attempted check-option violation undoes every earlier successful statement in an open transaction. Handle the failure, explicitly choose the intended cleanup, and verify the final committed state. In a pool, release a connection only after resolving its transaction and expected session state. These operational details matter even when the view definition itself is only a few lines.\n\n## Practice a successful edit and an intentionally rejected edit\n\nFor a first exercise, create a simple media-only view and update the camera label through it. Query equipment directly to verify the changed label and confirm that a nonmedia item remains unchanged. The solution uses the view's direct base-column mapping, not an update to a copied result set. Try addressing an item absent from the view and explain the zero-row effect.\n\nFor a second exercise, use a positive-stock view with a check option. Increase availability to five, then predict why an update to zero is rejected through that interface. Finally describe how a permitted direct base update can still make stock zero. Continue with [view security](/learning/dbms-sql-tutorial/view-security), [simple views](/learning/dbms-sql-tutorial/simple-views) and [view limitations](/learning/dbms-sql-tutorial/view-limitations). A correct write interface specifies row mapping, accepted values, permissions and failure handling together.",
+  "references": [
+    {
+      "title": "MySQL updatable and insertable views",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/view-updatability.html"
+    },
+    {
+      "title": "MySQL view check option",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/view-check-option.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-19-updatable-views",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-19-updatable-views-1",
+          "test_id": "pt-dbms-sql-19-updatable-views",
+          "question_text": "Which of the following views is most likely to be directly updatable?",
+          "options": [
+            "A view with GROUP BY and COUNT(*)",
+            "A view joining two tables",
+            "A single-table view with a simple WHERE filter and no aggregation",
+            "A view using UNION of two SELECTs"
+          ],
+          "correct_index": 2,
+          "explanation": "Simple, single-table views without aggregation, GROUP BY, DISTINCT, or set operations are the classic case of an updatable view.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-19-updatable-views-2",
+          "test_id": "pt-dbms-sql-19-updatable-views",
+          "question_text": "Why can't `UPDATE department_summary SET avg_salary = 75000 WHERE name = 'Sales'; ` be executed, given department_summary uses AVG(salary) GROUP BY department?",
+          "options": [
+            "Because UPDATE statements are never allowed on views",
+            "Because the average is derived from many employee rows, so there's no unambiguous way to determine which underlying rows to change and by how much",
+            "Because department_summary has no WHERE clause",
+            "Because AVG() columns are read-only by SQL syntax rule with no underlying reason"
+          ],
+          "correct_index": 1,
+          "explanation": "The fundamental issue is semantic ambiguity: an aggregate value maps to many underlying rows, so there's no defined way to push a single new value back down to specific row changes.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-19-updatable-views-3",
+          "test_id": "pt-dbms-sql-19-updatable-views",
+          "question_text": "What does WITH CHECK OPTION do on an updatable view?",
+          "options": [
+            "It makes a non-updatable view updatable",
+            "It prevents INSERT/UPDATE operations from creating a row that would violate the view's own WHERE clause",
+            "It automatically refreshes materialized data",
+            "It restricts which columns can be selected"
+          ],
+          "correct_index": 1,
+          "explanation": "WITH CHECK OPTION ensures any row inserted or updated through the view still satisfies the view's defining WHERE clause, rejecting changes that would 'escape' the view's visibility.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-19-updatable-views-4",
+          "test_id": "pt-dbms-sql-19-updatable-views",
+          "question_text": "Which of these is generally NOT a requirement for a view to be updatable?",
+          "options": [
+            "No aggregate functions in the SELECT list",
+            "No GROUP BY or DISTINCT",
+            "The requested writable column must map to a permitted underlying base-table column",
+            "The view must include an ORDER BY clause"
+          ],
+          "correct_index": 3,
+          "explanation": "ORDER BY is not an updatability requirement. Aggregation and DISTINCT restrict MySQL view writes, while the requested writable column needs a permitted base-column mapping; some join views support restricted updates.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-19-updatable-views-5",
+          "test_id": "pt-dbms-sql-19-updatable-views",
+          "question_text": "In MySQL, which statement correctly describes updating a join view?",
+          "options": [
+            "Joins are forbidden in SQL views entirely",
+            "Some join views permit updates to columns of one underlying table; restrictions apply.",
+            "Joined views cannot be queried with SELECT",
+            "Because JOIN always implies DISTINCT"
+          ],
+          "correct_index": 1,
+          "explanation": "Join views are not universally read-only; one UPDATE cannot modify multiple base tables through the view.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-19-updatable-views-6",
+          "test_id": "pt-dbms-sql-19-updatable-views",
+          "question_text": "Which mechanism can PostgreSQL use to define custom UPDATE behavior for an otherwise non-updatable view?",
+          "options": [
+            "WITH CHECK OPTION",
+            "An INSTEAD OF trigger",
+            "A materialized view REFRESH",
+            "GRANT UPDATE ON view"
+          ],
+          "correct_index": 1,
+          "explanation": "This is a PostgreSQL facility; MySQL does not support triggers on views.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-19-updatable-views-7",
+          "test_id": "pt-dbms-sql-19-updatable-views",
+          "question_text": "A view selects `salary * 1.1 AS projected_salary` from employees. Can you directly UPDATE the projected_salary column through this view?",
+          "options": [
+            "Yes, it maps directly to the salary column",
+            "No, because it's a computed expression with no single underlying column to write to",
+            "Yes, but only for values above 80000",
+            "Only if WITH CHECK OPTION is used"
+          ],
+          "correct_index": 1,
+          "explanation": "A computed/expression column has no direct 1:1 mapping to an underlying stored column, so it typically cannot be the target of a direct UPDATE through the view.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-19-updatable-views-8",
+          "test_id": "pt-dbms-sql-19-updatable-views",
+          "question_text": "Does updatability behavior for single-table views with edge-case shapes (e.g., WHERE referencing non-selected columns) vary across database engines?",
+          "options": [
+            "No, the SQL standard makes this fully uniform across all engines",
+            "Yes, MySQL, PostgreSQL, and Oracle differ on some edge conditions, so engine documentation should be consulted",
+            "Updatability is identical because it's determined only by the CREATE VIEW keyword",
+            "This only matters for materialized views"
+          ],
+          "correct_index": 1,
+          "explanation": "Updatability and insertability depend on the engine and exact query shape. MySQL permits some join-view updates but restricts aggregate, distinct and other shapes; consult the actual view definition.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-19-updatable-views-c-new-1",
+          "test_id": "pt-dbms-sql-19-updatable-views",
+          "question_text": "An item disappears from a filtered view after its base value changes. What happened?",
+          "options": [
+            "Its row stopped satisfying the view predicate",
+            "The base row was necessarily deleted",
+            "The view stored a stale copy",
+            "The primary key became NULL"
+          ],
+          "correct_index": 0,
+          "explanation": "View membership follows the defining query over base rows.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-19-updatable-views-c-new-2",
+          "test_id": "pt-dbms-sql-19-updatable-views",
+          "question_text": "Does a view check option prevent all direct base-table writes violating its predicate?",
+          "options": [
+            "Yes, it replaces all base constraints",
+            "No; it constrains writes through the relevant view",
+            "Only on Tuesdays",
+            "Only when SELECT has ORDER BY"
+          ],
+          "correct_index": 1,
+          "explanation": "Other authorized write paths need their own enforcement.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-19-updatable-views-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-19-updatable-views-c-new-3",
+          "test_id": "pt-dbms-sql-19-updatable-views-application",
+          "question_text": "Why can an aggregate availability view reject direct updates?",
+          "options": [
+            "All views are materialized",
+            "An average is always an integer",
+            "A group value does not identify an unambiguous base-row change",
+            "Primary keys cannot be selected"
+          ],
+          "correct_index": 2,
+          "explanation": "Setting an average does not specify which component facts should change.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-19-updatable-views-c-new-4",
+          "test_id": "pt-dbms-sql-19-updatable-views-application",
+          "question_text": "Can some MySQL join views support updates?",
+          "options": [
+            "No join view is ever updatable",
+            "Yes, every table simultaneously",
+            "Only through MySQL view triggers",
+            "Yes, under restrictions, to one base table per statement"
+          ],
+          "correct_index": 3,
+          "explanation": "The exact mapping and query shape determine support.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-19-updatable-views-c-new-5",
+          "test_id": "pt-dbms-sql-19-updatable-views-application",
+          "question_text": "Can MySQL attach an INSTEAD OF trigger to a view?",
+          "options": [
+            "No; that is not a MySQL view facility",
+            "Yes, always",
+            "Only if the view uses DISTINCT",
+            "Only for aggregate views"
+          ],
+          "correct_index": 0,
+          "explanation": "Some other engines support such triggers; dialect boundaries matter.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-19-updatable-views-c-new-6",
+          "test_id": "pt-dbms-sql-19-updatable-views-application",
+          "question_text": "What does a successful zero-row UPDATE establish?",
+          "options": [
+            "The requested item definitely existed",
+            "The statement executed, not that the requested item was changed",
+            "A hidden item was inserted",
+            "The caller became authorized"
+          ],
+          "correct_index": 1,
+          "explanation": "The workflow must inspect whether the required business effect occurred.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-19-updatable-views-c-new-7",
+          "test_id": "pt-dbms-sql-19-updatable-views-application",
+          "question_text": "Does an updatable flag guarantee insertion of every desired row?",
+          "options": [
+            "Yes, all DML shapes are equivalent",
+            "Only when the view is alphabetized",
+            "No, omitted required base columns can block inserts",
+            "No inserts can ever use views"
+          ],
+          "correct_index": 2,
+          "explanation": "Insertability has additional column and base-default requirements.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-19-updatable-views-c-new-8",
+          "test_id": "pt-dbms-sql-19-updatable-views-application",
+          "question_text": "What is MySQL default check scope when WITH CHECK OPTION omits LOCAL or CASCADED?",
+          "options": [
+            "LOCAL",
+            "NONE",
+            "RANDOM",
+            "CASCADED"
+          ],
+          "correct_index": 3,
+          "explanation": "The declared nested-view chain still requires inspection.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-19-updatable-views-c-new-9",
+          "test_id": "pt-dbms-sql-19-updatable-views-application",
+          "question_text": "Which column lacks a direct writable mapping here?",
+          "options": [
+            "available multiplied by replacement_cost",
+            "A directly selected label",
+            "A directly selected availability",
+            "A directly selected item_id"
+          ],
+          "correct_index": 0,
+          "explanation": "The engine does not invent how to distribute an expression update across its inputs.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-19-updatable-views-c-new-10",
+          "test_id": "pt-dbms-sql-19-updatable-views-application",
+          "question_text": "What should accompany a permitted-write test?",
+          "options": [
+            "Only a screenshot",
+            "A rejected-write test and inspection of the base result",
+            "A changed production grant",
+            "Deletion of all unrelated rows"
+          ],
+          "correct_index": 1,
+          "explanation": "Both accepted and forbidden behavior establish the interface contract.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-19-updatable-views-c-new-11",
+          "test_id": "pt-dbms-sql-19-updatable-views-application",
+          "question_text": "Is ORDER BY required for a MySQL view to be updatable?",
+          "options": [
+            "Yes, always",
+            "Only descending order works",
+            "No",
+            "Only numeric ordering works"
+          ],
+          "correct_index": 2,
+          "explanation": "Sorting and base-row write mapping are separate properties.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-19-updatable-views-c-new-12",
+          "test_id": "pt-dbms-sql-19-updatable-views-application",
+          "question_text": "Does technical view updatability grant a caller permission?",
+          "options": [
+            "Yes, the view name grants access",
+            "Only for aggregate views",
+            "Only when rows are visible in navigation",
+            "No; privileges and security context remain necessary"
+          ],
+          "correct_index": 3,
+          "explanation": "Shape and authorization answer different questions.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cx-c-view-label-update",
+      "slug": "c-view-label-update",
+      "title": "Edit a mapped label through a view",
+      "difficulty": "Easy",
+      "task": "Change item1 label to Studio camera using media_items, then return item_id, label from equipment ordered by item_id.",
+      "schema_sql": "CREATE TABLE equipment(item_id INT PRIMARY KEY,label VARCHAR(40),available INT NOT NULL,category VARCHAR(20)); CREATE VIEW media_items AS SELECT item_id,label,available,category FROM equipment WHERE category='media';",
+      "seed_sql": "INSERT INTO equipment VALUES(1,'Camera',3,'media'),(2,'Desk',1,'office');",
+      "solution_sql": "UPDATE media_items SET label='Studio camera' WHERE item_id=1; SELECT item_id,label FROM equipment ORDER BY item_id;",
+      "expected": "item_id\tlabel\n1\tStudio camera\n2\tDesk",
+      "ordering": "Order exactly as requested by the task; row order is otherwise unspecified.",
+      "edge_cases": [
+        "Empty tables.",
+        "NULL values where the schema permits them.",
+        "Repeated matching values when keys permit them."
+      ],
+      "hints": [
+        "Only a visible mapped row is changed; updating a missing or filtered-out identity has no effect."
+      ],
+      "explanation": "Only a visible mapped row is changed; updating a missing or filtered-out identity has no effect.",
+      "validation_cases": [
+        {
+          "name": "missing item",
+          "seed_sql": "INSERT INTO equipment VALUES(2,'Desk',1,'office');",
+          "expected": "item_id\tlabel\n2\tDesk"
+        },
+        {
+          "name": "out of scope",
+          "seed_sql": "INSERT INTO equipment VALUES(1,'Desk',1,'office');",
+          "expected": "item_id\tlabel\n1\tDesk"
+        }
+      ]
+    },
+    {
+      "id": "cx-c-view-check-valid",
+      "slug": "c-view-check-valid",
+      "title": "Preserve a checked view predicate",
+      "difficulty": "Medium",
+      "task": "Through checked_stock, add2 to available for item1. Return item_id, available from equipment ordered by item_id. Only positive-stock rows are visible.",
+      "schema_sql": "CREATE TABLE equipment(item_id INT PRIMARY KEY,available INT NOT NULL); CREATE VIEW checked_stock AS SELECT item_id,available FROM equipment WHERE available>0 WITH CHECK OPTION;",
+      "seed_sql": "INSERT INTO equipment VALUES(1,3),(2,0);",
+      "solution_sql": "UPDATE checked_stock SET available=available+2 WHERE item_id=1; SELECT item_id,available FROM equipment ORDER BY item_id;",
+      "expected": "item_id\tavailable\n1\t5\n2\t0",
+      "ordering": "Order exactly as requested by the task; row order is otherwise unspecified.",
+      "edge_cases": [
+        "Empty tables.",
+        "NULL values where the schema permits them.",
+        "Repeated matching values when keys permit them."
+      ],
+      "hints": [
+        "A successful update preserves the positive-stock predicate; attempted writes to zero must be tested as rejected operations separately."
+      ],
+      "explanation": "A successful update preserves the positive-stock predicate; attempted writes to zero must be tested as rejected operations separately.",
+      "validation_cases": [
+        {
+          "name": "zero excluded",
+          "seed_sql": "INSERT INTO equipment VALUES(1,0),(2,4);",
+          "expected": "item_id\tavailable\n1\t0\n2\t4"
+        },
+        {
+          "name": "positive update",
+          "seed_sql": "INSERT INTO equipment VALUES(1,1);",
+          "expected": "item_id\tavailable\n1\t3"
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": null,
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-19-updatable-views-1",
+      "test_id": "pt-dbms-sql-19-updatable-views",
+      "question_text": "Which of the following views is most likely to be directly updatable?",
+      "options": [
+        "A view with GROUP BY and COUNT(*)",
+        "A view joining two tables",
+        "A single-table view with a simple WHERE filter and no aggregation",
+        "A view using UNION of two SELECTs"
+      ],
+      "correct_index": 2,
+      "explanation": "Simple, single-table views without aggregation, GROUP BY, DISTINCT, or set operations are the classic case of an updatable view.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-19-updatable-views-2",
+      "test_id": "pt-dbms-sql-19-updatable-views",
+      "question_text": "Why can't `UPDATE department_summary SET avg_salary = 75000 WHERE name = 'Sales';` be executed, given department_summary uses AVG(salary) GROUP BY department?",
+      "options": [
+        "Because UPDATE statements are never allowed on views",
+        "Because the average is derived from many employee rows, so there's no unambiguous way to determine which underlying rows to change and by how much",
+        "Because department_summary has no WHERE clause",
+        "Because AVG() columns are read-only by SQL syntax rule with no underlying reason"
+      ],
+      "correct_index": 1,
+      "explanation": "The fundamental issue is semantic ambiguity: an aggregate value maps to many underlying rows, so there's no defined way to push a single new value back down to specific row changes.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-19-updatable-views-3",
+      "test_id": "pt-dbms-sql-19-updatable-views",
+      "question_text": "What does WITH CHECK OPTION do on an updatable view?",
+      "options": [
+        "It makes a non-updatable view updatable",
+        "It prevents INSERT/UPDATE operations from creating a row that would violate the view's own WHERE clause",
+        "It automatically refreshes materialized data",
+        "It restricts which columns can be selected"
+      ],
+      "correct_index": 1,
+      "explanation": "WITH CHECK OPTION ensures any row inserted or updated through the view still satisfies the view's defining WHERE clause, rejecting changes that would 'escape' the view's visibility.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-19-updatable-views-4",
+      "test_id": "pt-dbms-sql-19-updatable-views",
+      "question_text": "Which of these is generally NOT a requirement for a view to be updatable?",
+      "options": [
+        "No aggregate functions in the SELECT list",
+        "No GROUP BY or DISTINCT",
+        "The view must be based on a single base table",
+        "The view must include an ORDER BY clause"
+      ],
+      "correct_index": 3,
+      "explanation": "ORDER BY has no bearing on updatability; the real requirements involve single-table sourcing and absence of aggregation/GROUP BY/DISTINCT/set operations.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-19-updatable-views-5",
+      "test_id": "pt-dbms-sql-19-updatable-views",
+      "question_text": "Why is a view joining employees and departments typically NOT directly updatable?",
+      "options": [
+        "Joins are forbidden in SQL views entirely",
+        "An update to a joined row might logically need to change two different underlying tables at once, and the engine has no reliable default way to split that change",
+        "Joined views cannot be queried with SELECT",
+        "Because JOIN always implies DISTINCT"
+      ],
+      "correct_index": 1,
+      "explanation": "A row from a joined view combines data from multiple tables; there's ambiguity in how an UPDATE should be distributed across them, so most engines disallow direct updates on such views by default.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-19-updatable-views-6",
+      "test_id": "pt-dbms-sql-19-updatable-views",
+      "question_text": "What mechanism lets a database administrator define custom logic for how an UPDATE against a non-updatable (e.g., aggregated) view should be handled?",
+      "options": [
+        "WITH CHECK OPTION",
+        "An INSTEAD OF trigger",
+        "A materialized view REFRESH",
+        "GRANT UPDATE ON view"
+      ],
+      "correct_index": 1,
+      "explanation": "INSTEAD OF triggers let you intercept DML against a view and substitute your own procedural logic for how it should affect the underlying tables — used precisely because the default mapping is ambiguous or unsupported.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-19-updatable-views-7",
+      "test_id": "pt-dbms-sql-19-updatable-views",
+      "question_text": "A view selects `salary * 1.1 AS projected_salary` from employees. Can you directly UPDATE the projected_salary column through this view?",
+      "options": [
+        "Yes, it maps directly to the salary column",
+        "No, because it's a computed expression with no single underlying column to write to",
+        "Yes, but only for values above 80000",
+        "Only if WITH CHECK OPTION is used"
+      ],
+      "correct_index": 1,
+      "explanation": "A computed/expression column has no direct 1:1 mapping to an underlying stored column, so it typically cannot be the target of a direct UPDATE through the view.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-19-updatable-views-8",
+      "test_id": "pt-dbms-sql-19-updatable-views",
+      "question_text": "Does updatability behavior for single-table views with edge-case shapes (e.g., WHERE referencing non-selected columns) vary across database engines?",
+      "options": [
+        "No, the SQL standard makes this fully uniform across all engines",
+        "Yes, MySQL, PostgreSQL, and Oracle differ on some edge conditions, so engine documentation should be consulted",
+        "Updatability is identical because it's determined only by the CREATE VIEW keyword",
+        "This only matters for materialized views"
+      ],
+      "correct_index": 1,
+      "explanation": "While the broad rules (no joins/aggregation/GROUP BY/DISTINCT) are widely shared, specific engines differ on some edge cases of what counts as updatable, making per-engine verification important.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "/root/content_c",
+    "independent_review": "passed",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Independent manual content review passed within independent_review_scope; engine/browser/release gates separate.",
+    "canonical_answer_indices_preserved": true,
+    "editorial_record": "Original explanations, examples and scenarios; external originality clearance and AdSense review unperformed.",
+    "independent_reviewer": "/root",
+    "independent_review_scope": "Full notes,20MCQs/options/explanations,both SQL problems and six fixtures,diagram,metadata and links. Direct mapping,check-option scope,restricted join writes,insertability and permissions separated. Ambiguous single-base-table distractor and blanket no-join explanation corrected. Six MariaDB fixtures separately passed. Manual editorial review only; exact MySQL/provider,browser,originality and AdSense gates separate."
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-19-updatable-views",
+    "original_note_sha256": "2d110e7154d4787af2ce805b4fe13d58ee9273019fbeb5fe7d9eaa4dfef43c9f",
+    "status": "drafted; not included in prepared paired migrations"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Write mapping and visibility",
+      "description": "Mapped base columns can change underlying rows; expressions and grouped results need a different contract.",
+      "columns": [
+        "View shape",
+        "Proposed change",
+        "Key question"
+      ],
+      "rows": [
+        [
+          "Filtered base columns",
+          "Change label",
+          "Is the row visible and caller permitted?"
+        ],
+        [
+          "Positive-stock check",
+          "Set stock to zero",
+          "Check option rejects membership loss"
+        ],
+        [
+          "Grouped average",
+          "Set average to50",
+          "Which base facts would change?"
+        ],
+        [
+          "Join view",
+          "Update two base tables",
+          "One-table update restriction applies"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "technical_review": "author self-review",
+    "server_rendering": "unverified",
+    "browser_rendering": "unverified"
+  },
+  "authoring_status": "drafted; verification pending"
+}

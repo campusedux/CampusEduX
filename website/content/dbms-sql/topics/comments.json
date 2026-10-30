@@ -1,0 +1,632 @@
+{
+  "source_ref": "chapter-8-sql-fundamentals/comments",
+  "slug": "comments",
+  "title": "Comments",
+  "description": "Use MySQL line and block comments to document intent while avoiding delimiter mistakes, unsafe nesting, executable-comment surprises, and confusion between SQL text and string data.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Writing explanations beside executable SQL\n\nSQL comments attach human-readable explanation to a statement or script without normally contributing a value to an ordinary query. They help readers understand a non-obvious rule, an intentional exclusion, or an important assumption. A good comment explains why the SQL is written that way rather than repeating a nearby keyword in different words.\n\nFor example, a report may exclude draft announcements because only published records belong in the student-facing count. The predicate expresses the exclusion; a short comment can explain its purpose. That explanation is valuable when another maintainer considers broadening the filter, especially if the sample data does not reveal why drafts should remain separate.\n\nComments are part of source text and must still follow the target parser's rules. This topic uses MySQL 8.4. Products differ in line markers, nesting support, and special comment forms, so do not assume that every character sequence beginning like a comment is ignored identically everywhere. Correct documentation syntax is part of a reproducible example.\n\n## Using line comments clearly\n\nThe familiar double-dash form starts a line comment. In MySQL, the second dash must be followed by whitespace or a control character for this form to act as a comment marker. Write a space after the two dashes. This avoids confusing the marker with arithmetic-like text and makes the intended boundary easy for a reader to recognize.\n\n```sql\nSELECT announcement_id, title\nFROM announcements\nWHERE published = 1 -- Drafts are excluded from the student report.\nORDER BY announcement_id;\n```\n\nThe line break is important because the comment continues to the end of its line. ORDER BY remains executable because it starts on the next line. Placing additional SQL text after the explanatory words on the same line would leave that text inside the comment instead of adding another clause.\n\nMySQL also supports a hash character as a line-comment marker. That is a dialect-specific form rather than a portable default. Prefer the existing project's convention and label MySQL-specific examples. A statement using a hash comment can fail when copied into a product or client that interprets the character differently.\n\n## Using block comments for a bounded explanation\n\nAn ordinary block comment begins with slash-star and ends with star-slash. It can span lines or appear between statement tokens. Use it for a short explanation that is naturally grouped together, not to conceal unrelated code or create an undocumented alternative implementation. A clear opening and closing boundary helps reviewers see which text remains executable.\n\n```sql\nSELECT announcement_id, title\nFROM announcements\n/* Countable announcements must already be published. */\nWHERE published = 1\nORDER BY announcement_id;\n```\n\nBoth examples express the same report population. The explanatory text is not a predicate and does not enforce publication by itself. Removing WHERE while leaving the comment would produce a different query. Tests should verify the actual result and eligibility rule rather than treating a descriptive sentence as evidence that the implementation still follows it.\n\n## Avoiding nested and unfinished blocks\n\nDo not rely on nested block comments in MySQL. Wrapping a region containing an existing block comment with another opening and closing pair can make the first inner closing marker end the outer comment early. Text the author believed disabled can then be parsed as SQL. The outcome may be an error or an unintended operation, depending on the surrounding text.\n\nFor a temporary local investigation, a safer approach may be commenting individual lines with the supported line form, provided the resulting statement is reviewed carefully. Do not leave large obsolete queries commented out as a permanent parallel implementation. Version control and focused history are better places to preserve superseded code once a change has been reviewed.\n\nAn unfinished block comment also makes statement boundaries unreliable. A client may continue collecting input, reject the statement, or treat later text as commented until a close is encountered. Avoid claiming that every unterminated comment always silently succeeds and ignores the rest of the file. Client and server parsing both affect the observed behavior.\n\n## Recognizing comment-like text inside strings\n\nThe characters used for comments can also appear as ordinary data. A ticket label might literally contain two dashes, a hash, or slash-star text. Inside a properly quoted string, those characters belong to the value rather than opening a SQL comment. A query comparing the stored label must preserve the original value and its quoting.\n\nFor example, a note reading priority -- review is a complete string value when enclosed in single quotes. The double dashes inside it do not automatically hide the closing quote or the next clause. Similarly, a recorded note containing slash-star and star-slash is not an instruction to strip part of the note before comparison.\n\nThis is why a naive text replacement that removes every comment-looking pattern is not a safe SQL parser. It can corrupt literal values and change a statement's meaning. Use the established client or parser for the task, and keep fixtures that contain comment-like strings when testing a script-processing utility. A regular expression that works on one simple statement is not proof of general SQL parsing correctness.\n\n## Understanding MySQL special comment forms\n\nMySQL supports executable comment forms beginning with slash-star-exclamation. The server can interpret their contents as SQL under documented rules, including version-qualified cases. These are different from ordinary explanatory blocks. A reviewer must not assume that every visually comment-like region is inert merely because it has the familiar outer delimiters.\n\nOptimizer-hint comments use another special opening form with a plus sign. Supported hints can influence planning under their documented semantics. They are not ordinary prose and should not be introduced casually to make a slow example look faster. Verify the actual engine, feature, and plan evidence before relying on any such instruction.\n\nThese forms also limit what compatibility tests establish. A MariaDB parser can recognize or ignore forms differently from exact MySQL, especially around version-qualified behavior. Record the actual engine used and do not call one compatibility execution a proof of every target behavior. The exercises here use ordinary comments so they do not require special executable-comment semantics.\n\n## Keeping comments accurate and safe\n\nA stale explanation can be more misleading than no explanation. If a filter changes from published only to another population, update the reason beside it. Review code and comment together: the predicate determines behavior, while the text helps a future reader understand the requirement and trade-off.\n\nAvoid writing secrets, credentials, private records, or copied production connection strings in comments. Source comments can be checked into version control, included in query logs, or exposed through diagnostic tooling. Calling something a comment does not make it a private note. Use approved references and synthetic examples for reproducibility.\n\nComments also do not sanitize untrusted input. If an application concatenates caller text into SQL, comment markers can become part of an injection attempt. The correct defense is the established parameter-binding and trusted validation approach, along with appropriate authorization. Deleting a few punctuation sequences is not a substitute for preserving the code-versus-data boundary.\n\n## Checking formatting without changing meaning\n\nFormatting a query across lines should preserve its parsed structure. Moving a clause onto a line already containing a line-comment marker can remove that clause from execution. Deleting a line break during minification can have the same effect. A SQL formatter or script transformation therefore needs to respect comments and quoted values rather than treating whitespace as universally irrelevant.\n\nCheck representative results after changing comment placement. Include published and draft rows, an empty input, and values containing comment-like characters. Confirm that filters, grouping, and ordering still execute as intended. For a script, verify statement boundaries through the established runner and avoid enabling multiple statements or privileged operations as a workaround.\n\nThe best comments make SQL easier to maintain while remaining visibly separate from its enforcement. Use the target dialect's syntax, close every ordinary block, preserve string data, and recognize special forms that can affect execution. Explain intent concisely and keep the explanation synchronized with the actual statement so readers can trust both the query and the reason it was written.\n",
+  "references": [
+    {
+      "title": "MySQL comments and special comment forms",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/comments.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-8-comments",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-8-comments-1",
+          "test_id": "pt-dbms-sql-8-comments",
+          "question_text": "Which form is the clear double-dash line-comment opening used in MySQL examples?",
+          "options": [
+            "//",
+            "#",
+            "-- followed by a space",
+            "<!--"
+          ],
+          "correct_index": 2,
+          "explanation": "MySQL requires whitespace or a control character after the second dash.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-8-comments-2",
+          "test_id": "pt-dbms-sql-8-comments",
+          "question_text": "Which comment style can span multiple lines?",
+          "options": [
+            "-- comment",
+            "# comment",
+            "/* comment */",
+            "// comment"
+          ],
+          "correct_index": 2,
+          "explanation": "/* ... */ block comments can span multiple lines, exactly like C-family block comments.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-8-comments-3",
+          "test_id": "pt-dbms-sql-8-comments",
+          "question_text": "Which single-line comment marker is a MySQL-specific addition, not part of the SQL standard?",
+          "options": [
+            "--",
+            "/* */",
+            "#",
+            "There is no such marker"
+          ],
+          "correct_index": 2,
+          "explanation": "# is a MySQL-specific single-line comment marker; -- is the standard one, supported everywhere.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-8-comments-4",
+          "test_id": "pt-dbms-sql-8-comments",
+          "question_text": "Should ordinary nested block comments be relied on in MySQL?",
+          "options": [
+            "Yes, nesting is fully supported and safe",
+            "No; avoid nesting because an inner closing marker can end the intended outer comment",
+            "Only in PostgreSQL",
+            "Only if there are exactly two nested levels"
+          ],
+          "correct_index": 1,
+          "explanation": "Nesting behavior is dialect-specific. This topic explicitly targets MySQL rather than making a universal claim about every SQL product.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-8-comments-5",
+          "test_id": "pt-dbms-sql-8-comments",
+          "question_text": "What risk does an unfinished block comment create for a SQL script?",
+          "options": [
+            "No risk — the database automatically closes it at the end of the statement",
+            "Later text or statement boundaries may be misinterpreted; the client may wait, reject input, or keep text inside a comment",
+            "It causes an immediate, very clear syntax error at the exact missing spot",
+            "Unterminated comments are automatically converted to line comments"
+          ],
+          "correct_index": 1,
+          "explanation": "The outcome depends on the client and parser. Silent successful execution is not guaranteed.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-8-comments-6",
+          "test_id": "pt-dbms-sql-8-comments",
+          "question_text": "Someone tries to comment out a block of SQL that already contains a `/* ... */` comment inside it, by wrapping the whole thing in another `/* ... */`. What actually happens?",
+          "options": [
+            "It works correctly and everything is commented out as intended",
+            "The FIRST inner */ ends the outer comment early, so the remaining text becomes real (likely invalid) SQL",
+            "SQL automatically detects the intent and nests correctly",
+            "This always produces a silent, undetectable bug with no error"
+          ],
+          "correct_index": 1,
+          "explanation": "Because block comments don't nest, the inner */ prematurely closes the outer comment, and the rest is parsed as SQL — often producing a syntax error.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-8-comments-7",
+          "test_id": "pt-dbms-sql-8-comments",
+          "question_text": "Can a single-line comment appear at the end of a line of real SQL code, like `ORDER BY salary DESC; -- highest paid first`?",
+          "options": [
+            "No, comments must always be on their own line",
+            "Yes — a single-line comment can trail after real code on the same line",
+            "Only block comments can trail after code",
+            "This is only allowed in MySQL"
+          ],
+          "correct_index": 1,
+          "explanation": "A trailing -- comment after real SQL on the same line is standard and common practice.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-8-comments-8",
+          "test_id": "pt-dbms-sql-8-comments",
+          "question_text": "Why are comments useful in a SQL script beyond just 'notes'?",
+          "options": [
+            "They have no real use beyond decoration",
+            "They document non-obvious business logic or exclusions (e.g. why contractors are excluded from a query) that the SQL syntax itself can't express",
+            "They make queries execute faster",
+            "They are required by the SQL standard for every statement"
+          ],
+          "correct_index": 1,
+          "explanation": "Comments capture the 'why' behind a query's logic — context that pure SQL syntax has no way to express.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-8-comments-new-9",
+          "test_id": "pt-dbms-sql-8-comments",
+          "question_text": "What should a useful SQL comment primarily explain?",
+          "options": [
+            "Only repeat SELECT as choose columns",
+            "Non-obvious intent, assumptions, or reasons for a condition",
+            "A secret connection password",
+            "A second permanently hidden implementation"
+          ],
+          "correct_index": 1,
+          "explanation": "Comments help maintainers understand why the executable logic is required.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-8-comments-new-10",
+          "test_id": "pt-dbms-sql-8-comments",
+          "question_text": "Does an explanatory comment saying published only enforce that population?",
+          "options": [
+            "Yes; prose comments filter rows",
+            "Only if the comment is uppercase",
+            "No; the actual query predicate must enforce it",
+            "Only if the table has a key"
+          ],
+          "correct_index": 2,
+          "explanation": "Behavior is determined by executable SQL rather than descriptive text.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-8-comments-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-8-comments-application-new-1",
+          "test_id": "pt-dbms-sql-8-comments-application",
+          "question_text": "ORDER BY is moved onto the same line after a double-dash comment. What can happen?",
+          "options": [
+            "The comment forces a faster sort",
+            "The clause automatically moves to the next line",
+            "The ordering clause becomes part of the comment",
+            "Every row is deleted"
+          ],
+          "correct_index": 2,
+          "explanation": "A line comment continues to the end of its physical line.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-8-comments-application-new-2",
+          "test_id": "pt-dbms-sql-8-comments-application",
+          "question_text": "A quoted value contains the text priority -- review. Are the dashes necessarily a SQL comment?",
+          "options": [
+            "Yes; every double dash starts a comment regardless of quotes",
+            "Only if the text contains a space",
+            "Only if the column is indexed",
+            "No; inside the quoted string they are value data"
+          ],
+          "correct_index": 3,
+          "explanation": "The parser distinguishes quoted data from statement structure.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-8-comments-application-new-3",
+          "test_id": "pt-dbms-sql-8-comments-application",
+          "question_text": "A wrapper block surrounds text that already contains a block comment. What should a MySQL author avoid assuming?",
+          "options": [
+            "That the wrapper safely nests until its final closing marker",
+            "That all line breaks become table rows",
+            "That every string becomes NULL",
+            "That a new transaction begins"
+          ],
+          "correct_index": 0,
+          "explanation": "The inner closing marker can terminate the intended outer block early.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-8-comments-application-new-4",
+          "test_id": "pt-dbms-sql-8-comments-application",
+          "question_text": "A script uses MySQL hash line comments and is copied to another product. What must be checked?",
+          "options": [
+            "Only whether the filename ends in sql",
+            "Whether the target recognizes that dialect-specific marker",
+            "Only whether the first query returns one row",
+            "Only the screen width"
+          ],
+          "correct_index": 1,
+          "explanation": "Comment syntax is not identical in every dialect.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-8-comments-application-new-5",
+          "test_id": "pt-dbms-sql-8-comments-application",
+          "question_text": "A region begins with the MySQL executable-comment opening slash-star-exclamation. What must review recognize?",
+          "options": [
+            "It is guaranteed inert prose",
+            "It is a string literal automatically",
+            "Its contents can be interpreted as SQL under documented rules",
+            "It authorizes production execution"
+          ],
+          "correct_index": 2,
+          "explanation": "Special forms cannot be assessed as ordinary explanatory blocks.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-8-comments-application-new-6",
+          "test_id": "pt-dbms-sql-8-comments-application",
+          "question_text": "A comment begins with the optimizer-hint form. What evidence should support relying on it?",
+          "options": [
+            "Only a reassuring sentence beside it",
+            "Only the size of the code block",
+            "Only the number of examples",
+            "Actual supported hint semantics and relevant plan behavior"
+          ],
+          "correct_index": 3,
+          "explanation": "Hint comments can affect execution strategy and require technical evidence.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-8-comments-application-new-7",
+          "test_id": "pt-dbms-sql-8-comments-application",
+          "question_text": "A utility strips every slash-star pattern using naive replacement, including inside strings. What can it damage?",
+          "options": [
+            "Literal values and therefore query meaning",
+            "Only unused whitespace",
+            "Only external CSS",
+            "Only database passwords that are not present"
+          ],
+          "correct_index": 0,
+          "explanation": "Comment-looking sequences inside quoted strings are data.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-8-comments-application-new-8",
+          "test_id": "pt-dbms-sql-8-comments-application",
+          "question_text": "A predicate changed but its old comment remains. What should review do?",
+          "options": [
+            "Trust the comment instead of the query",
+            "Reconcile the explanation with the actual requirement and behavior",
+            "Remove every test",
+            "Assume comments execute as validation"
+          ],
+          "correct_index": 1,
+          "explanation": "Stale comments can mislead later maintenance decisions.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-8-comments-application-new-9",
+          "test_id": "pt-dbms-sql-8-comments-application",
+          "question_text": "A connection password is placed in a SQL comment for troubleshooting. Is it safe because comments are not ordinary result rows?",
+          "options": [
+            "Yes; comments are always private",
+            "Only if the comment spans one line",
+            "No; source, logs, and tooling can expose it",
+            "Only if a semicolon follows it"
+          ],
+          "correct_index": 2,
+          "explanation": "Comments are not a secret-storage mechanism.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-8-comments-application-new-10",
+          "test_id": "pt-dbms-sql-8-comments-application",
+          "question_text": "An application removes comment punctuation from untrusted input instead of binding values. What is missing?",
+          "options": [
+            "A second punctuation blacklist alone",
+            "A wider result table",
+            "A different comment caption",
+            "The established code-versus-data boundary and trusted input handling"
+          ],
+          "correct_index": 3,
+          "explanation": "Ad hoc character removal does not replace safe parameter binding and authorization.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "dsa-dbms-sql-comments-published-report",
+      "slug": "comments-published-report",
+      "title": "Document a published-announcement filter",
+      "difficulty": "Easy",
+      "task": "Return announcement_id and title for published announcements, ordered by announcement_id. Include a double-dash line comment explaining that drafts are excluded; ensure ORDER BY remains executable on a later line. Titles containing comment-like characters must stay unchanged.",
+      "schema_sql": "CREATE TABLE announcements (announcement_id INT PRIMARY KEY, title VARCHAR(60) NOT NULL, audience VARCHAR(20) NOT NULL, published INT NOT NULL CHECK (published IN (0,1)));",
+      "seed_sql": "INSERT INTO announcements VALUES (3,'Review /* pending */','students',1),(1,'Priority -- review','students',1),(2,'Draft #1','students',0);",
+      "expected": "announcement_id\ttitle\n1\tPriority -- review\n3\tReview /* pending */",
+      "ordering": "announcement_id ascending",
+      "constraints": [
+        "announcement_id is unique",
+        "published is 0 or 1",
+        "Comment-like characters in title are ordinary data"
+      ],
+      "edge_cases": [
+        "Draft rows are excluded",
+        "Do not strip comment-like title text",
+        "Empty input returns no rows"
+      ],
+      "hints": [
+        "Leave a space after the double dash",
+        "Put ORDER BY on its own line after the comment"
+      ],
+      "solution_sql": "SELECT announcement_id, title FROM announcements\nWHERE published = 1 -- Drafts do not belong in the published report.\nORDER BY announcement_id;",
+      "explanation": "The line comment documents the publication rule without swallowing the ordering clause. Stored title text is selected unchanged.",
+      "validation_cases": [
+        {
+          "seed_sql": "",
+          "expected": ""
+        },
+        {
+          "seed_sql": "INSERT INTO announcements VALUES (2,'# reminder','staff',1),(1,'Do not show','staff',0);",
+          "expected": "announcement_id\ttitle\n2\t# reminder"
+        }
+      ]
+    },
+    {
+      "id": "dsa-dbms-sql-comments-literal-and-group",
+      "slug": "comments-literal-and-group",
+      "title": "Preserve comment-like strings in an audience summary",
+      "difficulty": "Medium",
+      "task": "Return audience and marked_count for published announcements whose title is exactly priority -- review or review /* pending */. Compare title text as binary for exact case and spacing. Group by audience and order by audience. Include an ordinary block comment explaining that the marker-like sequences are stored text, not executable comments. Do not use nested or executable comments.",
+      "schema_sql": "CREATE TABLE announcements (announcement_id INT PRIMARY KEY, title VARCHAR(60) NOT NULL, audience VARCHAR(20) NOT NULL, published INT NOT NULL CHECK (published IN (0,1)));",
+      "seed_sql": "INSERT INTO announcements VALUES (1,'priority -- review','students',1),(2,'review /* pending */','students',1),(3,'priority -- review','staff',1),(4,'priority -- review','students',0),(5,'Priority -- review','staff',1),(6,'ordinary','students',1);",
+      "expected": "audience\tmarked_count\nstaff\t1\nstudents\t2",
+      "ordering": "audience ascending",
+      "constraints": [
+        "Exact target spellings are lowercase",
+        "published is 0 or 1",
+        "One row is one announcement"
+      ],
+      "edge_cases": [
+        "Exclude unpublished matching titles",
+        "Uppercase variants are not exact matches",
+        "Do not remove marker-like characters from string literals",
+        "Audiences without a match are absent"
+      ],
+      "hints": [
+        "Ordinary comment delimiters must not wrap another block",
+        "Bind each exact title as quoted data in the comparison",
+        "Use a binary title comparison and group after filtering"
+      ],
+      "solution_sql": "/* Match recorded title text exactly; marker-like characters inside strings remain data. */\nSELECT audience, COUNT(*) AS marked_count FROM announcements\nWHERE published = 1 AND (CAST(title AS BINARY) = 'priority -- review' OR CAST(title AS BINARY) = 'review /* pending */')\nGROUP BY audience ORDER BY audience;",
+      "explanation": "The ordinary explanatory block is separate from the quoted values. Exact binary comparisons retain the intended case-sensitive population before grouping published announcements.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO announcements VALUES (1,'priority -- review','staff',0),(2,'Priority -- review','staff',1);",
+          "expected": ""
+        },
+        {
+          "seed_sql": "INSERT INTO announcements VALUES (2,'review /* pending */','students',1),(1,'priority -- review','students',1);",
+          "expected": "audience\tmarked_count\nstudents\t2"
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-8-comments-1",
+      "test_id": "pt-dbms-sql-8-comments",
+      "question_text": "Which syntax starts a standard single-line SQL comment?",
+      "options": [
+        "//",
+        "#",
+        "--",
+        "<!--"
+      ],
+      "correct_index": 2,
+      "explanation": "-- begins a single-line comment in standard SQL, running to the end of the line.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-8-comments-2",
+      "test_id": "pt-dbms-sql-8-comments",
+      "question_text": "Which comment style can span multiple lines?",
+      "options": [
+        "-- comment",
+        "# comment",
+        "/* comment */",
+        "// comment"
+      ],
+      "correct_index": 2,
+      "explanation": "/* ... */ block comments can span multiple lines, exactly like C-family block comments.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-8-comments-3",
+      "test_id": "pt-dbms-sql-8-comments",
+      "question_text": "Which single-line comment marker is a MySQL-specific addition, not part of the SQL standard?",
+      "options": [
+        "--",
+        "/* */",
+        "#",
+        "There is no such marker"
+      ],
+      "correct_index": 2,
+      "explanation": "# is a MySQL-specific single-line comment marker; -- is the standard one, supported everywhere.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-8-comments-4",
+      "test_id": "pt-dbms-sql-8-comments",
+      "question_text": "Do standard SQL block comments support nesting (a comment inside a comment)?",
+      "options": [
+        "Yes, nesting is fully supported and safe",
+        "No — the first closing */ ends the comment, so anything after it is parsed as real SQL",
+        "Only in PostgreSQL",
+        "Only if there are exactly two nested levels"
+      ],
+      "correct_index": 1,
+      "explanation": "Standard SQL block comments are not nestable; the first */ closes the comment regardless of how many /* appeared before it.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-8-comments-5",
+      "test_id": "pt-dbms-sql-8-comments",
+      "question_text": "What is the practical risk of an unterminated block comment (a `/*` with no matching `*/`)?",
+      "options": [
+        "No risk — the database automatically closes it at the end of the statement",
+        "It silently swallows everything after it, including real statements, until a later */ or end of file",
+        "It causes an immediate, very clear syntax error at the exact missing spot",
+        "Unterminated comments are automatically converted to line comments"
+      ],
+      "correct_index": 1,
+      "explanation": "An unterminated block comment absorbs subsequent text as comment, which can silently disable real SQL statements without an obvious error.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-8-comments-6",
+      "test_id": "pt-dbms-sql-8-comments",
+      "question_text": "Someone tries to comment out a block of SQL that already contains a `/* ... */` comment inside it, by wrapping the whole thing in another `/* ... */`. What actually happens?",
+      "options": [
+        "It works correctly and everything is commented out as intended",
+        "The FIRST inner */ ends the outer comment early, so the remaining text becomes real (likely invalid) SQL",
+        "SQL automatically detects the intent and nests correctly",
+        "This always produces a silent, undetectable bug with no error"
+      ],
+      "correct_index": 1,
+      "explanation": "Because block comments don't nest, the inner */ prematurely closes the outer comment, and the rest is parsed as SQL — often producing a syntax error.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-8-comments-7",
+      "test_id": "pt-dbms-sql-8-comments",
+      "question_text": "Can a single-line comment appear at the end of a line of real SQL code, like `ORDER BY salary DESC; -- highest paid first`?",
+      "options": [
+        "No, comments must always be on their own line",
+        "Yes — a single-line comment can trail after real code on the same line",
+        "Only block comments can trail after code",
+        "This is only allowed in MySQL"
+      ],
+      "correct_index": 1,
+      "explanation": "A trailing -- comment after real SQL on the same line is standard and common practice.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-8-comments-8",
+      "test_id": "pt-dbms-sql-8-comments",
+      "question_text": "Why are comments useful in a SQL script beyond just 'notes'?",
+      "options": [
+        "They have no real use beyond decoration",
+        "They document non-obvious business logic or exclusions (e.g. why contractors are excluded from a query) that the SQL syntax itself can't express",
+        "They make queries execute faster",
+        "They are required by the SQL standard for every statement"
+      ],
+      "correct_index": 1,
+      "explanation": "Comments capture the 'why' behind a query's logic — context that pure SQL syntax has no way to express.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "coordinator",
+    "independent_review": "unavailable; no agent tools",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Definitions and examples checked against questions; no plagiarism certification.",
+    "existing_question_corrections": [
+      "tq-dbms-sql-8-comments-1",
+      "tq-dbms-sql-8-comments-4",
+      "tq-dbms-sql-8-comments-5"
+    ],
+    "canonical_answer_indices_preserved": true
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-8-comments",
+    "original_note_sha256": "31415323fcba43e1d584afdfb1e7d01307321d2a5cffaba553b27d826414d7b4",
+    "status": "paired migration prepared; not applied"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Comment syntax versus stored text",
+      "description": "Ordinary comments, special forms, and quoted data have different parser roles. This table is descriptive; no example in it authorizes executing a production operation.",
+      "columns": [
+        "Form",
+        "Role in MySQL",
+        "Common mistake"
+      ],
+      "rows": [
+        [
+          "-- followed by space",
+          "Line comment through the line ending",
+          "Moving a required clause after the marker"
+        ],
+        [
+          "/* explanation */",
+          "Ordinary bounded comment",
+          "Relying on nested blocks"
+        ],
+        [
+          "# explanation",
+          "MySQL line comment",
+          "Assuming universal dialect support"
+        ],
+        [
+          "/*! ... */",
+          "Potential executable form",
+          "Treating every block-like region as inert prose"
+        ],
+        [
+          "'priority -- review'",
+          "String data",
+          "Stripping marker-like characters from the value"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "coordinator review",
+    "server_rendering": "passed",
+    "browser_rendering": "unverified",
+    "independent_review": "unavailable; no agent tools",
+    "rendering_check": "2026-10-28: actual LessonBlock/TopicDiagrams server rendering; 38 authored-package checks passed. Desktop/mobile browser rendering unverified."
+  },
+  "sql_verification": {
+    "engine": "11.8.6-MariaDB-0+deb13u1 from Debian",
+    "scope": "MariaDB compatibility execution; exact MySQL 8.4/provider execution unverified",
+    "fingerprint": "c264726c7bde315c37875029798f52b3c8ef7818628d296443fbe45333cd4141",
+    "cases": [
+      {
+        "problem": "comments-published-report",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "comments-published-report",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "comments-published-report",
+        "case": 2,
+        "passed": true
+      },
+      {
+        "problem": "comments-literal-and-group",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "comments-literal-and-group",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "comments-literal-and-group",
+        "case": 2,
+        "passed": true
+      }
+    ],
+    "all_passed": true
+  }
+}

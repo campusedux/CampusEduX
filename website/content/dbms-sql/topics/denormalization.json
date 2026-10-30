@@ -1,0 +1,592 @@
+{
+  "source_ref": "chapter-21-normalization-and-functional-dependencies/denormalization",
+  "slug": "denormalization",
+  "title": "Denormalization",
+  "description": "Evaluate deliberate SQL redundancy with explicit authority, freshness, retry safety, reconciliation and rollback, using cached-count and cached-total drift examples.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Duplicate a fact only for a measured reason\n\nDenormalization deliberately stores information that could be derived from other authoritative facts, usually to serve a specific access pattern more efficiently. A campus store might store an order count beside a customer record rather than counting that customer's orders for every dashboard request. The stored count is redundant because the order relation already contains the underlying facts from which it can be calculated.\n\nThe decision is not simply fewer joins are better. A redundant value introduces another state that can disagree with its source. A design must explain which representation is authoritative, who updates the derived copy, what freshness is promised and how disagreement is detected and repaired. Without those answers, the apparent read optimization can become a persistent data-integrity defect.\n\n## Begin with the normalized fact grain\n\nSuppose Orders has one row per order, identified by order_id, with customer_id and amount. A customer summary stores customer_id, order_count and total_amount. The normalized order facts remain the authority for the count and total. The summary is a derived representation at one row per customer, not an additional independent record of revenue.\n\nIf cancelled orders, refunds or currencies exist, define their treatment before writing the summary formula. Counting every stored order and summing every amount may not match the business definition of active orders or recognized revenue. A derived cache that consistently computes the wrong population is still wrong. Denormalization requires a stable measure definition as much as it requires an update mechanism.\n\n## Establish evidence for the read problem\n\nMeasure the actual expensive query and inspect its plan before duplicating data. A missing appropriate index, unnecessary selected columns or an incorrectly multiplied join can explain poor performance without requiring a redundant summary. Fixing such issues may preserve a simpler authoritative model and remove the need for a second representation entirely.\n\nIf a measured workload still needs faster repeated summaries, record the baseline latency, query frequency and expected data scale. State which read path the proposed denormalization targets. A dashboard refreshed every few minutes has different freshness requirements from a checkout decision that must use current authoritative balances. Do not reuse a reporting cache for an integrity-critical decision merely because it returns quickly.\n\n## Compare synchronous and asynchronous maintenance\n\nSynchronous maintenance updates source facts and derived state in one properly defined transaction. It can provide a stronger immediate consistency promise, but it adds write work and can create contention on a popular summary row. Every write path must participate, including corrections, imports, deletions and administrative tools. An overlooked path can make a seemingly transactional design drift.\n\nAsynchronous maintenance updates the derived representation after the source change, perhaps through a durable event or scheduled rebuild. It can reduce request-time work but permits a window of staleness. The design must specify ordering, retries and failure recovery. A label such as eventually consistent does not define how long stale data is acceptable or what operators should do when the consumer stops progressing.\n\n## Make retries safe before using increments\n\nIncrementing a cached count once per received event is unsafe when the delivery system can retry the same event. A replay can add the same order twice. Conversely, dropping a failed event can leave the summary permanently short. Maintenance needs a justified idempotency or recomputation strategy, not an assumption that each source change will be delivered exactly once.\n\nA correction from ten units to fifteen units also differs from a new fifteen-unit order. An incremental updater must know the relevant prior state or a well-defined delta. Out-of-order updates can apply an older value after a newer correction unless the design includes a reliable ordering policy. Recomputing a customer's summary from authoritative facts can be easier to reason about, though it has its own cost and concurrency considerations.\n\n## Preserve authority during disagreement\n\nWhen the cached total disagrees with the source orders, the application should have a documented rule about which representation wins. For this lesson, Orders is authoritative and the summary can be rebuilt. Allowing arbitrary edits to both copies turns reconciliation into a conflict between two supposed truths. That is a different architecture requiring explicit ownership and conflict rules.\n\nThe derived table should also have a clear scope. A summary containing only recently active customers cannot prove that an absent customer has zero lifetime orders. Absence can mean not yet built, filtered out or truly empty, depending on the contract. Store or expose readiness information when the consumer must distinguish those states rather than silently presenting every missing cache entry as a measured zero.\n\n## Detect drift with an independent recomputation\n\nA read-only reconciliation compares cached measures with a fresh aggregate of source facts. For the simplified nonnull integer example, an empty order population has count zero and a displayed total of zero. That zero-total policy is explicit; in another domain, unknown measures may need to remain unknown. The diagnostic must use the same approved population definition as the cache.\n\n```sql\nSELECT c.customer_id,\n       c.order_count AS cached_count,\n       COUNT(o.order_id) AS actual_count\nFROM customer_summary AS c\nLEFT JOIN orders AS o ON o.customer_id = c.customer_id\nGROUP BY c.customer_id, c.order_count\nHAVING c.order_count <> COUNT(o.order_id)\nORDER BY c.customer_id;\n```\n\nCOUNT(o.order_id) matters here. COUNT(*) would count the null-extended left-join row for a customer with no orders and falsely report one order. The diagnostic also begins from cached customers, so it cannot reveal a missing summary row for a customer absent from that input. A complete reconciliation must choose a candidate population that covers every customer the summary contract promises to represent.\n\n## Keep privacy and access scope aligned\n\nA derived copy can widen access if it exposes values to callers who cannot read the underlying facts. A dashboard summary may legitimately have a different disclosure level, but that must be an intentional authorization decision enforced at trusted boundaries. Copying protected data into a convenient table does not remove its sensitivity or its retention requirements.\n\nLikewise, deleting or correcting a source fact may require updating cached copies, exports and snapshots. The more redundant representations exist, the more places a lifecycle change must reach. Include provenance, rebuild responsibility and retention behavior in the design. A fast read path is incomplete if it preserves stale private information after the authoritative data has been removed under an approved policy.\n\n## Distinguish a cache from a historical fact\n\nA current product name copied into an order may be denormalized if it is intended to mirror the live catalog name. A product name captured at purchase time may instead be an independent historical fact: the description agreed when the sale occurred. Automatically rewriting that snapshot after a catalog rename could destroy history rather than repair redundancy.\n\nAsk what time the value describes and whether later source changes are supposed to propagate. The same column shape can serve a cache, a legal record or an analytics snapshot with different semantics. Do not classify all repeated text as a mistake or every historical snapshot as an optimization. The domain's temporal meaning determines whether the copy should track the current source.\n\n## Plan rebuilds and reversibility\n\nA derived representation should ideally be rebuildable from a defined authoritative source. Rebuilds need a consistency boundary so that changes arriving during reconstruction are not lost or counted twice. A blind truncate-and-reload operation can temporarily remove data or mix source states. The operational strategy depends on the engine, workload and approved deployment process, so this lesson does not prescribe production commands.\n\nA rollback plan should explain how readers return to authoritative queries if the cache is wrong or unavailable. Keep the source facts intact and avoid making a speculative summary the only surviving record. Observe cache age, reconciliation failures and maintenance backlog, rather than monitoring read latency alone. Those signals show whether the optimization still meets its correctness promise.\n\n## Evaluate both read savings and write burden\n\nDenormalization can reduce repeated aggregation or complex relationship traversal, but it consumes storage and maintenance work. It can increase lock contention, retry complexity and operational repair cost. Compare those costs with the measured read benefit under representative load. A tiny example proving that one SELECT is shorter is not evidence of a production performance improvement.\n\nThe exercises focus on detecting count and total disagreement in synthetic cached summaries. They do not install a maintenance process or prove concurrency safety. Continue with [normalization](/learning/dbms-sql-tutorial/3nf) for dependency-based design and [transaction boundaries](/learning/dbms-sql-tutorial/transaction-boundaries) for atomic maintenance considerations. A defensible denormalization proposal includes authority, freshness, failure recovery, reconciliation and rollback alongside the faster read.\n",
+  "references": [
+    {
+      "title": "MySQL 8.4 reference manual",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/innodb-and-acid.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-21-denormalization",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-21-denormalization-1",
+          "test_id": "pt-dbms-sql-21-denormalization",
+          "question_text": "What is denormalization, precisely?",
+          "options": [
+            "Forgetting to normalize a schema during initial design",
+            "The deliberate reintroduction of controlled redundancy into an already-normalized schema, to optimize a specific known read-heavy access pattern",
+            "A synonym for reaching 1NF",
+            "Removing all foreign keys from a schema"
+          ],
+          "correct_index": 1,
+          "explanation": "Denormalization is a conscious, informed trade-off made after understanding the fully normalized design — not an accident or a shortcut taken instead of normalizing.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-21-denormalization-2",
+          "test_id": "pt-dbms-sql-21-denormalization",
+          "question_text": "What evidence justifies investigating a stored customer summary?",
+          "options": [
+            "The query contains any join",
+            "Representative measurements show repeated authoritative aggregation is a real bottleneck",
+            "The summary has fewer column names",
+            "Every dashboard is necessarily too slow"
+          ],
+          "correct_index": 1,
+          "explanation": "A proposed cache targets a demonstrated workload; its performance improvement still needs measurement.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-21-denormalization-3",
+          "test_id": "pt-dbms-sql-21-denormalization",
+          "question_text": "What makes the customer summary a controlled derived representation?",
+          "options": [
+            "Both copies are independently editable truths",
+            "Orders remain authoritative and a defined maintenance process owns freshness and repair",
+            "The summary has no update policy",
+            "The original orders are deleted after every dashboard read"
+          ],
+          "correct_index": 1,
+          "explanation": "Intentional redundancy needs authority, maintenance and recovery contracts.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-21-denormalization-4",
+          "test_id": "pt-dbms-sql-21-denormalization",
+          "question_text": "Who should own synchronization of the derived customer summary?",
+          "options": [
+            "Uncoordinated manual edits by each reader",
+            "A defined maintenance mechanism covering every relevant source-change path",
+            "The ORDER BY clause",
+            "Only the first import job"
+          ],
+          "correct_index": 1,
+          "explanation": "The mechanism may be synchronous or asynchronous, but its ownership and failure behavior must be explicit.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-21-denormalization-5",
+          "test_id": "pt-dbms-sql-21-denormalization",
+          "question_text": "What is a careful statement about materialized representations and refresh?",
+          "options": [
+            "Every engine refreshes every materialized result immediately",
+            "A stored query result needs a defined refresh policy; engine support and scheduling vary",
+            "MySQL 8.4 automatically creates native materialized views for all summaries",
+            "A stored result can never become stale"
+          ],
+          "correct_index": 1,
+          "explanation": "Do not equate stored query output with automatic freshness or assume a native materialized-view feature in MySQL.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-21-denormalization-6",
+          "test_id": "pt-dbms-sql-21-denormalization",
+          "question_text": "Why is denormalization applied 'without first understanding the normalized design' considered a red flag rather than a valid trade-off?",
+          "options": [
+            "Because denormalization always requires deleting the normalized tables first",
+            "Without understanding the normalized alternative and dependencies, redundancy has no justified ownership, consistency or workload trade-off",
+            "Because SQL syntax prevents denormalization without prior normalization",
+            "Because it is technically impossible to denormalize an unnormalized schema"
+          ],
+          "correct_index": 1,
+          "explanation": "The entire justification for calling something 'denormalization' rather than 'bad design' rests on it being a deliberate choice made with full knowledge of the normalized alternative and its trade-offs.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-21-denormalization-7",
+          "test_id": "pt-dbms-sql-21-denormalization",
+          "question_text": "In this lesson, which representation owns the order facts?",
+          "options": [
+            "Both copies independently override each other",
+            "Orders; the customer summary is maintained from those facts under the approved process",
+            "Only the dashboard display",
+            "Whichever value is larger"
+          ],
+          "correct_index": 1,
+          "explanation": "A synchronous maintenance transaction or asynchronous pipeline must preserve that authority rule.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-21-denormalization-8",
+          "test_id": "pt-dbms-sql-21-denormalization",
+          "question_text": "What tradeoff must a denormalization proposal evaluate?",
+          "options": [
+            "Guaranteed free speed with no write impact",
+            "Measured read benefit against storage, maintenance, staleness and repair costs",
+            "Only the number of joins in the query text",
+            "Only alphabetical output order"
+          ],
+          "correct_index": 1,
+          "explanation": "A shorter read query does not establish a net workload improvement.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "cx-q-denormalization-9",
+          "test_id": "pt-dbms-sql-21-denormalization",
+          "question_text": "What must a redundant summary identify explicitly?",
+          "options": [
+            "Its authoritative source",
+            "Only a short table name",
+            "Only an output alias",
+            "Only its row count"
+          ],
+          "correct_index": 0,
+          "explanation": "Disagreement needs a defined direction of repair.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "cx-q-denormalization-10",
+          "test_id": "pt-dbms-sql-21-denormalization",
+          "question_text": "What should precede a denormalization proposal?",
+          "options": [
+            "Deleting normalized facts",
+            "Measurement of the actual read bottleneck",
+            "Adding every summary imaginable",
+            "Assuming every join is slow"
+          ],
+          "correct_index": 1,
+          "explanation": "Evidence can reveal simpler query or index improvements.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "cx-test-denormalization-2",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "cx-q-denormalization-11",
+          "test_id": "cx-test-denormalization-2",
+          "question_text": "What risk follows an asynchronously maintained summary?",
+          "options": [
+            "Automatic perfect freshness",
+            "No write work at all",
+            "Possible staleness requiring an explicit freshness and recovery contract",
+            "No need for recovery"
+          ],
+          "correct_index": 2,
+          "explanation": "Freshness and failure behavior need a contract.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "cx-q-denormalization-12",
+          "test_id": "cx-test-denormalization-2",
+          "question_text": "Why can a retried increment event corrupt a cache?",
+          "options": [
+            "Retries always delete rows",
+            "Counts cannot be stored",
+            "All events are inherently unique",
+            "The same source fact may be counted twice"
+          ],
+          "correct_index": 3,
+          "explanation": "Delivery multiplicity needs idempotency or recomputation.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "cx-q-denormalization-13",
+          "test_id": "cx-test-denormalization-2",
+          "question_text": "Why use COUNT(o.order_id) after the shown left join?",
+          "options": [
+            "COUNT(*) would count an unmatched placeholder row",
+            "COUNT(*) is invalid syntax",
+            "COUNT always ignores every row",
+            "The key is a cached total"
+          ],
+          "correct_index": 0,
+          "explanation": "The nonnull source key distinguishes real orders.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "cx-q-denormalization-14",
+          "test_id": "cx-test-denormalization-2",
+          "question_text": "What does a cache absent from a filtered summary necessarily mean?",
+          "options": [
+            "Zero lifetime orders always",
+            "Nothing without its coverage contract",
+            "A deleted customer always",
+            "A fully rebuilt cache always"
+          ],
+          "correct_index": 1,
+          "explanation": "Absence can mean unbuilt or out of scope.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "cx-q-denormalization-15",
+          "test_id": "cx-test-denormalization-2",
+          "question_text": "Can a purchase-time product description be an independent historical fact?",
+          "options": [
+            "No, every repeated name is a cache",
+            "Only if current names never change",
+            "Yes",
+            "Only without a primary key"
+          ],
+          "correct_index": 2,
+          "explanation": "Temporal meaning decides whether updates should propagate.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "cx-q-denormalization-16",
+          "test_id": "cx-test-denormalization-2",
+          "question_text": "Why must every write path participate in synchronous maintenance?",
+          "options": [
+            "Only dashboard reads change totals",
+            "Transactions repair missing logic automatically",
+            "Imports never change source facts",
+            "An omitted path can make the derived copy drift"
+          ],
+          "correct_index": 3,
+          "explanation": "Corrections and administrative writes also affect authority.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "cx-q-denormalization-17",
+          "test_id": "cx-test-denormalization-2",
+          "question_text": "What can make delta maintenance hard for corrections?",
+          "options": [
+            "The updater needs correct prior state and event order",
+            "Every correction is a new order",
+            "Amounts never change",
+            "Only INSERT statements matter"
+          ],
+          "correct_index": 0,
+          "explanation": "A corrected value is not necessarily an additive new fact.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "cx-q-denormalization-18",
+          "test_id": "cx-test-denormalization-2",
+          "question_text": "What should a rebuild preserve?",
+          "options": [
+            "Only alphabetical output order",
+            "A consistent boundary with concurrent source changes",
+            "Only the cached table name",
+            "Only old cache rows"
+          ],
+          "correct_index": 1,
+          "explanation": "Otherwise changes can be lost or double applied.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "cx-q-denormalization-19",
+          "test_id": "cx-test-denormalization-2",
+          "question_text": "Why review authorization for derived copies?",
+          "options": [
+            "Summaries are never sensitive",
+            "Copies automatically inherit every policy",
+            "They can expose protected information under a new access path",
+            "Faster queries require no permissions"
+          ],
+          "correct_index": 2,
+          "explanation": "Disclosure and retention requirements still apply.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "cx-q-denormalization-20",
+          "test_id": "cx-test-denormalization-2",
+          "question_text": "What is a useful rollback property?",
+          "options": [
+            "The cache is the only surviving data",
+            "Every stale row is accepted forever",
+            "No reconciliation is possible",
+            "Readers can return to intact authoritative facts"
+          ],
+          "correct_index": 3,
+          "explanation": "A failed optimization should not destroy authority.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cx-denorm-count-drift",
+      "slug": "denorm-count-drift",
+      "title": "Detect cached count disagreement",
+      "difficulty": "Easy",
+      "task": "Return customer_id,cached_count,actual_count for cached customers whose order count differs from authoritative orders, ordered by customer_id.",
+      "schema_sql": "CREATE TABLE customer_summary(customer_id INT PRIMARY KEY,order_count INT NOT NULL,total_amount INT NOT NULL); CREATE TABLE orders(order_id INT PRIMARY KEY,customer_id INT NOT NULL,amount INT NOT NULL);",
+      "seed_sql": "INSERT INTO customer_summary VALUES (1,2,30),(2,1,0),(3,1,5); INSERT INTO orders VALUES (10,1,10),(11,1,20),(12,3,7);",
+      "solution_sql": "SELECT c.customer_id,c.order_count AS cached_count,COUNT(o.order_id) AS actual_count FROM customer_summary c LEFT JOIN orders o ON o.customer_id=c.customer_id GROUP BY c.customer_id,c.order_count HAVING c.order_count<>COUNT(o.order_id) ORDER BY c.customer_id;",
+      "expected": "customer_id\tcached_count\tactual_count\n2\t1\t0",
+      "ordering": "As specified by the task and explicit ORDER BY.",
+      "constraints": [
+        "Return customer_id,cached_count,actual_count for cached customers whose order count differs from authoritative orders, ordered by customer_id."
+      ],
+      "edge_cases": [
+        "No source orders is count zero.",
+        "A correct count can coexist with an incorrect amount."
+      ],
+      "hints": [
+        "Count a nonnull order identity so an unmatched left-join row contributes zero."
+      ],
+      "explanation": "Count a nonnull order identity so an unmatched left-join row contributes zero.",
+      "validation_cases": [
+        {
+          "name": "zero orders agrees with zero cache",
+          "seed_sql": "INSERT INTO customer_summary VALUES (1,0,0);",
+          "expected": ""
+        },
+        {
+          "name": "missing cached count",
+          "seed_sql": "INSERT INTO customer_summary VALUES (1,0,0); INSERT INTO orders VALUES (1,1,5);",
+          "expected": "customer_id\tcached_count\tactual_count\n1\t0\t1"
+        }
+      ]
+    },
+    {
+      "id": "cx-denorm-total-drift",
+      "slug": "denorm-total-drift",
+      "title": "Detect cached total disagreement",
+      "difficulty": "Medium",
+      "task": "Return customer_id,cached_total,actual_total for cached customers whose stored total differs from the sum of their authoritative order amounts. Define no orders as displayed zero. Order by customer_id.",
+      "schema_sql": "CREATE TABLE customer_summary(customer_id INT PRIMARY KEY,order_count INT NOT NULL,total_amount INT NOT NULL); CREATE TABLE orders(order_id INT PRIMARY KEY,customer_id INT NOT NULL,amount INT NOT NULL);",
+      "seed_sql": "INSERT INTO customer_summary VALUES (1,2,30),(2,1,0),(3,1,5); INSERT INTO orders VALUES (10,1,10),(11,1,20),(12,3,7);",
+      "solution_sql": "SELECT c.customer_id,c.total_amount AS cached_total,COALESCE(SUM(o.amount),0) AS actual_total FROM customer_summary c LEFT JOIN orders o ON o.customer_id=c.customer_id GROUP BY c.customer_id,c.total_amount HAVING c.total_amount<>COALESCE(SUM(o.amount),0) ORDER BY c.customer_id;",
+      "expected": "customer_id\tcached_total\tactual_total\n3\t5\t7",
+      "ordering": "As specified by the task and explicit ORDER BY.",
+      "constraints": [
+        "Return customer_id,cached_total,actual_total for cached customers whose stored total differs from the sum of their authoritative order amounts. Define no orders as displayed zero. Order by customer_id."
+      ],
+      "edge_cases": [
+        "Legitimate equal amounts must both contribute.",
+        "A stale nonzero cache disagrees with an empty source population."
+      ],
+      "hints": [
+        "Recompute the authoritative sum and apply the declared zero policy only at the aggregate boundary."
+      ],
+      "explanation": "Recompute the authoritative sum and apply the declared zero policy only at the aggregate boundary.",
+      "validation_cases": [
+        {
+          "name": "equal amounts are separate orders",
+          "seed_sql": "INSERT INTO customer_summary VALUES (1,2,5); INSERT INTO orders VALUES (1,1,5),(2,1,5);",
+          "expected": "customer_id\tcached_total\tactual_total\n1\t5\t10"
+        },
+        {
+          "name": "no orders but stale cached total",
+          "seed_sql": "INSERT INTO customer_summary VALUES (1,0,9);",
+          "expected": "customer_id\tcached_total\tactual_total\n1\t9\t0"
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-21-denormalization-1",
+      "test_id": "pt-dbms-sql-21-denormalization",
+      "question_text": "What is denormalization, precisely?",
+      "options": [
+        "Forgetting to normalize a schema during initial design",
+        "The deliberate reintroduction of controlled redundancy into an already-normalized schema, to optimize a specific known read-heavy access pattern",
+        "A synonym for reaching 1NF",
+        "Removing all foreign keys from a schema"
+      ],
+      "correct_index": 1,
+      "explanation": "Denormalization is a conscious, informed trade-off made after understanding the fully normalized design — not an accident or a shortcut taken instead of normalizing.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-21-denormalization-2",
+      "test_id": "pt-dbms-sql-21-denormalization",
+      "question_text": "In the EnrollmentReport example, why is a 4-table join avoided for the reporting dashboard?",
+      "options": [
+        "Because joins are illegal in reporting queries",
+        "Because at large scale, with thousands of daily queries, the repeated join cost becomes a measured performance bottleneck that a flat, pre-joined reporting table eliminates",
+        "Because Student, Course, and Instructor tables are deleted once EnrollmentReport is built",
+        "Because EnrollmentReport uses a different database engine"
+      ],
+      "correct_index": 1,
+      "explanation": "The redundant flat table is built specifically to avoid repeating an expensive join on every single dashboard query, given the known heavy read volume.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-21-denormalization-3",
+      "test_id": "pt-dbms-sql-21-denormalization",
+      "question_text": "What critically distinguishes the redundancy in EnrollmentReport from the harmful redundancy discussed in topic 21.1?",
+      "options": [
+        "There is no real difference — both are equally harmful design flaws",
+        "The EnrollmentReport redundancy is deliberate, scoped to a read-optimized copy, and kept in sync by a managed process, while the normalized tables remain the single source of truth for writes",
+        "EnrollmentReport redundancy only exists temporarily during backups",
+        "The redundancy in 21.1 was intentional, while EnrollmentReport's is accidental"
+      ],
+      "correct_index": 1,
+      "explanation": "The key differentiator is intentionality and management: denormalization is a conscious, contained decision built on top of a normalized system of record, unlike the original organic redundancy problem.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-21-denormalization-4",
+      "test_id": "pt-dbms-sql-21-denormalization",
+      "question_text": "Who or what should be responsible for keeping a denormalized reporting table like EnrollmentReport in sync with the normalized source tables?",
+      "options": [
+        "Individual application developers manually running UPDATE statements whenever they remember to",
+        "A dedicated, automated refresh process (scheduled job, trigger, or materialized view) that owns synchronization, rather than scattered manual updates",
+        "No synchronization is needed once a table is denormalized",
+        "The end users viewing the dashboard"
+      ],
+      "correct_index": 1,
+      "explanation": "A managed, automated sync process contains the update-anomaly risk to one well-understood mechanism, rather than reintroducing the same manual-update inconsistency risk from topic 21.3.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-21-denormalization-5",
+      "test_id": "pt-dbms-sql-21-denormalization",
+      "question_text": "What is a materialized view, in the context of denormalization?",
+      "options": [
+        "A type of index that speeds up INSERT statements",
+        "A database-engine-managed object that looks like a denormalized flat table to readers but is refreshed automatically by the engine, combining query simplicity with managed consistency",
+        "A synonym for a normalized relation",
+        "A view that can never be queried directly"
+      ],
+      "correct_index": 1,
+      "explanation": "Materialized views offer a middle ground: they provide the query simplicity of a denormalized table while the database engine (rather than application code) manages keeping the data current.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-21-denormalization-6",
+      "test_id": "pt-dbms-sql-21-denormalization",
+      "question_text": "Why is denormalization applied 'without first understanding the normalized design' considered a red flag rather than a valid trade-off?",
+      "options": [
+        "Because denormalization always requires deleting the normalized tables first",
+        "Because without first understanding what full normalization would require and why, the resulting redundancy is just the same old unmanaged design flaw from 21.1, not an informed, scoped optimization",
+        "Because SQL syntax prevents denormalization without prior normalization",
+        "Because it is technically impossible to denormalize an unnormalized schema"
+      ],
+      "correct_index": 1,
+      "explanation": "The entire justification for calling something 'denormalization' rather than 'bad design' rests on it being a deliberate choice made with full knowledge of the normalized alternative and its trade-offs.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-21-denormalization-7",
+      "test_id": "pt-dbms-sql-21-denormalization",
+      "question_text": "In the denormalized EnrollmentReport design, where should application writes (e.g., a new enrollment) actually be directed?",
+      "options": [
+        "Directly into EnrollmentReport, bypassing the normalized tables",
+        "Into the normalized tables (Student, Course, Instructor, Enrollment), with EnrollmentReport updated only by the separate managed refresh process",
+        "Into both EnrollmentReport and the normalized tables simultaneously by the application code",
+        "Writes should be disabled entirely once denormalization is introduced"
+      ],
+      "correct_index": 1,
+      "explanation": "The normalized tables remain the authoritative system of record for writes; EnrollmentReport is a derived, read-optimized copy that the refresh process — not application write logic — keeps current.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-21-denormalization-8",
+      "test_id": "pt-dbms-sql-21-denormalization",
+      "question_text": "What is the fundamental trade-off being made when a team chooses to denormalize a reporting table?",
+      "options": [
+        "Slower reads in exchange for simpler writes",
+        "Faster reads (fewer or no joins) in exchange for extra storage and a synchronization process (or engine-managed refresh overhead)",
+        "Reduced storage in exchange for slower reads",
+        "No trade-off exists; denormalization has zero costs"
+      ],
+      "correct_index": 1,
+      "explanation": "Denormalization explicitly accepts additional storage and synchronization complexity (or materialized-view refresh cost) as the price paid for eliminating expensive joins on frequent reads.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "worker_3",
+    "independent_review": "passed",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "author review; independent review pending",
+    "canonical_answer_indices_preserved": true,
+    "editorial_record": "Original explanations and assessments; seeded identities and canonical answer positions retained. External originality clearance unavailable.",
+    "independent_reviewer": "/root",
+    "independent_review_scope": "Full notes,20 MCQs/options/reasoning,both reconciliation exercises with six predicted outputs and repair-direction diagram reviewed. Authority, synchronous/asynchronous maintenance, retries/deltas, absence coverage, snapshot history, privacy and rebuild/rollback distinctions correct. Removed unexplained historical-topic distractor wording and clarified asynchronous staleness is not an automatic finite bound. Exact MySQL/provider, browser and release validation remain separate."
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-21-denormalization",
+    "original_note_sha256": "63bc69611e7f3fc79de6b70b5521cdc2446f6d8c6d8c9835c52c4ed3193d77b9",
+    "status": "drafted; not included in prepared paired migrations"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "A derived summary needs a repair direction",
+      "description": "Orders own the underlying facts; the summary can be recomputed rather than treated as an independent truth.",
+      "columns": [
+        "State",
+        "Source orders",
+        "Cached value",
+        "Interpretation"
+      ],
+      "rows": [
+        [
+          "Current",
+          "10 + 20",
+          "30",
+          "Agreement"
+        ],
+        [
+          "Correction pending",
+          "10 + 25",
+          "30",
+          "Stale cache"
+        ],
+        [
+          "Duplicate event applied",
+          "10 + 20",
+          "40",
+          "Maintenance defect"
+        ],
+        [
+          "Rebuilt",
+          "10 + 25",
+          "35",
+          "Restored agreement"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "coordinator independent manual review passed",
+    "server_rendering": "passed",
+    "browser_rendering": "unverified",
+    "independent_review": "passed",
+    "server_rendering_evidence": "2026-10-29 full Vitest:1310 passed/12 skipped; actual LessonBlock/TopicDiagrams render over230 packages. Browser visual QA remains unverified."
+  },
+  "authoring_status": "drafted; verification pending",
+  "sql_verification": {
+    "scope": "not executed; exact MySQL/provider execution pending",
+    "all_passed": false,
+    "cases": []
+  }
+}

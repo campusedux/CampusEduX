@@ -1,0 +1,642 @@
+{
+  "source_ref": "chapter-8-sql-fundamentals/sql-dialects",
+  "slug": "sql-dialects",
+  "title": "SQL Dialects",
+  "description": "Adapt SQL concepts to the actual engine and version, comparing row limits, arithmetic, generated identifiers, quoting, time values, and the silent differences that syntax checks miss.",
+  "dialect": "MySQL 8.4",
+  "notes": "## One family of ideas with product-specific behavior\n\nAn SQL dialect is the language behavior implemented by a particular database product and version. It includes supported standard features, extensions, syntax choices, functions, and implementation rules. Two products can express the same relational task while requiring different statements or returning different results for an apparently similar expression. Learn the task first, then verify how the actual target expresses it.\n\nThis course uses MySQL 8.4 as its executable dialect. Comparisons with PostgreSQL, SQL Server, or SQLite are labeled to explain differences, not to promise that every example runs everywhere. Even within one product, installed version and relevant settings can affect behavior. Identify the actual engine before deciding that a copied query is correct or incorrect.\n\nA syntax error is only one kind of dialect mismatch. A query can execute successfully while interpreting arithmetic, text, dates, or missing values differently from the author's intention. This is why adaptation needs expected results and edge cases rather than a process of changing tokens until the parser stops complaining.\n\n## Preserving the task before changing syntax\n\nSuppose a report needs the three highest-scoring applicants, with applicant_id ascending to break equal scores. This requirement says which population qualifies, which values appear, and how ties are ordered. It is more precise than asking for the top three rows without defining top. The same contract can guide implementations in different dialects.\n\nIn MySQL, a suitable query uses ORDER BY score descending, applicant_id ascending, then LIMIT three. SQL Server has a TOP form for the corresponding limited result. PostgreSQL also supports LIMIT. Copying TOP directly into MySQL is not the right way to request the task, even though both products use SQL.\n\n```sql\nSELECT applicant_id, applicant_name, score\nFROM applicants\nORDER BY score DESC, applicant_id ASC\nLIMIT 3;\n```\n\nIf two applicants share the highest score, the identifier tie-breaker determines their order. Without it, a limited result at the boundary can vary among equally ranked rows. Different syntax is not the only adaptation question: preserve the ranking and tie policy as well as the requested row count.\n\n## Distinguishing integer and fractional division\n\nArithmetic provides an important silent difference. In MySQL, the slash operator can return a fractional result for integer-valued inputs, while DIV performs integer division. In PostgreSQL, dividing integer operands with the slash operator truncates toward zero; using a suitable non-integer type changes the calculation. A query can run in both products and still produce different numbers.\n\nFor positive values, five divided by two has a fractional result of two and a half, while five DIV two in MySQL gives two. Exact display scale depends on expression types and context, so compare the intended numeric result rather than assuming every client prints the same number of decimal places. An explicit cast can define the displayed result type for an exercise.\n\n```sql\nSELECT CAST(5 / 2 AS DECIMAL(8,2)) AS fractional_result,\n       5 DIV 2 AS whole_groups;\n```\n\nIn the MySQL-oriented example, the output values are 2.50 and 2. Use this distinction when computing an average, completion ratio, or number of full containers. Accidentally choosing integer division for a percentage can make every incomplete ratio appear zero even though the expression executes without error.\n\n## Handling missing and zero denominators\n\nA ratio task needs a policy for a zero or missing denominator. Do not assume every dialect and statement context reports division by zero the same way. MySQL behavior can involve NULL, warnings, or errors depending on the operation and relevant mode. A portable business explanation should state the desired absence or failure policy rather than relying on an accidental default.\n\nA MySQL query can use NULLIF to turn a zero denominator into NULL before division. That is appropriate only when the task defines an undefined ratio as missing. A CASE expression can also separate conditions explicitly. Neither technique means that missing input is actually zero or that an undefined ratio should be reported as successful completion.\n\nIf a task asks for a percentage, define its scale. A ratio of one half and a percentage of fifty represent the same proportion in different units. Casting the final expression to a decimal with a stated number of places can make an exercise's output predictable, but it does not choose the business meaning. The requirement must supply that meaning first.\n\n## Comparing generated identifier syntax\n\nAutomatic identifier generation also differs. MySQL commonly uses AUTO_INCREMENT for a suitable integer column. SQL Server uses its own identity mechanisms. SQLite has special behavior for an INTEGER PRIMARY KEY in an ordinary rowid table: the column aliases the rowid and can receive an automatically chosen integer when omitted. These declarations should not be mixed as if they were one universal grammar.\n\nSQLite's AUTOINCREMENT keyword is not required for the ordinary automatic rowid assignment just described; it changes the allocation policy. WITHOUT ROWID tables are an important exception to the rowid explanation. These details matter when translating a schema, but the full allocation and identity guarantees must be checked in the actual product documentation rather than inferred from a keyword resemblance.\n\nGenerated identifiers should preserve the identity contract needed by callers. A migration that creates new numeric keys for existing records can break references and saved progress even if the new table accepts inserts correctly. Dialect adaptation is not permission to regenerate established identities or change URLs and external references without an approved transition.\n\n## Checking quoting, text, and time expressions\n\nMySQL uses backticks for identifier quoting, while standard SQL delimited identifiers use double quotes. MySQL's ANSI_QUOTES mode changes the meaning of double quotes, so a query's behavior can depend on mode as well as product. Single quotes remain the clear choice for character literals in the examples here. Identifier spelling and string comparison are separate concerns.\n\nText comparison can depend on collation, including case and accent behavior. A name search that appears portable may match a different set of people after moving products or changing a column's collation. Specify the intended comparison and test representative text rather than assuming that matching syntax preserves the same population.\n\nCURRENT_TIMESTAMP is a standard expression supported by many products, but the type, precision, and time interpretation still require context. A familiar function name is not a universal promise about timezone behavior. Date formatting, interval expressions, and conversion functions are common places where copying examples across dialects needs explicit adaptation.\n\n## Using an API without forgetting the dialect\n\nA common application API can stabilize connection and execution calls, but it does not make every SQL string interchangeable. A JDBC execute call containing TOP still sends dialect-specific SQL. A Python adapter may use a different parameter style even when the general connection and cursor pattern is familiar. Review the calling interface and SQL language separately.\n\nLikewise, a mysql-named command-line client does not prove that the server is exact MySQL. It can communicate with a compatible engine such as MariaDB. Record the actual server engine and version used for exercises. Compatibility execution is useful evidence, but exact provider behavior remains unverified until checked in the intended environment.\n\n## Building a reliable adaptation process\n\nStart with the required result, target engine, version, schema, and relevant settings. Consult official documentation for uncertain syntax or behavior. Write original sample data that includes ties, NULL values, zero denominators, boundary numbers, and relevant text cases. Compare actual outputs with the stated task rather than with an unexamined screenshot from another product.\n\nKeep product-specific choices explicit and reuse the project's existing query and migration boundaries. Do not weaken constraints or access rules merely to make a translated statement run. Dialect literacy makes SQL knowledge more transferable because it separates the stable idea from implementation details, while honest execution evidence shows which spelling and behavior were actually verified.\n",
+  "references": [
+    {
+      "title": "MySQL SELECT and LIMIT",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/select.html"
+    },
+    {
+      "title": "MySQL arithmetic operators",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/arithmetic-functions.html"
+    },
+    {
+      "title": "SQLite rowid and AUTOINCREMENT",
+      "url": "https://www.sqlite.org/autoinc.html"
+    },
+    {
+      "title": "PostgreSQL arithmetic operators",
+      "url": "https://www.postgresql.org/docs/current/functions-math.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-8-sql-dialects",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-8-sql-dialects-1",
+          "test_id": "pt-dbms-sql-8-sql-dialects",
+          "question_text": "What is a SQL 'dialect'?",
+          "options": [
+            "A completely different language unrelated to SQL",
+            "A product/version-specific implementation of supported SQL features, extensions, and behavior",
+            "An old, deprecated version of SQL no longer used",
+            "A dialect only exists for spoken languages, not SQL"
+          ],
+          "correct_index": 1,
+          "explanation": "Dialects include behavioral differences as well as proprietary syntax; installed versions and settings matter.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-8-sql-dialects-2",
+          "test_id": "pt-dbms-sql-8-sql-dialects",
+          "question_text": "Which keyword does SQL Server use to limit the number of returned rows, where MySQL and PostgreSQL use LIMIT?",
+          "options": [
+            "TOP",
+            "FIRST",
+            "ROWNUM",
+            "CAP"
+          ],
+          "correct_index": 0,
+          "explanation": "SQL Server uses TOP N in the SELECT clause instead of a trailing LIMIT clause.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-8-sql-dialects-3",
+          "test_id": "pt-dbms-sql-8-sql-dialects",
+          "question_text": "In a normal SQLite rowid table, which declaration commonly aliases the rowid and permits automatic integer assignment?",
+          "options": [
+            "AUTO_INCREMENT",
+            "IDENTITY(1,1)",
+            "INTEGER PRIMARY KEY (which auto-generates the rowid)",
+            "SERIAL"
+          ],
+          "correct_index": 2,
+          "explanation": "INTEGER PRIMARY KEY has special rowid behavior in ordinary SQLite tables. WITHOUT ROWID tables are an exception, and AUTOINCREMENT changes allocation policy.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-8-sql-dialects-4",
+          "test_id": "pt-dbms-sql-8-sql-dialects",
+          "question_text": "Why can a query that works on MySQL fail on SQL Server even though both are 'doing SQL'?",
+          "options": [
+            "SQL Server does not actually support SELECT statements",
+            "Dialect-specific syntax (e.g. LIMIT vs TOP, function names) differs even when the underlying task is the same",
+            "MySQL is not a real relational database",
+            "It is impossible for any query to be dialect-specific"
+          ],
+          "correct_index": 1,
+          "explanation": "The concept can be identical while the exact keyword or function name required differs by vendor dialect.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-8-sql-dialects-5",
+          "test_id": "pt-dbms-sql-8-sql-dialects",
+          "question_text": "Which of these is a genuinely SILENT dialect difference (no error, just a different result) rather than a syntax error?",
+          "options": [
+            "Using AUTO_INCREMENT on a database that doesn't support that keyword",
+            "Integer division truncating in one engine but returning a decimal in another",
+            "Misspelling the SELECT keyword",
+            "Forgetting a closing parenthesis"
+          ],
+          "correct_index": 1,
+          "explanation": "Integer division behavior differing (truncate vs decimal result) produces a different but still 'successful' result — a silent correctness bug, not an obvious syntax error.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-8-sql-dialects-6",
+          "test_id": "pt-dbms-sql-8-sql-dialects",
+          "question_text": "A student copies a SQL example from an online tutorial and it fails to run. What is a likely, commonly-overlooked cause?",
+          "options": [
+            "SQL never fails for any reason related to dialect",
+            "The tutorial's example may target a different database dialect than the one the student is using",
+            "All SQL tutorials are always broken",
+            "The student's database has stopped supporting SQL entirely"
+          ],
+          "correct_index": 1,
+          "explanation": "Dialect mismatch between the tutorial's target database and the student's actual database is one of the most common sources of this kind of failure.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-8-sql-dialects-7",
+          "test_id": "pt-dbms-sql-8-sql-dialects",
+          "question_text": "Which function is standard SQL and widely supported across dialects for getting the current timestamp?",
+          "options": [
+            "NOW()",
+            "GETDATE()",
+            "CURRENT_TIMESTAMP",
+            "SYSDATE"
+          ],
+          "correct_index": 2,
+          "explanation": "CURRENT_TIMESTAMP is part of the SQL standard; NOW(), GETDATE(), and SYSDATE are vendor-specific spellings for similar behavior.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-8-sql-dialects-8",
+          "test_id": "pt-dbms-sql-8-sql-dialects",
+          "question_text": "What is the best general practice when learning SQL from any single tutorial or course?",
+          "options": [
+            "Assume every dialect behaves identically in every respect, with no exceptions",
+            "Learn the underlying relational concept first, then look up how that concept is spelled in your specific target dialect",
+            "Never learn more than one dialect, since switching is impossible",
+            "Avoid using any vendor-specific feature under any circumstance, even when it is the right tool"
+          ],
+          "correct_index": 1,
+          "explanation": "Understanding the concept independent of syntax, then mapping it to the target dialect's specific spelling, is the transferable skill.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-8-sql-dialects-new-9",
+          "test_id": "pt-dbms-sql-8-sql-dialects",
+          "question_text": "Which MySQL operator requests integer division explicitly?",
+          "options": [
+            "AS",
+            "DIV",
+            "LIKE",
+            "ORDER BY"
+          ],
+          "correct_index": 1,
+          "explanation": "DIV returns the integer quotient rather than the ordinary fractional division result.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-8-sql-dialects-new-10",
+          "test_id": "pt-dbms-sql-8-sql-dialects",
+          "question_text": "Why must a top-three query define a tie-breaker when exact selection matters?",
+          "options": [
+            "LIMIT sorts every column automatically",
+            "TOP eliminates every duplicate value",
+            "Equal primary sort values can otherwise leave the boundary selection unspecified",
+            "Every identifier must become a timestamp"
+          ],
+          "correct_index": 2,
+          "explanation": "A stable unique tie-breaker makes the intended ranking deterministic.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-8-sql-dialects-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-8-sql-dialects-application-new-1",
+          "test_id": "pt-dbms-sql-8-sql-dialects-application",
+          "question_text": "In the MySQL example, what are CAST(5 / 2 AS DECIMAL(8,2)) and 5 DIV 2?",
+          "options": [
+            "2 and 2.50",
+            "0 and 5",
+            "2.50 and 2",
+            "5 and 0"
+          ],
+          "correct_index": 2,
+          "explanation": "The slash operator preserves the fractional result while DIV gives whole groups.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-8-sql-dialects-application-new-2",
+          "test_id": "pt-dbms-sql-8-sql-dialects-application",
+          "question_text": "An integer expression returns 2 in one engine and 2.5 in another without errors. What should be reviewed?",
+          "options": [
+            "Only whether the query ends in a semicolon",
+            "Only the result column name",
+            "Only the number of connected users",
+            "Operand types and division semantics in each dialect"
+          ],
+          "correct_index": 3,
+          "explanation": "Successful parsing can conceal a silent arithmetic difference.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-8-sql-dialects-application-new-3",
+          "test_id": "pt-dbms-sql-8-sql-dialects-application",
+          "question_text": "A ratio is defined as missing for zero denominator. What can NULLIF(denominator,0) provide before division?",
+          "options": [
+            "A NULL denominator for the zero case",
+            "A denominator of one for every row",
+            "An automatic authorization check",
+            "A guaranteed percentage of one hundred"
+          ],
+          "correct_index": 0,
+          "explanation": "NULLIF expresses the stated missing-result policy without inventing a valid ratio.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-8-sql-dialects-application-new-4",
+          "test_id": "pt-dbms-sql-8-sql-dialects-application",
+          "question_text": "Two applicants have equal scores and only one remaining limited-result slot. What determines a stable choice?",
+          "options": [
+            "The current physical insertion order by assumption",
+            "An explicit additional ordering key such as applicant_id",
+            "The length of the SQL statement",
+            "The database logo"
+          ],
+          "correct_index": 1,
+          "explanation": "A tie policy must be part of the requested order.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-8-sql-dialects-application-new-5",
+          "test_id": "pt-dbms-sql-8-sql-dialects-application",
+          "question_text": "A normal SQLite INTEGER PRIMARY KEY generates a value when omitted. Is AUTOINCREMENT always required for that?",
+          "options": [
+            "Yes; no rowid can be generated without it",
+            "Only MySQL can generate integers",
+            "No; AUTOINCREMENT changes the allocation policy",
+            "Only if every row has a NULL name"
+          ],
+          "correct_index": 2,
+          "explanation": "Ordinary rowid assignment does not require SQLite AUTOINCREMENT.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-8-sql-dialects-application-new-6",
+          "test_id": "pt-dbms-sql-8-sql-dialects-application",
+          "question_text": "A MySQL statement uses a SQL Server TOP form and fails. What should guide the rewrite?",
+          "options": [
+            "Removing the WHERE clause indiscriminately",
+            "Disabling all constraints",
+            "Assuming the server must be unavailable",
+            "The required result and supported MySQL syntax"
+          ],
+          "correct_index": 3,
+          "explanation": "Translate the intended task rather than dropping semantics until parsing succeeds.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-8-sql-dialects-application-new-7",
+          "test_id": "pt-dbms-sql-8-sql-dialects-application",
+          "question_text": "A query compares names under a new collation after migration. What can change even if the syntax stays identical?",
+          "options": [
+            "Which text values compare equal and qualify",
+            "The identifier of every database user automatically",
+            "The number of tiers necessarily increases",
+            "Every NULL becomes zero"
+          ],
+          "correct_index": 0,
+          "explanation": "Collation can alter case and accent comparison behavior.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-8-sql-dialects-application-new-8",
+          "test_id": "pt-dbms-sql-8-sql-dialects-application",
+          "question_text": "A familiar CURRENT_TIMESTAMP expression exists in two products. What still needs context?",
+          "options": [
+            "Only the word CURRENT",
+            "Result type, precision, and time interpretation",
+            "Only the statement's indentation",
+            "Nothing, because identical names prove every property"
+          ],
+          "correct_index": 1,
+          "explanation": "Common expressions do not establish identical temporal semantics.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-8-sql-dialects-application-new-9",
+          "test_id": "pt-dbms-sql-8-sql-dialects-application",
+          "question_text": "A JDBC call sends a vendor-specific SQL string. Which layer retains the dialect dependency?",
+          "options": [
+            "Only the Java variable name",
+            "Only the result table heading",
+            "The SQL operation inside the API call",
+            "No layer; JDBC translates every feature"
+          ],
+          "correct_index": 2,
+          "explanation": "A standard call interface does not standardize arbitrary SQL text.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-8-sql-dialects-application-new-10",
+          "test_id": "pt-dbms-sql-8-sql-dialects-application",
+          "question_text": "A provider migration regenerates all existing topic IDs. Why is this outside a mere syntax adaptation?",
+          "options": [
+            "All dialect changes require new IDs",
+            "SQL forbids stable keys",
+            "Only typography could be affected",
+            "It changes established identity and can break references and saved progress"
+          ],
+          "correct_index": 3,
+          "explanation": "Preserving identifiers and external contracts is separate from adopting target syntax.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "dsa-dbms-sql-dialects-mysql-top-three",
+      "slug": "dialects-mysql-top-three",
+      "title": "Express a stable top-three query in MySQL",
+      "difficulty": "Easy",
+      "task": "Return applicant_id, applicant_name, score for at most three applicants. Rank score descending, breaking ties by applicant_id ascending. Use the MySQL LIMIT syntax and return all applicants if fewer than three exist.",
+      "schema_sql": "CREATE TABLE applicants (applicant_id INT PRIMARY KEY, applicant_name VARCHAR(40) NOT NULL, score INT NOT NULL CHECK (score BETWEEN 0 AND 100));",
+      "seed_sql": "INSERT INTO applicants VALUES (4,'Noor',90),(3,'Mira',98),(1,'Dev',98),(2,'Avi',95),(5,'Ria',90);",
+      "expected": "applicant_id\tapplicant_name\tscore\n1\tDev\t98\n3\tMira\t98\n2\tAvi\t95",
+      "ordering": "score descending, applicant_id ascending",
+      "constraints": [
+        "Unique applicant_id",
+        "Scores are non-null integers between 0 and 100"
+      ],
+      "edge_cases": [
+        "Equal scores require the identifier tie-breaker",
+        "Fewer than three rows are all returned",
+        "Empty input returns no rows"
+      ],
+      "hints": [
+        "Define ORDER BY before LIMIT",
+        "Use both sort keys explicitly"
+      ],
+      "solution_sql": "SELECT applicant_id, applicant_name, score FROM applicants ORDER BY score DESC, applicant_id ASC LIMIT 3;",
+      "explanation": "The explicit ranking preserves the task, and MySQL LIMIT bounds the result without relying on unspecified encounter order.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO applicants VALUES (2,'Noor',90),(1,'Mira',90);",
+          "expected": "applicant_id\tapplicant_name\tscore\n1\tMira\t90\n2\tNoor\t90"
+        },
+        {
+          "seed_sql": "",
+          "expected": ""
+        }
+      ]
+    },
+    {
+      "id": "dsa-dbms-sql-dialects-fractional-ratios",
+      "slug": "dialects-fractional-ratios",
+      "title": "Compute explicit fractional and whole-group results",
+      "difficulty": "Medium",
+      "task": "For every batch return batch_id, full_groups, fill_percent. full_groups is item_count DIV group_size when group_size is nonzero; otherwise NULL. fill_percent is 100 times item_count / group_size, cast to DECIMAL(10,2), and NULL for zero or missing group_size. Preserve NULL item_count. Order by batch_id. These are ratios, so fill_percent may exceed 100.",
+      "schema_sql": "CREATE TABLE batches (batch_id INT PRIMARY KEY, item_count INT NULL CHECK (item_count >= 0), group_size INT NULL CHECK (group_size >= 0));",
+      "seed_sql": "INSERT INTO batches VALUES (1,5,2),(2,1,2),(3,0,4),(4,4,0),(5,NULL,2),(6,3,NULL);",
+      "expected": "batch_id\tfull_groups\tfill_percent\n1\t2\t250.00\n2\t0\t50.00\n3\t0\t0.00\n4\tNULL\tNULL\n5\tNULL\tNULL\n6\tNULL\tNULL",
+      "ordering": "batch_id ascending",
+      "constraints": [
+        "Nonnegative counts or NULL",
+        "group_size can be zero or NULL",
+        "Output percentage uses two decimal places"
+      ],
+      "edge_cases": [
+        "Positive fractional ratios must not truncate before scaling",
+        "Zero denominator yields missing outputs",
+        "NULL inputs remain missing",
+        "Zero numerator and positive denominator yields zero"
+      ],
+      "hints": [
+        "Use NULLIF(group_size,0) as the denominator",
+        "Use DIV for whole groups and slash division for the percentage",
+        "Cast the final scaled ratio to the required exact decimal"
+      ],
+      "solution_sql": "SELECT batch_id, item_count DIV NULLIF(group_size,0) AS full_groups, CAST(100 * item_count / NULLIF(group_size,0) AS DECIMAL(10,2)) AS fill_percent FROM batches ORDER BY batch_id;",
+      "explanation": "NULLIF expresses the undefined zero-denominator policy. DIV computes full groups; ordinary division preserves the fraction before the final percentage cast.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO batches VALUES (1,1,3),(2,10,3);",
+          "expected": "batch_id\tfull_groups\tfill_percent\n1\t0\t33.33\n2\t3\t333.33"
+        },
+        {
+          "seed_sql": "",
+          "expected": ""
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-8-sql-dialects-1",
+      "test_id": "pt-dbms-sql-8-sql-dialects",
+      "question_text": "What is a SQL 'dialect'?",
+      "options": [
+        "A completely different language unrelated to SQL",
+        "A specific vendor's implementation of SQL: the standard core plus its own proprietary syntax and functions",
+        "An old, deprecated version of SQL no longer used",
+        "A dialect only exists for spoken languages, not SQL"
+      ],
+      "correct_index": 1,
+      "explanation": "A dialect is one vendor's flavor of SQL — the shared standard core plus that vendor's own additions.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-8-sql-dialects-2",
+      "test_id": "pt-dbms-sql-8-sql-dialects",
+      "question_text": "Which keyword does SQL Server use to limit the number of returned rows, where MySQL and PostgreSQL use LIMIT?",
+      "options": [
+        "TOP",
+        "FIRST",
+        "ROWNUM",
+        "CAP"
+      ],
+      "correct_index": 0,
+      "explanation": "SQL Server uses TOP N in the SELECT clause instead of a trailing LIMIT clause.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-8-sql-dialects-3",
+      "test_id": "pt-dbms-sql-8-sql-dialects",
+      "question_text": "In SQLite, how is an auto-incrementing primary key typically declared?",
+      "options": [
+        "AUTO_INCREMENT",
+        "IDENTITY(1,1)",
+        "INTEGER PRIMARY KEY (which auto-generates the rowid)",
+        "SERIAL"
+      ],
+      "correct_index": 2,
+      "explanation": "SQLite's INTEGER PRIMARY KEY column is itself an alias for the auto-generated rowid, giving auto-increment behavior without a separate keyword.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-8-sql-dialects-4",
+      "test_id": "pt-dbms-sql-8-sql-dialects",
+      "question_text": "Why can a query that works on MySQL fail on SQL Server even though both are 'doing SQL'?",
+      "options": [
+        "SQL Server does not actually support SELECT statements",
+        "Dialect-specific syntax (e.g. LIMIT vs TOP, function names) differs even when the underlying task is the same",
+        "MySQL is not a real relational database",
+        "It is impossible for any query to be dialect-specific"
+      ],
+      "correct_index": 1,
+      "explanation": "The concept can be identical while the exact keyword or function name required differs by vendor dialect.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-8-sql-dialects-5",
+      "test_id": "pt-dbms-sql-8-sql-dialects",
+      "question_text": "Which of these is a genuinely SILENT dialect difference (no error, just a different result) rather than a syntax error?",
+      "options": [
+        "Using AUTO_INCREMENT on a database that doesn't support that keyword",
+        "Integer division truncating in one engine but returning a decimal in another",
+        "Misspelling the SELECT keyword",
+        "Forgetting a closing parenthesis"
+      ],
+      "correct_index": 1,
+      "explanation": "Integer division behavior differing (truncate vs decimal result) produces a different but still 'successful' result — a silent correctness bug, not an obvious syntax error.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-8-sql-dialects-6",
+      "test_id": "pt-dbms-sql-8-sql-dialects",
+      "question_text": "A student copies a SQL example from an online tutorial and it fails to run. What is a likely, commonly-overlooked cause?",
+      "options": [
+        "SQL never fails for any reason related to dialect",
+        "The tutorial's example may target a different database dialect than the one the student is using",
+        "All SQL tutorials are always broken",
+        "The student's database has stopped supporting SQL entirely"
+      ],
+      "correct_index": 1,
+      "explanation": "Dialect mismatch between the tutorial's target database and the student's actual database is one of the most common sources of this kind of failure.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-8-sql-dialects-7",
+      "test_id": "pt-dbms-sql-8-sql-dialects",
+      "question_text": "Which function is standard SQL and widely supported across dialects for getting the current timestamp?",
+      "options": [
+        "NOW()",
+        "GETDATE()",
+        "CURRENT_TIMESTAMP",
+        "SYSDATE"
+      ],
+      "correct_index": 2,
+      "explanation": "CURRENT_TIMESTAMP is part of the SQL standard; NOW(), GETDATE(), and SYSDATE are vendor-specific spellings for similar behavior.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-8-sql-dialects-8",
+      "test_id": "pt-dbms-sql-8-sql-dialects",
+      "question_text": "What is the best general practice when learning SQL from any single tutorial or course?",
+      "options": [
+        "Assume every dialect behaves identically in every respect, with no exceptions",
+        "Learn the underlying relational concept first, then look up how that concept is spelled in your specific target dialect",
+        "Never learn more than one dialect, since switching is impossible",
+        "Avoid using any vendor-specific feature under any circumstance, even when it is the right tool"
+      ],
+      "correct_index": 1,
+      "explanation": "Understanding the concept independent of syntax, then mapping it to the target dialect's specific spelling, is the transferable skill.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "coordinator",
+    "independent_review": "unavailable; no agent tools",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Definitions and examples checked against questions; no plagiarism certification.",
+    "existing_question_corrections": [
+      "tq-dbms-sql-8-sql-dialects-1",
+      "tq-dbms-sql-8-sql-dialects-3"
+    ],
+    "canonical_answer_indices_preserved": true
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-8-sql-dialects",
+    "original_note_sha256": "73521449983ec8380b83cc247fbabf8c439c32c7bfc540ebe6b099c55b254a21",
+    "status": "paired migration prepared; not applied"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Dialect differences to verify before copying a statement",
+      "description": "The examples identify syntax and behavioral boundaries. They are not claims of complete equivalence across every version or configuration.",
+      "columns": [
+        "Task",
+        "MySQL-oriented form",
+        "Comparison to check"
+      ],
+      "rows": [
+        [
+          "Limit a ranked result",
+          "ORDER BY ... LIMIT n",
+          "SQL Server has TOP; preserve tie policy"
+        ],
+        [
+          "Fractional versus integer division",
+          "/ versus DIV",
+          "Integer slash division differs in PostgreSQL"
+        ],
+        [
+          "Generated identifiers",
+          "AUTO_INCREMENT",
+          "SQLite INTEGER PRIMARY KEY has rowid-specific behavior"
+        ],
+        [
+          "Identifier versus string quoting",
+          "Backticks versus single quotes",
+          "Double-quote meaning can depend on mode"
+        ],
+        [
+          "Runtime evidence",
+          "Actual server engine/version",
+          "A mysql client name does not prove exact MySQL execution"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "coordinator review",
+    "server_rendering": "passed",
+    "browser_rendering": "unverified",
+    "independent_review": "unavailable; no agent tools",
+    "rendering_check": "2026-10-28: actual LessonBlock/TopicDiagrams server rendering; 38 authored-package checks passed. Desktop/mobile browser rendering unverified."
+  },
+  "sql_verification": {
+    "engine": "11.8.6-MariaDB-0+deb13u1 from Debian",
+    "scope": "MariaDB compatibility execution; exact MySQL 8.4/provider execution unverified",
+    "fingerprint": "5562e6db32decfcb2fe9e3181833a9d5c703e00a3210bc444aabc58ad7be15a2",
+    "cases": [
+      {
+        "problem": "dialects-mysql-top-three",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "dialects-mysql-top-three",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "dialects-mysql-top-three",
+        "case": 2,
+        "passed": true
+      },
+      {
+        "problem": "dialects-fractional-ratios",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "dialects-fractional-ratios",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "dialects-fractional-ratios",
+        "case": 2,
+        "passed": true
+      }
+    ],
+    "all_passed": true
+  }
+}

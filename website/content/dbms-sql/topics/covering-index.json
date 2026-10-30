@@ -1,0 +1,510 @@
+{
+  "source_ref": "chapter-20-indexes-and-access-paths/covering-index",
+  "slug": "covering-index",
+  "title": "Covering Index",
+  "description": "Evaluate covering indexes per query by separating value availability, selective access and ordering, with InnoDB primary-key payload and EXPLAIN distinctions.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Cover the needs of one query\n\nA covering index contains the column values needed to evaluate a particular query without ordinary retrieval of additional projected columns from the base row. Covering is a relationship between an index and a query, not a permanent quality that every index either has or lacks. The same index can cover a narrow lookup and fail to cover a report that asks for an additional comment field.\n\nRead [composite index](/learning/dbms-sql-tutorial/composite-index), [clustered index](/learning/dbms-sql-tutorial/clustered-index) and [selectivity](/learning/dbms-sql-tutorial/selectivity). This topic uses MySQL 8.4 and InnoDB examples. Other engines store secondary-row references differently and may use different vocabulary or index-inclusion syntax. Translate the physical assumptions as carefully as the SQL.\n\n## Identify every column the query needs\n\nSuppose registrations has registration_id as its primary key, event_id, state, booked_at and private_note. A report requests registration_id and booked_at for one event's confirmed registrations. The relevant columns include those projected and those used in predicates. Ordering, grouping, join conditions and expressions can introduce additional requirements too.\n\n```sql\nSELECT registration_id, booked_at\nFROM registrations\nWHERE event_id = 7 AND state = 'confirmed'\nORDER BY booked_at, registration_id;\n```\n\nAn index on event_id,state,booked_at is a candidate for this access pattern. InnoDB secondary entries also carry the primary-key columns, which can make registration_id available without explicitly repeating it in the index declaration. This is engine-specific storage knowledge, not a reason to assume every database automatically includes every possible row identifier.\n\n## Separate locating rows from supplying values\n\nAn index can efficiently locate matching rows while still requiring additional base-row access to fetch a requested field. Conversely, an index can contain all needed fields while providing a weak search predicate that scans many entries. These are different performance dimensions: search selectivity and value coverage.\n\nFor example, a query that filters only booked_at may not receive the same narrow leading-prefix lookup from an index beginning event_id,state. It might still read an index containing the required columns, but coverage alone does not guarantee a small scan. Evaluate how the index finds candidates and how it supplies their values as two separate questions.\n\n## Add a field and reconsider coverage\n\nIf the report begins returning private_note, the earlier candidate index no longer contains every required projected value. Fetching notes can require visiting the clustered row. Adding the note to the index could increase coverage, but a long note can sharply increase index size and write cost. Do not reflexively append every requested column.\n\nThe projection is also an access contract. A query that originally returned booking times may not be authorized to return private notes. Performance review should not silently expand the interface or copy sensitive values into additional structures. Establish that a field belongs in the consumer's result before deciding whether an index should include it.\n\n## Understand the InnoDB primary-key contribution\n\nInnoDB stores table data in a clustered index and uses the primary-key value in secondary index records to locate the clustered row. This makes primary-key choice consequential for secondary index size. A wider composite primary key can increase the footprint of many secondary structures even when their explicitly named columns remain unchanged.\n\nThis fact does not mean every primary-key-based lookup is free. It explains which identity values are present in secondary entries and how a noncovered lookup can find the full row. Keep engine-specific guarantees separate from conceptual relational keys: a candidate key is a logical uniqueness property, while clustered storage and secondary payload are implementation decisions.\n\n## Treat index-only wording with appropriate precision\n\nA plan can indicate that query column requirements are satisfied by an index. Under a transactional storage engine, visibility checks and implementation details may still require work beyond reading one isolated secondary entry. Avoid an absolute claim that covering guarantees no clustered access under every concurrent state or engine version.\n\nThe practical promise is narrower: the query need not request an additional user column that exists only in the base row. This can reduce expensive lookups substantially. When a workload depends on exact physical reads, measure those reads under representative transaction and cache conditions rather than deriving them solely from the column list.\n\n## Read EXPLAIN indicators correctly\n\nMySQL's traditional EXPLAIN can report Using index for a covering access. Using index condition describes index condition pushdown and is a different concept. The word index appearing somewhere in a plan is not enough to establish complete coverage. Read the full access description, chosen key and estimated row information together.\n\nEXPLAIN estimates do not establish observed runtime by themselves. EXPLAIN ANALYZE executes the statement and provides actual execution information, so it needs a suitable environment and workload. Compare the same result contract before and after a candidate index change. A plan improvement that drops required columns or changes row order may violate the caller's requirements.\n\n## Cover ordering only when the key order supports it\n\nThe registration example constrains event_id and state by equality, leaving booked_at order within that prefix. The primary key can supply the identity tie-breaker in an InnoDB secondary ordering context, subject to the actual index and optimizer behavior. Inspect the plan rather than promising that every combined ascending or descending ordering is automatically satisfied.\n\nIf a query asks for a different order, such as state across several events, a separate sort may still be necessary. Coverage and order compatibility are independent. An index that avoids base-row retrieval can still require sorting the produced rows. Explain which cost a proposed design addresses so the improvement can be evaluated accurately.\n\n## Consider prefix indexes and expression requirements\n\nAn index containing only a prefix of a long text value may not contain enough information to return the full text exactly. Similarly, a query expression may need source columns or an indexed expression supported by the engine. Seeing a related column name in the index definition is not sufficient to establish that every required value is available.\n\nAvoid using shortened text keys as a universal covering strategy. They can help certain searches while still requiring verification or full-value access. Collation and expression semantics matter as well. Check the actual query, data type and index definition together rather than assuming a visual resemblance between the projection and index columns proves coverage.\n\n## Balance read savings against write amplification\n\nWider indexes occupy more pages and can displace other useful pages from cache. Inserts, deletes and relevant updates must maintain their entries. A frequently changed state field or note can make an otherwise appealing covering index expensive for a write-heavy workload. Benchmark the operational mix rather than one isolated read.\n\nSeveral overlapping covering indexes can duplicate much of the same payload. Review existing indexes and the full query family before adding another. Removing an apparently redundant index also needs evidence because uniqueness, foreign-key support, ordering or another consumer may depend on it. Index design should preserve both functional constraints and workload behavior.\n\n## Audit required columns and access\n\nFor each candidate query, list predicate columns, projected columns, join columns and ordering requirements. Mark which values are present in the proposed index and which require another source. Then independently describe whether the leading key order can locate a narrow candidate range. This separates two claims that are often incorrectly merged into the phrase the query uses an index.\n\nCompare a narrow registration query, the same query with private_note and a broad date query lacking the leading event filter. The index can cover different subsets of these requests while offering different search efficiency. A useful review names those limits explicitly and reserves runtime claims for measured plans on representative data.\n\n## Recheck coverage after a product change\n\nA frontend change that adds one column to a report can alter its database cost even when the URL and filters remain identical. Record the query projection with the index hypothesis so the next reviewer can see that dependency. Do not remove the added field merely to preserve a preferred plan if the product requirement legitimately needs it. Instead, evaluate the new workload and its acceptable cost.\n\nConversely, a deliberately narrower query can be valuable when callers do not need the full row. Returning only a stable identity and booking time reduces transferred data and can make coverage possible. That is a contract decision as well as an optimization, so inspect direct callers before narrowing an established response. Once the contract is settled, use representative data to compare candidate plans rather than changing interfaces repeatedly until an attractive EXPLAIN label appears. This keeps the measurement attached to a useful and stable user-visible behavior.\n",
+  "references": [
+    {
+      "title": "Primary reference",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/explain-output.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-20-covering-index",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-20-covering-index-1",
+          "test_id": "pt-dbms-sql-20-covering-index",
+          "question_text": "What makes an index covering?",
+          "options": [
+            "Its name says cover",
+            "It contains the values needed by a particular query",
+            "It has the most columns globally",
+            "It is unique"
+          ],
+          "correct_index": 1,
+          "explanation": "Coverage depends on the query's complete column requirements.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-20-covering-index-2",
+          "test_id": "pt-dbms-sql-20-covering-index",
+          "question_text": "Can one index cover one query but not another?",
+          "options": [
+            "No",
+            "Yes",
+            "Only if renamed",
+            "Only after restart"
+          ],
+          "correct_index": 1,
+          "explanation": "Adding a required field can change coverage without changing the index.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-20-covering-index-3",
+          "test_id": "pt-dbms-sql-20-covering-index",
+          "question_text": "Which columns matter besides projected columns?",
+          "options": [
+            "Only table captions",
+            "Predicate join grouping and ordering requirements",
+            "Only aliases",
+            "Only comments"
+          ],
+          "correct_index": 1,
+          "explanation": "The engine needs values used to evaluate the query as well as display its output.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-20-covering-index-4",
+          "test_id": "pt-dbms-sql-20-covering-index",
+          "question_text": "Does coverage imply a selective lookup?",
+          "options": [
+            "Always",
+            "No",
+            "Only for integers",
+            "Only for primary keys"
+          ],
+          "correct_index": 1,
+          "explanation": "A covering structure can still require scanning many entries.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-20-covering-index-5",
+          "test_id": "pt-dbms-sql-20-covering-index",
+          "question_text": "What does an InnoDB secondary entry carry in addition to its declared key?",
+          "options": [
+            "Every private field",
+            "Primary-key columns",
+            "All transaction history",
+            "Every other secondary index"
+          ],
+          "correct_index": 1,
+          "explanation": "Those identity values support locating the clustered row.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-20-covering-index-6",
+          "test_id": "pt-dbms-sql-20-covering-index",
+          "question_text": "What can a wider primary key increase?",
+          "options": [
+            "Only SQL text size",
+            "Secondary-index footprint",
+            "Only UI width",
+            "Nothing outside its own caption"
+          ],
+          "correct_index": 1,
+          "explanation": "InnoDB secondary records carry the clustered identity.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-20-covering-index-7",
+          "test_id": "pt-dbms-sql-20-covering-index",
+          "question_text": "What happens when private_note is added to the projection?",
+          "options": [
+            "The earlier index necessarily remains covering",
+            "Coverage must be reevaluated",
+            "The note is automatically public",
+            "The query becomes read-only"
+          ],
+          "correct_index": 1,
+          "explanation": "A newly required value may exist only in the clustered row.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-20-covering-index-8",
+          "test_id": "pt-dbms-sql-20-covering-index",
+          "question_text": "Does Using index condition mean the same as Using index?",
+          "options": [
+            "Yes",
+            "No",
+            "Only with ORDER BY",
+            "Only for VARCHAR"
+          ],
+          "correct_index": 1,
+          "explanation": "Index condition pushdown and covering access describe different mechanisms.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-20-covering-index-new-9",
+          "test_id": "pt-dbms-sql-20-covering-index",
+          "question_text": "What can a covering query still require?",
+          "options": [
+            "A separate sort",
+            "No CPU work ever",
+            "No transaction checks ever",
+            "No scan entries"
+          ],
+          "correct_index": 0,
+          "explanation": "Value coverage does not establish order compatibility or eliminate all work.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-20-covering-index-new-10",
+          "test_id": "pt-dbms-sql-20-covering-index",
+          "question_text": "Why are absolute no-clustered-access claims risky?",
+          "options": [
+            "Coverage never helps",
+            "Visibility and engine details can add work",
+            "Indexes cannot hold values",
+            "Only text indexes exist"
+          ],
+          "correct_index": 1,
+          "explanation": "Transactional behavior can complicate a purely column-based physical-read claim.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-20-covering-index-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-20-covering-index-application-new-1",
+          "test_id": "pt-dbms-sql-20-covering-index-application",
+          "question_text": "What does EXPLAIN ANALYZE add compared with ordinary estimates?",
+          "options": [
+            "A guaranteed new index",
+            "A permission bypass",
+            "Observed execution information",
+            "A schema rollback"
+          ],
+          "correct_index": 2,
+          "explanation": "It executes the statement and records actual behavior.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-20-covering-index-application-new-2",
+          "test_id": "pt-dbms-sql-20-covering-index-application",
+          "question_text": "Can a text prefix necessarily supply the whole text value?",
+          "options": [
+            "Yes",
+            "Only if sorted",
+            "Only if unique",
+            "No"
+          ],
+          "correct_index": 3,
+          "explanation": "A prefix omits the remaining characters needed for exact full-value projection.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-20-covering-index-application-new-3",
+          "test_id": "pt-dbms-sql-20-covering-index-application",
+          "question_text": "What is an index's leading key order relevant to?",
+          "options": [
+            "Candidate navigation",
+            "Authentication alone",
+            "Query caption length",
+            "Application localization"
+          ],
+          "correct_index": 0,
+          "explanation": "The ordered prefixes influence how a narrow search range can be found.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-20-covering-index-application-new-4",
+          "test_id": "pt-dbms-sql-20-covering-index-application",
+          "question_text": "Why avoid adding every selected field to every index?",
+          "options": [
+            "Queries stop returning columns",
+            "Storage cache and write costs grow",
+            "It disables primary keys",
+            "It removes all constraints"
+          ],
+          "correct_index": 1,
+          "explanation": "Covering benefits must be balanced against maintaining wider entries.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-20-covering-index-application-new-5",
+          "test_id": "pt-dbms-sql-20-covering-index-application",
+          "question_text": "What should precede a new candidate index?",
+          "options": [
+            "An automatic production deployment",
+            "Removal of every old index",
+            "Review of existing indexes and workload",
+            "A caption change"
+          ],
+          "correct_index": 2,
+          "explanation": "Overlapping structures may duplicate work or serve constraints and other consumers.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-20-covering-index-application-new-6",
+          "test_id": "pt-dbms-sql-20-covering-index-application",
+          "question_text": "Does returning a field for performance reasons establish authorization?",
+          "options": [
+            "Yes",
+            "Only from an index",
+            "Only for one row",
+            "No"
+          ],
+          "correct_index": 3,
+          "explanation": "The field must belong in the permitted interface independently of access-path design.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-20-covering-index-application-new-7",
+          "test_id": "pt-dbms-sql-20-covering-index-application",
+          "question_text": "What should a before-after comparison preserve?",
+          "options": [
+            "Output values columns and required order",
+            "Only SQL aliases",
+            "Only table count",
+            "Only index names"
+          ],
+          "correct_index": 0,
+          "explanation": "A faster plan must still satisfy the same consumer contract.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-20-covering-index-application-new-8",
+          "test_id": "pt-dbms-sql-20-covering-index-application",
+          "question_text": "Can a covering broad scan be slower than another path?",
+          "options": [
+            "No",
+            "Yes",
+            "Only if nulls exist",
+            "Only without a caption"
+          ],
+          "correct_index": 1,
+          "explanation": "Coverage is one cost dimension rather than a universal performance guarantee.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-20-covering-index-application-new-9",
+          "test_id": "pt-dbms-sql-20-covering-index-application",
+          "question_text": "Why consider frequently updated indexed fields?",
+          "options": [
+            "They never affect writes",
+            "They remove all cache use",
+            "They increase relevant index maintenance",
+            "They eliminate row versions"
+          ],
+          "correct_index": 2,
+          "explanation": "Changing indexed payload requires updating the index representation.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-20-covering-index-application-new-10",
+          "test_id": "pt-dbms-sql-20-covering-index-application",
+          "question_text": "What is a useful coverage review artifact?",
+          "options": [
+            "Only an index name",
+            "Only a successful SELECT result",
+            "Only a screenshot",
+            "A mapping of required values to index contents"
+          ],
+          "correct_index": 3,
+          "explanation": "The mapping makes missing values and separate access requirements explicit.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [],
+  "coding_not_applicable": "Coverage is an engine-plan property, not a row-result property. Meaningful executable work needs an approved indexed fixture and representative plan/visibility measurements; generic SELECT exercises would not prove index-only behavior.",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-20-covering-index-1",
+      "test_id": "pt-dbms-sql-20-covering-index",
+      "question_text": "What defines a covering index for a specific query?",
+      "options": [
+        "Any index on the primary key",
+        "An index that contains every column the query filters on AND every column it selects, so the query can be answered entirely from the index",
+        "An index that spans the entire table's storage",
+        "A hash index used for exact matches only"
+      ],
+      "correct_index": 1,
+      "explanation": "A covering index must include all filter and output columns for that particular query so the engine never needs the actual row.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-20-covering-index-2",
+      "test_id": "pt-dbms-sql-20-covering-index",
+      "question_text": "What is the performance benefit of a covering index compared to a regular non-clustered index for a matching query?",
+      "options": [
+        "It removes the need for a WHERE clause",
+        "It eliminates the extra bookmark lookup back to the actual table row, since all needed data is in the index",
+        "It converts the table into a hash table",
+        "It automatically doubles storage space with no benefit"
+      ],
+      "correct_index": 1,
+      "explanation": "Since all needed columns are present in the index, the engine can skip the second lookup step (fetching the row) entirely.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-20-covering-index-3",
+      "test_id": "pt-dbms-sql-20-covering-index",
+      "question_text": "What is this scenario, where a query is answered purely from an index without touching the table, commonly called?",
+      "options": [
+        "A full table scan",
+        "An index-only scan",
+        "A hash collision",
+        "A clustered rebuild"
+      ],
+      "correct_index": 1,
+      "explanation": "When the engine can satisfy a query entirely from the index without visiting the base table, it's called an index-only scan.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-20-covering-index-4",
+      "test_id": "pt-dbms-sql-20-covering-index",
+      "question_text": "Given index (department, id) and query `SELECT id, department FROM students WHERE department = 'CS'`, why is this index covering for this query?",
+      "options": [
+        "Because it includes gpa and email too",
+        "Because both the filter column (department) and the selected column (id) are present in the index",
+        "Because the index is a hash index",
+        "Because it is the table's clustered index"
+      ],
+      "correct_index": 1,
+      "explanation": "Since department (filter) and id (select) are both in the index, the query never needs to visit the actual row.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-20-covering-index-5",
+      "test_id": "pt-dbms-sql-20-covering-index",
+      "question_text": "Would the same index (department, id) be covering for `SELECT * FROM students WHERE department = 'CS'`?",
+      "options": [
+        "Yes, because department is in the index",
+        "No, because SELECT * needs columns like gpa, name, email that aren't in this index",
+        "Yes, because id is the primary key",
+        "No index can ever cover a SELECT * query"
+      ],
+      "correct_index": 1,
+      "explanation": "Covering is query-specific: since SELECT * needs all columns and this index only has department and id, it cannot cover this broader query.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-20-covering-index-6",
+      "test_id": "pt-dbms-sql-20-covering-index",
+      "question_text": "What is a real cost of designing an index specifically to cover more query shapes?",
+      "options": [
+        "No cost; covering indexes are always free",
+        "The index grows larger (more columns) and incurs more write-maintenance overhead",
+        "It disables the primary key",
+        "It forces the table to lose its clustered index"
+      ],
+      "correct_index": 1,
+      "explanation": "Adding more columns to an index for covering purposes increases its storage footprint and the cost of maintaining it on writes.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-20-covering-index-7",
+      "test_id": "pt-dbms-sql-20-covering-index",
+      "question_text": "What happens if a query needs one column that is NOT present in an otherwise-matching covering index?",
+      "options": [
+        "The query fails with an error",
+        "The engine falls back to a bookmark lookup (or full scan) to fetch the missing column from the actual row",
+        "The missing column is silently returned as NULL",
+        "The index is automatically expanded on the fly"
+      ],
+      "correct_index": 1,
+      "explanation": "Covering is all-or-nothing per query — if even one needed column is missing, the engine must go back to the row (or scan) to get it.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-20-covering-index-8",
+      "test_id": "pt-dbms-sql-20-covering-index",
+      "question_text": "What feature do some engines offer to add columns to an index purely for covering, without making them part of the sort key?",
+      "options": [
+        "Partial indexes",
+        "Included (non-key) columns",
+        "Hash buckets",
+        "Composite primary keys"
+      ],
+      "correct_index": 1,
+      "explanation": "Some engines let you attach extra 'included' columns to an index for covering purposes without affecting the index's sort/key structure.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "/root/worker_2",
+    "independent_review": "passed",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "authored; independent review pending",
+    "canonical_answer_indices_preserved": true,
+    "editorial_record": "Original prose and assessments. Seed snapshots and canonical answer indices retained; external originality clearance pending.",
+    "independent_reviewer": "/root",
+    "independent_review_scope": "Full notes,20 MCQs/options/reasoning,coverage-navigation diagram and conceptual plan-lab rationale reviewed. Per-query column requirements, InnoDB primary-key payload, covering versus selectivity/order, Using index versus index condition pushdown, prefix limitations and MVCC caveat correctly scoped. No measured index or visibility claim made. Exact MySQL/provider, browser and release validation remain separate."
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-20-covering-index",
+    "original_note_sha256": "242857e77234506ae692b2cc2b73d3909a96ae22c0d0566e19f3969c366703dd",
+    "status": "drafted; not included in prepared paired migrations"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Coverage and navigation are separate checks",
+      "description": "The candidate index is(event_id,state,booked_at) with InnoDB primary-key payload.",
+      "columns": [
+        "Query requirement",
+        "Values available?",
+        "Narrow leading-prefix search?"
+      ],
+      "rows": [
+        [
+          "ID/time for one event and state",
+          "Yes",
+          "Candidate equality prefix"
+        ],
+        [
+          "Same query plus private_note",
+          "No for note",
+          "Candidate equality prefix"
+        ],
+        [
+          "Time-only report across all events",
+          "Potentially yes",
+          "Not the same leading-prefix lookup"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "technical_review": "coordinator independent manual review passed",
+    "browser_rendering": "unverified",
+    "independent_review": "passed",
+    "server_rendering": "passed",
+    "server_rendering_evidence": "2026-10-29 full Vitest:1310 passed/12 skipped; actual LessonBlock/TopicDiagrams render over230 packages. Browser visual QA remains unverified."
+  },
+  "authoring_status": "drafted; verification pending",
+  "sql_verification": {
+    "scope": "not executed; exact MySQL/provider execution pending",
+    "all_passed": false,
+    "cases": []
+  }
+}

@@ -56,28 +56,34 @@ export function LearningBookmarkButton({ topicId, slugPath }: { topicId: string;
   async function toggle() {
     setPending(true);
     setError(null);
-    const { createBrowserSupabase } = await import("@/lib/supabase/browser");
-    const supabase = createBrowserSupabase();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
-      setPhase("anon");
+    try {
+      const { createBrowserSupabase } = await import("@/lib/supabase/browser");
+      const supabase = createBrowserSupabase();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) {
+        setPhase("anon");
+        setPending(false);
+        return;
+      }
+      const next = !bookmarked;
+      const res = next
+        ? await supabase
+            .from("learning_bookmarks")
+            .upsert({ user_id: user.id, topic_id: topicId }, { onConflict: "user_id,topic_id" })
+        : await supabase.from("learning_bookmarks").delete().eq("user_id", user.id).eq("topic_id", topicId);
       setPending(false);
-      return;
-    }
-    const next = !bookmarked;
-    const res = next
-      ? await supabase
-          .from("learning_bookmarks")
-          .upsert({ user_id: user.id, topic_id: topicId }, { onConflict: "user_id,topic_id" })
-      : await supabase.from("learning_bookmarks").delete().eq("user_id", user.id).eq("topic_id", topicId);
-    setPending(false);
-    if (res.error) {
+      if (res.error) {
+        setError("Couldn't update the bookmark. Try again.");
+        return;
+      }
+      setBookmarked(next);
+    } catch {
       setError("Couldn't update the bookmark. Try again.");
-      return;
+    } finally {
+      setPending(false);
     }
-    setBookmarked(next);
   }
 
   // Same box as the button that replaces it (`max-sm:h-11` below, and roughly

@@ -69,10 +69,12 @@ export function useSessionProfile(): Result {
 
   useEffect(() => {
     let active = true;
+    let request = 0;
 
     async function load(force = false) {
+      const current = ++request;
       const profile = await fetchProfile(force);
-      if (active) setState({ loading: false, profile });
+      if (active && current === request) setState({ loading: false, profile });
     }
 
     load();

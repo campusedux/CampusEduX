@@ -1,0 +1,607 @@
+{
+  "source_ref": "chapter-12-select-and-filtering/coalesce",
+  "slug": "coalesce",
+  "title": "COALESCE",
+  "description": "Use SQL COALESCE to select the first non-NULL value, order fallbacks, and preserve meaningful zeros without confusing display values with stored facts.",
+  "dialect": "MySQL 8.4",
+  "notes": "## A fallback supplies a result when input is absent\n\nCOALESCE returns the first non-[NULL](/learning/dbms-sql-tutorial/null-values) value among its supplied expressions. A campus shop might display zero when a product's stock has never been counted, or a contact panel might try a preferred label before a backup label. The operation chooses a fallback according to an explicit priority order. It does not combine all supplied values into one string or calculate an average.\n\nThe fallback needs a clear meaning. In the retained stock task, zero is a requested output convention for missing measurements. That convention does not establish that the actual stock was measured as empty. Explain the difference between a display value and an authoritative fact so a convenient presentation does not silently become an inventory decision.\n\n## Left-to-right priority defines the selected value\n\nIf preferred_contact is present, it wins even when backup_contact is also present. If the preferred field is NULL, the next candidate can supply the value. A final literal can guarantee a caption when every optional source is absent. Place candidates in business priority order rather than alphabetical order or the order in which they happened to be added to the schema.\n\nThe selection is not based on which value looks most useful to a reader. An empty string is non-NULL in MySQL and therefore can win before a later meaningful backup. Zero can likewise win in a numeric fallback chain. COALESCE tests absence, not truthiness, positivity, nonblankness or format validity. Those requirements need separate explicit expressions when the contract actually calls for them.\n\n```sql\nSELECT id, name, COALESCE(stock, 0) AS stock\nFROM products\nORDER BY id;\n```\n\n## All missing candidates still produce NULL\n\nCOALESCE does not invent an implicit universal [default](/learning/dbms-sql-tutorial/default). If every candidate is NULL and no known fallback is supplied, the result is NULL. A final caption such as No label recorded changes that outcome deliberately. A final numeric zero does something different and should not be supplied merely because the application has difficulty rendering missing values.\n\nDecide whether a missing result is acceptable at the consuming boundary. An audit may need to preserve unknown values rather than hide them. A display card may need a readable placeholder. A calculation may require rejection or further investigation. The same source fields can support all three features, but each expression should state its own fallback policy clearly.\n\n## The source value remains unchanged\n\nA SELECT using COALESCE computes an output expression. It does not update the stored column, backfill old rows or alter a DEFAULT declaration. The retained exercise returns product stock with missing values presented as zero while preserving the original sample data. A later direct read of the source column can still find NULL.\n\nThis distinction is especially important when an output alias reuses the source column name. Returning COALESCE stock under the label stock can be convenient for an established API, but a consumer needs to know the transformation contract. When building a new report, a label such as displayed_stock or a separate measurement_known flag can make the preserved uncertainty easier to understand.\n\n## Defaults and fallback expressions operate at different times\n\nA column default can initialize omitted input during a write under its declared rules. COALESCE provides a value when the query expression is evaluated. Changing a default does not make earlier NULLs disappear, and adding COALESCE to a query does not create a new storage rule. Keep insertion policy, stored evidence and presentation policy distinct.\n\nIf a repair operation genuinely needs to persist a replacement, it is a separate write with its own accepted source and authorization. Do not treat a display fallback as approval to rewrite unknown quantities. An inventory count should come from a trusted measurement or other defined authority, and concurrent edits must be handled at the actual mutation boundary.\n\n## Compatible types keep the result meaningful\n\nThe arguments participate in result-type determination under the database's rules. Mixing a numeric stock count with unrelated text can produce a type or conversion outcome that differs from the caller's expectation. Prefer candidate values that belong to one coherent result domain. A numeric quantity and a readable missing-data caption are often better returned as separate properties than forced into one ambiguous column.\n\nA fallback chain can contain expressions rather than only columns and literals. Their resulting types still matter. Casting can be useful when the intended result type is explicit, but a cast should not conceal malformed input or truncate an important value. Verify how the client receives the result, including numeric scale and text collation when those properties form part of the API contract.\n\n## Portable names do not guarantee identical type rules\n\nCOALESCE is widely supported standard SQL and can express several fallback levels. MySQL also offers IFNULL for a two-argument fallback, while other engines have their own alternatives. Prefer a common expression when it matches the requirement, but do not promise identical type inference, evaluation behaviour or performance across all database systems merely because the function name is shared.\n\nA migration between engines should verify representative values and receiving application types. A fallback that previously returned a number could be consumed differently after a change in surrounding expressions or column types. Keep the intended output domain explicit and test missing, present and boundary values, not only the ordinary row that selects the first argument unchanged.\n\n## Empty text needs a separate normalization policy\n\nIf an empty contact label should be treated as missing, NULLIF can deliberately convert that sentinel before COALESCE chooses a backup. Whitespace-only labels require their own policy about trimming. These are decisions about meaning, not built-in COALESCE behaviour. A legitimate empty value in another domain should not be discarded merely because one display feature wants a nonblank caption.\n\nNormalization also affects identity and user expectations. Trimming a code or ignoring case can merge values that an external system considers distinct. Apply the agreed contract consistently and preserve raw receipt when correction needs source evidence. A fallback expression should not quietly become an undocumented general-purpose data cleaner.\n\n## Outer joins can create fallback opportunities\n\nA LEFT JOIN can produce NULL right-side properties when no row matches. COALESCE can then provide a display label, but the same fallback may also cover a matched row whose optional label is NULL. Those situations are distinct even if the displayed caption is identical. Inspect a guaranteed-present matched identifier when the feature needs to distinguish no relationship from an incomplete related record.\n\nFor example, no assigned department differs from an assigned department with no public caption. A single Unknown department label may be acceptable for a card but inadequate for an audit. Preserve a relationship-present indicator or another explicit classification where necessary. The fallback answers which display value to use, not why the original value was absent.\n\n## Aggregation changes when unknown becomes zero\n\nAVG stock ignores NULL measurements in its ordinary input behaviour. AVG of COALESCE stock with zero includes previously unknown measurements as zeros, changing the denominator and meaning. A mean of recorded stock is different from a zero-imputed mean across all products. Choose deliberately and state the represented population instead of call one a universally corrected average.\n\nSimilarly, COALESCE applied outside SUM can provide zero when there are no aggregate contributions, while applying a fallback to each input changes row-level contributions. Those forms can coincide on some samples while expressing different reasoning. Test both an empty input and rows containing only missing values so the report's intended empty-result convention is actually observed.\n\n## Test priority rather than only the fallback\n\nThe retained beginner exercise preserves Stock With a Default and includes an existing known zero. The intermediate exercise selects a display label from preferred, backup and final placeholder candidates. Its fixtures include both-present rows, all-missing rows and an empty preferred string that intentionally wins under this presence-only contract. This exposes a solution that treats blank text as automatically absent.\n\nFor each result, identify the first non-NULL candidate and explain why earlier candidates did not win. Then state whether the result is a stored fact, a computed value or a presentation convention. That habit makes fallback chains predictable and prevents a convenient label from silently erasing information about what the system actually knows.\n",
+  "references": [
+    {
+      "title": "MySQL 8.4 COALESCE and comparison functions",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/comparison-operators.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-12-coalesce",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-12-coalesce-1",
+          "test_id": "pt-dbms-sql-12-coalesce",
+          "question_text": "What does COALESCE select?",
+          "options": [
+            "The last candidate always",
+            "The first non-NULL candidate in its stated priority order",
+            "The largest candidate",
+            "All candidates concatenated"
+          ],
+          "correct_index": 1,
+          "explanation": "Presence and argument order determine the selected value.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-12-coalesce-2",
+          "test_id": "pt-dbms-sql-12-coalesce",
+          "question_text": "What does COALESCE(NULL,0) return?",
+          "options": [
+            "NULL",
+            "Zero",
+            "An empty string",
+            "A SQL error"
+          ],
+          "correct_index": 1,
+          "explanation": "The second candidate is present.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-12-coalesce-3",
+          "test_id": "pt-dbms-sql-12-coalesce",
+          "question_text": "Can COALESCE express more than two fallback levels?",
+          "options": [
+            "No, exactly two are required",
+            "Yes, using several candidates",
+            "Only with numeric candidates",
+            "Only inside UPDATE"
+          ],
+          "correct_index": 1,
+          "explanation": "Use the business priority order.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-12-coalesce-4",
+          "test_id": "pt-dbms-sql-12-coalesce",
+          "question_text": "Why use standard COALESCE when suitable instead of an engine-specific fallback name?",
+          "options": [
+            "It is guaranteed faster everywhere",
+            "Its common supported syntax can improve portability",
+            "Other functions never work",
+            "It requires all arguments to be numeric"
+          ],
+          "correct_index": 1,
+          "explanation": "Engine-specific type and evaluation details still need checks.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-12-coalesce-5",
+          "test_id": "pt-dbms-sql-12-coalesce",
+          "question_text": "What happens if every supplied candidate is NULL?",
+          "options": [
+            "Zero is invented automatically",
+            "The result is NULL",
+            "The string NULL is returned",
+            "The query always errors"
+          ],
+          "correct_index": 1,
+          "explanation": "A known fallback must be explicit if required.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-12-coalesce-6",
+          "test_id": "pt-dbms-sql-12-coalesce",
+          "question_text": "What does preferred,backup,placeholder order express?",
+          "options": [
+            "A concatenation order",
+            "A prioritized fallback policy",
+            "A formatting validation rule",
+            "An arithmetic expression"
+          ],
+          "correct_index": 1,
+          "explanation": "A present preferred value wins before later candidates.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-12-coalesce-7",
+          "test_id": "pt-dbms-sql-12-coalesce",
+          "question_text": "Why consider candidate type compatibility?",
+          "options": [
+            "Types never matter",
+            "The result has an engine-determined type and may undergo conversion",
+            "Every candidate creates its own output column",
+            "Only the first literal has any type"
+          ],
+          "correct_index": 1,
+          "explanation": "Keep one coherent output domain.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-12-coalesce-8",
+          "test_id": "pt-dbms-sql-12-coalesce",
+          "question_text": "Is COALESCE limited to MySQL?",
+          "options": [
+            "Yes, MySQL invented the only version",
+            "No, it is broadly supported standard SQL",
+            "Only PostgreSQL supports it",
+            "Only MariaDB supports it"
+          ],
+          "correct_index": 1,
+          "explanation": "Portability of the name does not erase engine-specific details.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-12-coalesce-new-9",
+          "test_id": "pt-dbms-sql-12-coalesce",
+          "question_text": "Does COALESCE(stock,0) in SELECT persist zero into stock?",
+          "options": [
+            "No",
+            "Yes, it performs an update",
+            "Only if the alias is stock",
+            "Only for the first row"
+          ],
+          "correct_index": 0,
+          "explanation": "The source column remains unchanged.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-12-coalesce-new-10",
+          "test_id": "pt-dbms-sql-12-coalesce",
+          "question_text": "What does COALESCE(0,7) return?",
+          "options": [
+            "Seven",
+            "Zero",
+            "NULL",
+            "TRUE"
+          ],
+          "correct_index": 1,
+          "explanation": "Zero is non-NULL, not a missing candidate.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-12-coalesce-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-12-coalesce-application-new-1",
+          "test_id": "pt-dbms-sql-12-coalesce-application",
+          "question_text": "What does a present empty preferred string do?",
+          "options": [
+            "It is always skipped",
+            "It wins unless separate normalization changes the contract",
+            "It becomes NULL automatically",
+            "It raises an error"
+          ],
+          "correct_index": 1,
+          "explanation": "MySQL empty text is not NULL.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-12-coalesce-application-new-2",
+          "test_id": "pt-dbms-sql-12-coalesce-application",
+          "question_text": "What must be deliberate before treating blank text as absent?",
+          "options": [
+            "Only the output heading",
+            "The number of rows",
+            "The normalization policy",
+            "Whether an index exists"
+          ],
+          "correct_index": 2,
+          "explanation": "Fallback does not define all data-cleaning semantics.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-12-coalesce-application-new-3",
+          "test_id": "pt-dbms-sql-12-coalesce-application",
+          "question_text": "How does a query fallback differ from a column DEFAULT?",
+          "options": [
+            "They always rewrite the same stored values",
+            "A fallback creates a schema rule",
+            "A default always backfills every NULL",
+            "It is evaluated in the result expression rather than initializing omitted write input"
+          ],
+          "correct_index": 3,
+          "explanation": "They act at different boundaries.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-12-coalesce-application-new-4",
+          "test_id": "pt-dbms-sql-12-coalesce-application",
+          "question_text": "Why can reusing the output label stock require a documented contract?",
+          "options": [
+            "The displayed fallback may differ from the stored measurement",
+            "Aliases always mutate columns",
+            "The name forces a numeric type",
+            "No client can read aliased output"
+          ],
+          "correct_index": 0,
+          "explanation": "Consumers must understand the transformation.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-12-coalesce-application-new-5",
+          "test_id": "pt-dbms-sql-12-coalesce-application",
+          "question_text": "What distinction can one fallback label conceal after a LEFT JOIN?",
+          "options": [
+            "A primary key becoming unique",
+            "No matching related row versus a matched row with a missing optional label",
+            "An index becoming faster",
+            "All column types disappearing"
+          ],
+          "correct_index": 1,
+          "explanation": "Use a reliable matched identifier if that distinction matters.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-12-coalesce-application-new-6",
+          "test_id": "pt-dbms-sql-12-coalesce-application",
+          "question_text": "How can AVG(COALESCE(stock,0)) differ from AVG(stock)?",
+          "options": [
+            "It only changes the alias",
+            "It never changes the result",
+            "Unknowns contribute zeros and can change the denominator",
+            "It always raises division by zero"
+          ],
+          "correct_index": 2,
+          "explanation": "Choose the intended statistical population.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-12-coalesce-application-new-7",
+          "test_id": "pt-dbms-sql-12-coalesce-application",
+          "question_text": "Does a readable fallback label establish authoritative data completeness?",
+          "options": [
+            "Yes, every fallback completes the source",
+            "Only for contact labels",
+            "Only if the placeholder is nonempty",
+            "No, it can merely hide missing source data in presentation"
+          ],
+          "correct_index": 3,
+          "explanation": "Audit the source field when completeness is the question.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-12-coalesce-application-new-8",
+          "test_id": "pt-dbms-sql-12-coalesce-application",
+          "question_text": "What should be tested besides the all-missing case?",
+          "options": [
+            "Present earlier candidates that must outrank later ones",
+            "Only the final placeholder",
+            "Only one empty table",
+            "Only duplicate IDs"
+          ],
+          "correct_index": 0,
+          "explanation": "Priority mistakes can survive tests focused only on fallback.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-12-coalesce-application-new-9",
+          "test_id": "pt-dbms-sql-12-coalesce-application",
+          "question_text": "Should unknown measured stock be permanently replaced with zero just because the UI displays zero?",
+          "options": [
+            "Yes, every display value should be stored",
+            "No, storage repair needs a separate accepted rule and authority",
+            "Only if price is present",
+            "Only when COALESCE has two arguments"
+          ],
+          "correct_index": 1,
+          "explanation": "Presentation convention does not invent a measurement.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-12-coalesce-application-new-10",
+          "test_id": "pt-dbms-sql-12-coalesce-application",
+          "question_text": "Does a standard function name guarantee identical receiving client types across engines?",
+          "options": [
+            "Yes, with no exceptions",
+            "Only if NULL is the first argument",
+            "No, verify type resolution and client results",
+            "Only for strings"
+          ],
+          "correct_index": 2,
+          "explanation": "The complete expression and engine rules matter.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cp-dbms-sql-stock-with-a-default",
+      "slug": "stock-with-a-default",
+      "title": "Stock With a Default",
+      "difficulty": "Easy",
+      "task": "Return id,name and stock with NULL stock displayed as 0, preserving known stock values and all source rows. This is an output convention, not a stored measurement repair. Order by id.",
+      "schema_sql": "CREATE TABLE products (\n  id INTEGER PRIMARY KEY,\n  name TEXT NOT NULL,\n  category TEXT NOT NULL,\n  price INTEGER NOT NULL,\n  stock INTEGER\n);",
+      "seed_sql": "INSERT INTO products (id, name, category, price, stock) VALUES\n(1, 'ProLaptop', 'Electronics', 85000, 12),\n(2, 'Notebook', 'Stationery', 40, NULL),\n(3, 'Python Basics', 'Books', 350, 5),\n(4, 'ProPhone', 'Electronics', 45000, 0),\n(5, 'Novel', 'Books', 220, NULL),\n(6, 'Desk Lamp', 'Home', 900, 8);",
+      "expected": "id\tname\tstock\n1\tProLaptop\t12\n2\tNotebook\t0\n3\tPython Basics\t5\n4\tProPhone\t0\n5\tNovel\t0\n6\tDesk Lamp\t8",
+      "ordering": "As explicitly ordered in the result query.",
+      "constraints": [
+        "Use only the supplied synthetic tables and requested transition.",
+        "Preserve unrelated rows."
+      ],
+      "edge_cases": [
+        "Known zero is already present.",
+        "NULL becomes zero only in the returned expression."
+      ],
+      "hints": [
+        "Use a result expression rather than UPDATE.",
+        "Preserve the original output alias and ordering."
+      ],
+      "solution_sql": "SELECT id,name,COALESCE(stock,0) AS stock FROM products ORDER BY id;",
+      "explanation": "The first present candidate supplies the output. Known zero remains zero and missing stock uses the explicit fallback without changing stored facts.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO products (id, name, category, price, stock) VALUES\n(1, 'ProTablet', 'Electronics', 32000, 4),\n(2, 'Pencil Set', 'Stationery', 60, NULL),\n(3, 'SQL Guide', 'Books', 500, 10),\n(4, 'ProSpeaker', 'Electronics', 6000, 0);",
+          "expected": "id\tname\tstock\n1\tProTablet\t4\n2\tPencil Set\t0\n3\tSQL Guide\t10\n4\tProSpeaker\t0"
+        },
+        {
+          "seed_sql": "INSERT INTO products VALUES (1,'Unknown','Books',1,NULL),(2,'Empty','Books',1,0),(3,'Known','Books',1,7);",
+          "expected": "id\tname\tstock\n1\tUnknown\t0\n2\tEmpty\t0\n3\tKnown\t7"
+        }
+      ],
+      "existing_problem": true,
+      "original_description_md5": "3f47d9700d9fac25a148404a3cc418c4",
+      "original_check_sql": "",
+      "check_sql": ""
+    },
+    {
+      "id": "cx-coalesce-label-priority",
+      "slug": "coalesce-label-priority",
+      "title": "Select a presence-only display-label priority",
+      "difficulty": "Medium",
+      "task": "Return contact_id,display_label using preferred_label first, then backup_label, then 'No label'. Empty text is present and intentionally wins; do not trim or normalize it. Order by contact_id.",
+      "schema_sql": "CREATE TABLE contact_labels(contact_id INT PRIMARY KEY,preferred_label VARCHAR(40),backup_label VARCHAR(40));",
+      "seed_sql": "INSERT INTO contact_labels VALUES (1,'Media Desk','Office'),(2,NULL,'Stores'),(3,NULL,NULL),(4,'','Backup');",
+      "expected": "contact_id\tdisplay_label\n1\tMedia Desk\n2\tStores\n3\tNo label\n4\t",
+      "ordering": "As explicitly ordered in the result query.",
+      "constraints": [
+        "Use only the supplied synthetic tables and requested transition.",
+        "Preserve unrelated rows."
+      ],
+      "edge_cases": [
+        "Both present values choose preferred.",
+        "All missing inputs choose the explicit final label."
+      ],
+      "hints": [
+        "Keep candidates in the stated priority order.",
+        "Do not add NULLIF because empty text is valid here."
+      ],
+      "solution_sql": "SELECT contact_id,COALESCE(preferred_label,backup_label,'No label') AS display_label FROM contact_labels ORDER BY contact_id;",
+      "explanation": "The ordered fallback selects the first non-NULL candidate. The empty preferred string is deliberately retained under the task contract.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO contact_labels VALUES (7,NULL,'Backup'),(8,'Primary','Other');",
+          "expected": "contact_id\tdisplay_label\n7\tBackup\n8\tPrimary"
+        },
+        {
+          "seed_sql": "INSERT INTO contact_labels VALUES (1,NULL,NULL);",
+          "expected": "contact_id\tdisplay_label\n1\tNo label"
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-12-coalesce-1",
+      "test_id": "pt-dbms-sql-12-coalesce",
+      "question_text": "What does COALESCE(val1, val2, ..., valN) return?",
+      "options": [
+        "The last non-NULL value",
+        "The first non-NULL value among its arguments, checked left to right",
+        "The average of all non-NULL values",
+        "TRUE if any argument is NULL"
+      ],
+      "correct_index": 1,
+      "explanation": "COALESCE scans left to right and returns the first argument that isn't NULL.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-12-coalesce-2",
+      "test_id": "pt-dbms-sql-12-coalesce",
+      "question_text": "For Notebook where stock is NULL, what does COALESCE(stock, 0) return?",
+      "options": [
+        "NULL",
+        "0",
+        "An error",
+        "The string 'NULL'"
+      ],
+      "correct_index": 1,
+      "explanation": "Since stock is NULL, COALESCE falls through to the next argument, the literal 0.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-12-coalesce-3",
+      "test_id": "pt-dbms-sql-12-coalesce",
+      "question_text": "Can COALESCE accept more than two arguments?",
+      "options": [
+        "No, exactly two arguments are required",
+        "Yes — it can take any number of arguments, checking each in order until a non-NULL one is found",
+        "It accepts exactly three arguments",
+        "More than two arguments causes a syntax error"
+      ],
+      "correct_index": 1,
+      "explanation": "COALESCE is variadic — it can chain through any number of fallback options.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-12-coalesce-4",
+      "test_id": "pt-dbms-sql-12-coalesce",
+      "question_text": "Why is COALESCE generally preferred over dialect-specific alternatives like MySQL's IFNULL()?",
+      "options": [
+        "COALESCE is always faster",
+        "COALESCE is standard SQL supported broadly, while IFNULL()/NVL()-style functions are dialect-specific and typically limited to exactly two arguments",
+        "IFNULL() is deprecated and no longer works anywhere",
+        "COALESCE can only be used with numeric types, making it more predictable"
+      ],
+      "correct_index": 1,
+      "explanation": "Portability and flexibility (any number of arguments) favor COALESCE for general use.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-12-coalesce-5",
+      "test_id": "pt-dbms-sql-12-coalesce",
+      "question_text": "What happens if EVERY argument to COALESCE is NULL?",
+      "options": [
+        "An error is raised",
+        "COALESCE itself returns NULL, since there's no non-NULL value to fall back to",
+        "It returns the literal string 'NULL'",
+        "It returns 0 by default"
+      ],
+      "correct_index": 1,
+      "explanation": "If no argument is non-NULL, there's nothing for COALESCE to return except NULL itself.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-12-coalesce-6",
+      "test_id": "pt-dbms-sql-12-coalesce",
+      "question_text": "What real-world pattern does `COALESCE(preferred_phone, backup_phone, office_phone, 'No phone on file')` express?",
+      "options": [
+        "Averaging four phone numbers together",
+        "Trying each contact option in priority order, falling back to a final default message if none are available",
+        "Concatenating all four values into one string",
+        "Validating that all four phone numbers are correctly formatted"
+      ],
+      "correct_index": 1,
+      "explanation": "This is a classic multi-level fallback pattern that COALESCE's variadic nature supports directly.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-12-coalesce-7",
+      "test_id": "pt-dbms-sql-12-coalesce",
+      "question_text": "Should all arguments passed to COALESCE be of compatible types?",
+      "options": [
+        "No, type never matters for COALESCE",
+        "Yes — mixing incompatible types can cause an error or an unexpected implicit conversion, depending on the dialect",
+        "Only the first argument's type matters",
+        "COALESCE automatically converts every argument to text"
+      ],
+      "correct_index": 1,
+      "explanation": "Type compatibility across COALESCE's arguments avoids relying on potentially inconsistent implicit conversions.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-12-coalesce-8",
+      "test_id": "pt-dbms-sql-12-coalesce",
+      "question_text": "Is COALESCE part of the SQL standard, or a MySQL-specific extension?",
+      "options": [
+        "A MySQL-specific extension only",
+        "Part of the standard SQL specification, supported broadly across dialects",
+        "A PostgreSQL-only feature",
+        "Not part of any formal specification"
+      ],
+      "correct_index": 1,
+      "explanation": "COALESCE's standard-SQL status is exactly what makes it more portable than vendor-specific shortcuts.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "coordinator",
+    "independent_review": "passed",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Independent manual review passed; native MySQL fixture evidence recorded separately; provider/browser/Supabase release gates remain separate.",
+    "existing_question_corrections": [
+      "tq-dbms-sql-12-coalesce-1",
+      "tq-dbms-sql-12-coalesce-2",
+      "tq-dbms-sql-12-coalesce-3",
+      "tq-dbms-sql-12-coalesce-4",
+      "tq-dbms-sql-12-coalesce-5",
+      "tq-dbms-sql-12-coalesce-6",
+      "tq-dbms-sql-12-coalesce-7",
+      "tq-dbms-sql-12-coalesce-8"
+    ],
+    "canonical_answer_indices_preserved": true,
+    "editorial_record": "Original snapshots retained. Questions rewritten for precise dialect and topic coverage while preserving identities and canonical answer positions; technical and independent review pending.",
+    "independent_reviewer": "Codex reviewer, current 2026-10-30 session",
+    "independent_review_scope": "Read full notes, all 640 MCQ stems/options/canonical answers/explanations, 64 exercise contracts/solutions/fixtures, and all 32 diagrams. Verified retained identities/answers through source-continuity tests; SQL execution evidence is recorded separately. No external originality, provider, live application or Supabase authorization clearance.",
+    "independent_review_record": "reports/independent-review-2026-10-30.json",
+    "content_sha256": "39aabd0d90d96f1f574c1f30df59d1a0411541a5589095c204b9fe31952a24a9"
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-12-coalesce",
+    "original_note_sha256": "7a59a589bfe093dc649aca91dbd35a4930305190e10ff6db2d36731e6a13113c",
+    "status": "drafted; not yet included in prepared paired migrations"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Presence-only fallback preserves zero and empty text",
+      "description": "The first non-NULL candidate wins; no truthiness or format check is implied.",
+      "columns": [
+        "First candidate",
+        "Second candidate",
+        "Fallback",
+        "Selected value"
+      ],
+      "rows": [
+        [
+          "NULL",
+          "Stores",
+          "No label",
+          "Stores"
+        ],
+        [
+          "Media Desk",
+          "Office",
+          "No label",
+          "Media Desk"
+        ],
+        [
+          "Empty string",
+          "Backup",
+          "No label",
+          "Empty string"
+        ],
+        [
+          "NULL",
+          "NULL",
+          "No label",
+          "No label"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "drafted — verification pending",
+    "server_rendering": "pending",
+    "browser_rendering": "unverified",
+    "independent_review": "pending"
+  },
+  "authoring_status": "drafted — verification pending",
+  "sql_verification": {
+    "scope": "not executed; exact MySQL/provider verification pending",
+    "all_passed": false,
+    "cases": []
+  }
+}

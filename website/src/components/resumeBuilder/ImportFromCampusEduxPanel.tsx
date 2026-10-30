@@ -38,14 +38,21 @@ const ImportFromCampusEduxPanel = forwardRef<
   useImperativeHandle(ref, () => ({ open: load }));
 
   async function load() {
+    if (loading) return;
     setOpen(true);
     if (data) return;
     setLoading(true);
     setError(null);
-    const res = await getCampusEduxImportDataAction();
-    setLoading(false);
-    if ("error" in res) setError(res.error);
-    else setData(res);
+    try {
+      const res = await getCampusEduxImportDataAction();
+      setLoading(false);
+      if ("error" in res) setError(res.error);
+      else setData(res);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
+    } finally {
+      setLoading(false);
+    }
   }
 
   const importablePersonalKeys = data

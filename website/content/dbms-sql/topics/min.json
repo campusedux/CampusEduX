@@ -1,0 +1,607 @@
+{
+  "source_ref": "chapter-14-sql-functions/min",
+  "slug": "min",
+  "title": "MIN",
+  "description": "Use SQL MIN to find the smallest known value, handle empty and NULL input, compare dates and text, and retrieve every tied eligible row.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Minimum means the smallest known value\n\nMIN is an aggregate function that returns the smallest nonmissing value of an expression across a qualifying population. A campus purchasing team can use it to find the lowest recorded quotation for a microphone. The result answers a value question: what is the smallest quoted price? It does not independently identify a supplier, promise availability, or establish that the quotation is still valid.\n\nBefore using the function, understand a basic [SELECT](/learning/dbms-sql-tutorial/select) query, row filtering, and the difference between a value and a row. Identify the measurement, its units, and the population being compared. Mixing prices for different products or currencies can produce a mathematically valid minimum that answers no useful purchasing question.\n\n## Define the population before reducing it\n\nThe following synthetic setup records three quotations. Two quotations concern the requested microphone and one concerns a camera. The filter must restrict the population to the microphone before the aggregate reduces its prices. The alias gives the single output value a useful name without changing which input values are compared.\n\n```sql\nCREATE TABLE quotations (\n  quote_id INT PRIMARY KEY,\n  item_code VARCHAR(12) NOT NULL,\n  price DECIMAL(8,2)\n);\nINSERT INTO quotations VALUES\n  (11, 'MIC', 42.00), (12, 'MIC', 39.50), (13, 'CAM', 10.00);\n\nSELECT MIN(price) AS lowest_price\nFROM quotations\nWHERE item_code = 'MIC';\n```\n\nBy tracing those inputs, the anticipated minimum is thirty-nine and fifty hundredths, not the camera price of ten. This is an expected result to verify against the declared engine, rather than a record of execution. Removing the item filter changes the question to the lowest price across every recorded item.\n\n## Missing values do not compete with known prices\n\nA [NULL](/learning/dbms-sql-tutorial/null-values) price means a recorded quotation lacks a known price. MIN ignores that missing expression value when comparing known prices. It does not turn absence into zero. If prices are forty, NULL, and thirty, the smallest known price is thirty. A known zero price, by contrast, participates normally and can be the minimum.\n\nThis distinction matters when a zero represents a genuine free offer. Replacing every missing price with zero before aggregation makes an incomplete quotation appear cheaper than every positive offer. Use a replacement only when the domain explicitly defines that meaning. A display fallback after the calculation is a different decision from inventing an input measurement.\n\n## Empty input and all-missing input deserve different explanations\n\nWithout grouping, an aggregate query returns one summary row even when its filter admits no input rows. Its minimum value is NULL. A population containing rows whose price expressions are all NULL also yields a NULL minimum. The scalar result alone does not distinguish those situations, so a useful report can return additional evidence.\n\n```sql\nSELECT COUNT(*) AS matching_quotes,\n       COUNT(price) AS priced_quotes,\n       MIN(price) AS lowest_price\nFROM quotations\nWHERE item_code = 'MIC';\n```\n\nThe first count describes population size; the second describes known measurements. Together they let a caller distinguish no quotations from quotations awaiting prices. Neither count authorizes access to another supplier's private data. Access must already be enforced by the trusted data boundary before the reporting calculation is evaluated.\n\n## Grouped minima summarize each existing group\n\nGrouping changes the result grain, meaning what one output row represents. Group by item code to obtain one minimum for each represented item, rather than one value for the complete catalogue. A group with only unknown prices remains a represented group and receives a NULL minimum. An item absent from the input does not spontaneously create a group.\n\nIf a dashboard must display every item, including items without quotations, start from the item catalogue and design the relationship deliberately. An outer join can preserve those catalogue identities, but counting its placeholder row differs from counting a matched quotation identity. Explain the intended population before combining joins, counts, and minima.\n\n## Filter rows and filter summaries at their own boundaries\n\nA WHERE predicate decides which source quotations contribute to a minimum. A HAVING predicate can restrict completed group summaries. For example, restricting input to approved quotations differs from retaining items whose lowest approved price falls below a budget. The approval condition and budget condition answer different questions and should remain visibly separate.\n\nWriting MIN directly in the same query block's ordinary WHERE condition is not the right way to filter on a group result. Compute the summary at the appropriate stage or use a subquery. Keep the original population restriction consistent when a later query uses that calculated boundary to find matching detail rows.\n\n## The lowest value does not select its owner\n\nTwo suppliers can offer the same lowest price. MIN reports that price once; it does not choose which supplier deserves attribution. Selecting an unrelated supplier column beside an ungrouped minimum is not a reliable way to obtain the corresponding row. MySQL's normal grouping checks reject many such expressions, and permissive settings cannot create a valid ownership rule.\n\nIf every tied cheapest quotation is required, compare qualified detail prices with a subquery that computes the same population's minimum. If only one quotation is required, define a complete ordering and an explicit tie breaker. These choices produce different row counts, so the task description must say which result is intended.\n\n## Sorting and taking one row has different edge cases\n\nAscending ordering followed by a limit can retrieve a complete cheapest row, but it is not universally equivalent to MIN. In MySQL, ascending order places NULL before known values by default. An unfiltered first row can therefore contain a missing price while MIN returns a known price. Exclude missing measurements when the row-selection requirement calls for a known cheapest offer.\n\nAn empty ordered detail query returns no rows, while the ungrouped aggregate still returns its summary row containing NULL. Ties add another distinction: a limit of one selects one row under the stated order, whereas a comparison with the minimum can preserve all tied rows. Test each contract independently.\n\n## The comparison domain determines what smallest means\n\nFor supported numeric types, MIN compares numeric values, including negative values. For date values, it finds the earliest recorded date. Text follows the expression's collation rather than a universal English dictionary. A code stored as text can therefore have an order different from the numeric values suggested by its characters.\n\nDo not convert identifiers into numbers merely to obtain a familiar ranking. For specialized types, verify MySQL's documented comparison behavior instead of assuming aggregate ordering matches every ORDER BY rule. In particular, ENUM and SET aggregates compare their string values, which can differ from ordering by their internal enumeration positions.\n\n## Duplicates do not move the boundary\n\nRepeating the same price cannot make the smallest known value smaller or larger. MySQL permits DISTINCT inside MIN, but removing duplicate candidates does not change this extremum. That property differs from SUM, COUNT, and AVG, whose meaning can change when repeated values are removed.\n\nIt does not follow that duplicate-producing joins are always harmless. Although the minimum may remain unchanged, accompanying counts, totals, and retrieved detail rows can become wrong. Review the relationship's multiplicity and the intended result grain before treating an unchanged minimum as evidence that an entire joined report is correct.\n\n## Inspect performance without changing the question\n\nAn appropriate index can help MySQL answer some simple minimum queries efficiently. Filtering, grouping, expression evaluation, and available access paths influence what work remains necessary. A function around the indexed value or a mismatch between index order and population filters can change the plan. There is no universal promise that MIN always beats every ordered query.\n\nBegin with boundary, missing-value, empty-population, and tie fixtures. Then inspect representative plans and measurements if performance matters. Preserve those correctness cases during tuning. A rapid answer over the wrong set of quotations does not become a useful optimization because the returned scalar looks plausible.\n\n## Carry the boundary into deliberate practice\n\nThe beginner exercise returns a lowest known inspection score while preserving the distinction between negative scores, zero, and missing measurements. The intermediate exercise returns every lowest eligible quotation within each item. It filters eligible quotations before computing each item boundary, so rejected quotations cannot enter the detailed result.\n\nFor each task, list the qualifying rows, remove missing comparison values, determine the smallest remaining value, and then apply the requested output grain. State what happens when nothing qualifies and when several rows share the boundary. Those four decisions explain both the result and the mistakes that near-miss fixtures are designed to expose.\n\n\nMySQL also supports MIN as a window function with an OVER clause. Partitioning by item computes its minimum while preserving each qualifying detail row. A surrounding derived query can then retain rows whose price equals that boundary. Apply eligibility inside the window input, and remember that a partition containing only missing prices cannot satisfy ordinary equality with its NULL minimum.\n",
+  "references": [
+    {
+      "title": "MySQL 8.4 aggregate function descriptions",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/aggregate-functions.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-14-min",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-14-min-1",
+          "test_id": "pt-dbms-sql-14-min",
+          "question_text": "For values 12, NULL, -4, and 8, what is MIN(value)?",
+          "options": [
+            "-4",
+            "0",
+            "NULL",
+            "12"
+          ],
+          "correct_index": 0,
+          "explanation": "Missing values are ignored; negative four is the smallest known candidate.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-14-min-2",
+          "test_id": "pt-dbms-sql-14-min",
+          "question_text": "What does MIN(inspection_date) identify among known dates?",
+          "options": [
+            "The insertion date of the newest row",
+            "The earliest date",
+            "The latest date",
+            "The current session date"
+          ],
+          "correct_index": 1,
+          "explanation": "Chronologically earlier date values compare smaller.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-14-min-3",
+          "test_id": "pt-dbms-sql-14-min",
+          "question_text": "Can MIN compare a supported VARCHAR expression in MySQL?",
+          "options": [
+            "No, it accepts integers only",
+            "Yes, using its applicable string comparison rules",
+            "Yes, but only after every value becomes zero",
+            "Only when the query has no WHERE"
+          ],
+          "correct_index": 1,
+          "explanation": "A text minimum follows the applicable collation rather than a universal alphabet.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-14-min-4",
+          "test_id": "pt-dbms-sql-14-min",
+          "question_text": "Under an ordinary collation ordering Amber before Copper and Zinc, what is MIN(name) for Copper, Amber, Zinc, Amber?",
+          "options": [
+            "Copper",
+            "Zinc",
+            "Amber",
+            "NULL"
+          ],
+          "correct_index": 2,
+          "explanation": "Repeating Amber does not alter the smallest candidate.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-14-min-5",
+          "test_id": "pt-dbms-sql-14-min",
+          "question_text": "What value does an ungrouped MIN(price) return when WHERE admits no rows?",
+          "options": [
+            "0",
+            "NULL",
+            "An automatic default price",
+            "An exception because no minimum row exists"
+          ],
+          "correct_index": 1,
+          "explanation": "The ungrouped query still produces a summary row, whose minimum is missing.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-14-min-6",
+          "test_id": "pt-dbms-sql-14-min",
+          "question_text": "How does MIN(DISTINCT price) compare with MIN(price) over the same ordinary values?",
+          "options": [
+            "It always halves the minimum",
+            "It counts minimum-price rows",
+            "It produces the same minimum",
+            "It is invalid MySQL aggregate syntax"
+          ],
+          "correct_index": 2,
+          "explanation": "Removing repeated candidates cannot move the minimum boundary.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-14-min-7",
+          "test_id": "pt-dbms-sql-14-min",
+          "question_text": "Why does MIN(price) alone not answer which supplier offered the cheapest price?",
+          "options": [
+            "It always selects the highest supplier id",
+            "It returns the value without choosing an owning detail row",
+            "It cannot process a WHERE filter",
+            "Every supplier must offer a different price"
+          ],
+          "correct_index": 1,
+          "explanation": "Ties and sibling properties need an explicit detail-selection contract.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-14-min-8",
+          "test_id": "pt-dbms-sql-14-min",
+          "question_text": "What is a useful reason to choose MIN rather than an ordered detail query when only a summary value is needed?",
+          "options": [
+            "It guarantees zero table reads",
+            "It directly expresses an aggregate boundary and composes with grouping",
+            "It automatically returns supplier details",
+            "It always outruns every indexed ordered query"
+          ],
+          "correct_index": 1,
+          "explanation": "The semantic fit is clear, while performance still depends on the plan.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-14-min-new-9",
+          "test_id": "pt-dbms-sql-14-min",
+          "question_text": "Which input change can make MIN smaller?",
+          "options": [
+            "Adding a known value below the existing minimum",
+            "Repeating the current minimum",
+            "Adding another NULL",
+            "Sorting the same input descending"
+          ],
+          "correct_index": 0,
+          "explanation": "Only a new smaller candidate moves the lower boundary.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-14-min-new-10",
+          "test_id": "pt-dbms-sql-14-min",
+          "question_text": "How can a report distinguish no matching quotations from matches whose prices are all unknown?",
+          "options": [
+            "Replace every NULL with zero before MIN",
+            "Return COUNT(*) and COUNT(price) beside MIN(price)",
+            "Inspect the scalar minimum alone",
+            "Assume NULL always means no rows"
+          ],
+          "correct_index": 1,
+          "explanation": "Population and known-value counts provide the missing context.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-14-min-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-14-min-application-new-1",
+          "test_id": "pt-dbms-sql-14-min-application",
+          "question_text": "What happens if an unknown price is changed to zero inside MIN(COALESCE(price,0))?",
+          "options": [
+            "MIN ignores it because it originated as NULL",
+            "The expression always returns NULL",
+            "The invented zero participates in the minimum",
+            "The source table is automatically updated"
+          ],
+          "correct_index": 2,
+          "explanation": "A preprocessing fallback changes the compared candidates without changing stored source data.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-14-min-application-new-2",
+          "test_id": "pt-dbms-sql-14-min-application",
+          "question_text": "What does MIN return for the known temperatures -9, -3, and -6?",
+          "options": [
+            "0",
+            "-3",
+            "6",
+            "-9"
+          ],
+          "correct_index": 3,
+          "explanation": "Numeric ordering includes legitimate negative values.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-14-min-application-new-3",
+          "test_id": "pt-dbms-sql-14-min-application",
+          "question_text": "What does GROUP BY item_code change about MIN(price)?",
+          "options": [
+            "It calculates a separate boundary for each represented item group",
+            "It selects one arbitrary supplier globally",
+            "It creates groups for every absent item automatically",
+            "It removes all NULL-only groups"
+          ],
+          "correct_index": 0,
+          "explanation": "Grouping establishes the result grain; all-missing represented groups still exist.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-14-min-application-new-4",
+          "test_id": "pt-dbms-sql-14-min-application",
+          "question_text": "Which stage ordinarily restricts group summaries using their calculated minimum?",
+          "options": [
+            "The same block's ordinary WHERE with MIN directly",
+            "HAVING",
+            "A column DEFAULT",
+            "A table rename"
+          ],
+          "correct_index": 1,
+          "explanation": "WHERE filters input rows; HAVING can filter aggregate group results.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-14-min-application-new-5",
+          "test_id": "pt-dbms-sql-14-min-application",
+          "question_text": "Why can ORDER BY price ASC LIMIT 1 disagree with MIN(price) in MySQL?",
+          "options": [
+            "MIN always returns a whole row",
+            "LIMIT converts unknown prices to negative infinity in storage",
+            "Ascending ordering can select a NULL price before known values",
+            "MySQL does not support ascending order"
+          ],
+          "correct_index": 2,
+          "explanation": "A row-selection query must define its missing-value policy.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-14-min-application-new-6",
+          "test_id": "pt-dbms-sql-14-min-application",
+          "question_text": "How many rows does an ungrouped MIN summary return over empty input, without HAVING?",
+          "options": [
+            "No rows",
+            "One row with zero",
+            "One row per missing source row",
+            "One row with a NULL minimum"
+          ],
+          "correct_index": 3,
+          "explanation": "An ungrouped aggregate summarizes the empty input in a single result row.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-14-min-application-new-7",
+          "test_id": "pt-dbms-sql-14-min-application",
+          "question_text": "A cheapest-quotation report needs every tied approved quote. Which rule is essential?",
+          "options": [
+            "Apply approval scope both when calculating the boundary and when retrieving detail",
+            "Admit any rejected row with the same price",
+            "Choose the largest quote id without a requirement",
+            "Replace every missing price with the minimum"
+          ],
+          "correct_index": 0,
+          "explanation": "A matching value does not override the required eligibility scope.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-14-min-application-new-8",
+          "test_id": "pt-dbms-sql-14-min-application",
+          "question_text": "Does an unchanged minimum prove that a join has the correct multiplicity?",
+          "options": [
+            "Yes, all aggregates ignore duplicates",
+            "No; companion counts and returned detail can still be multiplied",
+            "Yes, a minimum prevents duplicate joins",
+            "Only if every value is positive"
+          ],
+          "correct_index": 1,
+          "explanation": "The extremum's duplicate insensitivity does not certify the full report.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-14-min-application-new-9",
+          "test_id": "pt-dbms-sql-14-min-application",
+          "question_text": "How do MySQL MIN and MAX compare ENUM values?",
+          "options": [
+            "Always by enumeration position as ORDER BY can do",
+            "By counting enum labels",
+            "Using their string values",
+            "By their insertion timestamps"
+          ],
+          "correct_index": 2,
+          "explanation": "Specialized types need documented comparison semantics instead of assumptions about internal ordinal positions.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-14-min-application-new-10",
+          "test_id": "pt-dbms-sql-14-min-application",
+          "question_text": "What does MIN(price) OVER (PARTITION BY item_code) do to qualifying detail rows?",
+          "options": [
+            "Collapses all items to one global row",
+            "Deletes prices above the minimum",
+            "Automatically filters out every tie",
+            "Annotates each row with its item's boundary while retaining rows"
+          ],
+          "correct_index": 3,
+          "explanation": "The window calculation preserves detail; a surrounding query can apply the desired boundary filter.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cx-min-known-inspection-score",
+      "slug": "min-known-inspection-score",
+      "title": "Find the lowest known inspection score",
+      "difficulty": "Easy",
+      "task": "Return one column named lowest_score containing MIN(score) across all inspection_scores. Missing scores do not compete. Return one summary row even when no known score exists. Negative and zero scores are legitimate. Preserve source data.",
+      "schema_sql": "CREATE TABLE inspection_scores(reading_id INT PRIMARY KEY,score INT);",
+      "seed_sql": "INSERT INTO inspection_scores VALUES (5,NULL),(2,-3),(9,-7),(3,-7),(12,0);",
+      "expected": "lowest_score\n-7",
+      "ordering": "One aggregate summary row; no row ordering is needed.",
+      "constraints": [
+        "Read only the supplied synthetic table.",
+        "Preserve negative scores, zero, and missingness as distinct states."
+      ],
+      "edge_cases": [
+        "An all-missing population yields a NULL minimum.",
+        "An empty table still yields one summary row.",
+        "Repeated minima do not change the boundary."
+      ],
+      "hints": [
+        "Aggregate the score expression directly.",
+        "Do not replace a missing score with zero."
+      ],
+      "solution_sql": "SELECT MIN(score) AS lowest_score FROM inspection_scores;",
+      "explanation": "The known candidates include negative seven twice, negative three, and zero. Their smallest value is negative seven. An empty or all-missing population has no known boundary, so the summary remains NULL.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO inspection_scores VALUES (1,NULL),(2,NULL);",
+          "expected": "lowest_score\nNULL"
+        },
+        {
+          "seed_sql": "",
+          "expected": "lowest_score\nNULL"
+        },
+        {
+          "seed_sql": "INSERT INTO inspection_scores VALUES (1,4),(2,0),(3,NULL);",
+          "expected": "lowest_score\n0"
+        }
+      ]
+    },
+    {
+      "id": "cx-min-approved-item-quotes",
+      "slug": "min-approved-item-quotes",
+      "title": "Return every lowest approved quotation by item",
+      "difficulty": "Medium",
+      "task": "Return quote_id,item_code,price for every approved quotation tied at the lowest known approved price within its item_code. approval=1 means approved. Exclude unknown prices and rejected quotations, including rejected quotations tied at an approved boundary. Order by item_code ascending then quote_id ascending.",
+      "schema_sql": "CREATE TABLE item_quotes(quote_id INT PRIMARY KEY,item_code VARCHAR(12) NOT NULL,price INT,approval INT NOT NULL);",
+      "seed_sql": "INSERT INTO item_quotes VALUES (1,'CAM',80,1),(2,'CAM',60,1),(3,'CAM',60,1),(4,'CAM',10,0),(5,'MIC',20,1),(6,'MIC',NULL,1),(7,'MIC',20,0),(8,'UNK',NULL,1);",
+      "expected": "quote_id\titem_code\tprice\n2\tCAM\t60\n3\tCAM\t60\n5\tMIC\t20",
+      "ordering": "item_code ASC, then quote_id ASC.",
+      "constraints": [
+        "Use the supplied MySQL 8.4-compatible schema.",
+        "Return all qualifying ties without updating source rows."
+      ],
+      "edge_cases": [
+        "Rejected values must not establish the minimum.",
+        "Rejected rows sharing a boundary remain excluded.",
+        "An all-missing item has no qualifying detail row."
+      ],
+      "hints": [
+        "Filter approval before computing each item's boundary.",
+        "A windowed MIN preserves details for a surrounding filter."
+      ],
+      "solution_sql": "SELECT quote_id,item_code,price FROM (SELECT quote_id,item_code,price,MIN(price) OVER (PARTITION BY item_code) AS lowest_price FROM item_quotes WHERE approval=1) AS ranked WHERE price=lowest_price ORDER BY item_code ASC,quote_id ASC;",
+      "explanation": "Approval is applied before the item partition minimum is computed. Equality retains every known price tied at that item's boundary. Rejected quotations never appear in the window input, and NULL comparisons do not qualify.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO item_quotes VALUES (1,'A',NULL,1),(2,'A',-9,0),(3,'B',5,0);",
+          "expected": ""
+        },
+        {
+          "seed_sql": "INSERT INTO item_quotes VALUES (8,'A',0,1),(2,'A',-2,1),(6,'A',-2,1),(7,'B',3,1),(9,'A',-2,0);",
+          "expected": "quote_id\titem_code\tprice\n2\tA\t-2\n6\tA\t-2\n7\tB\t3"
+        },
+        {
+          "seed_sql": "",
+          "expected": ""
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-14-min-1",
+      "test_id": "pt-dbms-sql-14-min",
+      "question_text": "Given order amounts 250.00, NULL, 400.00, 150.00, 300.00, what does MIN(amount) return?",
+      "options": [
+        "150.00",
+        "0.00",
+        "NULL",
+        "250.00"
+      ],
+      "correct_index": 0,
+      "explanation": "MIN ignores the NULL and finds the smallest of the remaining non-NULL values: 150.00.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-14-min-2",
+      "test_id": "pt-dbms-sql-14-min",
+      "question_text": "What does MIN(order_date) conceptually return?",
+      "options": [
+        "The most recent order date",
+        "The earliest order date",
+        "Today's date",
+        "The average order date"
+      ],
+      "correct_index": 1,
+      "explanation": "MIN on a date column returns the chronologically earliest (smallest) date value.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-14-min-3",
+      "test_id": "pt-dbms-sql-14-min",
+      "question_text": "Can MIN() be used on a VARCHAR (string) column?",
+      "options": [
+        "No, MIN only works on numeric types",
+        "Yes, it returns the alphabetically first value based on the column's collation",
+        "Yes, but it always returns an error for text data",
+        "Only if the strings are numeric digits"
+      ],
+      "correct_index": 1,
+      "explanation": "MIN works on any type with a defined ordering, including strings, returning the lexicographically smallest value per the column's collation.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-14-min-4",
+      "test_id": "pt-dbms-sql-14-min",
+      "question_text": "Given the names Alice, Bob, Alice, Charlie, Bob, what does MIN(customer_name) return?",
+      "options": [
+        "'Bob'",
+        "'Charlie'",
+        "'Alice'",
+        "NULL"
+      ],
+      "correct_index": 2,
+      "explanation": "'Alice' is alphabetically first among the distinct and repeated names present.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-14-min-5",
+      "test_id": "pt-dbms-sql-14-min",
+      "question_text": "What does MIN(amount) return over a query that matches zero rows?",
+      "options": [
+        "0",
+        "NULL",
+        "-1",
+        "An error"
+      ],
+      "correct_index": 1,
+      "explanation": "Like other aggregates, MIN returns NULL when there are no rows (or no non-NULL values) to evaluate.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-14-min-6",
+      "test_id": "pt-dbms-sql-14-min",
+      "question_text": "How does MIN(DISTINCT amount) compare to MIN(amount) on the same column?",
+      "options": [
+        "MIN(DISTINCT amount) is always smaller",
+        "MIN(DISTINCT amount) is always larger",
+        "They always produce the identical result, since removing duplicates never changes which value is smallest",
+        "MIN(DISTINCT amount) throws a syntax error"
+      ],
+      "correct_index": 2,
+      "explanation": "DISTINCT removes duplicate values but never changes the smallest value present, so MIN(DISTINCT x) always equals MIN(x).",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-14-min-7",
+      "test_id": "pt-dbms-sql-14-min",
+      "question_text": "You need both the minimum order amount AND the name of the customer who placed that order. Why can't MIN(amount) alone answer this?",
+      "options": [
+        "MIN(amount) is always NULL when combined with a customer name",
+        "MIN only returns the scalar minimum value, with no way to also retrieve other columns from the row it came from",
+        "MIN cannot be used at all without GROUP BY",
+        "MIN requires a JOIN to compute at all"
+      ],
+      "correct_index": 1,
+      "explanation": "MIN collapses to a single value with no reference back to its source row; to get sibling columns you need ORDER BY ... LIMIT 1 or a subquery filter like WHERE amount = (SELECT MIN(amount) ...).",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-14-min-8",
+      "test_id": "pt-dbms-sql-14-min",
+      "question_text": "Why might MIN(amount) be preferred over SELECT amount FROM orders ORDER BY amount ASC LIMIT 1 when you only need the minimum value itself?",
+      "options": [
+        "MIN cannot be combined with WHERE, so it's always simpler",
+        "MIN is a true aggregate that collapses to one row directly, often lets the engine use an index efficiently, and composes naturally with GROUP BY for per-group minimums",
+        "ORDER BY ... LIMIT 1 is not valid SQL syntax",
+        "MIN always returns multiple rows, unlike ORDER BY ... LIMIT 1"
+      ],
+      "correct_index": 1,
+      "explanation": "MIN is conceptually and often practically more efficient for the value alone, and unlike a LIMIT 1 approach, it works cleanly per group once GROUP BY is introduced.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "/root/integration_seo author",
+    "independent_review": "passed",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Independent manual review passed; native MySQL fixture evidence recorded separately; provider/browser/Supabase release gates remain separate.",
+    "existing_question_corrections": [
+      "tq-dbms-sql-14-min-1",
+      "tq-dbms-sql-14-min-2",
+      "tq-dbms-sql-14-min-3",
+      "tq-dbms-sql-14-min-4",
+      "tq-dbms-sql-14-min-5",
+      "tq-dbms-sql-14-min-6",
+      "tq-dbms-sql-14-min-7",
+      "tq-dbms-sql-14-min-8"
+    ],
+    "canonical_answer_indices_preserved": true,
+    "editorial_record": "Original seed snapshots retained. Questions independently rewritten using new examples while preserving original IDs and canonical answer positions. No pre-existing MIN/MAX coding problem found in the inspected seed.",
+    "independent_reviewer": "Codex reviewer, current 2026-10-30 session",
+    "independent_review_scope": "Read full notes, all 640 MCQ stems/options/canonical answers/explanations, 64 exercise contracts/solutions/fixtures, and all 32 diagrams. Verified retained identities/answers through source-continuity tests; SQL execution evidence is recorded separately. No external originality, provider, live application or Supabase authorization clearance.",
+    "independent_review_record": "reports/independent-review-2026-10-30.json",
+    "content_sha256": "efa1bda96704dfbef6a7593e3645dd4e6b88b3dbcb04cfa6c0025f3a4cd30d8d"
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-14-min",
+    "original_note_sha256": "ff544f66995e096768a572ac1922dbb751c55b7904b6d6ecaac32ce012804a58",
+    "status": "drafted; not included in prepared paired migrations"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Known candidates compete within each eligible item",
+      "description": "Approved quotation prices define each item's boundary; missing and rejected rows cannot become a cheapest eligible detail.",
+      "columns": [
+        "Item",
+        "Eligible known prices",
+        "Minimum",
+        "Returned quotation identities"
+      ],
+      "rows": [
+        [
+          "CAM",
+          "80, 60, 60",
+          "60",
+          "2 and 3"
+        ],
+        [
+          "MIC",
+          "20",
+          "20",
+          "5"
+        ],
+        [
+          "UNK",
+          "None",
+          "NULL",
+          "No known-price detail"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required; comparison and detail-selection table",
+    "technical_review": "authored draft; independent check pending",
+    "server_rendering": "pending",
+    "browser_rendering": "unverified",
+    "independent_review": "pending"
+  },
+  "authoring_status": "drafted; verification pending",
+  "sql_verification": {
+    "scope": "not executed; exact MySQL 8.4/provider and compatibility execution pending",
+    "all_passed": false,
+    "cases": []
+  }
+}

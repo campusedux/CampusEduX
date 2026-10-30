@@ -1,0 +1,623 @@
+{
+  "source_ref": "chapter-7-relational-algebra/intersection",
+  "slug": "intersection",
+  "title": "Intersection",
+  "description": "Find tuples shared by compatible populations, distinguish exact membership from join combinations, and preserve set duplicate and SQL NULL semantics in translations.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Intersection requires membership in both inputs\n\nIntersection in relational algebra returns tuples present in both compatible relations. If Honors contains identifiers one, two, and five while DeanList contains two and three, their intersection contains only two. The operation answers a shared-membership question, not an inclusive either question and not a request to concatenate all source occurrences.\n\nThe classical result is a set. If a tuple belongs to both populations, it appears once regardless of how many SQL source rows happen to represent that value. Input relations need corresponding attribute meanings and compatible domains. An empty input makes the intersection empty because no tuple can then satisfy membership in both sets.\n\n## Compatible shapes must also have compatible meaning\n\nSQL set operations require equal column counts and supported type compatibility in corresponding positions. That does not prove the roles are conceptually interchangeable. Student identifiers and course identifiers can share an integer type while belonging to different identity spaces. A matching number across those sources does not establish that a student belongs to a course relationship.\n\nFor a two-attribute intersection, compare corresponding complete roles such as student_id and course_id on both sides. Swapping the order in one branch can compare the wrong values. Use explicit projections and clear output names rather than SELECT star over independently changing tables. The intended shared fact should be understandable before considering conversions the engine might accept.\n\n## Native INTERSECT states the shared-set operation\n\nMySQL 8.4 supports INTERSECT. In the illustrated form, plain INTERSECT uses distinct semantics, returning one copy of each shared selected tuple. Older product versions can have different feature availability, so a lesson should name the target version instead of teaching that MySQL categorically lacks the operation. Exact provider execution remains a separate verification question.\n\n```sql\nSELECT student_id FROM honors_students\nINTERSECT\nSELECT student_id FROM deans_list\nORDER BY student_id;\n```\n\nThe query retains shared student identities. The final ordering is explicit; shared membership does not imply a guaranteed presentation sequence. A disjoint population produces no rows, while identical nonempty inputs produce their distinct common contents. These are useful basic fixtures before reasoning about richer multi-column inputs.\n\n## Join output is not automatically intersection\n\nAn inner join combines matching source rows and can expose attributes from both sides. A set intersection compares the selected tuples of same-shaped populations. If Honors has student two twice and DeanList has it three times, joining on student_id can produce six combinations for that identity. A plain intersection should still return one shared identifier under distinct semantics.\n\nA join-based translation can therefore need an explicit projection and duplicate elimination. It must also match every relevant attribute, not merely one convenient identifier when the intended tuple has several components. The existence of a join keyword does not establish equivalent result grain. Inspect what is compared, what is selected, and how repetitions are handled.\n\n## Membership predicates can express a semijoin\n\nFor nonmissing single-column identifiers, selecting distinct identities from one population with an IN membership condition over the other can express the shared set. EXISTS can express a corresponding matching condition. The result still needs the proper duplicate policy if the first source contains repeated values. A predicate admitting several repeated rows is not automatically a distinct set result.\n\nThe term semijoin is useful here: retain qualifying values or tuples from one side based on whether a match exists, rather than returning every pair of matching source occurrences. Whether that implementation is preferable depends on the task and supported plans. No one syntax should be declared universally faster without actual workload evidence.\n\n## Complete tuples prevent false shared membership\n\nSuppose RequiredEnrollment contains (Student 1, Course 10) and (Student 1, Course 20), while Completed contains only (Student 1, Course 10). Their shared pair set contains only the first pair. Matching on student_id alone would wrongly admit Course 20 because that student completed some course, not necessarily the particular course in the selected tuple.\n\nThe same principle applies to campus-scoped identifiers and term-specific facts. Shared student name, local number, or catalogue course code can be insufficient when the actual identity includes another role. Projection before intersection changes the question. Intersecting student ids answers who appears in both populations, while intersecting enrollment pairs asks which participation facts are shared.\n\n## DISTINCT and ALL describe different multiplicities\n\nThe default distinct intersection has the classical set-style meaning in this tutorial. Where a dialect supports an ALL variant, its duplicate multiplicity is another contract rather than the same operation with a different spelling. Do not assume a bag intersection either preserves every Cartesian join match or always collapses to one row.\n\nThe exercises deliberately use plain distinct semantics. They include duplicate source occurrences so a mistaken join without deduplication becomes visible. A request to count shared identities can aggregate the distinct result, while a request to measure source occurrences needs a separately defined rule. Name the counted object instead of using a vague total of common students for several incompatible measurements.\n\n## SQL absence rules need careful translations\n\nNative distinct set operations have specified handling for NULLs. A nullable tuple can be common under set-operation semantics even though an ordinary equality predicate involving NULL yields UNKNOWN. A join or IN translation using normal equality can therefore differ from native intersection when nullable components are involved. An equivalence proven only for required values should state that assumption.\n\nFor MySQL, a suitable NULL-safe equality predicate can support an explicit translation when the domain requires that matching behaviour. But choosing it needs a contract for absent values and all selected components. Do not infer that missing identifiers identify actual people or that every NULL represents the same real-world entity. Result-value comparison and domain identity are different questions.\n\n## Filters define the populations being intersected\n\nA report asking for active honors students who also have an active dean's-list membership needs the appropriate eligibility in both input populations. Removing duplicates after intersection cannot repair a wrong source condition. A student with only an inactive membership in one list may be excluded under that policy even if the raw identifier appears in both physical tables.\n\nPredicate placement can change the result when the inputs include status, dates, or other roles. If eligibility belongs to the source occurrence, filter that source before constructing the intended selected tuple set. Retaining status in the set comparison can also change equality: active and inactive become different selected tuples rather than merely different reasons for eligibility.\n\n## Algebraic properties describe logic, not plans\n\nUnder compatible classical set assumptions, intersection is commutative: exchanging the operands does not change the shared set. Intersecting a relation with itself returns that relation, and intersecting with the empty set returns empty. These are useful checks on intended semantics. They do not require a database to execute both textual forms with identical physical plans or runtime costs.\n\nMixed set expressions still need clear grouping and supported SQL syntax. A shared population of a union can differ from unioning one branch with an intersection if the grouping changes. Use named stages or parentheses where they help readers see which populations each operator consumes. Logical clarity is more reliable than memorizing one unqualified operator-order slogan.\n\n## Validate overlap, duplicates and tuple roles\n\nUse partially overlapping inputs, identical inputs, disjoint inputs, duplicate occurrences on both sides, and one empty input. For pair intersection, include a shared first component with a different second component to expose incomplete comparisons. Check final labels and ordering separately from membership. Small counterexamples make the result contract visible without a large or unrealistic fixture.\n\nThe exercises verify shared student identities and shared student-course pairs on isolated nonmissing SQL fixtures. Their required-value assumption makes native and join-based membership reasoning straightforward while leaving nullable translations explicitly separate. MariaDB reference execution is not exact MySQL/provider proof. Intersection is useful when complete tuple meaning, source eligibility, duplicate policy, absence assumptions, and output grain are all preserved rather than inferred from any successful inner join.\n",
+  "references": [
+    {
+      "title": "MySQL 8.4 set operations",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/set-operations.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-7-intersection",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-7-intersection-1",
+          "test_id": "pt-dbms-sql-7-intersection",
+          "question_text": "What does the Intersection operation (∩) return?",
+          "options": [
+            "Rows present in either of two relations",
+            "Rows present in BOTH of two union-compatible relations",
+            "All rows from the first relation only",
+            "The column names common to two relations"
+          ],
+          "correct_index": 1,
+          "explanation": "Intersection returns exactly the overlap — rows appearing in both relations.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-7-intersection-2",
+          "test_id": "pt-dbms-sql-7-intersection",
+          "question_text": "Which SQL keyword implements native shared-set intersection in MySQL 8.4?",
+          "options": [
+            "UNION",
+            "INTERSECT",
+            "EXCEPT",
+            "JOIN"
+          ],
+          "correct_index": 1,
+          "explanation": "INTERSECT is the standard SQL keyword for this operation.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-7-intersection-3",
+          "test_id": "pt-dbms-sql-7-intersection",
+          "question_text": "For required single-column ids, which approach can express distinct intersection when native syntax is unavailable?",
+          "options": [
+            "It cannot be simulated at all",
+            "Use membership or a matching join with the full intended comparison and explicit duplicate elimination as needed",
+            "By using UNION twice",
+            "By using ORDER BY on both queries"
+          ],
+          "correct_index": 1,
+          "explanation": "A bare join can multiply duplicate occurrences; nullable inputs need additional semantic care.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-7-intersection-4",
+          "test_id": "pt-dbms-sql-7-intersection",
+          "question_text": "What requirement do the two relations combined with Intersection share with Union?",
+          "options": [
+            "They must both be empty",
+            "They must be union-compatible: same number of columns, with compatible types",
+            "They must have the same primary key values",
+            "There is no shared requirement"
+          ],
+          "correct_index": 1,
+          "explanation": "Compatible SQL column counts and types are needed, and corresponding roles must also mean the same kind of fact.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-7-intersection-5",
+          "test_id": "pt-dbms-sql-7-intersection",
+          "question_text": "Is Intersection the same thing as an inner join?",
+          "options": [
+            "Yes, they are identical operations",
+            "No — Intersection compares whole rows across same-shaped relations; a join combines rows from potentially differently-shaped relations based on a matching condition",
+            "Inner join is a special, simpler case with no real difference",
+            "Intersection only works on single-column relations, unlike joins"
+          ],
+          "correct_index": 1,
+          "explanation": "The two operations solve different problems: whole-row set overlap vs. combining columns from possibly-different relations via a match condition.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-7-intersection-6",
+          "test_id": "pt-dbms-sql-7-intersection",
+          "question_text": "Does standard SQL's INTERSECT remove duplicate rows from its result by default?",
+          "options": [
+            "No, it preserves every duplicate",
+            "Yes, by default — mirroring the same set-based semantics as UNION",
+            "Only if ORDER BY is also specified",
+            "INTERSECT has no concept of duplicates"
+          ],
+          "correct_index": 1,
+          "explanation": "INTERSECT deduplicates by default, just like UNION, consistent with set semantics.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-7-intersection-7",
+          "test_id": "pt-dbms-sql-7-intersection",
+          "question_text": "Which statement about the target version and historical MySQL support is accurate?",
+          "options": [
+            "INTERSECT has always been universally supported with zero exceptions",
+            "MySQL 8.4 supports INTERSECT; older versions can lack it, so syntax support must be tied to the actual version",
+            "PostgreSQL has never supported INTERSECT",
+            "INTERSECT is exclusive to NoSQL databases"
+          ],
+          "correct_index": 1,
+          "explanation": "Do not generalize a historical limitation to the stated modern target; local MariaDB checks remain separate from exact target execution.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-7-intersection-8",
+          "test_id": "pt-dbms-sql-7-intersection",
+          "question_text": "If honors_students contains {1,2,5} and deans_list contains {2,3}, what does their Intersection return?",
+          "options": [
+            "{1,2,3,5}",
+            "{2}",
+            "{1,5}",
+            "{}"
+          ],
+          "correct_index": 1,
+          "explanation": "Only student_id 2 appears in both sets, so the intersection is exactly {2}.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-7-intersection-new-9",
+          "test_id": "pt-dbms-sql-7-intersection",
+          "question_text": "Honors is {1,2,5} and DeanList is {2,3}. Which set is common?",
+          "options": [
+            "{1,2,3,5}",
+            "{2}",
+            "{1,5}",
+            "{3}"
+          ],
+          "correct_index": 1,
+          "explanation": "Shared membership requires presence in both populations.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-7-intersection-new-10",
+          "test_id": "pt-dbms-sql-7-intersection",
+          "question_text": "One input is empty. What is its classical intersection with any compatible set?",
+          "options": [
+            "The other entire set",
+            "One NULL row",
+            "Empty",
+            "A missing schema"
+          ],
+          "correct_index": 2,
+          "explanation": "No tuple is present in both.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-7-intersection-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-7-intersection-application-new-1",
+          "test_id": "pt-dbms-sql-7-intersection-application",
+          "question_text": "Why can a duplicate-preserving join differ from distinct INTERSECT?",
+          "options": [
+            "INTERSECT always changes identifiers",
+            "Joins cannot compare integers",
+            "Matching occurrences can multiply combinations",
+            "Every join result is automatically distinct"
+          ],
+          "correct_index": 2,
+          "explanation": "The result multiplicity contracts differ.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-7-intersection-application-new-2",
+          "test_id": "pt-dbms-sql-7-intersection-application",
+          "question_text": "Two rows on one side and three on the other share one id. How many join combinations can occur?",
+          "options": [
+            "1 always",
+            "2",
+            "3",
+            "6"
+          ],
+          "correct_index": 3,
+          "explanation": "Every matching occurrence can pair with each occurrence on the other side.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-7-intersection-application-new-3",
+          "test_id": "pt-dbms-sql-7-intersection-application",
+          "question_text": "Why compare course_id as well as student_id for shared enrollment pairs?",
+          "options": [
+            "Completion of some course is not completion of every course for that student",
+            "The course title is always unique",
+            "Only one selected role matters",
+            "A join automatically infers the intended pair"
+          ],
+          "correct_index": 0,
+          "explanation": "The full selected tuple determines shared membership.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-7-intersection-application-new-4",
+          "test_id": "pt-dbms-sql-7-intersection-application",
+          "question_text": "Does intersecting student ids answer the same question as intersecting student-course pairs?",
+          "options": [
+            "Yes; identities never affect grain",
+            "No; projection changes the selected fact grain",
+            "Only if rows are sorted",
+            "Only if both sources have keys"
+          ],
+          "correct_index": 1,
+          "explanation": "The chosen attributes determine what counts as common.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-7-intersection-application-new-5",
+          "test_id": "pt-dbms-sql-7-intersection-application",
+          "question_text": "Can ordinary equality translations differ from native set operations on NULLs?",
+          "options": [
+            "No; NULL always equals every value",
+            "Only if there are no attributes",
+            "Yes; their specified NULL comparison behaviour can differ",
+            "Only if the table is empty"
+          ],
+          "correct_index": 2,
+          "explanation": "State required-value assumptions or use a justified translation.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-7-intersection-application-new-6",
+          "test_id": "pt-dbms-sql-7-intersection-application",
+          "question_text": "Does a first-source membership predicate automatically remove duplicates?",
+          "options": [
+            "Yes; IN always deduplicates every selected source row",
+            "Only when ids are missing",
+            "Only if no ORDER BY appears",
+            "No; DISTINCT or another suitable set formulation can still be needed"
+          ],
+          "correct_index": 3,
+          "explanation": "Qualifying repeated input occurrences can remain repeated.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-7-intersection-application-new-7",
+          "test_id": "pt-dbms-sql-7-intersection-application",
+          "question_text": "What property holds for compatible classical intersection?",
+          "options": [
+            "Commutativity",
+            "Operand direction always changes membership",
+            "It always contains the full union",
+            "It adds new tuples not present in either source"
+          ],
+          "correct_index": 0,
+          "explanation": "Both operand orders identify the same shared set.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-7-intersection-application-new-8",
+          "test_id": "pt-dbms-sql-7-intersection-application",
+          "question_text": "Can final duplicate removal fix an incorrectly admitted inactive identity?",
+          "options": [
+            "Yes; inactive rows always repeat",
+            "No; source eligibility needs the correct rule",
+            "Only if active is text",
+            "Only if a primary key exists"
+          ],
+          "correct_index": 1,
+          "explanation": "Population and multiplicity are separate.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-7-intersection-application-new-9",
+          "test_id": "pt-dbms-sql-7-intersection-application",
+          "question_text": "What must a count of shared students specify?",
+          "options": [
+            "Only a short alias",
+            "Only the source filename",
+            "Whether it counts distinct identities or another defined occurrence population",
+            "Only displayed name length"
+          ],
+          "correct_index": 2,
+          "explanation": "Different count grains can yield different totals.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-7-intersection-application-new-10",
+          "test_id": "pt-dbms-sql-7-intersection-application",
+          "question_text": "What does a local nonmissing fixture fail to prove?",
+          "options": [
+            "Its tested native shared-set output",
+            "Its explicit final ordering",
+            "Its supplied duplicate cases",
+            "Every nullable translation and exact provider execution"
+          ],
+          "correct_index": 3,
+          "explanation": "Evidence has the scope of the executed assumptions.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cx-intersection-identities",
+      "slug": "intersection-identities",
+      "title": "Find distinct identities on both distinction lists",
+      "difficulty": "Easy",
+      "task": "Use plain INTERSECT to return each student_id present in both honors_students and deans_list exactly once. Input occurrences may repeat.",
+      "schema_sql": "CREATE TABLE honors_students (student_id INT NOT NULL);\nCREATE TABLE deans_list (student_id INT NOT NULL);",
+      "seed_sql": "INSERT INTO honors_students VALUES (1),(2),(2),(5); INSERT INTO deans_list VALUES (2),(2),(3);",
+      "expected": "student_id\n2",
+      "ordering": "Ascending student_id.",
+      "constraints": [
+        "Student identities are nonmissing integers.",
+        "The syntax targets MySQL 8.4; local execution is recorded as MariaDB compatibility evidence."
+      ],
+      "edge_cases": [
+        "Duplicates on both sides must not multiply distinct output.",
+        "One empty input yields an empty result."
+      ],
+      "hints": [
+        "Use the native distinct set operator.",
+        "Order the combined result explicitly."
+      ],
+      "solution_sql": "SELECT student_id FROM honors_students INTERSECT SELECT student_id FROM deans_list ORDER BY student_id;",
+      "explanation": "The operator returns common selected identities rather than matching source-occurrence combinations. Output fixtures alone do not prove arbitrary code used the requested syntax.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO honors_students VALUES (9),(2); INSERT INTO deans_list VALUES (9),(2),(9);",
+          "expected": "student_id\n2\n9"
+        },
+        {
+          "seed_sql": "INSERT INTO honors_students VALUES (1);",
+          "expected": ""
+        }
+      ]
+    },
+    {
+      "id": "cx-intersection-pairs",
+      "slug": "intersection-pairs",
+      "title": "Match complete student-course tuples without join fan-out",
+      "difficulty": "Medium",
+      "task": "Return each distinct student_id and course_id pair present in both required_pairs and completed_pairs. Compare both components and collapse repeated source occurrences.",
+      "schema_sql": "CREATE TABLE required_pairs (student_id INT NOT NULL, course_id INT NOT NULL);\nCREATE TABLE completed_pairs (student_id INT NOT NULL, course_id INT NOT NULL);",
+      "seed_sql": "INSERT INTO required_pairs VALUES (1,10),(1,20),(2,10),(2,10); INSERT INTO completed_pairs VALUES (1,10),(2,10),(2,10),(2,30);",
+      "expected": "student_id\tcourse_id\n1\t10\n2\t10",
+      "ordering": "Ascending student_id, course_id.",
+      "constraints": [
+        "All selected components are nonmissing; nullable equivalence is outside this fixture contract."
+      ],
+      "edge_cases": [
+        "A student can have another nonmatching course.",
+        "Duplicates on both sides must not multiply the pair report."
+      ],
+      "hints": [
+        "Use the full participant pair in the matching condition.",
+        "Project distinct pairs if using a join translation."
+      ],
+      "solution_sql": "SELECT DISTINCT r.student_id, r.course_id FROM required_pairs r JOIN completed_pairs c ON c.student_id = r.student_id AND c.course_id = r.course_id ORDER BY r.student_id, r.course_id;",
+      "explanation": "The full comparison and DISTINCT preserve the intended set intersection rather than a student-only match or bag of join combinations.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO required_pairs VALUES (1,20); INSERT INTO completed_pairs VALUES (1,10);",
+          "expected": ""
+        },
+        {
+          "seed_sql": "INSERT INTO required_pairs VALUES (1,10),(1,10); INSERT INTO completed_pairs VALUES (1,10),(1,10);",
+          "expected": "student_id\tcourse_id\n1\t10"
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-7-intersection-1",
+      "test_id": "pt-dbms-sql-7-intersection",
+      "question_text": "What does the Intersection operation (∩) return?",
+      "options": [
+        "Rows present in either of two relations",
+        "Rows present in BOTH of two union-compatible relations",
+        "All rows from the first relation only",
+        "The column names common to two relations"
+      ],
+      "correct_index": 1,
+      "explanation": "Intersection returns exactly the overlap — rows appearing in both relations.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-7-intersection-2",
+      "test_id": "pt-dbms-sql-7-intersection",
+      "question_text": "Which SQL keyword directly implements Intersection in dialects that support it?",
+      "options": [
+        "UNION",
+        "INTERSECT",
+        "EXCEPT",
+        "JOIN"
+      ],
+      "correct_index": 1,
+      "explanation": "INTERSECT is the standard SQL keyword for this operation.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-7-intersection-3",
+      "test_id": "pt-dbms-sql-7-intersection",
+      "question_text": "How can Intersection be simulated in a dialect that lacks native INTERSECT support?",
+      "options": [
+        "It cannot be simulated at all",
+        "Using a WHERE ... IN (subquery) pattern (or an INNER JOIN), checking membership in the second relation",
+        "By using UNION twice",
+        "By using ORDER BY on both queries"
+      ],
+      "correct_index": 1,
+      "explanation": "An IN-subquery (or equivalent INNER JOIN) achieves the same logical result as INTERSECT.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-7-intersection-4",
+      "test_id": "pt-dbms-sql-7-intersection",
+      "question_text": "What requirement do the two relations combined with Intersection share with Union?",
+      "options": [
+        "They must both be empty",
+        "They must be union-compatible: same number of columns, with compatible types",
+        "They must have the same primary key values",
+        "There is no shared requirement"
+      ],
+      "correct_index": 1,
+      "explanation": "Both Union and Intersection require union-compatibility between their operand relations.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-7-intersection-5",
+      "test_id": "pt-dbms-sql-7-intersection",
+      "question_text": "Is Intersection the same thing as an inner join?",
+      "options": [
+        "Yes, they are identical operations",
+        "No — Intersection compares whole rows across same-shaped relations; a join combines rows from potentially differently-shaped relations based on a matching condition",
+        "Inner join is a special, simpler case with no real difference",
+        "Intersection only works on single-column relations, unlike joins"
+      ],
+      "correct_index": 1,
+      "explanation": "The two operations solve different problems: whole-row set overlap vs. combining columns from possibly-different relations via a match condition.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-7-intersection-6",
+      "test_id": "pt-dbms-sql-7-intersection",
+      "question_text": "Does standard SQL's INTERSECT remove duplicate rows from its result by default?",
+      "options": [
+        "No, it preserves every duplicate",
+        "Yes, by default — mirroring the same set-based semantics as UNION",
+        "Only if ORDER BY is also specified",
+        "INTERSECT has no concept of duplicates"
+      ],
+      "correct_index": 1,
+      "explanation": "INTERSECT deduplicates by default, just like UNION, consistent with set semantics.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-7-intersection-7",
+      "test_id": "pt-dbms-sql-7-intersection",
+      "question_text": "What historical dialect limitation is worth knowing about INTERSECT?",
+      "options": [
+        "INTERSECT has always been universally supported with zero exceptions",
+        "Older MySQL versions lacked native INTERSECT support, requiring an IN-subquery/INNER JOIN workaround instead; modern MySQL versions have added support",
+        "PostgreSQL has never supported INTERSECT",
+        "INTERSECT is exclusive to NoSQL databases"
+      ],
+      "correct_index": 1,
+      "explanation": "This is a genuine, practically relevant dialect history worth checking before relying on native INTERSECT.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-7-intersection-8",
+      "test_id": "pt-dbms-sql-7-intersection",
+      "question_text": "If honors_students contains {1,2,5} and deans_list contains {2,3}, what does their Intersection return?",
+      "options": [
+        "{1,2,3,5}",
+        "{2}",
+        "{1,5}",
+        "{}"
+      ],
+      "correct_index": 1,
+      "explanation": "Only student_id 2 appears in both sets, so the intersection is exactly {2}.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "coordinator",
+    "independent_review": "unavailable; no agent tools",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Definitions and examples checked against questions; no plagiarism certification.",
+    "existing_question_corrections": [
+      "tq-dbms-sql-7-intersection-2",
+      "tq-dbms-sql-7-intersection-3",
+      "tq-dbms-sql-7-intersection-4",
+      "tq-dbms-sql-7-intersection-7"
+    ],
+    "canonical_answer_indices_preserved": true,
+    "batch_review": {
+      "reviewer": "coordinator",
+      "independent": false,
+      "scope": "New package only: notes, keyed examples, original question identities and canonical indices, every correct answer, exercises and recorded fixture outputs, diagram trace, content-only paired integration.",
+      "findings_resolved": "Outer Join retained absence question clarified: missing parent is a violation only when the modeled relationship requires it. Division retains its original Hard exercise; validator permits retained Hard alongside Easy while rejecting a new Hard substitute.",
+      "remaining": "Exact MySQL/provider execution, browser QA, independent review and applied-migration behavior unverified; output fixtures do not prove required source technique."
+    }
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-7-intersection",
+    "original_note_sha256": "7d1d115610e8b77939a3b139de6d9fca7e3a84a5bf622d46c8e681c087b2da7e",
+    "status": "paired migration prepared; not applied"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Complete pair intersection excludes a shared student’s other course",
+      "description": "A matching student identifier is insufficient when the result grain is a student-course tuple. Repeated source occurrences do not create extra distinct common pairs.",
+      "columns": [
+        "Required pair",
+        "Completed pair evidence",
+        "Shared tuple?"
+      ],
+      "rows": [
+        [
+          "(1, 10)",
+          "(1, 10) present",
+          "Yes"
+        ],
+        [
+          "(1, 20)",
+          "Only (1, 10) present for student 1",
+          "No"
+        ],
+        [
+          "(2, 10), repeated twice",
+          "(2, 10), repeated twice",
+          "Yes, one distinct output pair"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "coordinator checked complete tuple comparison, duplicate fan-out counterexample and nonmissing translation assumptions",
+    "server_rendering": "passed",
+    "browser_rendering": "unverified",
+    "independent_review": "unavailable; no agent tools",
+    "server_rendering_evidence": "Selected actual LessonBlock tests passed for the new set-operation batch; unchanged packages intentionally skipped."
+  },
+  "sql_verification": {
+    "engine": "11.8.6-MariaDB-0+deb13u1 from Debian",
+    "scope": "MariaDB compatibility execution; exact MySQL 8.4/provider execution unverified",
+    "fingerprint": "cd6eed9e13b7dd60df8cfbf78ba0e1cc712d36e04e419d2f5e671364450e4a8c",
+    "cases": [
+      {
+        "problem": "intersection-identities",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "intersection-identities",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "intersection-identities",
+        "case": 2,
+        "passed": true
+      },
+      {
+        "problem": "intersection-pairs",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "intersection-pairs",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "intersection-pairs",
+        "case": 2,
+        "passed": true
+      }
+    ],
+    "all_passed": true
+  }
+}

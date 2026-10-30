@@ -1,0 +1,510 @@
+{
+  "source_ref": "chapter-21-normalization-and-functional-dependencies/candidate-key-derivation",
+  "slug": "candidate-key-derivation",
+  "title": "Candidate Key Derivation",
+  "description": "Derive every candidate key from verified functional dependencies using closure, mandatory attributes, systematic pruning and explicit minimality checks.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Identify every minimal determinant of the relation\n\nA candidate key is a set of attributes that determines every attribute of a relation and loses that ability when any attribute is removed. Deriving keys means proving both coverage and minimality from the permitted-state rules. A column combination that happens to be unique in a spreadsheet is only an observation about that spreadsheet. The application may permit a future row that repeats the combination.\n\nRead [functional dependencies](/learning/dbms-sql-tutorial/functional-dependency), [attribute closure](/learning/dbms-sql-tutorial/closure-of-attributes) and [candidate keys](/learning/dbms-sql-tutorial/candidate-key). This topic connects them into a repeatable procedure. Work with classical relations and a verified dependency set first; SQL nullability, collation and write enforcement require a subsequent implementation review.\n\n## State the relation and the complete dependency set\n\nConsider a current enrolment relation with eight attributes: StudentID, StudentName, CourseID, CourseName, InstructorID, InstructorName, InstructorOffice and EnrollmentDate. Assume each student has one current name, each course has one current title and assigned instructor, and each instructor has one current name and office. Each student-course pair has one current enrollment date.\n\nThe declared dependencies are StudentID determines StudentName; CourseID determines CourseName and InstructorID; InstructorID determines InstructorName and InstructorOffice; and StudentID together with CourseID determines EnrollmentDate. No additional dependencies are assumed. An instructor may teach several courses, and a student may enroll in several courses. These permissions explain why reversing an arrow is not justified.\n\nA history model could require different keys. If several enrollments for the same student and course coexist, an attempt or enrollment identity may be needed. Multiple course instructors or dated office assignments also change the dependencies. Deriving a perfect key for an incorrectly stated relation does not fix that modeling error. Confirm what one row represents before doing formal calculations.\n\n## Compute closure until no rule adds information\n\nStart a closure with the proposed determinant itself. Repeatedly apply any dependency whose entire left side is already known, adding its right-side attributes. Continue until a complete pass adds nothing. Dependencies may become applicable after earlier additions, so reading the list just once can miss a necessary chain.\n\nFor CourseID alone, add CourseName and InstructorID. InstructorID then supplies InstructorName and InstructorOffice. The closure contains five attributes. It never obtains StudentID, StudentName or EnrollmentDate. CourseID is therefore not a superkey of this relation, irrespective of whether a friendly sample currently contains only one student per course.\n\nFor StudentID alone, the closure contains StudentID and StudentName. For StudentID plus InstructorID, it also obtains the instructor name and office, totaling five attributes. Nothing supplies CourseID, CourseName or EnrollmentDate. An instructor identity is not an alternate course identity when an instructor can teach multiple courses.\n\n## Establish coverage and then prove minimality\n\nFor StudentID together with CourseID, both descriptive chains apply, and the pair determines EnrollmentDate. Its closure reaches all eight attributes. That proves the pair is a superkey. Now remove StudentID and compute the remaining CourseID closure; it fails. Remove CourseID and compute the StudentID closure; it fails too. The pair is minimal and therefore a candidate key.\n\n| Starting set | Closure size | Verdict |\n|---|---|---|\n| StudentID | 2 | Not a superkey |\n| CourseID | 5 | Not a superkey |\n| StudentID, InstructorID | 5 | Not a superkey |\n| StudentID, CourseID | 8 | Candidate after removal checks |\n\nFor any finite proposed key, testing every single-attribute removal is sufficient to establish minimality once coverage is known. If a smaller proper subset were a superkey, one of the one-removal supersets containing it would also be a superkey. This follows from the fact that adding attributes cannot reduce closure. Testing just one arbitrary removal is insufficient.\n\n## Use mandatory attributes to reduce the search\n\nAn attribute absent from every right-hand side cannot be derived from other attributes under the stated dependency set. Any superkey must contain it. In the enrolment example, StudentID and CourseID never appear on the right, so every key must contain both. Their pair is already a candidate key, which proves that no different minimal key exists under these assumptions.\n\nThis is a useful pruning rule, not an instruction to ignore the remaining dependencies. Some relations have no such mandatory attribute, and some mandatory sets are not yet superkeys. Start with the mandatory set, compute its closure, and add combinations of remaining attributes only when needed. Reject supersets of an already discovered candidate key because they cannot be minimal.\n\nAttributes appearing on a right-hand side are not automatically forbidden from keys. A reversible dependency can make either side useful. Classify attributes according to the actual closure implications rather than memorizing a rule that dependent columns never belong to a key. That mistaken shortcut can miss alternate candidate keys and corrupt later normal-form analysis.\n\n## Enumerate alternatives instead of stopping at the first key\n\nConsider a separate relation with attributes A, B and C and dependencies A determines B and B determines A. Neither rule derives C, so C must be in every key. A together with C reaches B; B together with C reaches A. Both AC and BC are minimal superkeys. Finding AC does not justify stopping before BC is considered.\n\nThe set ABC is a superkey but is not a candidate key because removing A leaves BC, which still determines everything. Candidate means minimal by containment, rather than globally shortest among all keys. Another dependency system can have candidate keys of different sizes. A larger minimal key remains a candidate when none of its own proper subsets determines the relation.\n\nEvery attribute belonging to at least one candidate key is prime. In the AC and BC example, all three attributes are prime even though no single key contains a unique special category of primary attributes. Selecting AC as the SQL primary key does not make B nonprime. Normal-form definitions use all candidate keys, not just the chosen implementation key.\n\n## Keep the empty determinant in the formal model\n\nThe empty set has a closure too. Begin with no known attributes and apply dependencies with an empty left side, if the domain includes constant facts. A relation whose entire contents are determined by constants can have the empty set as a candidate key in the classical model. Ordinary introductory examples generally exclude that unusual case, but the procedure should state its assumptions.\n\nFor the enrolment dependencies, the empty closure adds nothing, so it is not a superkey. The mandatory-attribute reasoning and pair derivation remain unchanged. A singleton key should still be checked against the empty subset when constants are possible; calling every single attribute automatically minimal overlooks this boundary.\n\n## Separate proof from implementation and observation\n\nA duplicate query can refute an implementation's proposed required key by finding two conflicting rows, but a clean scan cannot prove every permitted future state. Conversely, a formal key derivation does not demonstrate that the application installed suitable constraints or aligned text comparison and nullability with the model. Those are separate evidence levels.\n\nA SQL UNIQUE declaration allowing multiple nulls does not directly implement a classical required identifier. A surrogate primary key can distinguish physical rows while leaving a repeated business combination unconstrained. Preserve the derived identity rule when reviewing schema enforcement instead of assuming one generated identifier makes every business dependency true.\n\n## Explain why a search is complete\n\nA derivation should explain not only why its listed keys work, but why none were missed. In the enrolment example, the two mandatory attributes provide that argument immediately: every superkey contains both, and their pair is already minimal. Enumerating arbitrary larger combinations adds no new candidate. In the alternate-key example, the mandatory attribute C leaves two meaningful single additions, A or B, and both were checked.\n\nWhen mandatory attributes do not finish the problem, enumerate remaining subsets in increasing size and retain each failed closure as evidence. Skip any combination containing a known key because it cannot be minimal. This pruning improves practical work without removing the worst-case exponential search problem. Do not claim polynomial enumeration merely because one small exercise has a short proof. A reviewable answer states which search space was eliminated by implication and which combinations were explicitly tested.\n\n## Practice coverage, alternatives and failed proofs\n\nFor a first exercise, derive the enrolment key without using the table above. Write each closure addition with the dependency that justified it, then explain why InstructorID cannot replace CourseID. For a second exercise, derive all keys of ABC under A determines B and B determines A. Show the two minimal keys and reject the full-set superkey explicitly.\n\nAs an extension, add C determines B to that second dependency set and recompute from the beginning. C then determines B and A, so C alone is a candidate key; AC and BC are no longer minimal. A small rule change can therefore alter the entire key inventory. Record the exact dependency set alongside each result so another learner can reproduce the reasoning.\n\nContinue with [minimal covers](/learning/dbms-sql-tutorial/minimal-cover) and [BCNF](/learning/dbms-sql-tutorial/bcnf). A defensible derivation lists the relation, assumptions, closure steps, all candidate keys and every minimality argument. It never substitutes present-day uniqueness or column naming conventions for the domain rules.",
+  "references": [
+    {
+      "title": "Database System Concepts: relational database design teaching materials",
+      "url": "https://www.db-book.com/slides-dir/index.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-21-candidate-key-derivation",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-21-candidate-key-derivation-1",
+          "test_id": "pt-dbms-sql-21-candidate-key-derivation",
+          "question_text": "What two conditions must an attribute set K satisfy to be a candidate key?",
+          "options": [
+            "K must be a single attribute, and it must be numeric",
+            "K+ must equal all attributes of the relation (superkey), and no proper subset of K may also satisfy that (minimality)",
+            "K must appear first in the CREATE TABLE statement",
+            "K must have no NULL values ever inserted"
+          ],
+          "correct_index": 1,
+          "explanation": "Candidate key status requires both being a superkey (closure reaches everything) and being minimal (no smaller subset also works).",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-21-candidate-key-derivation-2",
+          "test_id": "pt-dbms-sql-21-candidate-key-derivation",
+          "question_text": "For the eight-attribute enrolment relation and exact dependency set stated in the notes, why does {CourseID} alone fail to be a candidate key of StudentCourse?",
+          "options": [
+            "Because CourseID is a foreign key by convention",
+            "Because {CourseID}+ only reaches 5 of the 8 attributes, never determining StudentID, StudentName, or EnrollmentDate",
+            "Because CourseID values are not unique in the sample data",
+            "Because CourseID must always be paired with InstructorID"
+          ],
+          "correct_index": 1,
+          "explanation": "Its closure {CourseID, CourseName, InstructorID, InstructorName, InstructorOffice} falls short of all 8 attributes, so CourseID alone is not even a superkey, let alone a candidate key.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-21-candidate-key-derivation-3",
+          "test_id": "pt-dbms-sql-21-candidate-key-derivation",
+          "question_text": "For the eight-attribute enrolment relation and exact dependency set stated in the notes, why is {StudentID, CourseID} confirmed as a candidate key rather than merely a superkey?",
+          "options": [
+            "Because its closure reaches all 8 attributes AND neither {StudentID} alone nor {CourseID} alone also reaches all 8 (minimality holds)",
+            "Because it was the first pair tested",
+            "Because StudentID and CourseID are both integers",
+            "Because it is listed first in the schema"
+          ],
+          "correct_index": 0,
+          "explanation": "Superkey status alone isn't enough — minimality must also be verified by checking that no proper subset shares the same closure-reaches-everything property, which holds here.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-21-candidate-key-derivation-4",
+          "test_id": "pt-dbms-sql-21-candidate-key-derivation",
+          "question_text": "For the eight-attribute enrolment relation and exact dependency set stated in the notes, why does {StudentID, InstructorID} fail to qualify as a candidate key?",
+          "options": [
+            "Because it contains too many attributes",
+            "Because its closure only reaches 5 attributes (missing CourseID, CourseName, EnrollmentDate) — it is not even a superkey",
+            "Because InstructorID is never part of any candidate key",
+            "Because StudentID cannot be combined with InstructorID in any FD"
+          ],
+          "correct_index": 1,
+          "explanation": "No FD lets you derive CourseID from InstructorID (one instructor can teach several courses), so this pair's closure stops well short of all attributes and fails the superkey test outright.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-21-candidate-key-derivation-5",
+          "test_id": "pt-dbms-sql-21-candidate-key-derivation",
+          "question_text": "What is a 'prime attribute'?",
+          "options": [
+            "Any attribute with a numeric data type",
+            "An attribute that belongs to at least one candidate key of the relation",
+            "An attribute that is never null",
+            "The first attribute listed in the CREATE TABLE statement"
+          ],
+          "correct_index": 1,
+          "explanation": "Prime attributes are those participating in some candidate key — here, StudentID and CourseID are prime, and this classification matters later for the 3NF/BCNF distinction.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-21-candidate-key-derivation-6",
+          "test_id": "pt-dbms-sql-21-candidate-key-derivation",
+          "question_text": "Why is deriving a candidate key via closure computation more reliable than eyeballing sample data for uniqueness?",
+          "options": [
+            "It isn't more reliable — sample data is always sufficient",
+            "Sample data uniqueness could be coincidental to the current rows, while closure computation is grounded in the declared functional dependencies (business rules) that must hold for all valid data",
+            "Closure computation is faster to perform by hand",
+            "Eyeballing data always produces the same answer as closure computation"
+          ],
+          "correct_index": 1,
+          "explanation": "A few rows might show unique values purely by chance; only reasoning from the actual FDs (permanent business rules) guarantees the key holds for every possible valid instance.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-21-candidate-key-derivation-7",
+          "test_id": "pt-dbms-sql-21-candidate-key-derivation",
+          "question_text": "In the worst case, why can brute-force candidate key derivation become expensive for a relation with many attributes?",
+          "options": [
+            "Because closures cannot be computed for more than 3 attributes",
+            "Because testing every possible subset of n attributes is exponential (2^n combinations) in the worst case, though known FDs let designers prune obviously-insufficient candidates quickly in practice",
+            "Because SQL does not support composite keys",
+            "Because functional dependencies expire after a fixed number of rows"
+          ],
+          "correct_index": 1,
+          "explanation": "Exhaustively checking every subset scales exponentially with attribute count, but in practice you can eliminate subsets quickly once their closures are seen to fall short, as shown in the worked steps.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-21-candidate-key-derivation-8",
+          "test_id": "pt-dbms-sql-21-candidate-key-derivation",
+          "question_text": "For the eight-attribute enrolment relation and exact dependency set stated in the notes, for the StudentCourse relation, how many distinct candidate keys are there?",
+          "options": [
+            "Three: {StudentID}, {CourseID}, and {InstructorID}",
+            "Exactly one: {StudentID, CourseID}",
+            "Two: {StudentID, CourseID} and {StudentID, InstructorID}",
+            "None — the relation has no candidate key"
+          ],
+          "correct_index": 1,
+          "explanation": "Systematic closure testing shows only {StudentID, CourseID} reaches all 8 attributes with no smaller subset also doing so — it is the unique candidate key of this relation.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-21-candidate-key-derivation-new-9",
+          "test_id": "pt-dbms-sql-21-candidate-key-derivation",
+          "question_text": "Under A→B and B→A on ABC, which attribute belongs to every key?",
+          "options": [
+            "A only",
+            "C",
+            "B only",
+            "None"
+          ],
+          "correct_index": 1,
+          "explanation": "No dependency derives C, so it must be supplied.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-21-candidate-key-derivation-new-10",
+          "test_id": "pt-dbms-sql-21-candidate-key-derivation",
+          "question_text": "Which complete key inventory follows for that ABC relation?",
+          "options": [
+            "A and B",
+            "ABC only",
+            "AC and BC",
+            "AB only"
+          ],
+          "correct_index": 2,
+          "explanation": "Each includes C and one attribute that derives the other.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-21-candidate-key-derivation-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-21-candidate-key-derivation-application-new-1",
+          "test_id": "pt-dbms-sql-21-candidate-key-derivation-application",
+          "question_text": "Why is ABC not minimal under keys AC and BC?",
+          "options": [
+            "It contains letters",
+            "It has no SQL alias",
+            "It appears last",
+            "A proper subset already determines every attribute"
+          ],
+          "correct_index": 3,
+          "explanation": "Removing A leaves BC, still a superkey.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-21-candidate-key-derivation-application-new-2",
+          "test_id": "pt-dbms-sql-21-candidate-key-derivation-application",
+          "question_text": "Which check follows proving that K is a superkey?",
+          "options": [
+            "Remove each attribute and recompute closure",
+            "Count sample rows",
+            "Sort K alphabetically",
+            "Choose a numeric datatype"
+          ],
+          "correct_index": 0,
+          "explanation": "Candidate status requires no removable attribute.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-21-candidate-key-derivation-application-new-3",
+          "test_id": "pt-dbms-sql-21-candidate-key-derivation-application",
+          "question_text": "Can keys of different sizes both be candidates?",
+          "options": [
+            "No, only the smallest size survives",
+            "Yes, if each is minimal by containment",
+            "Only if their names differ",
+            "Only with NULL"
+          ],
+          "correct_index": 1,
+          "explanation": "Minimality concerns proper subsets of each proposed key.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-21-candidate-key-derivation-application-new-4",
+          "test_id": "pt-dbms-sql-21-candidate-key-derivation-application",
+          "question_text": "Does selecting AC as PRIMARY KEY make B nonprime when BC is another candidate?",
+          "options": [
+            "Yes, only the primary key matters",
+            "Only if B is numeric",
+            "No, B remains in a candidate key",
+            "Only if C is NULL"
+          ],
+          "correct_index": 2,
+          "explanation": "Prime membership is defined over all candidate keys.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-21-candidate-key-derivation-application-new-5",
+          "test_id": "pt-dbms-sql-21-candidate-key-derivation-application",
+          "question_text": "What can a unique-looking sample establish about a proposed key?",
+          "options": [
+            "Its universal minimality",
+            "Its full domain closure",
+            "Every future constraint",
+            "Only that no conflict was observed in that sample"
+          ],
+          "correct_index": 3,
+          "explanation": "Future permitted rows can refute accidental uniqueness.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-21-candidate-key-derivation-application-new-6",
+          "test_id": "pt-dbms-sql-21-candidate-key-derivation-application",
+          "question_text": "What happens to AC and BC if C alone becomes a superkey?",
+          "options": [
+            "They cease to be minimal",
+            "They become the only keys",
+            "They lose all dependencies",
+            "Their sizes become one"
+          ],
+          "correct_index": 0,
+          "explanation": "Each contains the smaller superkey C.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-21-candidate-key-derivation-application-new-7",
+          "test_id": "pt-dbms-sql-21-candidate-key-derivation-application",
+          "question_text": "Can a right-hand-side attribute belong to a candidate key?",
+          "options": [
+            "Never",
+            "Yes, reversible dependencies can make it useful",
+            "Only when it is first in a schema",
+            "Only for text"
+          ],
+          "correct_index": 1,
+          "explanation": "B participates in BC under A→B and B→A.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-21-candidate-key-derivation-application-new-8",
+          "test_id": "pt-dbms-sql-21-candidate-key-derivation-application",
+          "question_text": "When may the empty set be a candidate key?",
+          "options": [
+            "When a sample currently has no rows",
+            "Whenever no primary key is declared",
+            "When its closure reaches every attribute",
+            "Whenever NULL is permitted"
+          ],
+          "correct_index": 2,
+          "explanation": "A domain of constants can admit that formal boundary.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-21-candidate-key-derivation-application-new-9",
+          "test_id": "pt-dbms-sql-21-candidate-key-derivation-application",
+          "question_text": "Why does one pass over dependencies sometimes fail?",
+          "options": [
+            "Closures require sorting rows",
+            "Each rule expires after use",
+            "Dependencies can only fire once",
+            "A later addition can enable an earlier rule"
+          ],
+          "correct_index": 3,
+          "explanation": "Repeat until no rule adds attributes.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-21-candidate-key-derivation-application-new-10",
+          "test_id": "pt-dbms-sql-21-candidate-key-derivation-application",
+          "question_text": "What should accompany a saved key derivation?",
+          "options": [
+            "The relation and exact domain dependency set",
+            "Only the chosen key name",
+            "Only a screenshot",
+            "Only current distinct counts"
+          ],
+          "correct_index": 0,
+          "explanation": "The proof depends on those assumptions.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [],
+  "coding_not_applicable": "The objective is universal dependency implication and minimality. The notes provide two complete closure exercises and a changed-rule extension. A SQL row-output judge can detect snapshot conflicts but cannot prove all candidate keys over every permitted state.",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-21-candidate-key-derivation-1",
+      "test_id": "pt-dbms-sql-21-candidate-key-derivation",
+      "question_text": "What two conditions must an attribute set K satisfy to be a candidate key?",
+      "options": [
+        "K must be a single attribute, and it must be numeric",
+        "K+ must equal all attributes of the relation (superkey), and no proper subset of K may also satisfy that (minimality)",
+        "K must appear first in the CREATE TABLE statement",
+        "K must have no NULL values ever inserted"
+      ],
+      "correct_index": 1,
+      "explanation": "Candidate key status requires both being a superkey (closure reaches everything) and being minimal (no smaller subset also works).",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-21-candidate-key-derivation-2",
+      "test_id": "pt-dbms-sql-21-candidate-key-derivation",
+      "question_text": "Why does {CourseID} alone fail to be a candidate key of StudentCourse?",
+      "options": [
+        "Because CourseID is a foreign key by convention",
+        "Because {CourseID}+ only reaches 5 of the 8 attributes, never determining StudentID, StudentName, or EnrollmentDate",
+        "Because CourseID values are not unique in the sample data",
+        "Because CourseID must always be paired with InstructorID"
+      ],
+      "correct_index": 1,
+      "explanation": "Its closure {CourseID, CourseName, InstructorID, InstructorName, InstructorOffice} falls short of all 8 attributes, so CourseID alone is not even a superkey, let alone a candidate key.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-21-candidate-key-derivation-3",
+      "test_id": "pt-dbms-sql-21-candidate-key-derivation",
+      "question_text": "Why is {StudentID, CourseID} confirmed as a candidate key rather than merely a superkey?",
+      "options": [
+        "Because its closure reaches all 8 attributes AND neither {StudentID} alone nor {CourseID} alone also reaches all 8 (minimality holds)",
+        "Because it was the first pair tested",
+        "Because StudentID and CourseID are both integers",
+        "Because it is listed first in the schema"
+      ],
+      "correct_index": 0,
+      "explanation": "Superkey status alone isn't enough — minimality must also be verified by checking that no proper subset shares the same closure-reaches-everything property, which holds here.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-21-candidate-key-derivation-4",
+      "test_id": "pt-dbms-sql-21-candidate-key-derivation",
+      "question_text": "Why does {StudentID, InstructorID} fail to qualify as a candidate key?",
+      "options": [
+        "Because it contains too many attributes",
+        "Because its closure only reaches 5 attributes (missing CourseID, CourseName, EnrollmentDate) — it is not even a superkey",
+        "Because InstructorID is never part of any candidate key",
+        "Because StudentID cannot be combined with InstructorID in any FD"
+      ],
+      "correct_index": 1,
+      "explanation": "No FD lets you derive CourseID from InstructorID (one instructor can teach several courses), so this pair's closure stops well short of all attributes and fails the superkey test outright.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-21-candidate-key-derivation-5",
+      "test_id": "pt-dbms-sql-21-candidate-key-derivation",
+      "question_text": "What is a 'prime attribute'?",
+      "options": [
+        "Any attribute with a numeric data type",
+        "An attribute that belongs to at least one candidate key of the relation",
+        "An attribute that is never null",
+        "The first attribute listed in the CREATE TABLE statement"
+      ],
+      "correct_index": 1,
+      "explanation": "Prime attributes are those participating in some candidate key — here, StudentID and CourseID are prime, and this classification matters later for the 3NF/BCNF distinction.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-21-candidate-key-derivation-6",
+      "test_id": "pt-dbms-sql-21-candidate-key-derivation",
+      "question_text": "Why is deriving a candidate key via closure computation more reliable than eyeballing sample data for uniqueness?",
+      "options": [
+        "It isn't more reliable — sample data is always sufficient",
+        "Sample data uniqueness could be coincidental to the current rows, while closure computation is grounded in the declared functional dependencies (business rules) that must hold for all valid data",
+        "Closure computation is faster to perform by hand",
+        "Eyeballing data always produces the same answer as closure computation"
+      ],
+      "correct_index": 1,
+      "explanation": "A few rows might show unique values purely by chance; only reasoning from the actual FDs (permanent business rules) guarantees the key holds for every possible valid instance.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-21-candidate-key-derivation-7",
+      "test_id": "pt-dbms-sql-21-candidate-key-derivation",
+      "question_text": "In the worst case, why can brute-force candidate key derivation become expensive for a relation with many attributes?",
+      "options": [
+        "Because closures cannot be computed for more than 3 attributes",
+        "Because testing every possible subset of n attributes is exponential (2^n combinations) in the worst case, though known FDs let designers prune obviously-insufficient candidates quickly in practice",
+        "Because SQL does not support composite keys",
+        "Because functional dependencies expire after a fixed number of rows"
+      ],
+      "correct_index": 1,
+      "explanation": "Exhaustively checking every subset scales exponentially with attribute count, but in practice you can eliminate subsets quickly once their closures are seen to fall short, as shown in the worked steps.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-21-candidate-key-derivation-8",
+      "test_id": "pt-dbms-sql-21-candidate-key-derivation",
+      "question_text": "For the StudentCourse relation, how many distinct candidate keys are there?",
+      "options": [
+        "Three: {StudentID}, {CourseID}, and {InstructorID}",
+        "Exactly one: {StudentID, CourseID}",
+        "Two: {StudentID, CourseID} and {StudentID, InstructorID}",
+        "None — the relation has no candidate key"
+      ],
+      "correct_index": 1,
+      "explanation": "Systematic closure testing shows only {StudentID, CourseID} reaches all 8 attributes with no smaller subset also doing so — it is the unique candidate key of this relation.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "/root",
+    "independent_review": "passed",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Independent manual content review passed within independent_review_scope; engine/browser/release gates separate.",
+    "canonical_answer_indices_preserved": true,
+    "independent_reviewer": "/root/content_c",
+    "independent_review_scope": "Full notes, all20 MCQs/answers/explanations, diagram and no-coding rationale. Closures, minimality, mandatory attributes, alternative keys and empty determinant sound; minor inherited spacing only. Manual editorial/math review only; engine, browser, originality and AdSense clearance separate."
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-21-candidate-key-derivation",
+    "original_note_sha256": "0262f40d747ba873645d691992d3c5d8c84c4c0c9e840b7aab9f693640504268",
+    "status": "drafted; not included in prepared paired migrations"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Coverage is necessary; minimality finishes the proof",
+      "description": "The enrolment domain requires both student and course identity.",
+      "columns": [
+        "Proposed determinant",
+        "Attributes reached",
+        "Key conclusion"
+      ],
+      "rows": [
+        [
+          "StudentID",
+          "2 of8",
+          "Insufficient"
+        ],
+        [
+          "CourseID",
+          "5 of8",
+          "Insufficient"
+        ],
+        [
+          "StudentID + CourseID",
+          "8 of8",
+          "Candidate after both removal checks"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "provided",
+    "technical_review": "author review; independent review pending",
+    "server_rendering": "passed",
+    "browser_rendering": "unverified",
+    "independent_review": "pending",
+    "server_rendering_evidence": "2026-10-29 full Vitest:1310 passed/12 skipped; actual LessonBlock/TopicDiagrams render over230 packages. Browser visual QA remains unverified."
+  },
+  "authoring_status": "drafted; verification pending",
+  "sql_verification": {
+    "scope": "not executed; exact MySQL/provider verification pending",
+    "all_passed": false,
+    "cases": []
+  }
+}

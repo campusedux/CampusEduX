@@ -1,0 +1,651 @@
+{
+  "source_ref": "chapter-6-er-and-eer-modeling/multi-valued-attribute",
+  "slug": "multi-valued-attribute",
+  "title": "Multi Valued Attribute",
+  "description": "Model several simultaneous values per owner, map each occurrence to a queryable relation, and avoid phone-list parsing, fan-out counts and mistaken identity rules.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Several values can belong to one occurrence\n\nA multivalued attribute permits more than one simultaneous value for a single entity occurrence under the model. A student can have several contact phone numbers, or a campus facility can have several accessibility features. The property belongs to the identified owner, but there is a collection of values rather than one current scalar value for that role.\n\nMultiplicity describes permission in the model, not a requirement that every current owner actually has several values. A student can have zero, one, or several phones if that is the stated participation policy. A fixture containing only one phone per student does not prove the property is single-valued. Review the allowed states and required minimum as well as the current data.\n\n## Separate multiplicity from internal structure\n\nA phone token can be treated as one simple domain value while several tokens belong to one student. A structured Address can contain street, city, and postal code while several complete addresses belong to that student. Multivalued and composite therefore answer different questions: how many values exist and what components one value contains.\n\nA single address with four components remains one address. Four phone values remain four collection members even when each is stored as an opaque string. These distinctions should appear consistently in examples and mappings. Do not count the fields inside one structured address as separate address occurrences or treat string length as the number of contact values.\n\n## Common diagram notation marks the collection\n\nIn a common Chen-style ER diagram, a multivalued attribute uses a double oval attached to its owner or relevant relationship. A composite multivalued property can expose component roles as well. Other notations can represent collections through different symbols or explicit related entity types. State the chosen convention instead of assuming every modeling tool draws identical shapes.\n\nThe double oval does not define a SQL array type, create a foreign key, or validate every supplied phone. It communicates the conceptual multiplicity. Implementation still needs a representation, owner identity, appropriate value domains, and a policy for duplicates and absence. A useful mapping explanation connects those requirements rather than stopping at a list of diagram symbols.\n\n## A conventional relation stores one value per row\n\nA normalized introductory mapping can keep Student(student_id, student_name) and add StudentPhone(student_id, phone_number). Each StudentPhone tuple describes one owner-phone association. The owner reference connects the value to the correct student. If duplicate phone membership is not meaningful, a combined key can prevent repeating the same pair while permitting several different numbers for one student.\n\n```sql\nCREATE TABLE student_phones (\n  student_id INT NOT NULL,\n  phone_number VARCHAR(30) NOT NULL,\n  PRIMARY KEY (student_id, phone_number)\n);\n```\n\nThis fragment expresses the pair identity and required row values. An appropriate foreign key is needed separately to enforce actual Student existence. The temporary exercise mirrors omit that native reference declaration and state their valid-reference fixture assumptions. A primary key on student_id alone would wrongly restrict each student to one phone under this collection policy.\n\n## Value identity and owner identity differ\n\nTwo students can share one phone number if the domain permits a household contact. That does not make them one student, nor does it necessarily make the shared number a global key. The pair student_id and phone_number distinguishes membership in the chosen mapping. Constraining phone_number alone as globally unique would enforce a different policy and could reject legitimate shared contacts.\n\nTelephone strings can contain leading zeros, country prefixes, or formatting characters. Choose a documented canonicalization and comparison policy before declaring equality or uniqueness. The exercises treat supplied tokens as canonical opaque strings and do not validate delivery or ownership. A recorded unique membership does not prove the phone actually belongs to the student or that the student may use it for every institutional process.\n\n## Empty collections need not use placeholder rows\n\nA student with no phone can have no rows in StudentPhone. That is different from a stored membership whose phone_number is NULL. In the chosen mapping, every stored phone token is required, and absence of membership rows expresses an empty collection. This avoids inventing one missing contact occurrence that later reports might accidentally count as a real phone.\n\nA report asking for every student should preserve owners with no phone rows. Count a nonmissing child value or identity to obtain zero for an unmatched owner. COUNT(*) after a preserving join can count the unmatched result row as one. The query must follow the population and collection policy rather than equating every displayed row with an actual recorded contact.\n\n## Delimited lists obscure independent values\n\nA string such as phone1, phone2 puts the collection's membership structure inside an informal parsing convention. Searching by a substring can confuse one value with part of another. Independent validation, updates, indexing, and duplicate detection become harder unless every caller correctly implements the same escaping and parsing rules. A row-per-value relation makes the associations explicit.\n\nModern SQL products can support structured types such as JSON arrays, so it is too broad to say a database can never store a collection inside one column. MySQL has a JSON type. The modeling question is whether that representation and its supported constraints and operations fit the required contract. The conventional relation used here deliberately exposes independent owner-value memberships instead of promising that an arbitrary string list provides equivalent integrity.\n\n## Fixed slots impose another hidden bound\n\nColumns named phone1, phone2, and phone3 permit a fixed number of slots rather than an ordinary unbounded collection within resource limits. They require decisions about which slot receives a value, how to search all slots, and what gaps mean. If the actual policy has explicit named roles, those roles can justify distinct attributes, but arbitrary numbered slots do not create meaningful business distinctions.\n\nFor example, one institutional contact and one emergency contact are different roles with their own rules. Several undifferentiated reachable numbers are another model. Do not silently replace one with the other because a form currently displays two input boxes. The data model should preserve the permitted values and roles independently of a temporary screen layout.\n\n## Extra properties need an explicit occurrence model\n\nA student-phone association can carry a contact label, verification state, or validity period. Those properties may describe the association rather than the phone globally. A Skill catalogue can likewise be a shared entity while proficiency belongs to StudentSkill. Adding descriptive information does not automatically force one universal transformation; place each property at the fact grain it actually describes.\n\nIf repeated contacts over time are separate occurrences, the pair alone may no longer identify the required history. A period or occurrence identity and a suitable temporal policy can be needed. Conversely, if the task asks only for current set membership, repeated identical pairs should not create new facts. Define collection semantics before choosing keys or discarding duplicates.\n\n## Queries must avoid unintended fan-out\n\nJoining students to phones returns one row per matching membership. A student with three phone tokens can appear three times. That does not mean three student entities exist. A phone listing should retain every requested membership, while a count of students with phones should count the appropriate distinct student identities or use an existence condition.\n\nJoining two different multivalued collections can multiply combinations. A student with two phones and three skills can yield six phone-skill combinations. Counting those joined rows as phones or skills inflates both totals. Aggregate each collection at its own owner grain or use a correct distinct-identity strategy when appropriate. Small fixtures with several memberships in both collections expose the mistake.\n\n## Validate the collection policy directly\n\nTest one student with several distinct phones, two students sharing a phone, one owner with no phones, and an attempted repeated owner-phone pair. Under this lesson's set-membership policy, the first cases are valid and the repeated pair is rejected. A missing stored token is also rejected, while a genuinely empty collection needs no child rows at all.\n\nThe exercises verify membership queries, zero-inclusive counts, and selected local pair failures on isolated SQL fixtures. They do not establish native parent-reference enforcement, exact MySQL/provider behaviour, phone ownership, or production authority. A clear multivalued-attribute explanation connects owner identity, value structure, occurrence semantics, and multiplicity so the mapping can preserve independently manageable values without inventing extra entities or hiding important collections inside ambiguous strings.\n",
+  "references": [
+    {
+      "title": "MySQL 8.4 JSON data type",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/json.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-6-multi-valued-attribute",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-6-multi-valued-attribute-1",
+          "test_id": "pt-dbms-sql-6-multi-valued-attribute",
+          "question_text": "What defines a multi-valued attribute?",
+          "options": [
+            "An attribute that can be broken into smaller parts",
+            "An attribute that can hold more than one value simultaneously for a single entity",
+            "An attribute computed from other attributes",
+            "An attribute with no domain restriction"
+          ],
+          "correct_index": 1,
+          "explanation": "Multi-valued means an entity can legitimately have several concurrent values of that attribute.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-6-multi-valued-attribute-2",
+          "test_id": "pt-dbms-sql-6-multi-valued-attribute",
+          "question_text": "In the common Chen-style convention, how is a multivalued attribute marked?",
+          "options": [
+            "Single-line oval",
+            "Double-line oval (double circle)",
+            "Dashed oval",
+            "Rectangle"
+          ],
+          "correct_index": 1,
+          "explanation": "The double-line oval visually distinguishes multi-valued from ordinary single-valued attributes.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-6-multi-valued-attribute-3",
+          "test_id": "pt-dbms-sql-6-multi-valued-attribute",
+          "question_text": "Why does the conventional normalized mapping here use a separate owner-phone relation rather than an informal list string?",
+          "options": [
+            "Because relational columns can only ever be numeric",
+            "It exposes each membership for independent queries, keys and updates; structured SQL collection types are a separate design option",
+            "Because multi-valued attributes are not allowed in SQL databases at all",
+            "Because it would violate referential integrity automatically"
+          ],
+          "correct_index": 1,
+          "explanation": "Modern products can store JSON or other structured values. This exercise chooses a relation for explicit membership and integrity rules.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-6-multi-valued-attribute-4",
+          "test_id": "pt-dbms-sql-6-multi-valued-attribute",
+          "question_text": "Under a policy allowing several canonical phone tokens per student, which conventional mapping preserves membership?",
+          "options": [
+            "Store both numbers in one column separated by a comma",
+            "A Student_Phone relation with one owner-phone membership per row and an appropriate complete identity",
+            "Add two columns Phone1 and Phone2 to the Student table with a fixed limit",
+            "Ignore the second number"
+          ],
+          "correct_index": 1,
+          "explanation": "A child table with one row per value is the standard, normalized solution for multi-valued attributes (Phone1/Phone2 is a common anti-pattern with a hard-coded limit).",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-6-multi-valued-attribute-5",
+          "test_id": "pt-dbms-sql-6-multi-valued-attribute",
+          "question_text": "Can a multi-valued attribute also be composite?",
+          "options": [
+            "No, the two properties are mutually exclusive",
+            "Yes — e.g., a student could have multiple structured Addresses, each itself decomposing into Street/City/State",
+            "Only derived attributes can be multi-valued",
+            "Composite attributes are always single-valued by definition"
+          ],
+          "correct_index": 1,
+          "explanation": "Multi-valued (occurrence count) and composite (internal structure) are independent, combinable properties.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-6-multi-valued-attribute-6",
+          "test_id": "pt-dbms-sql-6-multi-valued-attribute",
+          "question_text": "If a shared Skill catalogue is modeled separately, where can a student-specific proficiency value belong?",
+          "options": [
+            "Never — multi-valued attributes should always stay as attributes",
+            "On the Student-Skill association, with a separate Skill entity if its independent catalogue identity and lifecycle justify one",
+            "As soon as there are more than two values",
+            "Only if the attribute is derived"
+          ],
+          "correct_index": 1,
+          "explanation": "Property ownership and lifecycle drive the representation; relationship attributes do not automatically force a universal new-entity rule.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-6-multi-valued-attribute-7",
+          "test_id": "pt-dbms-sql-6-multi-valued-attribute",
+          "question_text": "Which of these is the opposite classification of a multi-valued attribute?",
+          "options": [
+            "Composite attribute",
+            "Derived attribute",
+            "Single-valued attribute",
+            "Weak attribute"
+          ],
+          "correct_index": 2,
+          "explanation": "Single-valued and multi-valued are the two ends of the same classification axis (number of simultaneous values).",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-6-multi-valued-attribute-8",
+          "test_id": "pt-dbms-sql-6-multi-valued-attribute",
+          "question_text": "Storing a student's several phone numbers as 'phone1, phone2' in a single VARCHAR column is problematic mainly because:",
+          "options": [
+            "It uses too much storage space",
+            "It violates atomicity, making individual values hard to search, index, validate, or update independently",
+            "SQL does not allow VARCHAR columns",
+            "Phone numbers cannot be stored as text"
+          ],
+          "correct_index": 1,
+          "explanation": "An informal delimited list hides independent membership and creates parsing, indexing and validation difficulties. Structured SQL domain values require their own explicit design rather than a blanket impossibility claim.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-6-multi-valued-attribute-new-9",
+          "test_id": "pt-dbms-sql-6-multi-valued-attribute",
+          "question_text": "Must every current student have several phone tokens merely because the property is multivalued?",
+          "options": [
+            "Yes; exactly three are required",
+            "No; the model can permit zero, one or several",
+            "Only if names are unique",
+            "Only if phones are numeric"
+          ],
+          "correct_index": 1,
+          "explanation": "Multiplicity states the allowed values and any separately defined minimum.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-6-multi-valued-attribute-new-10",
+          "test_id": "pt-dbms-sql-6-multi-valued-attribute",
+          "question_text": "Which key fits current set membership with shared phones permitted?",
+          "options": [
+            "student_id alone",
+            "phone_number alone",
+            "student_id and phone_number together",
+            "student_name alone"
+          ],
+          "correct_index": 2,
+          "explanation": "The pair identifies the owner-value association.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-6-multi-valued-attribute-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-6-multi-valued-attribute-application-new-1",
+          "test_id": "pt-dbms-sql-6-multi-valued-attribute-application",
+          "question_text": "What represents an empty phone collection in this lesson’s mapping?",
+          "options": [
+            "One mandatory NULL phone row",
+            "An arbitrary zero token",
+            "No child membership rows",
+            "A deleted Student type"
+          ],
+          "correct_index": 2,
+          "explanation": "Stored membership values are required; absent membership expresses emptiness.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-6-multi-valued-attribute-application-new-2",
+          "test_id": "pt-dbms-sql-6-multi-valued-attribute-application",
+          "question_text": "Why can COUNT(*) over a preserving phone join overcount an empty collection?",
+          "options": [
+            "It never counts NULLs",
+            "It automatically counts only distinct phones",
+            "Every student must have a phone",
+            "It counts the preserved unmatched owner row"
+          ],
+          "correct_index": 3,
+          "explanation": "Count a nonmissing child value or identity.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-6-multi-valued-attribute-application-new-3",
+          "test_id": "pt-dbms-sql-6-multi-valued-attribute-application",
+          "question_text": "A student has two phones and three skills. How many combinations can their direct join produce?",
+          "options": [
+            "Six",
+            "Two",
+            "Three",
+            "One always"
+          ],
+          "correct_index": 0,
+          "explanation": "Independent collection joins can multiply memberships.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-6-multi-valued-attribute-application-new-4",
+          "test_id": "pt-dbms-sql-6-multi-valued-attribute-application",
+          "question_text": "Does a shared phone number prove two student rows are the same person?",
+          "options": [
+            "Yes; phone is always a global key",
+            "No; shared contacts can be legitimate",
+            "Only if stored as text",
+            "Only if the numbers are short"
+          ],
+          "correct_index": 1,
+          "explanation": "Identity requires the documented domain evidence.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-6-multi-valued-attribute-application-new-5",
+          "test_id": "pt-dbms-sql-6-multi-valued-attribute-application",
+          "question_text": "Does the existence of MySQL JSON mean every delimited string list has equivalent integrity?",
+          "options": [
+            "Yes; all strings are automatically arrays",
+            "Only commas matter",
+            "No; representation, supported constraints and operations need review",
+            "Every JSON document is a relational key"
+          ],
+          "correct_index": 2,
+          "explanation": "Structured collection support does not validate an arbitrary parsing convention.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-6-multi-valued-attribute-application-new-6",
+          "test_id": "pt-dbms-sql-6-multi-valued-attribute-application",
+          "question_text": "Why can fixed phone1 and phone2 columns be misleading for an undifferentiated collection?",
+          "options": [
+            "They always create a correct multivalued key",
+            "They guarantee no duplicates",
+            "They automatically define owner existence",
+            "They impose slot semantics and a fixed bound not necessarily present in the domain"
+          ],
+          "correct_index": 3,
+          "explanation": "UI slots should not silently redefine the model.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-6-multi-valued-attribute-application-new-7",
+          "test_id": "pt-dbms-sql-6-multi-valued-attribute-application",
+          "question_text": "Where does student-specific proficiency belong when skills have a shared catalogue?",
+          "options": [
+            "On the student-skill participation fact",
+            "As one universal skill proficiency",
+            "On the student’s birth date",
+            "In the phone number"
+          ],
+          "correct_index": 0,
+          "explanation": "Attribute ownership follows the relevant occurrence grain.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-6-multi-valued-attribute-application-new-8",
+          "test_id": "pt-dbms-sql-6-multi-valued-attribute-application",
+          "question_text": "What can make an owner-phone pair insufficient for historical occurrences?",
+          "options": [
+            "Every current pair is invalid",
+            "Several distinct periods or events may need separate identity and policy",
+            "Phone strings cannot be keys",
+            "Only display order can identify history"
+          ],
+          "correct_index": 1,
+          "explanation": "Current membership and historical occurrences have different grains.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-6-multi-valued-attribute-application-new-9",
+          "test_id": "pt-dbms-sql-6-multi-valued-attribute-application",
+          "question_text": "Which insertion should be rejected under the stated set-membership policy?",
+          "options": [
+            "A new phone for the same student",
+            "The same phone for another student permitted by policy",
+            "An existing student-phone pair repeated",
+            "A student with no child rows"
+          ],
+          "correct_index": 2,
+          "explanation": "The combined membership identity must be unique.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-6-multi-valued-attribute-application-new-10",
+          "test_id": "pt-dbms-sql-6-multi-valued-attribute-application",
+          "question_text": "What does a local membership query fail to prove?",
+          "options": [
+            "The returned fixture tokens",
+            "The tested result ordering",
+            "The supplied owner count",
+            "Phone ownership and application authorization"
+          ],
+          "correct_index": 3,
+          "explanation": "Stored representation is distinct from external truth and authority.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cx-multi-valued-list",
+      "slug": "multi-valued-list",
+      "title": "List independently represented phone memberships",
+      "difficulty": "Easy",
+      "task": "Return student_id and phone_number for every membership whose student exists. Preserve shared tokens as separate memberships for different owners.",
+      "schema_sql": "CREATE TABLE students (student_id INT PRIMARY KEY, student_name VARCHAR(80) NOT NULL);\nCREATE TABLE student_phones (student_id INT NOT NULL, phone_number VARCHAR(30) NOT NULL, PRIMARY KEY (student_id, phone_number));",
+      "seed_sql": "INSERT INTO students VALUES (17,'Asha'),(24,'Mira'),(30,'Dev'); INSERT INTO student_phones VALUES (17,'00120'),(17,'00999'),(24,'00120');",
+      "expected": "student_id\tphone_number\n17\t00120\n17\t00999\n24\t00120",
+      "ordering": "Ascending student_id, phone_number for membership lists; ascending student_id for summaries.",
+      "constraints": [
+        "Canonical phone tokens are opaque strings; sharing across students is permitted.",
+        "All supplied references match students; temporary fixtures do not establish native parent-reference enforcement."
+      ],
+      "edge_cases": [
+        "One owner can have several distinct values.",
+        "Different owners can share a token.",
+        "An owner can have no memberships."
+      ],
+      "hints": [
+        "Keep owner and value together in a membership result.",
+        "Preserve owners and count nonmissing child tokens for a zero-inclusive summary."
+      ],
+      "solution_sql": "SELECT s.student_id, p.phone_number FROM students s JOIN student_phones p ON p.student_id = s.student_id ORDER BY s.student_id, p.phone_number;",
+      "explanation": "The separate relation preserves each current owner-value membership and its intended collection semantics.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO students VALUES (7,'Asha');",
+          "expected": ""
+        },
+        {
+          "seed_sql": "INSERT INTO students VALUES (9,'Mira'); INSERT INTO student_phones VALUES (9,'00001');",
+          "expected": "student_id\tphone_number\n9\t00001"
+        }
+      ]
+    },
+    {
+      "id": "cx-multi-valued-counts",
+      "slug": "multi-valued-counts",
+      "title": "Count collection members without inventing a missing phone",
+      "difficulty": "Medium",
+      "task": "Return every student_id and phone_count. Include students with no phone rows as zero. Do not count distinct student names or globally distinct phone tokens.",
+      "schema_sql": "CREATE TABLE students (student_id INT PRIMARY KEY, student_name VARCHAR(80) NOT NULL);\nCREATE TABLE student_phones (student_id INT NOT NULL, phone_number VARCHAR(30) NOT NULL, PRIMARY KEY (student_id, phone_number));",
+      "seed_sql": "INSERT INTO students VALUES (17,'Asha'),(24,'Asha'),(30,'Dev'); INSERT INTO student_phones VALUES (17,'00120'),(17,'00999'),(24,'00120');",
+      "expected": "student_id\tphone_count\n17\t2\n24\t1\n30\t0",
+      "ordering": "Ascending student_id, phone_number for membership lists; ascending student_id for summaries.",
+      "constraints": [
+        "Canonical phone tokens are opaque strings; sharing across students is permitted.",
+        "All supplied references match students; temporary fixtures do not establish native parent-reference enforcement."
+      ],
+      "edge_cases": [
+        "One owner can have several distinct values.",
+        "Different owners can share a token.",
+        "An owner can have no memberships."
+      ],
+      "hints": [
+        "Keep owner and value together in a membership result.",
+        "Preserve owners and count nonmissing child tokens for a zero-inclusive summary."
+      ],
+      "solution_sql": "SELECT s.student_id, COUNT(p.phone_number) AS phone_count FROM students s LEFT JOIN student_phones p ON p.student_id = s.student_id GROUP BY s.student_id ORDER BY s.student_id;",
+      "explanation": "The separate relation preserves each current owner-value membership and its intended collection semantics.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO students VALUES (2,'Asha'),(1,'Asha');",
+          "expected": "student_id\tphone_count\n1\t0\n2\t0"
+        },
+        {
+          "seed_sql": "",
+          "expected": ""
+        }
+      ],
+      "negative_validation_cases": [
+        {
+          "sql": "INSERT INTO student_phones VALUES (17,'00120');",
+          "error_codes": [
+            1062
+          ]
+        },
+        {
+          "sql": "INSERT INTO student_phones VALUES (17,NULL);",
+          "error_codes": [
+            1048
+          ]
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-6-multi-valued-attribute-1",
+      "test_id": "pt-dbms-sql-6-multi-valued-attribute",
+      "question_text": "What defines a multi-valued attribute?",
+      "options": [
+        "An attribute that can be broken into smaller parts",
+        "An attribute that can hold more than one value simultaneously for a single entity",
+        "An attribute computed from other attributes",
+        "An attribute with no domain restriction"
+      ],
+      "correct_index": 1,
+      "explanation": "Multi-valued means an entity can legitimately have several concurrent values of that attribute.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-6-multi-valued-attribute-2",
+      "test_id": "pt-dbms-sql-6-multi-valued-attribute",
+      "question_text": "How is a multi-valued attribute represented in an ER diagram?",
+      "options": [
+        "Single-line oval",
+        "Double-line oval (double circle)",
+        "Dashed oval",
+        "Rectangle"
+      ],
+      "correct_index": 1,
+      "explanation": "The double-line oval visually distinguishes multi-valued from ordinary single-valued attributes.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-6-multi-valued-attribute-3",
+      "test_id": "pt-dbms-sql-6-multi-valued-attribute",
+      "question_text": "Why can't a multi-valued attribute be stored directly as one column in a relational table?",
+      "options": [
+        "Because relational columns can only ever be numeric",
+        "Because a column holds one value per row, so multiple simultaneous values require a separate table with one row per value",
+        "Because multi-valued attributes are not allowed in SQL databases at all",
+        "Because it would violate referential integrity automatically"
+      ],
+      "correct_index": 1,
+      "explanation": "Correct relational mapping puts multi-valued data into a child table (e.g., Student_Phone) with a foreign key back to the owner.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-6-multi-valued-attribute-4",
+      "test_id": "pt-dbms-sql-6-multi-valued-attribute",
+      "question_text": "A student has phone numbers: 9876543210 and 9123456789. What is the correct relational design for this?",
+      "options": [
+        "Store both numbers in one column separated by a comma",
+        "Create a separate table Student_Phone(Roll_No, Phone_Number) with one row per number",
+        "Add two columns Phone1 and Phone2 to the Student table with a fixed limit",
+        "Ignore the second number"
+      ],
+      "correct_index": 1,
+      "explanation": "A child table with one row per value is the standard, normalized solution for multi-valued attributes (Phone1/Phone2 is a common anti-pattern with a hard-coded limit).",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-6-multi-valued-attribute-5",
+      "test_id": "pt-dbms-sql-6-multi-valued-attribute",
+      "question_text": "Can a multi-valued attribute also be composite?",
+      "options": [
+        "No, the two properties are mutually exclusive",
+        "Yes — e.g., a student could have multiple structured Addresses, each itself decomposing into Street/City/State",
+        "Only derived attributes can be multi-valued",
+        "Composite attributes are always single-valued by definition"
+      ],
+      "correct_index": 1,
+      "explanation": "Multi-valued (occurrence count) and composite (internal structure) are independent, combinable properties.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-6-multi-valued-attribute-6",
+      "test_id": "pt-dbms-sql-6-multi-valued-attribute",
+      "question_text": "When should a 'multi-valued attribute' like Skill be redesigned into its own entity set instead?",
+      "options": [
+        "Never — multi-valued attributes should always stay as attributes",
+        "When the repeating value needs its own descriptive attributes (like Proficiency_Level) or its own relationships to other entities",
+        "As soon as there are more than two values",
+        "Only if the attribute is derived"
+      ],
+      "correct_index": 1,
+      "explanation": "Once a repeating value needs its own properties or relationships, it has outgrown being a mere multi-valued attribute and should become a proper entity set.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-6-multi-valued-attribute-7",
+      "test_id": "pt-dbms-sql-6-multi-valued-attribute",
+      "question_text": "Which of these is the opposite classification of a multi-valued attribute?",
+      "options": [
+        "Composite attribute",
+        "Derived attribute",
+        "Single-valued attribute",
+        "Weak attribute"
+      ],
+      "correct_index": 2,
+      "explanation": "Single-valued and multi-valued are the two ends of the same classification axis (number of simultaneous values).",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-6-multi-valued-attribute-8",
+      "test_id": "pt-dbms-sql-6-multi-valued-attribute",
+      "question_text": "Storing a student's several phone numbers as 'phone1, phone2' in a single VARCHAR column is problematic mainly because:",
+      "options": [
+        "It uses too much storage space",
+        "It violates atomicity, making individual values hard to search, index, validate, or update independently",
+        "SQL does not allow VARCHAR columns",
+        "Phone numbers cannot be stored as text"
+      ],
+      "correct_index": 1,
+      "explanation": "Packing multiple values into one field breaks first normal form and complicates data operations — a classic multi-valued-attribute mapping mistake.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "coordinator",
+    "independent_review": "unavailable; no agent tools",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Definitions and examples checked against questions; no plagiarism certification.",
+    "existing_question_corrections": [
+      "tq-dbms-sql-6-multi-valued-attribute-2",
+      "tq-dbms-sql-6-multi-valued-attribute-3",
+      "tq-dbms-sql-6-multi-valued-attribute-4",
+      "tq-dbms-sql-6-multi-valued-attribute-6",
+      "tq-dbms-sql-6-multi-valued-attribute-8"
+    ],
+    "canonical_answer_indices_preserved": true
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-6-multi-valued-attribute",
+    "original_note_sha256": "0ccdf43e8ed2e26efc7a59aeb38dc6bcbf85eb80474b2c155832cd5a7b65ab95",
+    "status": "paired migration prepared; not applied"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "One owner can have several explicit value memberships",
+      "description": "Student 17 has two tokens, Student 24 shares one token legitimately, and Student 30 has an empty collection represented by no child row.",
+      "columns": [
+        "Owner identity",
+        "Phone token",
+        "Membership interpretation"
+      ],
+      "rows": [
+        [
+          "17",
+          "00120",
+          "One membership"
+        ],
+        [
+          "17",
+          "00999",
+          "Another value for the same owner"
+        ],
+        [
+          "24",
+          "00120",
+          "Shared token under a different owner"
+        ],
+        [
+          "30",
+          "No child row",
+          "Empty collection; summary count is zero"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "coordinator checked collection versus component dimensions, owner-value identity and zero-inclusive counts",
+    "server_rendering": "passed",
+    "browser_rendering": "unverified",
+    "independent_review": "unavailable; no agent tools",
+    "server_rendering_evidence": "2026-10-29: 101 focused Vitest checks passed; all 92 authored packages rendered through actual LessonBlock."
+  },
+  "sql_verification": {
+    "engine": "11.8.6-MariaDB-0+deb13u1 from Debian",
+    "scope": "MariaDB compatibility execution; exact MySQL 8.4/provider execution unverified",
+    "fingerprint": "fcaf538a48106a61dc31762972880261ba5fb0fd22a2eeabcbc35a3435521c56",
+    "cases": [
+      {
+        "problem": "multi-valued-list",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "multi-valued-list",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "multi-valued-list",
+        "case": 2,
+        "passed": true
+      },
+      {
+        "problem": "multi-valued-counts",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "multi-valued-counts",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "multi-valued-counts",
+        "case": 2,
+        "passed": true
+      },
+      {
+        "problem": "multi-valued-counts",
+        "negative_case": 0,
+        "error_code": 1062,
+        "passed": true
+      },
+      {
+        "problem": "multi-valued-counts",
+        "negative_case": 1,
+        "error_code": 1048,
+        "passed": true
+      }
+    ],
+    "all_passed": true
+  }
+}

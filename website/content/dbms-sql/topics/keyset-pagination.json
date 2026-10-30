@@ -1,0 +1,621 @@
+{
+  "source_ref": "chapter-13-sorting-and-pagination/keyset-pagination",
+  "slug": "keyset-pagination",
+  "title": "Keyset Pagination",
+  "description": "Build reliable SQL continuation queries with complete cursor keys, mixed sort directions, explicit null policies and measured index performance.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Continue from a value boundary\n\nKeyset pagination retrieves the next slice of an ordered result by remembering the ordering values of the last displayed row. A cursor is the application's representation of that boundary. Unlike a page number, it describes where to continue in the chosen order. The database query compares eligible rows against the boundary and returns a bounded next slice.\n\nImagine a campus equipment list ordered by its unique numeric identifier. After displaying identifiers one, two and three, the next request asks for identifiers greater than three. Missing identifiers cause no problem: continuation follows values rather than assuming consecutive positions. Understand [ORDER BY](/learning/dbms-sql-tutorial/order-by), [LIMIT](/learning/dbms-sql-tutorial/limit) and Boolean conditions before implementing this technique.\n\n## Start with one ascending unique key\n\nThe retained exercise supplies a products table and a page ending at identifier three. Its next query is:\n\n```sql\nSELECT id, name\nFROM products\nWHERE id > 3\nORDER BY id ASC\nLIMIT 3;\n```\n\nThe comparison excludes the boundary itself. Using greater than or equal would repeat it. The order specifies which qualifying identities come first, and the limit caps the returned page. An identifier below the boundary cannot reappear just because earlier rows were deleted. The first request uses the same filters and ordering without a continuation predicate.\n\nThis query is not equivalent to skipping three rows. With identifiers ten, twenty and forty, a boundary of twenty continues at forty regardless of the number of earlier rows. Treat the boundary as a typed value from the previous response, never as an arithmetic page index or an assumed count of records already visited.\n\n## Repeated sort values require a complete key\n\nSuppose equipment is ordered by price ascending. Several items may share a price. Remembering only the last price and requiring a greater price skips unvisited items with that same price. Requiring a greater or equal price repeats previously shown items instead. Add a unique identifier as a final ordering term and retain both values in the cursor.\n\nFor an ascending price and ascending identifier, continue after price thirty and identifier eight using this predicate:\n\n```sql\nWHERE price > 30\n   OR (price = 30 AND equipment_id > 8)\nORDER BY price ASC, equipment_id ASC\nLIMIT 5\n```\n\nRead this as two disjoint routes: a later price, or the same price with a later identity. The boundary tuple is exclusive. The identifier must distinguish rows at the actual result grain; a joined result containing several tags per item may require an association identity or a different query shape.\n\n## Match each comparison to its direction\n\nA descending score list with ascending identifiers has mixed directions. After score eighty and identifier four, later rows have a lower score or the same score with a higher identifier. Applying greater than to both columns would incorrectly seek toward better scores while excluding some legitimate later results. Write the ordering rule first, then derive each branch.\n\n```sql\nSELECT request_id, score\nFROM requests\nWHERE status = 'active'\n  AND (score < 80 OR (score = 80 AND request_id > 4))\nORDER BY score DESC, request_id ASC\nLIMIT 3;\n```\n\nParentheses preserve the status restriction across both continuation branches. Without them, operator precedence can allow a branch to escape the intended eligibility rule. For more ordering columns, compare the first differing value after requiring equality on every earlier term. A compact row comparison is convenient for uniformly ascending nonnull keys, but mixed directions need explicit treatment.\n\n## Keep filters and cursor meaning together\n\nA cursor from an active-only list cannot automatically resume a list of all requests. Changing a department filter, tenant scope, search expression or sort direction changes the ordered population. Bind cursor interpretation to the relevant query parameters and a versioned format. Reject inconsistent combinations rather than silently return an unrelated continuation.\n\nParse cursor fields into expected types, bound page sizes and use parameterized SQL. Encoding JSON with base64 does not establish integrity or authorization. A signed cursor can detect modification, but every request still requires current access checks at the trusted boundary. Cursor validation and row access enforcement solve different problems and must both match the application contract.\n\n## Choose a policy for missing values\n\nOrdinary greater-than and less-than comparisons with NULL produce an unknown result, so a simple predicate can omit missing-value rows. Decide whether the paginated population excludes missing values or includes an explicitly ordered missing-value bucket. Do not infer a complete continuation rule merely from how the database displays nulls in one direction.\n\nFor an included bucket, a cursor may retain both a missing-value flag and the remaining ordering values. Cross from the known-value bucket into the null bucket deliberately, then continue inside that bucket by identity. A COALESCE sentinel is safe only when its relationship to every legitimate value and its index implications are established. The exercises use NOT NULL keys to isolate continuation semantics.\n\n## Separate live navigation from a snapshot\n\nKeyset pagination can avoid the positional shifts caused by inserting or deleting rows before an offset boundary. It does not freeze the underlying dataset. A new row after the boundary may appear later; a new row before it may never appear during the current forward traversal. A changed ordering value can move a previously seen identity across the boundary.\n\nSpecify whether the feature accepts those live-list effects or needs a stable export or snapshot. A timestamp watermark may restrict some newly inserted rows, but does not by itself freeze updates and deletes. Cross-request snapshot design depends on database isolation and application lifecycle. Neither a unique tiebreaker nor an opaque cursor independently supplies that stronger guarantee.\n\n## Measure the physical access path\n\nThe purpose of the seek method is to make an ordered range boundary available to the engine. A suitable index can let a query reach a useful range without repeatedly accounting for a deep positional prefix. That opportunity is not a constant-time guarantee. Filtering selectivity, joins, data distribution, selected columns and the chosen execution plan still matter.\n\nConsider an index whose leading keys match fixed eligibility predicates and whose subsequent keys support ordering. Inspect representative plans and timings before asserting a benefit. Equivalent tuple and expanded predicates can receive different index treatment in MySQL. Measure actual query forms; do not create redundant indexes or promise that every cursor query avoids sorting or scanning.\n\n## Support navigation deliberately\n\nForward continuation suits load-more lists and sequential processing. An arbitrary jump to page five hundred requires an independently known boundary or additional work; a cursor alone does not provide the row count before that position. If the product needs direct page numbers, weigh offset navigation or a separately maintained navigation structure against the added complexity.\n\nPrevious-page navigation reverses the relevant comparisons and query order around the first displayed tuple, takes the bounded preceding slice, then restores display order. Reusing the forward cursor without reversing its interpretation is incorrect. To signal another forward page, request one extra row and build the next cursor from the last row actually displayed, keeping the extra row out of the visible page.\n\n## Preserve the exact boundary representation\n\nA cursor must preserve ordering values at the precision used by the query. Rounding a timestamp to whole seconds when the database distinguishes microseconds can move the boundary. Converting a large integer through a client representation that loses precision can have a similar effect. Serialize and validate values without silently changing their meaning, and test round trips using values near the representation limits.\n\nText keys introduce another dependency: comparisons follow the database collation rather than an assumed byte ordering in application code. A cursor implementation should use the same comparison semantics as its SQL query. Changing a collation or a cursor format can require invalidating old cursors through a version policy. Prefer a stable, well-understood ordering contract rather than accepting every possible client-selected expression as a continuation key. These checks protect correctness even when a small integer-only fixture already passes.\n\n## Check the boundary with exercises\n\nThe retained product exercise tests ascending unique identifiers while preserving its established identity and fixtures. The active-request exercise uses descending scores and ascending identifiers. Trace equal-score rows on either side of its cursor and explain why an inactive high score remains excluded. The illustration shows these decisions as a concrete ordered sequence.\n\nCheck an empty suffix, missing boundary identity, nonconsecutive identifiers, ties and a page shorter than its limit. Deleting the boundary row need not invalidate a value-based continuation because its values remain in the cursor. Recap the design in four statements: define eligibility, complete the order, derive the exclusive boundary and test the actual access plan.\n",
+  "references": [
+    {
+      "title": "MySQL 8.4 LIMIT query optimization",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/limit-optimization.html"
+    },
+    {
+      "title": "MySQL 8.4 row constructor expression optimization",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/row-constructor-optimization.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-13-keyset-pagination",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-13-keyset-pagination-1",
+          "test_id": "pt-dbms-sql-13-keyset-pagination",
+          "question_text": "Which name also describes keyset pagination?",
+          "options": [
+            "The seek method",
+            "Random sampling",
+            "Whole-table counting",
+            "Implicit grouping"
+          ],
+          "correct_index": 0,
+          "explanation": "Continuation seeks past a remembered ordering boundary.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-13-keyset-pagination-2",
+          "test_id": "pt-dbms-sql-13-keyset-pagination",
+          "question_text": "What determines the next page in keyset pagination?",
+          "options": [
+            "An arbitrary physical row address",
+            "A comparison against the last displayed ordering tuple",
+            "The number of table columns",
+            "An implicit random seed"
+          ],
+          "correct_index": 1,
+          "explanation": "The boundary follows the declared result order.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-13-keyset-pagination-3",
+          "test_id": "pt-dbms-sql-13-keyset-pagination",
+          "question_text": "Why can a suitable keyset query improve deep-page performance?",
+          "options": [
+            "Every such query skips all sorting automatically",
+            "Its boundary can support indexed range access",
+            "It caches all future pages automatically",
+            "It removes the need for filtering"
+          ],
+          "correct_index": 1,
+          "explanation": "An indexed range can avoid repeated positional-prefix work; the actual plan still requires measurement.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-13-keyset-pagination-4",
+          "test_id": "pt-dbms-sql-13-keyset-pagination",
+          "question_text": "What does a cursor alone fail to provide for arbitrary page-number jumps?",
+          "options": [
+            "Any bounded result",
+            "An independently known boundary for the requested page",
+            "A way to use WHERE",
+            "A way to order rows"
+          ],
+          "correct_index": 1,
+          "explanation": "Sequential continuation starts from known values rather than an arbitrary numeric position.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-13-keyset-pagination-5",
+          "test_id": "pt-dbms-sql-13-keyset-pagination",
+          "question_text": "How should an ascending nonunique price order be completed?",
+          "options": [
+            "Ignore equal-price rows",
+            "Add a unique result-grain key to both ordering and continuation",
+            "Apply DISTINCT to price only",
+            "Always restart from the first price"
+          ],
+          "correct_index": 1,
+          "explanation": "A complete ordering tuple distinguishes identities within a tie.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-13-keyset-pagination-6",
+          "test_id": "pt-dbms-sql-13-keyset-pagination",
+          "question_text": "What usually supports the seek method's intended access benefit?",
+          "options": [
+            "Disabling all indexes",
+            "An appropriate index aligned with relevant filters and order",
+            "Allowing NULL in every key",
+            "Returning every column necessarily"
+          ],
+          "correct_index": 1,
+          "explanation": "Index design provides an access opportunity, not a universal plan guarantee.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-13-keyset-pagination-7",
+          "test_id": "pt-dbms-sql-13-keyset-pagination",
+          "question_text": "In WHERE id > 4 ORDER BY id LIMIT 2, what is 4?",
+          "options": [
+            "The page size",
+            "The last displayed identifier boundary",
+            "The total result count",
+            "The number of columns"
+          ],
+          "correct_index": 1,
+          "explanation": "The strict comparison resumes after that value.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-13-keyset-pagination-8",
+          "test_id": "pt-dbms-sql-13-keyset-pagination",
+          "question_text": "Which interaction often fits forward keyset navigation?",
+          "options": [
+            "Mandatory direct access to every page number",
+            "Sequential load-more browsing",
+            "Random selection without ordering",
+            "Editing table definitions"
+          ],
+          "correct_index": 1,
+          "explanation": "The interaction naturally supplies a prior boundary; actual performance still depends on the plan.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-13-keyset-pagination-new-9",
+          "test_id": "pt-dbms-sql-13-keyset-pagination",
+          "question_text": "Why does id >= cursor_id usually repeat a row?",
+          "options": [
+            "It includes the boundary identity",
+            "It reverses every order",
+            "It ignores the WHERE clause",
+            "It changes the primary key"
+          ],
+          "correct_index": 0,
+          "explanation": "Continuation normally excludes the last displayed tuple.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-13-keyset-pagination-new-10",
+          "test_id": "pt-dbms-sql-13-keyset-pagination",
+          "question_text": "Does an absent boundary row necessarily prevent value-based continuation?",
+          "options": [
+            "Yes, all cursors reference physical row addresses",
+            "No, its retained ordering values can still define the boundary",
+            "Only when OFFSET is added",
+            "Only when all identifiers are consecutive"
+          ],
+          "correct_index": 1,
+          "explanation": "Comparison uses cursor values rather than requiring the row to remain present.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-13-keyset-pagination-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-13-keyset-pagination-application-new-1",
+          "test_id": "pt-dbms-sql-13-keyset-pagination-application",
+          "question_text": "For score DESC, id ASC after (80,4), which predicate continues correctly?",
+          "options": [
+            "score > 80 OR id > 4",
+            "score < 80 OR (score = 80 AND id > 4)",
+            "score < 80 AND id > 4",
+            "score = 80 AND id < 4"
+          ],
+          "correct_index": 1,
+          "explanation": "Later scores are lower; within the boundary score later identifiers are greater.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-13-keyset-pagination-application-new-2",
+          "test_id": "pt-dbms-sql-13-keyset-pagination-application",
+          "question_text": "Why enclose the OR continuation branches when adding status='active'?",
+          "options": [
+            "Parentheses make indexes unnecessary",
+            "To reverse the score order",
+            "To apply eligibility to both continuation routes",
+            "To force every score to equal the cursor"
+          ],
+          "correct_index": 2,
+          "explanation": "AND has higher precedence than OR, so grouping preserves the requested population.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-13-keyset-pagination-application-new-3",
+          "test_id": "pt-dbms-sql-13-keyset-pagination-application",
+          "question_text": "What must happen when a cursor's filter context differs from the current request?",
+          "options": [
+            "Silently ignore all filters",
+            "Treat the cursor as authorization",
+            "Increase page size without a bound",
+            "Reject it or follow an explicit consistent cursor contract"
+          ],
+          "correct_index": 3,
+          "explanation": "The boundary is meaningful only with its defined query context.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-13-keyset-pagination-application-new-4",
+          "test_id": "pt-dbms-sql-13-keyset-pagination-application",
+          "question_text": "Does base64 encoding make a cursor tamper-proof?",
+          "options": [
+            "No, encoding is reversible representation",
+            "Yes, it authenticates the requester",
+            "Yes, it encrypts all row contents",
+            "Only when the id is numeric"
+          ],
+          "correct_index": 0,
+          "explanation": "Integrity and access enforcement need separate trusted mechanisms.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-13-keyset-pagination-application-new-5",
+          "test_id": "pt-dbms-sql-13-keyset-pagination-application",
+          "question_text": "What happens to ordinary comparisons against NULL ordering values?",
+          "options": [
+            "They always evaluate true",
+            "They can evaluate unknown and omit those rows",
+            "They automatically enter a null bucket",
+            "They make NULL equal every cursor value"
+          ],
+          "correct_index": 1,
+          "explanation": "Included missing values need an explicit continuation policy.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-13-keyset-pagination-application-new-6",
+          "test_id": "pt-dbms-sql-13-keyset-pagination-application",
+          "question_text": "Which change can move a previously displayed row after the current boundary?",
+          "options": [
+            "Renaming a local SQL variable only",
+            "Changing a column unrelated to sorting or eligibility",
+            "Updating its ordering value",
+            "Removing an unrelated heading"
+          ],
+          "correct_index": 2,
+          "explanation": "Keyset navigation does not freeze sorting values between requests.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-13-keyset-pagination-application-new-7",
+          "test_id": "pt-dbms-sql-13-keyset-pagination-application",
+          "question_text": "Does a unique ordering tuple create a cross-request snapshot?",
+          "options": [
+            "Yes, every SELECT shares a snapshot",
+            "Only for descending orders",
+            "Only if the cursor is signed",
+            "No, visibility across requests is a separate requirement"
+          ],
+          "correct_index": 3,
+          "explanation": "Deterministic ordering and dataset versioning provide different guarantees.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-13-keyset-pagination-application-new-8",
+          "test_id": "pt-dbms-sql-13-keyset-pagination-application",
+          "question_text": "Why can a joined item id be an insufficient final key?",
+          "options": [
+            "Several result rows may share that item id",
+            "All joins prohibit ORDER BY",
+            "Every join erases primary keys",
+            "A cursor must contain every table column"
+          ],
+          "correct_index": 0,
+          "explanation": "Uniqueness must be established at the displayed result grain.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-13-keyset-pagination-application-new-9",
+          "test_id": "pt-dbms-sql-13-keyset-pagination-application",
+          "question_text": "When fetching one extra row to detect another page, which row supplies the next cursor?",
+          "options": [
+            "The unshown extra row",
+            "The last row actually displayed",
+            "The first row ever inserted",
+            "An arbitrary highest identifier"
+          ],
+          "correct_index": 1,
+          "explanation": "Using the extra row as the boundary would skip that unshown row next time.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-13-keyset-pagination-application-new-10",
+          "test_id": "pt-dbms-sql-13-keyset-pagination-application",
+          "question_text": "What evidence supports a keyset performance claim?",
+          "options": [
+            "The presence of the word cursor",
+            "Equal result page sizes",
+            "Representative plans and measurements for the actual query",
+            "Base64 length"
+          ],
+          "correct_index": 2,
+          "explanation": "A suitable predicate provides an opportunity whose actual cost depends on execution.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cx-keyset-active-score-page",
+      "slug": "keyset-active-score-page",
+      "title": "Continue an active request ranking",
+      "difficulty": "Easy",
+      "task": "Return request_id,score for active requests after cursor (score=80,request_id=4), ordered by score descending then request_id ascending. Return at most three rows using keyset continuation, without OFFSET.",
+      "schema_sql": "CREATE TABLE requests(request_id INT PRIMARY KEY,status VARCHAR(20) NOT NULL,score INT NOT NULL);",
+      "seed_sql": "INSERT INTO requests VALUES (1,'active',90),(4,'active',80),(6,'active',80),(9,'closed',75),(2,'active',70),(8,'active',60),(7,'active',50);",
+      "expected": "request_id\tscore\n6\t80\n2\t70\n8\t60",
+      "ordering": "score descending, request_id ascending",
+      "constraints": [
+        "Preserve all rows.",
+        "Use keyset comparisons, not OFFSET."
+      ],
+      "edge_cases": [
+        "Equal scores need the identifier boundary.",
+        "Inactive rows never qualify."
+      ],
+      "hints": [
+        "Derive the lower-score route and equal-score route separately.",
+        "Apply status to both routes."
+      ],
+      "solution_sql": "SELECT request_id,score FROM requests WHERE status='active' AND (score<80 OR (score=80 AND request_id>4)) ORDER BY score DESC,request_id ASC LIMIT 3;",
+      "explanation": "Identity 6 follows identity 4 in the score-80 tie; lower active scores follow. Closed identity 9 stays excluded.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO requests VALUES (2,'active',80),(4,'active',80),(7,'active',80),(9,'active',80);",
+          "expected": "request_id\tscore\n7\t80\n9\t80"
+        },
+        {
+          "seed_sql": "INSERT INTO requests VALUES (1,'active',90),(4,'closed',70),(6,'active',60);",
+          "expected": "request_id\tscore\n6\t60"
+        },
+        {
+          "seed_sql": "INSERT INTO requests VALUES (1,'active',90),(2,'closed',40);",
+          "expected": ""
+        }
+      ]
+    },
+    {
+      "id": "cp-dbms-sql-next-page-after-id-3",
+      "slug": "next-page-after-id-3",
+      "title": "Next Page After ID 3",
+      "difficulty": "Medium",
+      "existing_problem": true,
+      "original_description_md5": "1aae6b97c2b8499878a3420d88fa4bc2",
+      "task": "Using keyset pagination (not OFFSET), fetch the next page of 3 products after the last-seen id of 3, ordered by id ascending. Return id,name.",
+      "schema_sql": "CREATE TABLE products (\n  id INTEGER PRIMARY KEY,\n  name TEXT NOT NULL,\n  category TEXT NOT NULL,\n  price INTEGER NOT NULL\n);",
+      "seed_sql": "INSERT INTO products (id, name, category, price) VALUES\n(1, 'ProLaptop', 'Electronics', 85000),\n(2, 'Desk Lamp', 'Home', 900),\n(3, 'ProPhone', 'Electronics', 45000),\n(4, 'Python Basics', 'Books', 350),\n(5, 'Novel', 'Books', 220),\n(6, 'Headphones', 'Electronics', 3000),\n(7, 'Rug', 'Home', 4500);",
+      "expected": "id\tname\n4\tPython Basics\n5\tNovel\n6\tHeadphones",
+      "ordering": "id ascending",
+      "constraints": [
+        "Return at most three products.",
+        "Preserve source identities and data."
+      ],
+      "edge_cases": [
+        "Identifier gaps do not change the value boundary.",
+        "An exhausted suffix returns no rows."
+      ],
+      "hints": [
+        "Exclude identifier 3 with a strict comparison.",
+        "Order before taking the bounded result."
+      ],
+      "solution_sql": "SELECT id,name FROM products WHERE id>3 ORDER BY id ASC LIMIT 3;",
+      "explanation": "The first three identities greater than three are four, five and six in the sample. A suitable primary-key access plan can seek into this range; performance still requires measurement.",
+      "check_sql": "",
+      "original_check_sql": "",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO products (id, name, category, price) VALUES\n(1, 'Tablet', 'Electronics', 20000),\n(2, 'Sofa', 'Home', 30000),\n(3, 'Speaker', 'Electronics', 5000),\n(4, 'Cookbook', 'Books', 400),\n(5, 'Chair', 'Home', 2500),\n(6, 'Mouse', 'Electronics', 900);",
+          "expected": "id\tname\n4\tCookbook\n5\tChair\n6\tMouse"
+        },
+        {
+          "seed_sql": "INSERT INTO products VALUES (2,'Before','Lab',1),(10,'Later','Lab',2),(30,'Last','Lab',3);",
+          "expected": "id\tname\n10\tLater\n30\tLast"
+        },
+        {
+          "seed_sql": "INSERT INTO products VALUES (1,'Only','Lab',1);",
+          "expected": ""
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-13-keyset-pagination-1",
+      "test_id": "pt-dbms-sql-13-keyset-pagination",
+      "question_text": "What is another common name for keyset pagination?",
+      "options": [
+        "The seek method",
+        "The offset method",
+        "The cursor scan",
+        "The window method"
+      ],
+      "correct_index": 0,
+      "explanation": "Keyset pagination is also widely known as the 'seek method' because it seeks directly to a known position via an indexed comparison.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-13-keyset-pagination-2",
+      "test_id": "pt-dbms-sql-13-keyset-pagination",
+      "question_text": "What does a keyset pagination query use instead of OFFSET to find the next page?",
+      "options": [
+        "A random sample of rows",
+        "A WHERE condition comparing the sort column to the last-seen row's value",
+        "A subquery that counts all prior rows",
+        "A second LIMIT clause"
+      ],
+      "correct_index": 1,
+      "explanation": "Keyset pagination remembers the last row's sort-key value and filters with WHERE sort_col > last_seen_value to fetch the next page.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-13-keyset-pagination-3",
+      "test_id": "pt-dbms-sql-13-keyset-pagination",
+      "question_text": "Why can keyset pagination be significantly faster than OFFSET-based pagination on large tables and deep pages?",
+      "options": [
+        "It avoids sorting the data entirely",
+        "It can use an index seek to jump directly past already-seen rows instead of scanning and discarding them",
+        "It caches all pages in memory automatically",
+        "It replaces LIMIT with a faster keyword"
+      ],
+      "correct_index": 1,
+      "explanation": "The WHERE-based seek lets the engine use an index to jump straight to the right position, whereas OFFSET must scan and discard every skipped row.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-13-keyset-pagination-4",
+      "test_id": "pt-dbms-sql-13-keyset-pagination",
+      "question_text": "What is a key limitation of keyset pagination compared to LIMIT/OFFSET?",
+      "options": [
+        "It cannot be combined with ORDER BY",
+        "It cannot jump directly to an arbitrary page number (e.g. page 500) without visiting the pages before it",
+        "It only works on tables with fewer than 1000 rows",
+        "It requires disabling indexes on the sort column"
+      ],
+      "correct_index": 1,
+      "explanation": "Because keyset pagination seeks relative to a known 'last seen' value, there's no way to jump straight to an arbitrary page without first knowing that page's starting key.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-13-keyset-pagination-5",
+      "test_id": "pt-dbms-sql-13-keyset-pagination",
+      "question_text": "When the sort key used for keyset pagination is not unique (e.g. sorting only by price, which can repeat), what should be added?",
+      "options": [
+        "Nothing, duplicates are automatically handled",
+        "A unique tiebreaker column (like the primary key) included in both ORDER BY and the WHERE comparison",
+        "A DISTINCT clause on the price column",
+        "An OFFSET 0 clause"
+      ],
+      "correct_index": 1,
+      "explanation": "A non-unique sort key needs a unique tiebreaker (typically the primary key) in a compound comparison to correctly and unambiguously determine 'rows after the last seen row'.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-13-keyset-pagination-6",
+      "test_id": "pt-dbms-sql-13-keyset-pagination",
+      "question_text": "For keyset pagination's performance benefit to actually be realized, what does the sort/filter column typically need?",
+      "options": [
+        "To be of type TEXT",
+        "To be indexed",
+        "To allow NULL values",
+        "To be the only column in the table"
+      ],
+      "correct_index": 1,
+      "explanation": "Without an index on the sort/filter column, the WHERE condition still requires a scan, losing the seek advantage.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-13-keyset-pagination-7",
+      "test_id": "pt-dbms-sql-13-keyset-pagination",
+      "question_text": "In the query `WHERE id > 4 ORDER BY id LIMIT 2`, what does the value `4` represent?",
+      "options": [
+        "The total number of rows in the table",
+        "The id of the last row seen on the previous page",
+        "The page size",
+        "The number of pages already fetched"
+      ],
+      "correct_index": 1,
+      "explanation": "4 is the last-seen id from the prior page, used as the seek point for fetching the next page.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-13-keyset-pagination-8",
+      "test_id": "pt-dbms-sql-13-keyset-pagination",
+      "question_text": "A UI needs a 'Load More' / infinite-scroll feed where users only ever move forward through results. Which pagination approach is best suited and why?",
+      "options": [
+        "LIMIT/OFFSET, because arbitrary page jumps are needed",
+        "Keyset pagination, because it only needs forward-moving 'next page' access and stays fast regardless of how far the user has scrolled",
+        "Neither approach works for infinite scroll",
+        "GROUP BY, because it deduplicates the feed"
+      ],
+      "correct_index": 1,
+      "explanation": "Infinite-scroll/load-more UIs only need sequential forward access (no arbitrary page jump), which is exactly what keyset pagination is optimized for, with no performance degradation at depth.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "content_author",
+    "independent_review": "passed",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Independent manual review passed; native MySQL fixture evidence recorded separately; provider/browser/Supabase release gates remain separate.",
+    "canonical_answer_indices_preserved": true,
+    "editorial_record": "Original seeded question snapshots and answer positions retained. Live questions remove unconditional performance claims. Newly authored prose and diagram; no third-party expression reused.",
+    "independent_reviewer": "Codex reviewer, current 2026-10-30 session",
+    "independent_review_scope": "Read full notes, all 640 MCQ stems/options/canonical answers/explanations, 64 exercise contracts/solutions/fixtures, and all 32 diagrams. Verified retained identities/answers through source-continuity tests; SQL execution evidence is recorded separately. No external originality, provider, live application or Supabase authorization clearance.",
+    "independent_review_record": "reports/independent-review-2026-10-30.json",
+    "content_sha256": "4afe13f9d70c609f1d05552f6ae6d2a9ab434a8e4edfc4f66627ebde11442c1b"
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-13-keyset-pagination",
+    "original_note_sha256": "bf7a043914b427939d7f770f994b2173bd9a352b8d366e02b985e03d5e03c18b",
+    "status": "drafted; not included in prepared paired migrations"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Continue after score 80 and request 4",
+      "description": "A descending-score, ascending-identity sequence distinguishes same-score successors from lower-score successors. Closed requests are excluded before continuation.",
+      "columns": [
+        "Request",
+        "Score",
+        "Status",
+        "Boundary decision"
+      ],
+      "rows": [
+        [
+          "1",
+          "90",
+          "active",
+          "Before boundary"
+        ],
+        [
+          "4",
+          "80",
+          "active",
+          "Boundary; exclude"
+        ],
+        [
+          "6",
+          "80",
+          "active",
+          "Same score; later identity"
+        ],
+        [
+          "9",
+          "75",
+          "closed",
+          "Ineligible"
+        ],
+        [
+          "2",
+          "70",
+          "active",
+          "Lower score; include"
+        ],
+        [
+          "8",
+          "60",
+          "active",
+          "Lower score; include"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "author traced values; independent review pending",
+    "server_rendering": "pending",
+    "browser_rendering": "unverified",
+    "independent_review": "pending"
+  },
+  "authoring_status": "drafted; verification pending",
+  "sql_verification": {
+    "scope": "not executed; native interpreter execution blocked by command policy; exact MySQL/provider pending",
+    "all_passed": false,
+    "cases": []
+  }
+}

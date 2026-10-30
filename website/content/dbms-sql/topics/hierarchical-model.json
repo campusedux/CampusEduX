@@ -1,0 +1,631 @@
+{
+  "source_ref": "chapter-3-data-models/hierarchical-model",
+  "slug": "hierarchical-model",
+  "title": "Hierarchical Model",
+  "description": "Understand rooted parent-child records, ownership paths, subtree operations, and shared-entity limits, with SQL exercises that mirror a hierarchy without claiming native IMS verification.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Organizing records around parent and child paths\n\nThe hierarchical data model organizes records in a rooted tree structure. A non-root occurrence has one immediate parent in the basic tree, while a parent can have several children. The root has no parent within that hierarchy. These relationships make ownership and traversal paths explicit: a record is understood partly through its position beneath other records.\n\nIBM IMS is a classic industrial example associated with hierarchical database organization. Actual products have additional facilities and implementation choices, so the basic model should not be treated as a complete specification of every IMS feature. This topic explains the tree concept first, then identifies where a real product's access and deletion rules require separate documentation.\n\nConsider a campus hierarchy: Department contains Labs, and each Lab contains Devices. Computing owns the Robotics and Networks labs; Robotics contains a camera and a motor kit. A camera occurrence belongs beneath one lab in this basic tree. The relationship describes ownership, not a promise that the camera's bytes occupy a particular disk address beside its parent.\n\n## Distinguishing types from occurrences\n\nA record type describes a kind of information, such as Lab with an identifier and name. A record occurrence is a particular lab, such as Robotics. The hierarchy of types says which child kinds are permitted under which parent kinds; the actual database contains occurrences linked according to that structure. Confusing the two can lead to counting one box in a diagram as one stored record.\n\nA department can have zero, one, or several lab occurrences if the requirements allow that range. Each non-root lab occurrence still has one parent in the basic hierarchy. Exactly one parent is not the same as exactly one child. A tree can branch widely while preserving a single path from the root to each contained occurrence.\n\nIdentifiers and labels also have separate roles. Two labs can share a display name while having different identifiers and different department parents. A path containing only labels may therefore be ambiguous. Use the actual identity and parent relationship when explaining which occurrence a traversal should reach.\n\n## Navigating a known path\n\nTraditional hierarchical access is often navigational: the application locates a root or parent and follows supported relationships to descendants. An operation asking for the devices in one lab aligns naturally with that path. The application must know enough about the hierarchy and product interface to request the intended occurrences.\n\nFor the campus example, a request can identify Computing, then Robotics, then its device children. A sibling lab such as Networks belongs under the same department but is not a child of Robotics. A device located beneath Networks should not appear merely because the application found the common department first. Path scope matters to the result contract.\n\nThis is different from saying all access requires a complete sequential walk of every record. Products can provide indexes, direct access facilities, and other supported mechanisms. The model describes parent-child organization, while actual access costs and available shortcuts depend on the engine, definitions, and workload.\n\n## Recognizing where trees fit well\n\nA hierarchy can suit data whose ownership genuinely follows a stable one-to-many structure. A document containing paragraphs and embedded elements, or an organizational catalog with clearly contained occurrences, can be easy to explain through parent-child paths. The important question is whether the tree represents the facts accurately rather than whether it produces an attractive picture.\n\nA familiar filesystem directory tree is a useful analogy for containment, but it has limits. Links, mounts, and other filesystem facilities can introduce relationships beyond a simple tree. Similarly, a product supporting hierarchical data may offer extra logical relationships. State the simplified assumption instead of using the analogy as proof that every real system has exactly the same constraints.\n\nKnown repetitive paths can support efficient operations when the implementation and workload fit. Do not promise that children are always physically adjacent or that hierarchical databases always beat relational ones. Storage organization, caching, access definitions, and requested work determine actual performance. A model label is not a benchmark.\n\n## Handling entities shared across parents\n\nThe basic tree becomes awkward when one entity must belong to several independent parents. Suppose the same physical camera is used by Robotics and Networks, and the database must preserve one authoritative camera identity. Copying a camera record under each lab can create competing facts about its maintenance date or serial number.\n\nDuplication is one possible representation choice, not the only facility every hierarchical product permits. Additional references or logical relationships can address some needs, but they add semantics beyond the basic ownership tree. The important lesson is to identify that a shared entity differs from two independently owned occurrences with similar attributes.\n\nA many-to-many relationship such as students attending several courses while each course has many students does not fit directly into a single-parent tree of shared student identities. A relational association table, network relationship structure, or another supported design can express that relationship differently. Choose the representation from the required identity and access patterns rather than forcing every fact beneath an arbitrary parent.\n\n## Defining updates and subtree deletion\n\nChanging a parent relationship can affect a whole path. Moving a lab to another department may require reviewing descendant ownership and applications that rely on the earlier hierarchy. A tree-shaped diagram should make clear which facts belong to the lab and which belong to the department, so a move does not silently reinterpret unrelated attributes.\n\nDeleting a parent also needs an explicit policy. Some hierarchical operations can delete dependent descendants as part of a subtree operation, but that behavior is not a universal automatic promise of every database accepting tree data. Determine whether the intended action rejects a nonempty parent, cascades, detaches, or requires a separate workflow.\n\nFor a Department-Lab-Device teaching tree, removing Robotics should not accidentally remove the sibling Networks subtree. Conversely, deleting only a label while leaving orphaned device relationships may violate the intended model. Test both the affected subtree and preserved siblings when an authorized implementation changes containment.\n\n## Mirroring the structure in SQL\n\nA relational representation can use departments, labs, and devices tables, with each lab referencing a department and each device referencing a lab. This mirrors the chosen hierarchy for SQL practice; it does not turn MySQL into a native IMS implementation. The same logical shape can be represented through different database models with different interfaces.\n\n```sql\nSELECT lab_id, lab_name\nFROM labs\nWHERE department_id = 1\nORDER BY lab_id;\n```\n\nThis query lists immediate lab children of department one. It does not recursively find every descendant device. A second query can join labs to devices to count immediate device children, preserving an empty lab with a left join. These exercises test the represented relationships and result grain rather than a vendor's navigational API.\n\nThe fixture must state which parent references are valid. A diagram and a successful SELECT over valid rows do not prove an arbitrary self-referencing table is acyclic or has exactly one root. Those invariants need actual enforcement and dedicated checks in a real design. The typed three-level exercise avoids pretending a generic integer parent field automatically enforces a tree.\n\n## Evaluating change and ad hoc questions\n\nNavigational coupling can make new questions or reorganized relationships expensive for applications that assume a fixed path. A report asking for every camera across all departments may need different access work from the usual request for one lab's children. The limitation is about the relationship between required questions and supported paths, not a claim that hierarchical systems cannot answer any report.\n\nCompare alternatives using concrete requirements: stable ownership, shared identity, traversal patterns, update frequency, and operational constraints. A relational model can offer declarative flexibility, while a hierarchical implementation may fit established containment workflows well. Neither conclusion follows simply from calling one model newer or drawing more arrows.\n\nThe hierarchical model is useful when its rooted ownership accurately expresses the domain. Keep roots, parents, children, and occurrences distinct; document shared-entity exceptions and deletion rules; and verify actual product behavior separately. Those habits let a tree serve as a precise structure rather than an unsupported guarantee about storage, performance, or lifecycle.\n",
+  "references": [
+    {
+      "title": "IBM IMS hierarchy examples",
+      "url": "https://www.ibm.com/docs/en/ims/15.4.0?topic=database-hierarchy-examples"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-3-hierarchical-model",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-3-hierarchical-model-1",
+          "test_id": "pt-dbms-sql-3-hierarchical-model",
+          "question_text": "In the hierarchical data model, what is the maximum number of parents a non-root record (segment) can have?",
+          "options": [
+            "Zero",
+            "Exactly one",
+            "Up to two",
+            "Unlimited"
+          ],
+          "correct_index": 1,
+          "explanation": "Every non-root segment in a hierarchical model has exactly one parent, forming a strict tree structure.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-3-hierarchical-model-2",
+          "test_id": "pt-dbms-sql-3-hierarchical-model",
+          "question_text": "Which well-known database system is the classic industrial implementation of the hierarchical model?",
+          "options": [
+            "IBM IMS",
+            "MongoDB",
+            "PostgreSQL",
+            "Neo4j"
+          ],
+          "correct_index": 0,
+          "explanation": "IBM's Information Management System (IMS) is the canonical hierarchical database, still used in mainframe environments.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-3-hierarchical-model-3",
+          "test_id": "pt-dbms-sql-3-hierarchical-model",
+          "question_text": "How is data typically accessed in a hierarchical database?",
+          "options": [
+            "Declarative SQL queries",
+            "Navigational traversal from parent to child via program calls",
+            "Graph traversal using index-free adjacency",
+            "Key-based hashing"
+          ],
+          "correct_index": 1,
+          "explanation": "Hierarchical systems like IMS use navigational access (e.g., DL/I calls such as GET NEXT WITHIN PARENT) rather than a declarative query language.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-3-hierarchical-model-4",
+          "test_id": "pt-dbms-sql-3-hierarchical-model",
+          "question_text": "A common everyday example of a hierarchical structure is:",
+          "options": [
+            "A social media friend graph",
+            "A filesystem's directories and files",
+            "A Redis cache",
+            "A wide column-family table"
+          ],
+          "correct_index": 1,
+          "explanation": "A filesystem is hierarchical: each file lives in exactly one directory, and directories nest into a tree.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-3-hierarchical-model-5",
+          "test_id": "pt-dbms-sql-3-hierarchical-model",
+          "question_text": "Why is a shared entity under several parents awkward in the basic single-parent tree?",
+          "options": [
+            "The model doesn't support relationships at all",
+            "The representation needs duplication or additional relationship facilities beyond basic tree ownership",
+            "It requires foreign keys, which hierarchical databases lack",
+            "Many-to-many requires a graph traversal engine"
+          ],
+          "correct_index": 1,
+          "explanation": "Some products offer additional facilities; duplication is not the only possible implementation.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-3-hierarchical-model-6",
+          "test_id": "pt-dbms-sql-3-hierarchical-model",
+          "question_text": "What must be specified before deleting a nonempty parent in a hierarchical design?",
+          "options": [
+            "Nothing; children become orphaned root nodes automatically",
+            "The delete is rejected unless children are manually detached",
+            "The actual descendant policy, such as rejection or a supported subtree deletion",
+            "Children are automatically re-parented to the grandparent"
+          ],
+          "correct_index": 2,
+          "explanation": "Deletion semantics belong to the defined operation and product, not a universal tree rule.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-3-hierarchical-model-7",
+          "test_id": "pt-dbms-sql-3-hierarchical-model",
+          "question_text": "Why can a well-matched hierarchical implementation perform efficiently for a known traversal?",
+          "options": [
+            "They use SQL more efficiently",
+            "Supported predefined paths and suitable implementation can reduce work for that workload",
+            "They automatically shard across clusters",
+            "They support ACID transactions better"
+          ],
+          "correct_index": 1,
+          "explanation": "Physical adjacency and superiority over another model are not universal guarantees.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-3-hierarchical-model-8",
+          "test_id": "pt-dbms-sql-3-hierarchical-model",
+          "question_text": "Which modeling pressure can motivate alternatives to a fixed ownership hierarchy?",
+          "options": [
+            "Hierarchical databases could not store text data",
+            "Changing access questions and shared many-to-many identity can fit the original tree poorly",
+            "Hierarchical databases could not run on mainframes",
+            "SQL was invented before the hierarchical model existed"
+          ],
+          "correct_index": 1,
+          "explanation": "This describes a trade-off rather than a universal history or inability to evolve.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-3-hierarchical-model-new-9",
+          "test_id": "pt-dbms-sql-3-hierarchical-model",
+          "question_text": "How does a record type differ from an occurrence?",
+          "options": [
+            "Every type is one stored root only",
+            "The type describes a kind; an occurrence is one actual record",
+            "Occurrences are physical files rather than records",
+            "The terms always mean a query result"
+          ],
+          "correct_index": 1,
+          "explanation": "A Lab definition can have many lab occurrences.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-3-hierarchical-model-new-10",
+          "test_id": "pt-dbms-sql-3-hierarchical-model",
+          "question_text": "What does the root lack within its hierarchy?",
+          "options": [
+            "Any possible child",
+            "An identity",
+            "An immediate parent",
+            "Any stored attributes"
+          ],
+          "correct_index": 2,
+          "explanation": "The root begins the tree rather than belonging beneath another occurrence in it.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-3-hierarchical-model-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-3-hierarchical-model-application-new-1",
+          "test_id": "pt-dbms-sql-3-hierarchical-model-application",
+          "question_text": "Robotics and Networks are labs under Computing. How are the labs related in the tree?",
+          "options": [
+            "Networks is necessarily a child of Robotics",
+            "Both are roots of the same single tree",
+            "Siblings",
+            "Each is the parent of Computing"
+          ],
+          "correct_index": 2,
+          "explanation": "They share one parent rather than containing one another.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-3-hierarchical-model-application-new-2",
+          "test_id": "pt-dbms-sql-3-hierarchical-model-application",
+          "question_text": "A camera shared by two labs is copied twice with conflicting maintenance dates. What problem is exposed?",
+          "options": [
+            "A guarantee that both dates are correct",
+            "A missing SQL semicolon only",
+            "A requirement that every tree have two roots",
+            "Duplicated identity and inconsistent facts"
+          ],
+          "correct_index": 3,
+          "explanation": "Shared physical identity differs from independent contained copies.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-3-hierarchical-model-application-new-3",
+          "test_id": "pt-dbms-sql-3-hierarchical-model-application",
+          "question_text": "Does WHERE department_id = 1 over labs retrieve every descendant device?",
+          "options": [
+            "No; it lists the matching lab records",
+            "Yes; equality predicates recurse automatically",
+            "Only if every lab name is unique",
+            "Only if no indexes exist"
+          ],
+          "correct_index": 0,
+          "explanation": "Immediate children and deeper descendants are different populations.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-3-hierarchical-model-application-new-4",
+          "test_id": "pt-dbms-sql-3-hierarchical-model-application",
+          "question_text": "A lab has no devices. Which SQL approach can keep it in a child-count report?",
+          "options": [
+            "Start only from matching devices",
+            "Start from labs and left join devices",
+            "Delete the lab before counting",
+            "Use a cross join with no relation"
+          ],
+          "correct_index": 1,
+          "explanation": "A preserving join allows a zero-child result.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-3-hierarchical-model-application-new-5",
+          "test_id": "pt-dbms-sql-3-hierarchical-model-application",
+          "question_text": "An arbitrary parent_id field exists. Does that alone prove no cycles?",
+          "options": [
+            "Yes; every integer is acyclic",
+            "Only if the field is nullable",
+            "No; acyclicity needs an actual invariant and checks",
+            "Only if the table has fewer than ten rows"
+          ],
+          "correct_index": 2,
+          "explanation": "A representation field is not complete tree enforcement.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-3-hierarchical-model-application-new-6",
+          "test_id": "pt-dbms-sql-3-hierarchical-model-application",
+          "question_text": "A parent deletion is proposed. What must tests include besides removed descendants?",
+          "options": [
+            "Only the parent display color",
+            "Only the shortest descendant name",
+            "Only the connection port",
+            "Sibling subtrees that must remain intact"
+          ],
+          "correct_index": 3,
+          "explanation": "The operation must preserve records outside its intended subtree.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-3-hierarchical-model-application-new-7",
+          "test_id": "pt-dbms-sql-3-hierarchical-model-application",
+          "question_text": "Two labs share a name. What identifies the intended occurrence reliably in the fixture?",
+          "options": [
+            "Its identifier and parent relationship",
+            "The name alone by assumption",
+            "The number of letters in the name",
+            "The insertion sequence"
+          ],
+          "correct_index": 0,
+          "explanation": "Labels can repeat; identity must remain explicit.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-3-hierarchical-model-application-new-8",
+          "test_id": "pt-dbms-sql-3-hierarchical-model-application",
+          "question_text": "A relational fixture mirrors a department tree. What has its successful query not verified?",
+          "options": [
+            "The fixture output observed",
+            "Native IMS navigation or storage behavior",
+            "That departments and labs were represented",
+            "That the query ran on the named engine"
+          ],
+          "correct_index": 1,
+          "explanation": "The exercise tests a representation, not another product's implementation.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-3-hierarchical-model-application-new-9",
+          "test_id": "pt-dbms-sql-3-hierarchical-model-application",
+          "question_text": "A report follows a frequently used path quickly. What should not be inferred?",
+          "options": [
+            "This measured path completed",
+            "The structure can have children",
+            "Every hierarchical workload is faster than every relational workload",
+            "Workload fit matters"
+          ],
+          "correct_index": 2,
+          "explanation": "Performance conclusions require their actual scope.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-3-hierarchical-model-application-new-10",
+          "test_id": "pt-dbms-sql-3-hierarchical-model-application",
+          "question_text": "A student attends several courses and each course has several students. What challenges the basic tree?",
+          "options": [
+            "Every student name must be NULL",
+            "Every course becomes a disk page",
+            "There can be no identifiers",
+            "One shared student identity needs multiple independent relationships"
+          ],
+          "correct_index": 3,
+          "explanation": "Many-to-many facts need a representation beyond simple single-parent ownership.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "dsa-dbms-sql-hierarchy-children",
+      "slug": "hierarchy-children",
+      "title": "List immediate lab children",
+      "difficulty": "Easy",
+      "task": "In this relational mirror of a hierarchy, return lab_id and lab_name for labs whose department_id is 1, ordered by lab_id. Do not return labs owned by another department. This is SQL representation practice, not a native IMS operation.",
+      "schema_sql": "CREATE TABLE labs (lab_id INT PRIMARY KEY, lab_name VARCHAR(40) NOT NULL, department_id INT NOT NULL);",
+      "seed_sql": "INSERT INTO labs VALUES (20,'Networks',1),(10,'Robotics',1),(30,'Optics',2);",
+      "expected": "lab_id\tlab_name\n10\tRobotics\n20\tNetworks",
+      "ordering": "lab_id ascending",
+      "constraints": [
+        "Unique lab identifiers",
+        "Each lab has one department parent",
+        "Department references are valid fixture identities"
+      ],
+      "edge_cases": [
+        "Several labs can share one parent",
+        "No matching parent returns no rows",
+        "Repeated lab names remain separate occurrences"
+      ],
+      "hints": [
+        "Filter the immediate parent identifier",
+        "Preserve the lab identity"
+      ],
+      "solution_sql": "SELECT lab_id,lab_name FROM labs WHERE department_id=1 ORDER BY lab_id;",
+      "explanation": "The parent predicate selects immediate children of the requested department without inventing recursive traversal.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO labs VALUES (2,'Shared Name',1),(1,'Shared Name',2);",
+          "expected": "lab_id\tlab_name\n2\tShared Name"
+        },
+        {
+          "seed_sql": "",
+          "expected": ""
+        }
+      ]
+    },
+    {
+      "id": "dsa-dbms-sql-hierarchy-child-count",
+      "slug": "hierarchy-child-count",
+      "title": "Count device children while retaining empty labs",
+      "difficulty": "Medium",
+      "task": "Return lab_id, lab_name, device_count for every lab in the relational hierarchy mirror. Count devices whose lab_id references the lab, include zero-child labs, and order by lab_id. One row must represent one lab.",
+      "schema_sql": "CREATE TABLE labs (lab_id INT PRIMARY KEY, lab_name VARCHAR(40) NOT NULL, department_id INT NOT NULL);\nCREATE TABLE devices (device_id INT PRIMARY KEY, lab_id INT NOT NULL, device_name VARCHAR(40) NOT NULL);",
+      "seed_sql": "INSERT INTO labs VALUES (10,'Robotics',1),(20,'Networks',1),(30,'Optics',2); INSERT INTO devices VALUES (1,10,'Camera'),(2,10,'Motor'),(3,30,'Lens');",
+      "expected": "lab_id\tlab_name\tdevice_count\n10\tRobotics\t2\n20\tNetworks\t0\n30\tOptics\t1",
+      "ordering": "lab_id ascending",
+      "constraints": [
+        "Device identifiers are unique",
+        "Every device fixture references an existing lab",
+        "The model is three-level typed containment; it does not test arbitrary cycles"
+      ],
+      "edge_cases": [
+        "Empty labs remain with zero count",
+        "Several children count independently",
+        "Repeated device labels are not identities"
+      ],
+      "hints": [
+        "Use a lab-preserving join",
+        "Count the non-null device identifier rather than COUNT(*)"
+      ],
+      "solution_sql": "SELECT l.lab_id,l.lab_name,COUNT(d.device_id) AS device_count FROM labs l LEFT JOIN devices d ON d.lab_id=l.lab_id GROUP BY l.lab_id,l.lab_name ORDER BY l.lab_id;",
+      "explanation": "The left join retains each lab; counting matched device keys returns zero for a lab with no children.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO labs VALUES (1,'Empty',1);",
+          "expected": "lab_id\tlab_name\tdevice_count\n1\tEmpty\t0"
+        },
+        {
+          "seed_sql": "INSERT INTO labs VALUES (1,'A',1); INSERT INTO devices VALUES (1,1,'Camera'),(2,1,'Camera');",
+          "expected": "lab_id\tlab_name\tdevice_count\n1\tA\t2"
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-3-hierarchical-model-1",
+      "test_id": "pt-dbms-sql-3-hierarchical-model",
+      "question_text": "In the hierarchical data model, what is the maximum number of parents a non-root record (segment) can have?",
+      "options": [
+        "Zero",
+        "Exactly one",
+        "Up to two",
+        "Unlimited"
+      ],
+      "correct_index": 1,
+      "explanation": "Every non-root segment in a hierarchical model has exactly one parent, forming a strict tree structure.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-3-hierarchical-model-2",
+      "test_id": "pt-dbms-sql-3-hierarchical-model",
+      "question_text": "Which well-known database system is the classic industrial implementation of the hierarchical model?",
+      "options": [
+        "IBM IMS",
+        "MongoDB",
+        "PostgreSQL",
+        "Neo4j"
+      ],
+      "correct_index": 0,
+      "explanation": "IBM's Information Management System (IMS) is the canonical hierarchical database, still used in mainframe environments.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-3-hierarchical-model-3",
+      "test_id": "pt-dbms-sql-3-hierarchical-model",
+      "question_text": "How is data typically accessed in a hierarchical database?",
+      "options": [
+        "Declarative SQL queries",
+        "Navigational traversal from parent to child via program calls",
+        "Graph traversal using index-free adjacency",
+        "Key-based hashing"
+      ],
+      "correct_index": 1,
+      "explanation": "Hierarchical systems like IMS use navigational access (e.g., DL/I calls such as GET NEXT WITHIN PARENT) rather than a declarative query language.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-3-hierarchical-model-4",
+      "test_id": "pt-dbms-sql-3-hierarchical-model",
+      "question_text": "A common everyday example of a hierarchical structure is:",
+      "options": [
+        "A social media friend graph",
+        "A filesystem's directories and files",
+        "A Redis cache",
+        "A wide column-family table"
+      ],
+      "correct_index": 1,
+      "explanation": "A filesystem is hierarchical: each file lives in exactly one directory, and directories nest into a tree.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-3-hierarchical-model-5",
+      "test_id": "pt-dbms-sql-3-hierarchical-model",
+      "question_text": "Why is representing many-to-many relationships problematic in the hierarchical model?",
+      "options": [
+        "The model doesn't support relationships at all",
+        "A child segment can only be attached under one parent, so shared entities must be duplicated",
+        "It requires foreign keys, which hierarchical databases lack",
+        "Many-to-many requires a graph traversal engine"
+      ],
+      "correct_index": 1,
+      "explanation": "Since a node can have only one parent, an entity related to two parents (e.g., a course in two departments) must be duplicated, risking inconsistency.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-3-hierarchical-model-6",
+      "test_id": "pt-dbms-sql-3-hierarchical-model",
+      "question_text": "What typically happens when a parent record is deleted in a hierarchical database?",
+      "options": [
+        "Nothing; children become orphaned root nodes automatically",
+        "The delete is rejected unless children are manually detached",
+        "Its entire subtree of child records is conventionally deleted along with it",
+        "Children are automatically re-parented to the grandparent"
+      ],
+      "correct_index": 2,
+      "explanation": "Because children are structurally bound to their parent, deleting a parent segment conventionally cascades and removes its entire subtree.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-3-hierarchical-model-7",
+      "test_id": "pt-dbms-sql-3-hierarchical-model",
+      "question_text": "Why can hierarchical databases like IMS still outperform relational databases for certain workloads?",
+      "options": [
+        "They use SQL more efficiently",
+        "Child records are physically stored near their parent, avoiding the need for joins on hierarchy-shaped access patterns",
+        "They automatically shard across clusters",
+        "They support ACID transactions better"
+      ],
+      "correct_index": 1,
+      "explanation": "Physical co-location of parent and child data lets hierarchical systems retrieve deeply nested records without performing joins, which is very fast for tree-shaped access.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-3-hierarchical-model-8",
+      "test_id": "pt-dbms-sql-3-hierarchical-model",
+      "question_text": "What is the fundamental limitation that eventually drove the industry from the hierarchical model toward the relational model?",
+      "options": [
+        "Hierarchical databases could not store text data",
+        "The tight coupling of logical structure to physical navigation made ad-hoc queries and evolving relationships (especially many-to-many) very difficult",
+        "Hierarchical databases could not run on mainframes",
+        "SQL was invented before the hierarchical model existed"
+      ],
+      "correct_index": 1,
+      "explanation": "The relational model decoupled logical queries from physical storage/navigation and handled many-to-many relationships via join tables, which the rigid hierarchical tree could not do cleanly.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "coordinator",
+    "independent_review": "unavailable; no agent tools",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Definitions and examples checked against questions; no plagiarism certification.",
+    "existing_question_corrections": [
+      "tq-dbms-sql-3-hierarchical-model-5",
+      "tq-dbms-sql-3-hierarchical-model-6",
+      "tq-dbms-sql-3-hierarchical-model-7",
+      "tq-dbms-sql-3-hierarchical-model-8"
+    ],
+    "canonical_answer_indices_preserved": true
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-3-hierarchical-model",
+    "original_note_sha256": "286a7e04f6ed0dc158dca2da9f1b388c3e99edc9cfd155cb3fe1267682dfec79",
+    "status": "paired migration prepared; not applied"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "A department hierarchy with one parent per occurrence",
+      "description": "Computing contains two sibling labs. Devices belong beneath a lab. The diagram describes ownership paths and makes no claim about physical adjacency or automatic deletion.",
+      "columns": [
+        "Occurrence",
+        "Immediate parent",
+        "Path from root"
+      ],
+      "rows": [
+        [
+          "Computing",
+          "None",
+          "Computing"
+        ],
+        [
+          "Robotics",
+          "Computing",
+          "Computing → Robotics"
+        ],
+        [
+          "Networks",
+          "Computing",
+          "Computing → Networks"
+        ],
+        [
+          "Camera",
+          "Robotics",
+          "Computing → Robotics → Camera"
+        ],
+        [
+          "Motor kit",
+          "Robotics",
+          "Computing → Robotics → Motor kit"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "coordinator review",
+    "server_rendering": "passed",
+    "browser_rendering": "unverified",
+    "independent_review": "unavailable; no agent tools",
+    "rendering_check": "2026-10-29: actual LessonBlock/TopicDiagrams rendering; 49 authored-package checks passed. Browser rendering unverified."
+  },
+  "sql_verification": {
+    "engine": "11.8.6-MariaDB-0+deb13u1 from Debian",
+    "scope": "MariaDB compatibility execution; exact MySQL 8.4/provider execution unverified",
+    "fingerprint": "34724aee4431f88e891242179046cb7f0d645fe3e99e8c16ff11c08bb45896cf",
+    "cases": [
+      {
+        "problem": "hierarchy-children",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "hierarchy-children",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "hierarchy-children",
+        "case": 2,
+        "passed": true
+      },
+      {
+        "problem": "hierarchy-child-count",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "hierarchy-child-count",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "hierarchy-child-count",
+        "case": 2,
+        "passed": true
+      }
+    ],
+    "all_passed": true
+  }
+}

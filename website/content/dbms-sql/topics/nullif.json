@@ -1,0 +1,603 @@
+{
+  "source_ref": "chapter-12-select-and-filtering/nullif",
+  "slug": "nullif",
+  "title": "NULLIF",
+  "description": "Use SQL NULLIF for documented sentinel values and zero denominators; combine it with COALESCE while preserving meaningful zeros and unknown results.",
+  "dialect": "MySQL 8.4",
+  "notes": "## A chosen sentinel can become missing output\n\nNULLIF compares two expressions and returns [NULL](/learning/dbms-sql-tutorial/null-values) when they compare equal; otherwise it returns the first expression. It is useful when a dataset uses a particular value as a sentinel for unavailable information. A campus import might use an empty discount code to mean no code was supplied. Converting that sentinel to NULL can make later missing-value handling explicit.\n\nThe conversion must follow a real contract. Zero stock is often a meaningful confirmed empty count, so it should not be turned into missing stock by habit. A sentinel is a value that the source definition designates as a placeholder. Do not infer that meaning solely because a value looks unusual or complicates a calculation. Preserve legitimate observations unless the requirement explicitly changes their interpretation.\n\n## Equality selects the missing result\n\nIf both operands are known and equal, NULLIF returns NULL. If they are known and unequal, the first operand is returned. The second operand is a comparison target, not an alternative fallback value. For example, comparing a supplied code with an empty string returns that code when it is nonempty; it does not return the empty string when the comparison fails.\n\nThe expression resembles a searched [CASE](/learning/dbms-sql-tutorial/case) whose equality branch returns NULL and whose fallback returns the first value. That relationship explains its basic meaning, but engine details about types and expression evaluation still apply. Use ordinary columns or deliberate stable expressions in teaching examples rather than imply NULLIF provides a universal single-evaluation guarantee for arbitrary volatile or expensive expressions.\n\n```sql\nSELECT offer_id, NULLIF(discount_code, '') AS normalized_code\nFROM equipment_offers\nORDER BY offer_id;\n```\n\n## NULL input remains a missing result\n\nWhen the first operand is already NULL, the result remains NULL under the ordinary comparison and return behaviour. NULLIF does not supply a known replacement. If the first operand is known and the second is NULL, equality is unknown rather than true, so the first operand can remain the result. This differs from MySQL NULL-safe equality, which asks a deliberately different question.\n\nDo not describe NULLIF as the exact mathematical inverse of COALESCE. One can introduce NULL under a chosen comparison and the other can replace missing output using a priority chain, but information can be lost in either transformation. A fallback zero cannot later reveal whether the original input was a real zero or a missing value without additional preserved evidence.\n\n## A zero denominator needs a semantic decision\n\nA ratio such as issued units divided by requested units is undefined when the requested amount is zero. Wrapping the denominator in NULLIF against zero makes that denominator NULL, allowing ordinary arithmetic to yield missing output instead of attempting a numeric division by that zero. The resulting ratio is not automatically zero; its absence communicates that the defined calculation had no valid denominator.\n\nThis idiom addresses the denominator case only. It does not validate that issued units are nonnegative, that both fields have appropriate types or that a request actually exists. Database modes and context can influence other error outcomes. Avoid broad statements that one NULLIF makes every possible arithmetic expression safe. Define the supported data domain and test the complete expression on the actual engine.\n\n```sql\nSELECT request_id,\n       CAST(issued_units / NULLIF(requested_units, 0) AS DECIMAL(10,2)) AS ratio\nFROM request_totals\nORDER BY request_id;\n```\n\n## Fallback after a missing ratio can hide meaning\n\nCOALESCE applied to a NULL ratio can provide a display convention such as zero, but that changes what a consumer sees. A request with no valid denominator differs from a request with a known positive denominator and zero issued units. Both can display zero after a fallback even though their underlying states require different explanations.\n\nPreserve the distinction when it matters. A report can return the numeric ratio and a separate status describing missing denominator, zero denominator or computed result. A dashboard may use a placeholder caption rather than a numeric zero. The SQL should communicate the report's chosen convention instead of label every zero-denominator case as a measured zero performance ratio.\n\n## Sentinel rules belong to a specific domain\n\nAn old feed might use minus one for an untracked quantity, while another feed treats minus one as an error that must be rejected. Converting it with NULLIF is appropriate only in the first explicitly defined contract. The same applies to text markers such as N/A. A literal N/A in a free-form note may be genuine content rather than a missing-value sentinel.\n\nKeep source evidence if normalization needs to be audited or corrected. A SELECT transformation leaves the underlying value intact, but a persisted rewrite can erase the original distinction. Any storage repair requires a separately authorized mutation plan with reviewed scope and rollback considerations. A learning expression showing normalized output is not an instruction to rewrite production data automatically.\n\n## Text equality still follows comparison semantics\n\nNULLIF relies on equality rules, so collation and operand types can affect which inputs become NULL. Under a case-insensitive comparison, a known sentinel might match a differently cased spelling. Trailing-space behaviour can also depend on the relevant text comparison. Define whether those variants should be treated as the same sentinel before choosing the expression and receiving schema.\n\nIf the policy treats whitespace-only text as absent, trimming can be combined deliberately with a blank-sentinel test. That normalization also changes nonblank text around the edges. Do not add it to an exercise whose contract preserves spaces or whose identifiers use exact spelling. The expression should implement the promised normalization rather than an informal idea of what looks cleaner.\n\n## Types and numeric precision remain relevant\n\nThe first expression defines the returned value when the sentinel does not match, subject to the engine's documented expression rules. Mixed-type comparisons can trigger conversion and produce unexpected equality. A text equipment code of 000 compared numerically with zero can lose an important identifier distinction. Align operand domains and bind application values with their intended types.\n\nDivision also needs a stated precision contract. MySQL's division operator differs from integer-division syntax, and exact numeric inputs have documented scale rules. If an exercise expects two decimal places, an explicit DECIMAL cast can make the output shape clear. Test fractional results rather than only exact integer quotients, which can hide a wrong division operator or an accidental text conversion.\n\n## Composition can express an explicit display policy\n\nA discount display can first map the empty-string sentinel to NULL, then use COALESCE to choose a final caption such as No code. A nonempty valid code remains itself, and an already missing code also receives the caption. This combines two separate operations: sentinel recognition and fallback selection. Explain them in that order instead of present the nested expression as an unexplained trick.\n\nThe nesting does not validate that the nonempty discount code is recognized, active or permitted for the caller. Those checks belong to the actual discount authority. Similarly, a normalized identifier does not prove a matching row exists. Shape, sentinel interpretation, reference integrity and authorization are different claims that require the appropriate trusted evidence.\n\n## Apply sentinel policies consistently across reports\n\nIf one report excludes a documented sentinel from an average while another counts it as a real observation, their totals can disagree for reasons users cannot see. Keep the normalization rule close to the authoritative contract and state which reports use normalized values. A useful reconciliation can report both received rows and nonmissing normalized observations, making the effect of the sentinel policy visible without pretending that the missing observations were measured.\n\n## Test the values information could be lost between\n\nThe first exercise maps a designated blank code to missing output and then supplies a caption. Its explicit binary collation and fixture domain avoid ambiguous space normalization. The second computes ratios with known, zero and missing denominators while preserving a known zero numerator as a real numeric zero. These cases distinguish absent results from valid empty quantities.\n\nFor every example, state which value triggers NULL, which value is preserved and what later consumers do with the result. Include both operands already missing where meaningful and verify deterministic ordered output. NULLIF is most useful when its sentinel rule is narrow and visible; it becomes misleading when used to erase inconvenient values without a documented explanation of what those values originally meant.\n",
+  "references": [
+    {
+      "title": "MySQL 8.4 NULLIF and flow-control semantics",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/flow-control-functions.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-12-nullif",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-12-nullif-1",
+          "test_id": "pt-dbms-sql-12-nullif",
+          "question_text": "Known operands a and b compare equal. What does NULLIF(a,b) return?",
+          "options": [
+            "a",
+            "b",
+            "NULL",
+            "An error always"
+          ],
+          "correct_index": 2,
+          "explanation": "The equality branch introduces missing output.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-12-nullif-2",
+          "test_id": "pt-dbms-sql-12-nullif",
+          "question_text": "Known operands are unequal. What does NULLIF(a,b) return?",
+          "options": [
+            "b",
+            "a",
+            "NULL always",
+            "Their concatenation"
+          ],
+          "correct_index": 1,
+          "explanation": "The second argument is a comparison target, not a fallback.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-12-nullif-3",
+          "test_id": "pt-dbms-sql-12-nullif",
+          "question_text": "Why use a quantity / NULLIF(denominator,0) expression?",
+          "options": [
+            "To force every ratio to zero",
+            "To make a designated zero denominator missing before division",
+            "To validate all business rules",
+            "To round every quotient automatically"
+          ],
+          "correct_index": 1,
+          "explanation": "The resulting missing ratio needs its own meaning.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-12-nullif-4",
+          "test_id": "pt-dbms-sql-12-nullif",
+          "question_text": "Which searched CASE describes NULLIF basic value selection?",
+          "options": [
+            "CASE WHEN a=b THEN a ELSE NULL END",
+            "CASE WHEN a=b THEN NULL ELSE a END",
+            "CASE WHEN a<>b THEN NULL ELSE b END",
+            "CASE WHEN a IS NULL THEN b ELSE a END"
+          ],
+          "correct_index": 1,
+          "explanation": "Type and evaluation details still follow the actual engine.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-12-nullif-5",
+          "test_id": "pt-dbms-sql-12-nullif",
+          "question_text": "What does a blank-code NULLIF followed by COALESCE express?",
+          "options": [
+            "Concatenate the sentinel and fallback",
+            "Recognize the blank sentinel, then select an explicit fallback",
+            "Validate every discount code",
+            "Persist the normalized code automatically"
+          ],
+          "correct_index": 1,
+          "explanation": "Sentinel recognition and fallback are separate stages.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-12-nullif-6",
+          "test_id": "pt-dbms-sql-12-nullif",
+          "question_text": "Are NULLIF and COALESCE exact reversible inverses?",
+          "options": [
+            "Yes, they restore every original value",
+            "No, either transformation can lose information",
+            "Only for all numeric columns",
+            "Only when fallback is zero"
+          ],
+          "correct_index": 1,
+          "explanation": "Complementary uses do not imply invertibility.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-12-nullif-7",
+          "test_id": "pt-dbms-sql-12-nullif",
+          "question_text": "What does NULLIF(NULL,5) return?",
+          "options": [
+            "Five",
+            "NULL",
+            "Zero",
+            "An empty string"
+          ],
+          "correct_index": 1,
+          "explanation": "The first value is already missing.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-12-nullif-8",
+          "test_id": "pt-dbms-sql-12-nullif",
+          "question_text": "When is converting zero into NULL appropriate?",
+          "options": [
+            "For every stock measurement",
+            "When the specific source contract defines zero as an absent-value sentinel",
+            "For every monetary amount",
+            "Whenever AVG would otherwise change"
+          ],
+          "correct_index": 1,
+          "explanation": "A meaningful confirmed zero should be preserved.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-12-nullif-new-9",
+          "test_id": "pt-dbms-sql-12-nullif",
+          "question_text": "What does NULLIF(5,NULL) ordinarily return?",
+          "options": [
+            "Five",
+            "NULL",
+            "Zero",
+            "A syntax error"
+          ],
+          "correct_index": 0,
+          "explanation": "Unknown equality does not choose the equal branch; the first value remains.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-12-nullif-new-10",
+          "test_id": "pt-dbms-sql-12-nullif",
+          "question_text": "Does a SELECT using NULLIF repair stored source values?",
+          "options": [
+            "Yes, it updates every sentinel",
+            "No",
+            "Only if an alias matches the source name",
+            "Only on the first row"
+          ],
+          "correct_index": 1,
+          "explanation": "It computes output without persisting a rewrite.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-12-nullif-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-12-nullif-application-new-1",
+          "test_id": "pt-dbms-sql-12-nullif-application",
+          "question_text": "What is a valid zero numerator over a known positive denominator?",
+          "options": [
+            "A missing ratio necessarily",
+            "A known zero ratio",
+            "A division-by-zero case",
+            "An invalid integer automatically"
+          ],
+          "correct_index": 1,
+          "explanation": "Do not confuse a real zero result with an absent denominator.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-12-nullif-application-new-2",
+          "test_id": "pt-dbms-sql-12-nullif-application",
+          "question_text": "What distinction can COALESCE(ratio,0) hide?",
+          "options": [
+            "The table name",
+            "Whether ORDER BY exists",
+            "Undefined or missing denominator versus a computed zero ratio",
+            "The count of SQL keywords"
+          ],
+          "correct_index": 2,
+          "explanation": "A display convention can merge distinct states.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-12-nullif-application-new-3",
+          "test_id": "pt-dbms-sql-12-nullif-application",
+          "question_text": "Does NULLIF against zero validate a negative numerator?",
+          "options": [
+            "Yes, every ratio field becomes valid",
+            "Only if the denominator is positive",
+            "Only after sorting",
+            "No, that requires a separate domain rule"
+          ],
+          "correct_index": 3,
+          "explanation": "The idiom addresses one specific denominator condition.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-12-nullif-application-new-4",
+          "test_id": "pt-dbms-sql-12-nullif-application",
+          "question_text": "Why consider collation for a text sentinel?",
+          "options": [
+            "Equality may treat spelling variants as equal",
+            "NULLIF never compares text",
+            "All collations are byte exact",
+            "Only result order changes"
+          ],
+          "correct_index": 0,
+          "explanation": "The sentinel contract should match comparison semantics.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-12-nullif-application-new-5",
+          "test_id": "pt-dbms-sql-12-nullif-application",
+          "question_text": "Why can numeric comparison be wrong for a text identifier 000?",
+          "options": [
+            "Every code is a quantity",
+            "It can erase a meaningful label distinction through conversion",
+            "Text cannot represent zeros",
+            "NULLIF forbids leading zero characters"
+          ],
+          "correct_index": 1,
+          "explanation": "Use the identifier domain rather than an unrelated numeric sentinel.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-12-nullif-application-new-6",
+          "test_id": "pt-dbms-sql-12-nullif-application",
+          "question_text": "When should trimming be included before a blank sentinel test?",
+          "options": [
+            "For every identifier automatically",
+            "Never in any SQL expression",
+            "Only when the contract deliberately treats those spaces as normalization",
+            "Only if an index is absent"
+          ],
+          "correct_index": 2,
+          "explanation": "Trimming changes text and must be intentional.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-12-nullif-application-new-7",
+          "test_id": "pt-dbms-sql-12-nullif-application",
+          "question_text": "Why test a fractional ratio?",
+          "options": [
+            "Only whole-number ratios are legal",
+            "It removes the need for denominator handling",
+            "It guarantees no conversions",
+            "To expose wrong integer division or unexpected precision"
+          ],
+          "correct_index": 3,
+          "explanation": "Result-scale requirements need representative values.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-12-nullif-application-new-8",
+          "test_id": "pt-dbms-sql-12-nullif-application",
+          "question_text": "What does a nonempty discount code surviving NULLIF fail to prove?",
+          "options": [
+            "That the code is recognized, active and authorized",
+            "That it was not the chosen sentinel",
+            "That it is present",
+            "That the expression returned its first value"
+          ],
+          "correct_index": 0,
+          "explanation": "Business authority remains a separate check.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-12-nullif-application-new-9",
+          "test_id": "pt-dbms-sql-12-nullif-application",
+          "question_text": "Why keep raw source evidence before a persisted normalization?",
+          "options": [
+            "Every SELECT deletes raw input",
+            "A rewrite can erase what the original sentinel represented",
+            "NULLIF always changes the schema",
+            "Raw fields automatically grant permission"
+          ],
+          "correct_index": 1,
+          "explanation": "A storage mutation needs reviewed scope and recoverability.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-12-nullif-application-new-10",
+          "test_id": "pt-dbms-sql-12-nullif-application",
+          "question_text": "Which ratio fixtures distinguish the important states?",
+          "options": [
+            "Only exact integer results",
+            "Only positive denominators with equal numerators",
+            "Zero numerator, zero denominator, missing denominator and a fractional valid result",
+            "An empty table alone"
+          ],
+          "correct_index": 2,
+          "explanation": "These separate known zero, missing result and ordinary calculation.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cx-nullif-code-display",
+      "slug": "nullif-code-display",
+      "title": "Display a designated blank discount sentinel",
+      "difficulty": "Easy",
+      "task": "Return offer_id,display_code with No code for NULL or the exact empty discount_code, and the original value otherwise. Inputs contain no whitespace-only or padded codes, so this task does not trim. Order by offer_id.",
+      "schema_sql": "CREATE TABLE equipment_offers(offer_id INT PRIMARY KEY,discount_code VARCHAR(20) CHARACTER SET ascii COLLATE ascii_bin);",
+      "seed_sql": "INSERT INTO equipment_offers VALUES (1,''),(2,NULL),(3,'SAVE5');",
+      "expected": "offer_id\tdisplay_code\n1\tNo code\n2\tNo code\n3\tSAVE5",
+      "ordering": "As explicitly ordered in the result query.",
+      "constraints": [
+        "Use only the supplied synthetic tables and requested transition.",
+        "Preserve unrelated rows."
+      ],
+      "edge_cases": [
+        "An already missing code receives the same display caption.",
+        "A known code 0 is not the blank sentinel."
+      ],
+      "hints": [
+        "Recognize the exact sentinel before choosing the caption.",
+        "Preserve other nonempty strings, including zero-like text."
+      ],
+      "solution_sql": "SELECT offer_id,COALESCE(NULLIF(discount_code,''),'No code') AS display_code FROM equipment_offers ORDER BY offer_id;",
+      "explanation": "NULLIF recognizes the designated blank sentinel. COALESCE then handles both that normalized missing result and already missing input without mutating the source.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO equipment_offers VALUES (7,'0'),(8,'NONE');",
+          "expected": "offer_id\tdisplay_code\n7\t0\n8\tNONE"
+        },
+        {
+          "seed_sql": "INSERT INTO equipment_offers VALUES (1,'');",
+          "expected": "offer_id\tdisplay_code\n1\tNo code"
+        }
+      ]
+    },
+    {
+      "id": "cx-nullif-request-ratio",
+      "slug": "nullif-request-ratio",
+      "title": "Preserve missing and zero-denominator ratios",
+      "difficulty": "Medium",
+      "task": "Return request_id,ratio as DECIMAL(10,2) for issued_units/requested_units. A zero or NULL requested_units gives NULL ratio. A zero issued_units with positive requested_units gives 0.00. All known counts are nonnegative, fit the decimal result range and are accepted synthetic facts. Order by request_id.",
+      "schema_sql": "CREATE TABLE request_totals(request_id INT PRIMARY KEY,issued_units INT,requested_units INT);",
+      "seed_sql": "INSERT INTO request_totals VALUES (1,3,4),(2,0,5),(3,2,0),(4,2,NULL),(5,NULL,5);",
+      "expected": "request_id\tratio\n1\t0.75\n2\t0.00\n3\tNULL\n4\tNULL\n5\tNULL",
+      "ordering": "As explicitly ordered in the result query.",
+      "constraints": [
+        "Use only the supplied synthetic tables and requested transition.",
+        "Preserve unrelated rows."
+      ],
+      "edge_cases": [
+        "Known zero numerator remains valid.",
+        "Missing numerator still yields missing arithmetic output."
+      ],
+      "hints": [
+        "Wrap only the denominator in NULLIF against zero.",
+        "Do not replace a missing ratio with numeric zero."
+      ],
+      "solution_sql": "SELECT request_id,CAST(issued_units/NULLIF(requested_units,0) AS DECIMAL(10,2)) AS ratio FROM request_totals ORDER BY request_id;",
+      "explanation": "The sentinel test applies only to the denominator. NULL arithmetic preserves missing input, while a known zero numerator remains a real zero ratio. The cast states the required result scale.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO request_totals VALUES (7,1,2),(8,1,0);",
+          "expected": "request_id\tratio\n7\t0.50\n8\tNULL"
+        },
+        {
+          "seed_sql": "INSERT INTO request_totals VALUES (1,0,4);",
+          "expected": "request_id\tratio\n1\t0.00"
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-12-nullif-1",
+      "test_id": "pt-dbms-sql-12-nullif",
+      "question_text": "What does NULLIF(val1, val2) return if val1 equals val2?",
+      "options": [
+        "val1",
+        "val2",
+        "NULL",
+        "An error"
+      ],
+      "correct_index": 2,
+      "explanation": "NULLIF specifically converts a matching value into NULL.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-12-nullif-2",
+      "test_id": "pt-dbms-sql-12-nullif",
+      "question_text": "What does NULLIF(val1, val2) return if val1 does NOT equal val2?",
+      "options": [
+        "NULL",
+        "val1, unchanged",
+        "val2",
+        "An error"
+      ],
+      "correct_index": 1,
+      "explanation": "When the values differ, NULLIF simply passes val1 through unchanged.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-12-nullif-3",
+      "test_id": "pt-dbms-sql-12-nullif",
+      "question_text": "What is the most common real-world use of NULLIF?",
+      "options": [
+        "Sorting rows",
+        "Safely avoiding division by zero: value / NULLIF(divisor, 0)",
+        "Removing duplicate rows",
+        "Converting text to uppercase"
+      ],
+      "correct_index": 1,
+      "explanation": "Turning a zero divisor into NULL avoids a division error, since division by NULL simply yields NULL.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-12-nullif-4",
+      "test_id": "pt-dbms-sql-12-nullif",
+      "question_text": "Which CASE expression is NULLIF(a, b) exactly equivalent to?",
+      "options": [
+        "CASE WHEN a = b THEN a ELSE NULL END",
+        "CASE WHEN a = b THEN NULL ELSE a END",
+        "CASE WHEN a <> b THEN NULL ELSE a END",
+        "CASE WHEN a IS NULL THEN b ELSE a END"
+      ],
+      "correct_index": 1,
+      "explanation": "NULLIF is shorthand for exactly this specific CASE pattern.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-12-nullif-5",
+      "test_id": "pt-dbms-sql-12-nullif",
+      "question_text": "What does COALESCE(NULLIF(discount_code, ''), 'NONE') accomplish?",
+      "options": [
+        "It always returns an empty string",
+        "It treats an empty string the same as a missing value, converting it to NULL first, then supplying 'NONE' as the fallback",
+        "It concatenates discount_code with 'NONE'",
+        "It causes an error if discount_code is empty"
+      ],
+      "correct_index": 1,
+      "explanation": "This combines NULLIF (empty-string-to-NULL) and COALESCE (NULL-to-fallback) into a single useful pattern.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-12-nullif-6",
+      "test_id": "pt-dbms-sql-12-nullif",
+      "question_text": "Is NULLIF the inverse operation of COALESCE?",
+      "options": [
+        "No, they do the same thing",
+        "Yes — COALESCE replaces NULL with a fallback value; NULLIF deliberately creates a NULL from a specific sentinel value",
+        "NULLIF only works with numbers, unlike COALESCE",
+        "NULLIF is a deprecated alias for COALESCE"
+      ],
+      "correct_index": 1,
+      "explanation": "The two functions serve complementary, opposite purposes.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-12-nullif-7",
+      "test_id": "pt-dbms-sql-12-nullif",
+      "question_text": "What does NULLIF(NULL, 5) return?",
+      "options": [
+        "5",
+        "NULL",
+        "An error",
+        "0"
+      ],
+      "correct_index": 1,
+      "explanation": "Since NULL = 5 is UNKNOWN (never TRUE), the 'otherwise return val1' branch applies — and val1 is itself NULL.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-12-nullif-8",
+      "test_id": "pt-dbms-sql-12-nullif",
+      "question_text": "Why might '0' be treated as a sentinel value worth converting to NULL with NULLIF in some datasets?",
+      "options": [
+        "Zero always means the same thing as NULL in every context",
+        "Sometimes 0 is used as a placeholder for 'not really tracked,' and treating it as NULL lets NULL-ignoring aggregate functions (like AVG) correctly skip those rows",
+        "NULLIF requires converting all zeros to NULL for validity",
+        "This has no real practical benefit"
+      ],
+      "correct_index": 1,
+      "explanation": "Distinguishing a genuine zero from a 'not tracked' placeholder matters for correct aggregate calculations.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "coordinator",
+    "independent_review": "passed",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Independent manual review passed; native MySQL fixture evidence recorded separately; provider/browser/Supabase release gates remain separate.",
+    "existing_question_corrections": [
+      "tq-dbms-sql-12-nullif-1",
+      "tq-dbms-sql-12-nullif-2",
+      "tq-dbms-sql-12-nullif-3",
+      "tq-dbms-sql-12-nullif-4",
+      "tq-dbms-sql-12-nullif-5",
+      "tq-dbms-sql-12-nullif-6",
+      "tq-dbms-sql-12-nullif-7",
+      "tq-dbms-sql-12-nullif-8"
+    ],
+    "canonical_answer_indices_preserved": true,
+    "editorial_record": "Original snapshots retained. Questions rewritten for precise dialect and topic coverage while preserving identities and canonical answer positions; technical and independent review pending.",
+    "independent_reviewer": "Codex reviewer, current 2026-10-30 session",
+    "independent_review_scope": "Read full notes, all 640 MCQ stems/options/canonical answers/explanations, 64 exercise contracts/solutions/fixtures, and all 32 diagrams. Verified retained identities/answers through source-continuity tests; SQL execution evidence is recorded separately. No external originality, provider, live application or Supabase authorization clearance.",
+    "independent_review_record": "reports/independent-review-2026-10-30.json",
+    "content_sha256": "f647d936f8d301b3f2d35b74107456ffcdb7d32fd2d11d651d33ea7d9f1f72b0"
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-12-nullif",
+    "original_note_sha256": "cebab71703c7908e557301fb4138d3a9a24ade8ba386b1d919cdb24d51b01bf4",
+    "status": "drafted; not yet included in prepared paired migrations"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "A denominator sentinel differs from a genuine zero result",
+      "description": "NULL is intentionally retained for undefined or missing ratios.",
+      "columns": [
+        "Issued units",
+        "Requested units",
+        "Normalized denominator",
+        "Ratio"
+      ],
+      "rows": [
+        [
+          "3",
+          "4",
+          "4",
+          "0.75"
+        ],
+        [
+          "0",
+          "5",
+          "5",
+          "0.00"
+        ],
+        [
+          "2",
+          "0",
+          "NULL",
+          "NULL"
+        ],
+        [
+          "2",
+          "NULL",
+          "NULL",
+          "NULL"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "drafted — verification pending",
+    "server_rendering": "pending",
+    "browser_rendering": "unverified",
+    "independent_review": "pending"
+  },
+  "authoring_status": "drafted — verification pending",
+  "sql_verification": {
+    "scope": "not executed; exact MySQL/provider verification pending",
+    "all_passed": false,
+    "cases": []
+  }
+}

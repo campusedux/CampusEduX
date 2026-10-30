@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { createBrowserSupabase } from "@/lib/supabase/browser";
+import { emitSessionChange } from "@/lib/sessionSignal";
 import type { AccountUser } from "@/lib/auth";
 import { Button, Field, Input, Select } from "@/components/ui";
 
@@ -37,25 +38,35 @@ export default function ProfileForm({ initial, catalog }: { initial: AccountUser
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (saving) return;
     setSaving(true);
     setError(null);
     setSaved(false);
-    const supabase = createBrowserSupabase();
-    const { error: updateError } = await supabase
-      .from("profiles")
-      .update({
-        full_name: fullName,
-        course,
-        branch,
-        year,
-        linkedin_url: linkedinUrl.trim() || null,
-        github_url: githubUrl.trim() || null,
-        portfolio_url: portfolioUrl.trim() || null,
-      })
-      .eq("id", initial.id);
-    setSaving(false);
-    if (updateError) setError(updateError.message);
-    else setSaved(true);
+    try {
+      const supabase = createBrowserSupabase();
+      const { error: updateError } = await supabase
+        .from("profiles")
+        .update({
+          full_name: fullName,
+          course,
+          branch,
+          year,
+          linkedin_url: linkedinUrl.trim() || null,
+          github_url: githubUrl.trim() || null,
+          portfolio_url: portfolioUrl.trim() || null,
+        })
+        .eq("id", initial.id);
+      setSaving(false);
+      if (updateError) setError(updateError.message);
+      else {
+        setSaved(true);
+        emitSessionChange();
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (

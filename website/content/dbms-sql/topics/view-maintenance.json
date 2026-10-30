@@ -1,0 +1,564 @@
+{
+  "slug": "view-maintenance",
+  "source_ref": "chapter-19-views/view-maintenance",
+  "title": "View Maintenance",
+  "description": "Understand ordinary view changes and stored-summary maintenance through enrollment counts, stale-result diagnostics, refresh design, and reconciliation labs.",
+  "dialect": "MySQL 8.4; engine-specific behavior labeled",
+  "references": [
+    {
+      "title": "MySQL view processing",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/view-algorithms.html"
+    },
+    {
+      "title": "MySQL view metadata",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/view-metadata.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-19-view-maintenance",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-19-view-maintenance-1",
+          "test_id": "pt-dbms-sql-19-view-maintenance",
+          "question_text": "What can happen if a column referenced by a view is dropped from the base table, in an engine that doesn't eagerly check view dependencies?",
+          "options": [
+            "The view is automatically updated to remove the reference",
+            "Nothing changes until the view is queried, at which point it fails with an error like 'column does not exist'",
+            "The database refuses to start",
+            "The view silently returns zero rows forever"
+          ],
+          "correct_index": 1,
+          "explanation": "Without eager dependency checking, the break is deferred until query time, producing a delayed and easy-to-miss failure — a dangerous maintenance trap.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-19-view-maintenance-2",
+          "test_id": "pt-dbms-sql-19-view-maintenance",
+          "question_text": "In PostgreSQL, why can CREATE OR REPLACE VIEW be preferable to dropping and recreating a compatible view definition?",
+          "options": [
+            "It runs faster on large tables",
+            "DROP VIEW typically removes the grants attached to the view object, which must then be manually re-issued; CREATE OR REPLACE VIEW preserves them",
+            "DROP VIEW is not valid SQL syntax",
+            "CREATE OR REPLACE VIEW automatically updates all dependent views too"
+          ],
+          "correct_index": 1,
+          "explanation": "PostgreSQL replacement preserves object identity and associated ownership/permissions under its supported replacement contract. Privilege behavior must not be generalized unchanged across engines.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-19-view-maintenance-3",
+          "test_id": "pt-dbms-sql-19-view-maintenance",
+          "question_text": "A column `salary` is renamed to `base_salary`. How can a view preserve its external `salary` column name for existing client applications?",
+          "options": [
+            "By using SELECT * so all columns pass through automatically",
+            "By redefining the view with `base_salary AS salary` in the SELECT list via CREATE OR REPLACE VIEW",
+            "It is impossible to preserve the old column name in a view",
+            "By creating a synonym table"
+          ],
+          "correct_index": 1,
+          "explanation": "Aliasing the renamed physical column back to the original name in the view definition keeps the view's output contract stable for consumers, even though the underlying column name changed.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-19-view-maintenance-4",
+          "test_id": "pt-dbms-sql-19-view-maintenance",
+          "question_text": "In MySQL, what should be understood about a view originally created using SELECT * when the base table changes?",
+          "options": [
+            "The view cannot ever be dropped",
+            "Its definition is frozen at creation: added base columns do not automatically appear, and dropping referenced columns can invalidate it",
+            "SELECTstar is forbidden in views",
+            "Every such view always runs slower"
+          ],
+          "correct_index": 1,
+          "explanation": "MySQL freezes the selected column definition at creation. Explicit projections make the intended output contract clearer; redefinition is deliberate.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-19-view-maintenance-5",
+          "test_id": "pt-dbms-sql-19-view-maintenance",
+          "question_text": "What does a dependency-tracking system (e.g., PostgreSQL's pg_depend) prevent by default?",
+          "options": [
+            "Creating any new view",
+            "Dropping a table that a view depends on, unless CASCADE is specified",
+            "Granting SELECT on a view",
+            "Renaming any column in the database"
+          ],
+          "correct_index": 1,
+          "explanation": "Dependency tracking blocks a DROP TABLE (or similar) that would break a dependent view, unless the operation is explicitly forced with CASCADE, protecting against accidental breakage.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-19-view-maintenance-6",
+          "test_id": "pt-dbms-sql-19-view-maintenance",
+          "question_text": "Why should a team query the system catalog for view dependencies before running ALTER TABLE ... DROP COLUMN in production?",
+          "options": [
+            "It's not necessary since SQL always warns automatically",
+            "To identify every view that could break from the change and fix/update them proactively rather than discovering failures later",
+            "Because ALTER TABLE requires listing dependent views by law of SQL syntax",
+            "To automatically drop all dependent views"
+          ],
+          "correct_index": 1,
+          "explanation": "Proactively checking dependencies (via information_schema.view_table_usage, pg_depend, etc.) lets a team fix or update all impacted views before the breaking change ships, avoiding delayed production failures.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-19-view-maintenance-7",
+          "test_id": "pt-dbms-sql-19-view-maintenance",
+          "question_text": "What compounding risk do nested views (a view built on another view) introduce for schema maintenance?",
+          "options": [
+            "None — nested views are fully isolated from each other",
+            "A single base-table schema change can cascade through multiple layers of dependent views, widening the blast radius of a break",
+            "Nested views cannot be created at all",
+            "Nested views automatically fix themselves"
+          ],
+          "correct_index": 1,
+          "explanation": "If view B is built on view A, a break in A (from a base-table change) propagates to B and anything built on B — increasing the scope of what must be checked and fixed.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-19-view-maintenance-8",
+          "test_id": "pt-dbms-sql-19-view-maintenance",
+          "question_text": "In PostgreSQL, what happens to a dependent parsed view when a referenced base column is renamed through a supported ALTER TABLE RENAME COLUMN?",
+          "options": [
+            "The view becomes a materialized view",
+            "The dependent view remains bound to the same base attribute; its existing output alias need not change",
+            "Every dependent view is automatically dropped",
+            "Column renaming is universally blocked by view dependencies"
+          ],
+          "correct_index": 1,
+          "explanation": "PostgreSQL tracks the referenced attribute through the rename. Renaming a view output column is a separate interface change; this differs from dropping a referenced column.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "cx-view-maintenance-fundamentals-9",
+          "test_id": "pt-dbms-sql-19-view-maintenance",
+          "question_text": "What maintenance does an ordinary view require after an eligible base row insert?",
+          "options": [
+            "No separate stored-result refresh",
+            "Always copy the entire table",
+            "Always restart the server",
+            "Always rebuild every index"
+          ],
+          "correct_index": 0,
+          "explanation": "An ordinary view evaluates its definition under transaction visibility rules.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "cx-view-maintenance-fundamentals-10",
+          "test_id": "pt-dbms-sql-19-view-maintenance",
+          "question_text": "What extra obligation does a stored summary introduce?",
+          "options": [
+            "Removing base constraints",
+            "Refreshing derived data consistently",
+            "Granting public access",
+            "Ignoring source changes"
+          ],
+          "correct_index": 1,
+          "explanation": "Stored derived rows can diverge unless maintenance keeps them current.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "cx-view-maintenance-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "cx-view-maintenance-application-1",
+          "test_id": "cx-view-maintenance-application",
+          "question_text": "Why is COUNT(e.id) useful after a left join to enrollments?",
+          "options": [
+            "It counts missing matches as one",
+            "It ignores the synthetic unmatched row",
+            "It removes course groups",
+            "It guarantees uniqueness"
+          ],
+          "correct_index": 1,
+          "explanation": "A nonnull match identifier counts actual child rows.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "cx-view-maintenance-application-2",
+          "test_id": "cx-view-maintenance-application",
+          "question_text": "What does changing a view column alias risk?",
+          "options": [
+            "Changing every primary key",
+            "Automatically deleting rows",
+            "Breaking consumers using the previous name",
+            "Only a cosmetic comment change"
+          ],
+          "correct_index": 2,
+          "explanation": "Exposed names are part of the contract.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "cx-view-maintenance-application-3",
+          "test_id": "cx-view-maintenance-application",
+          "question_text": "Which change requires two group adjustments in a cached count?",
+          "options": [
+            "Renaming a local variable",
+            "Reading an existing view",
+            "Sorting a report",
+            "Moving an enrollment between courses"
+          ],
+          "correct_index": 3,
+          "explanation": "The old course loses one while the new course gains one.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "cx-view-maintenance-application-4",
+          "test_id": "cx-view-maintenance-application",
+          "question_text": "Why is averaging previous averages generally incorrect?",
+          "options": [
+            "Groups may have different counts",
+            "AVG cannot handle integers",
+            "Every average is zero",
+            "SQL forbids nested reports"
+          ],
+          "correct_index": 0,
+          "explanation": "A combined average requires weights, typically sums and counts.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "cx-view-maintenance-application-5",
+          "test_id": "cx-view-maintenance-application",
+          "question_text": "What can a cache-first mismatch query miss?",
+          "options": [
+            "Every existing cached course",
+            "A course present only in source data",
+            "Every incorrect nonzero count",
+            "All duplicate enrollment rows"
+          ],
+          "correct_index": 1,
+          "explanation": "Starting from cache keys cannot see absent cache groups.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "cx-view-maintenance-application-6",
+          "test_id": "cx-view-maintenance-application",
+          "question_text": "What should a reconciliation query use as its row grain?",
+          "options": [
+            "Whatever column is shortest",
+            "One row per database",
+            "The same business grain as the maintained definition",
+            "Only distinct numeric values"
+          ],
+          "correct_index": 2,
+          "explanation": "A grain mismatch can hide or invent discrepancies.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "cx-view-maintenance-application-7",
+          "test_id": "cx-view-maintenance-application",
+          "question_text": "What happens if a delta event is applied twice without protection?",
+          "options": [
+            "The source table repairs it automatically",
+            "The view becomes read only",
+            "ORDER BY prevents it",
+            "The summary can be overcounted"
+          ],
+          "correct_index": 3,
+          "explanation": "Duplicate processing repeats the state change.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "cx-view-maintenance-application-8",
+          "test_id": "cx-view-maintenance-application",
+          "question_text": "What should a refresh publication avoid exposing?",
+          "options": [
+            "A partially rebuilt report",
+            "A stable column name",
+            "A verified result",
+            "A documented freshness boundary"
+          ],
+          "correct_index": 0,
+          "explanation": "Partial publication can present inconsistent totals.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "cx-view-maintenance-application-9",
+          "test_id": "cx-view-maintenance-application",
+          "question_text": "Why can MIN need extra work when a row is deleted?",
+          "options": [
+            "MIN always increments by one",
+            "The removed row may hold the minimum",
+            "MIN counts all NULL values",
+            "Every deletion clears every group"
+          ],
+          "correct_index": 1,
+          "explanation": "Finding the next minimum may require remaining source rows.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "cx-view-maintenance-application-10",
+          "test_id": "cx-view-maintenance-application",
+          "question_text": "Which claim needs separate operational evidence?",
+          "options": [
+            "A count of two rows is two",
+            "A named view stores a definition",
+            "A refresh remains consistent during concurrent writes",
+            "A missing key is absent"
+          ],
+          "correct_index": 2,
+          "explanation": "Concurrency behavior cannot be proved by a static content example.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-19-view-maintenance-1",
+      "test_id": "pt-dbms-sql-19-view-maintenance",
+      "question_text": "What can happen if a column referenced by a view is dropped from the base table, in an engine that doesn't eagerly check view dependencies?",
+      "options": [
+        "The view is automatically updated to remove the reference",
+        "Nothing changes until the view is queried, at which point it fails with an error like 'column does not exist'",
+        "The database refuses to start",
+        "The view silently returns zero rows forever"
+      ],
+      "correct_index": 1,
+      "explanation": "Without eager dependency checking, the break is deferred until query time, producing a delayed and easy-to-miss failure — a dangerous maintenance trap.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-19-view-maintenance-2",
+      "test_id": "pt-dbms-sql-19-view-maintenance",
+      "question_text": "Why is CREATE OR REPLACE VIEW generally preferred over DROP VIEW + CREATE VIEW when fixing a view's definition?",
+      "options": [
+        "It runs faster on large tables",
+        "DROP VIEW typically removes the grants attached to the view object, which must then be manually re-issued; CREATE OR REPLACE VIEW preserves them",
+        "DROP VIEW is not valid SQL syntax",
+        "CREATE OR REPLACE VIEW automatically updates all dependent views too"
+      ],
+      "correct_index": 1,
+      "explanation": "Dropping a view destroys the object and its associated permissions; replacing it in place keeps the same object identity and its grants intact, avoiding the risk of forgetting to reissue GRANTs.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-19-view-maintenance-3",
+      "test_id": "pt-dbms-sql-19-view-maintenance",
+      "question_text": "A column `salary` is renamed to `base_salary`. How can a view preserve its external `salary` column name for existing client applications?",
+      "options": [
+        "By using SELECT * so all columns pass through automatically",
+        "By redefining the view with `base_salary AS salary` in the SELECT list via CREATE OR REPLACE VIEW",
+        "It is impossible to preserve the old column name in a view",
+        "By creating a synonym table"
+      ],
+      "correct_index": 1,
+      "explanation": "Aliasing the renamed physical column back to the original name in the view definition keeps the view's output contract stable for consumers, even though the underlying column name changed.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-19-view-maintenance-4",
+      "test_id": "pt-dbms-sql-19-view-maintenance",
+      "question_text": "Why are views defined with SELECT * considered more fragile for long-term maintenance than views with an explicit column list?",
+      "options": [
+        "SELECT * views cannot be dropped",
+        "SELECT * views' output shape silently changes when columns are added to or removed from the base table",
+        "SELECT * is not valid inside a view definition",
+        "SELECT * views always run slower"
+      ],
+      "correct_index": 1,
+      "explanation": "A SELECT * view's output automatically reflects any base-table column additions/removals, which can unexpectedly change downstream consumers' results or break them — explicit column lists avoid this surprise.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-19-view-maintenance-5",
+      "test_id": "pt-dbms-sql-19-view-maintenance",
+      "question_text": "What does a dependency-tracking system (e.g., PostgreSQL's pg_depend) prevent by default?",
+      "options": [
+        "Creating any new view",
+        "Dropping a table that a view depends on, unless CASCADE is specified",
+        "Granting SELECT on a view",
+        "Renaming any column in the database"
+      ],
+      "correct_index": 1,
+      "explanation": "Dependency tracking blocks a DROP TABLE (or similar) that would break a dependent view, unless the operation is explicitly forced with CASCADE, protecting against accidental breakage.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-19-view-maintenance-6",
+      "test_id": "pt-dbms-sql-19-view-maintenance",
+      "question_text": "Why should a team query the system catalog for view dependencies before running ALTER TABLE ... DROP COLUMN in production?",
+      "options": [
+        "It's not necessary since SQL always warns automatically",
+        "To identify every view that could break from the change and fix/update them proactively rather than discovering failures later",
+        "Because ALTER TABLE requires listing dependent views by law of SQL syntax",
+        "To automatically drop all dependent views"
+      ],
+      "correct_index": 1,
+      "explanation": "Proactively checking dependencies (via information_schema.view_table_usage, pg_depend, etc.) lets a team fix or update all impacted views before the breaking change ships, avoiding delayed production failures.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-19-view-maintenance-7",
+      "test_id": "pt-dbms-sql-19-view-maintenance",
+      "question_text": "What compounding risk do nested views (a view built on another view) introduce for schema maintenance?",
+      "options": [
+        "None — nested views are fully isolated from each other",
+        "A single base-table schema change can cascade through multiple layers of dependent views, widening the blast radius of a break",
+        "Nested views cannot be created at all",
+        "Nested views automatically fix themselves"
+      ],
+      "correct_index": 1,
+      "explanation": "If view B is built on view A, a break in A (from a base-table change) propagates to B and anything built on B — increasing the scope of what must be checked and fixed.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-19-view-maintenance-8",
+      "test_id": "pt-dbms-sql-19-view-maintenance",
+      "question_text": "In PostgreSQL, what commonly happens if you try to RENAME a column that an existing view depends on?",
+      "options": [
+        "It always succeeds silently with no warning",
+        "It typically raises an error blocking the rename because other objects (the view) depend on that column",
+        "It automatically updates the view's definition to match",
+        "It converts the view into a materialized view"
+      ],
+      "correct_index": 1,
+      "explanation": "PostgreSQL's dependency tracking generally blocks a column rename when a view depends on it, forcing the view to be handled (e.g., via CREATE OR REPLACE VIEW) as part of the schema change.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cx-find-wrong-cached-counts",
+      "slug": "find-wrong-cached-counts",
+      "title": "Find Wrong Cached Counts",
+      "difficulty": "Easy",
+      "task": "Return course_id, cached, actual for cached courses whose stored count differs from actual enrollment count. Include zero matches. Order by course_id.",
+      "schema_sql": "CREATE TABLE enrollments (id INT PRIMARY KEY,course_id INT NOT NULL); CREATE TABLE cached_counts (course_id INT PRIMARY KEY,n INT NOT NULL);",
+      "seed_sql": "INSERT INTO enrollments VALUES (1,10),(2,10),(3,20); INSERT INTO cached_counts VALUES (10,1),(20,1),(40,1);",
+      "solution_sql": "SELECT c.course_id,c.n AS cached,COUNT(e.id) AS actual FROM cached_counts c LEFT JOIN enrollments e ON e.course_id=c.course_id GROUP BY c.course_id,c.n HAVING c.n <> COUNT(e.id) ORDER BY c.course_id;",
+      "expected": "course_id\tcached\tactual\n10\t1\t2\n40\t1\t0",
+      "ordering": "Order rows by the key specified in the task.",
+      "edge_cases": [
+        "Empty input returns no detail rows.",
+        "Include equal values on different source rows.",
+        "Verify boundary and NULL handling when the schema permits them."
+      ],
+      "hints": [
+        "Determine the result grain before writing the query.",
+        "Use explicit projected columns and a final ORDER BY."
+      ],
+      "explanation": "The solution implements the stated row selection and preserves the requested result grain; the final ordering makes comparisons deterministic.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO cached_counts VALUES (5,2);",
+          "expected": "course_id\tcached\tactual\n5\t2\t0"
+        }
+      ]
+    },
+    {
+      "id": "cx-reconcile-all-course-counts",
+      "slug": "reconcile-all-course-counts",
+      "title": "Reconcile All Course Counts",
+      "difficulty": "Medium",
+      "task": "Return course_id for missing cached courses or cached courses with an incorrect count. An existing zero cache group is acceptable when actual count is zero. Order by course_id.",
+      "schema_sql": "CREATE TABLE enrollments (id INT PRIMARY KEY,course_id INT NOT NULL); CREATE TABLE cached_counts (course_id INT PRIMARY KEY,n INT NOT NULL);",
+      "seed_sql": "INSERT INTO enrollments VALUES (1,10),(2,10),(3,20); INSERT INTO cached_counts VALUES (10,1),(20,1),(40,1);",
+      "solution_sql": "SELECT k.course_id FROM (SELECT course_id FROM enrollments UNION SELECT course_id FROM cached_counts) k LEFT JOIN (SELECT course_id,COUNT(*) AS n FROM enrollments GROUP BY course_id) a ON a.course_id=k.course_id LEFT JOIN cached_counts c ON c.course_id=k.course_id WHERE c.course_id IS NULL OR c.n <> COALESCE(a.n,0) ORDER BY k.course_id;",
+      "expected": "course_id\n10\n40",
+      "ordering": "Order rows by the key specified in the task.",
+      "edge_cases": [
+        "Empty input returns no detail rows.",
+        "Include equal values on different source rows.",
+        "Verify boundary and NULL handling when the schema permits them."
+      ],
+      "hints": [
+        "Determine the result grain before writing the query.",
+        "Use explicit projected columns and a final ORDER BY."
+      ],
+      "explanation": "The solution implements the stated row selection and preserves the requested result grain; the final ordering makes comparisons deterministic.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO enrollments VALUES (1,30); INSERT INTO cached_counts VALUES (40,0);",
+          "expected": "course_id\n30"
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "review": {
+    "reviewer": "/root/finish_e_views",
+    "independent_review": "passed",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Independent manual content review passed within independent_review_scope; engine/browser/release gates separate.",
+    "editorial_record": "Original scenario-led prose and assessments. External originality and AdSense review unperformed.",
+    "canonical_answer_indices_preserved": true,
+    "independent_reviewer": "/root/review_e_and_gaps",
+    "independent_review_scope": "Full notes,20MCQs with every option,canonical answer position and explanation,original diagrams,and all exercise contracts/fixtures or solved conceptual labs. Original identities/indices checked against public seed cache where applicable. Reported substantive findings corrected by coordinator and filtered recheck accepted;identified learner-facing spacing polished. Manual technical/editorial reasoning only;engine,provider,browser,external originality and AdSense evidence separate."
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-19-view-maintenance",
+    "original_note_sha256": "e7ab4cda8324d4ca2c60be8948c65591193673209302964505c9bf70323b4bf1",
+    "status": "drafted; not included in prepared paired migrations"
+  },
+  "notes": "## Keep definitions and stored results distinct\n\nA university dashboard shows enrollment totals by course. Its ordinary SQL view stores a definition that counts current enrollment rows. A separate summary table stores yesterday's calculated totals. Both may look like the same report to a reader, but their maintenance obligations differ. The ordinary view usually needs definition and dependency maintenance. The stored summary also needs data refresh maintenance. Start every investigation by identifying which object owns the displayed numbers and whether those numbers are computed during a read or stored earlier.\n\nView maintenance therefore has two related meanings. Schema maintenance preserves valid, compatible query definitions as underlying structures change. Materialized result maintenance keeps stored derived data consistent with its source. Calling a regular view stale without checking transaction snapshots or application caches leads to the wrong repair. Calling a summary current because its defining SELECT is correct ignores the time since the SELECT last ran.\n\n## Trace an ordinary enrollment view\n\nThe following MySQL example counts enrollment rows. Each enrollment identifier represents one registration; repeated course identifiers are expected. The ordinary view returns one group for each course with at least one enrollment. Courses with zero registrations do not appear unless a separate course list is joined into the definition.\n\n```sql\nCREATE TABLE enrollments (\n id INT PRIMARY KEY, course_id INT NOT NULL\n);\nINSERT INTO enrollments VALUES (1,10),(2,10),(3,20);\nCREATE VIEW enrollment_counts AS\nSELECT course_id,COUNT(*) AS n\nFROM enrollments GROUP BY course_id;\nSELECT course_id,n FROM enrollment_counts ORDER BY course_id;\n```\n\nThe expected rows are course 10 with count 2 and course 20 with count 1. Insert enrollment 4 for course 20, then perform an eligible fresh read: course 20 has count 2. No ordinary view refresh is required. A long running transaction may retain an older snapshot depending on isolation and read behavior. An application may also retain an old response. Inspect those layers before rewriting the view.\n\nThe grouping makes this particular view a reporting interface rather than a simple one row to one base row write path. Updating a count cannot identify which enrollment should be inserted or deleted. Perform registration changes through the trusted base write operation, then read the report. A useful abstraction does not imply that every derived value has a meaningful inverse update.\n\n## Maintain a compatible definition\n\nSuppose callers expect course_id and n. Replacing n with enrollment_total can break consumers even if the arithmetic stays correct. Adding a join can multiply enrollment rows, while changing COUNT(*) to COUNT(nullable_student_id) can exclude missing values. Review semantic compatibility alongside syntax. The previous definition and its representative outputs provide a practical rollback reference.\n\nUse the engine's supported metadata tools to inspect the existing definition before proposing a replacement. In MySQL, SHOW CREATE VIEW enrollment_counts reveals the stored definition. A query against INFORMATION_SCHEMA.VIEWS can help inventory view definitions subject to privileges. Neither command substitutes for discovering application callers, scheduled reports, exports, and dependent views. Some dependencies live outside the database catalog.\n\nA view defined with SELECT * is especially awkward as a stable interface. Its relationship to later schema changes is engine specific, and callers often assume a column order. Prefer explicit columns and aliases. During a planned change, compare result schemas and representative values, including empty input and duplicate source values. Treat a changed row grain as a contract change, even when the number of columns stays the same.\n\n## Maintain a stored summary\n\nMySQL does not provide the same native CREATE MATERIALIZED VIEW facility as PostgreSQL. A MySQL summary table and a refresh job are an application design with explicit consistency responsibilities. Do not copy a refresh command from another database and assume it works. This lesson uses a summary table so the maintenance issue is visible without implying a native MySQL materialized view implementation.\n\n```sql\nCREATE TABLE cached_counts (\n course_id INT PRIMARY KEY, n INT NOT NULL\n);\nINSERT INTO cached_counts VALUES (10,2),(20,1);\nSELECT c.course_id,c.n AS cached,COUNT(e.id) AS actual\nFROM cached_counts AS c\nLEFT JOIN enrollments AS e ON e.course_id=c.course_id\nGROUP BY c.course_id,c.n\nHAVING c.n <> COUNT(e.id)\nORDER BY c.course_id;\n```\n\nAfter the extra registration for course 20, this diagnostic reports cached 1 and actual 2. COUNT(e.id) is deliberate: COUNT(*) would count the synthetic outer join row for a course with no matching enrollments. This first diagnostic only inspects courses already in the cache. A course present solely in the base data is another defect and needs a broader reconciliation query.\n\n## Full recomputation and incremental changes\n\nFull recomputation derives all groups again. It is conceptually easy to verify but can be expensive for a large history. A careful publication process avoids exposing an empty or partially loaded report. The precise transaction, locking, and table replacement approach is engine specific and requires operational review. Do not assume a destructive delete followed by inserts is safe for concurrent readers or recoverable merely because a script contains both commands.\n\nIncremental maintenance updates only affected groups. For a count, an inserted registration adds one and a deleted registration subtracts one. Moving an enrollment between courses affects two groups. Handling an update as only an insertion leaves the old group wrong. Removing the last row also raises a contract question: should the group disappear, or remain with zero? Define that behavior before implementing deltas.\n\nNot every aggregate has equally simple inverse operations. SUM can add and subtract known contributions; AVG needs a compatible sum and count rather than averaging previous averages. MIN may need another search when its current smallest contributing row disappears. These differences explain why a generic increment script cannot maintain every materialized query correctly. The mathematical aggregate determines the state and recovery strategy.\n\n## Worked lab: diagnose an existing cached course\n\nStart from course 10 count 2 and course 20 count 1 in both sources and cache. Add a new registration to course 20. Write a grouped left join from cached_counts to enrollments and compare stored n with COUNT(e.id). The solution returns course 20 only, with cached 1 and actual 2. It does not modify either table, so the result is evidence of a mismatch rather than a repair.\n\nTest a cached course with no registrations. Its actual count must be zero. Then insert two different registrations for one course; both should count, despite matching course identifiers. A DISTINCT count of course_id would collapse the very occurrences being counted. Good diagnostics use the same grain and eligibility rule as the production definition.\n\n## Worked lab: find missing groups too\n\nA second task starts with enrollment for a new course 30 and no corresponding cached row. Build the set of course identifiers from both sources using UNION, then left join a base aggregation and the cached table. Compare counts using COALESCE only where missing groups mean zero. Also check whether the cached row is absent, because an absent group can matter even if a computed default happens to match.\n\nThe solution first establishes all relevant keys, so it catches extra cached groups and missing cached groups as well as wrong values. If the report contract intentionally omits empty courses, distinguish an obsolete cached zero group from a valid published zero group. Reconciliation must follow the stated contract, not a convenient generic equality test.\n\nA useful audit records both the compared values and the reconciliation time. That makes a later investigation distinguish a genuine mismatch from a source change that happened after the audit completed.\n\n## Recovery and operational checks\n\nA scheduled refresh needs an owner, a freshness expectation, failure reporting, and a restart strategy. Delta processing also needs protection against processing the same source event twice. Record a reliable boundary for the changes included in a publication so operators can explain which source state the report represents. Concurrent writes make an uncoordinated sequence of counts and cache writes difficult to reason about.\n\nKeep readers on a documented consistent interface during changes. Verify the new result before exposing it and retain an approved rollback path. These operational exercises are design guidance; no refresh job, DDL deployment, concurrent test, or provider check was executed here. Read [Simple Views](/learning/dbms-sql-tutorial/simple-views) for ordinary view behavior and [UNION ALL](/learning/dbms-sql-tutorial/union-all) for the duplicate rules that affect reconciliation inputs.\n",
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Definition maintenance versus result maintenance",
+      "columns": [
+        "Object",
+        "Stored information",
+        "Maintenance"
+      ],
+      "rows": [
+        [
+          "Ordinary view",
+          "Query definition",
+          "Preserve dependencies and interface"
+        ],
+        [
+          "Summary table",
+          "Previously computed rows",
+          "Refresh and reconcile with source"
+        ]
+      ],
+      "description": "An ordinary view and a stored summary have different freshness responsibilities."
+    }
+  ],
+  "diagram_review": {
+    "technical_review": "Independent manual diagram/content consistency review passed;actual static/browser rendering tracked separately.",
+    "server_rendering": "pending",
+    "browser_rendering": "unverified",
+    "independent_review": "passed"
+  },
+  "sql_verification": {
+    "scope": "not executed; concurrency/recovery/provider verification separate",
+    "all_passed": false,
+    "cases": []
+  }
+}

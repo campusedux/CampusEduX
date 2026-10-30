@@ -1,0 +1,590 @@
+{
+  "source_ref": "chapter-18-set-operations/duplicate-handling",
+  "slug": "duplicate-handling",
+  "title": "Duplicate Handling",
+  "description": "Choose SQL duplicate policies deliberately with DISTINCT, UNION and UNION ALL, preserving fact identity, provenance, null behavior and meaningful event multiplicity.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Decide whether repetition represents information\n\nDuplicate handling in SQL begins with a domain question: when do two result rows represent the same intended fact? Two ticket purchases can have the same price and still be separate purchases. Two imports can repeat the same external purchase identity and represent an accidental duplicate. Comparing visible values without stating the identity can erase legitimate events or retain a repeated event that should have been rejected.\n\nSQL query results usually behave as bags, meaning repeated rows can survive. Set operations and DISTINCT introduce explicit duplicate policies. Read [UNION ALL](/learning/dbms-sql-tutorial/union-all) and [UNION](/learning/dbms-sql-tutorial/union-sql) before comparing their results. This topic focuses on choosing and verifying the policy, rather than treating every repeated display row as an error.\n\n## Separate duplicate rows from duplicate labels\n\nSuppose two workshops have different workshop_id values but both use the title Introduction to SQL. Selecting workshop_id and title returns two different rows. Selecting only title can display the same string twice. Those repeated labels do not establish that the underlying workshop records are duplicates. The projection removed the identity that distinguished them.\n\nA report of distinct workshop titles may legitimately merge the labels. A registration picker must usually retain the workshop identities so that a learner can select the intended event. Both queries can read the same table and both can be correct, because they serve different output contracts. Define the caller's required identity before applying DISTINCT or replacing a bag-preserving operation with a set operation.\n\n## Understand the scope of DISTINCT\n\nSELECT DISTINCT applies to the complete selected tuple. If a query selects learner_id and course_code, two rows collapse only when both selected values compare as duplicates under the applicable rules. DISTINCT is not an instruction to keep one arbitrary row per learner. Including a varying timestamp or row identity can prevent otherwise repeated visible attributes from collapsing.\n\n```sql\nSELECT DISTINCT learner_id, course_code\nFROM attendance_uploads\nORDER BY learner_id, course_code;\n```\n\nThis query returns the represented learner-course pairs. It does not choose the latest attendance event, sum attendance duration or validate that repeated uploads were accidental. Those tasks require additional definitions. If the business rule concerns the newest event per learner and course, specify the ordering and tie policy, then use a suitable ranking or selection query.\n\n## Compare UNION with UNION ALL precisely\n\nUNION combines compatible query outputs and removes duplicate result tuples by default. UNION ALL combines them while retaining multiplicity. Duplicate removal applies across the combined result, including repeats originating within an individual branch. It is not restricted to a row appearing once on the left and once on the right.\n\n```sql\nSELECT learner_id, course_code FROM morning_uploads\nUNION\nSELECT learner_id, course_code FROM afternoon_uploads;\n```\n\nIf the same learner-course pair appears three times in the morning and twice in the afternoon, UNION returns one copy of that projected pair. UNION ALL returns five copies. Whether one or five is correct depends on whether the rows represent membership pairs or separate events. A faster operation that changes that policy answers a different question.\n\n## Keep provenance when sources matter\n\nAdding a source label to each branch changes the tuple being compared. The pair learner seven with SQL from morning differs from learner seven with SQL from afternoon when source_name is selected. UNION therefore retains both tuples even if the learner and course values agree. This can be useful for tracing where records came from, but it is not equivalent to distinct membership across sources.\n\nIf the report needs both a unified membership list and provenance, model those as related outputs rather than assuming one projection satisfies both. You might aggregate source labels separately or preserve raw events in a staging relation while deriving the distinct membership view. Do not discard source evidence prematurely when corrections, reconciliation or auditability depend on knowing which input supplied each observation.\n\n## Know the relevant null rule\n\nDuplicate elimination treats nulls as not distinct for the relevant set comparison. Two selected tuples with the same other values and null in the same selected position can collapse into one tuple under DISTINCT or UNION. That behavior differs from ordinary equality predicates, where NULL equals NULL does not evaluate true.\n\nA missing course_code in two uploads therefore does not automatically represent two different set values. It also does not prove the two uploads refer to the same real-world course. Set duplicate policy is an operation on the projected values. If missing identity makes reliable deduplication impossible, preserve uncertainty instead of interpreting the set result as proof that one underlying event occurred.\n\n## Compare text under actual collation rules\n\nText duplicate comparison can depend on the output's collation. Labels differing in letter case may compare equal under a case-insensitive collation. This means a visually distinct spelling is not guaranteed to survive duplicate elimination as a separate value. Conversely, two labels that look similar can differ in meaningful characters that the chosen comparison retains.\n\nChoose comparison semantics from the domain rather than from whichever collation a temporary table inherits. A case-insensitive person-name search and a case-sensitive external token have different requirements. When combining branches, inspect compatible types and collations as part of the result contract. Do not assume that adding DISTINCT creates a universal byte-for-byte deduplication procedure for every kind of text.\n\n## Diagnose repetition created by joins\n\nA learner joined to three attendance rows appears three times in the pair-level result. Selecting only learner detail can make those three outputs look like accidental duplicates. If the requirement is learners with any attendance, an EXISTS membership query often states the intended grain more clearly. If the requirement is every attendance event, removing the repeated learner detail loses information about event multiplicity.\n\nA final DISTINCT can hide an incomplete join predicate because some incorrect pairs happen to project identical columns. Before using it as a repair, inspect relationship keys and expected cardinality. Count source identities where needed and include distinct entities with equal labels in the fixture. Correct duplicate handling should preserve the requested facts, not simply make the result look less repetitive.\n\n## Distinguish result cleanup from integrity enforcement\n\nSELECT DISTINCT changes a query result; it does not remove rows from storage or prevent future duplicate imports. A unique constraint or unique index can enforce an approved key invariant at write time. Such schema changes require separate review and authorization in a real application. Do not present a read-time deduplication query as equivalent protection against concurrent duplicate writes.\n\nSimilarly, deleting repeated stored records requires a survivor policy, reference analysis and explicit operational approval. Keeping the smallest identity may discard the newest correction or break relationships if performed carelessly. The exercises here only read synthetic data. They teach how result policies behave without claiming to solve production cleanup, identity resolution or data-retention requirements.\n\n## Use multiplicity deliberately in measures\n\nCOUNT(*) after UNION ALL counts retained observations, while COUNT(*) after a distinct union counts distinct projected tuples. Neither is inherently the right count of people or events. The projection and duplicate policy determine the population being counted. State that population in the output label so that a reader does not mistake upload observations for unique enrollments.\n\nThe same reasoning applies to sums. Removing duplicate numeric amounts can undercount legitimate equal-valued transactions. Preserving repeated imported events can overcount accidental replays. Deduplicate by a verified event identity when the contract supports it, and keep separate legitimate events even when all displayed measures happen to agree. A fixture with two distinct five-unit transactions is more revealing than one where every amount is different.\n\n## Verify overlap, repetition and absence independently\n\nBuild a tiny pair of sources with one tuple unique to each, one tuple shared across both, a repeat within one branch and a null-valued tuple. Predict the result multiplicities for UNION and UNION ALL before executing them. Then add an identity or source column and predict the changed comparison tuple. These cases separate cross-source overlap from within-source repetition and projection effects.\n\nThe exercises compare distinct membership with observation multiplicity using integer identities, avoiding accidental collation assumptions. Continue with [set compatibility](/learning/dbms-sql-tutorial/set-compatibility) for output alignment and [join cardinality](/learning/dbms-sql-tutorial/join-cardinality) for repetition caused by relationships. A clear duplicate policy names the compared tuple, the intended fact identity, the treatment of missing values and whether repetition is meaningful evidence.\n",
+  "references": [
+    {
+      "title": "MySQL 8.4 reference manual",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/union.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-18-duplicate-handling",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-18-duplicate-handling-1",
+          "test_id": "pt-dbms-sql-18-duplicate-handling",
+          "question_text": "What is the default duplicate-handling behavior of UNION, INTERSECT, and EXCEPT?",
+          "options": [
+            "All three keep every duplicate by default",
+            "All three remove duplicates by default (set semantics)",
+            "UNION keeps duplicates, but INTERSECT and EXCEPT remove them",
+            "Duplicate handling is undefined and varies randomly"
+          ],
+          "correct_index": 1,
+          "explanation": "Every one of these three operations deduplicates by default.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-18-duplicate-handling-2",
+          "test_id": "pt-dbms-sql-18-duplicate-handling",
+          "question_text": "Which MySQL 8.4 operation concatenates both inputs while retaining their combined copies?",
+          "options": [
+            "INTERSECT ALL",
+            "EXCEPT ALL",
+            "UNION ALL",
+            "UNION DISTINCT"
+          ],
+          "correct_index": 2,
+          "explanation": "UNION ALL adds the multiplicities from both branches without distinct elimination.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-18-duplicate-handling-3",
+          "test_id": "pt-dbms-sql-18-duplicate-handling",
+          "question_text": "For one tuple appearing m times on the left and n times on the right, how do MySQL 8.4 INTERSECT ALL and EXCEPT ALL differ?",
+          "options": [
+            "Both always return m+n copies",
+            "INTERSECT ALL returns min(m,n); EXCEPT ALL returns max(m-n,0)",
+            "Both return exactly one copy",
+            "Neither syntax is supported in MySQL 8.4"
+          ],
+          "correct_index": 1,
+          "explanation": "ALL preserves multiset semantics according to the operation; it is not synonymous with concatenation for every set operator.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-18-duplicate-handling-4",
+          "test_id": "pt-dbms-sql-18-duplicate-handling",
+          "question_text": "Do you ever need to explicitly opt OUT of deduplication to get the default deduplicating behavior?",
+          "options": [
+            "Yes, deduplication must always be explicitly requested",
+            "No — deduplication IS the default; you explicitly opt INTO keeping duplicates instead (e.g. via ALL)",
+            "Deduplication cannot be controlled at all",
+            "This varies unpredictably by query"
+          ],
+          "correct_index": 1,
+          "explanation": "Plain set forms eliminate duplicate tuples. ALL selects multiset rules: UNION ALL adds copies, INTERSECT ALL keeps the minimum count, and EXCEPT ALL subtracts counts without going below zero.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-18-duplicate-handling-5",
+          "test_id": "pt-dbms-sql-18-duplicate-handling",
+          "question_text": "Why does duplicate handling matter for a downstream COUNT(*) on a combined result?",
+          "options": [
+            "COUNT(*) is unaffected by whether duplicates were removed",
+            "Whether duplicates were removed directly changes how many rows COUNT(*) sees",
+            "COUNT(*) automatically ignores duplicates regardless of the set operation used",
+            "This only matters for INTERSECT, never UNION"
+          ],
+          "correct_index": 1,
+          "explanation": "The actual row count of the combined result depends directly on whether deduplication happened.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-18-duplicate-handling-6",
+          "test_id": "pt-dbms-sql-18-duplicate-handling",
+          "question_text": "What practical question should precede choosing between a plain set operation and its ALL variant?",
+          "options": [
+            "Whether the tables have the same name",
+            "Whether duplicates actually need to be removed for this specific use case",
+            "Whether ORDER BY will be used",
+            "Whether the query involves more than one table"
+          ],
+          "correct_index": 1,
+          "explanation": "This is the core cost/correctness trade-off to consider before defaulting to the deduplicating form.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-18-duplicate-handling-7",
+          "test_id": "pt-dbms-sql-18-duplicate-handling",
+          "question_text": "What is a careful performance statement about duplicate elimination?",
+          "options": [
+            "It never costs work",
+            "It can require comparison or other processing, though a provably redundant step may be optimized away",
+            "It only matters for INTERSECT",
+            "Every plan must use the same sorting method"
+          ],
+          "correct_index": 1,
+          "explanation": "Physical work depends on the selected plan and proven properties. Do not assert a mandatory algorithm or unavoidable cost when redundancy is provable.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-18-duplicate-handling-8",
+          "test_id": "pt-dbms-sql-18-duplicate-handling",
+          "question_text": "When do UNION and UNION ALL return the same bag of selected tuples from two branches?",
+          "options": [
+            "Whenever there is no cross-branch overlap, even if a branch repeats tuples",
+            "When each branch has unique selected tuples and their tuple sets are disjoint",
+            "Whenever both branches have the same row count",
+            "Whenever ORDER BY is omitted"
+          ],
+          "correct_index": 1,
+          "explanation": "Both within-branch uniqueness and cross-branch disjointness are required. Equal results do not by themselves establish a universal performance difference.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "cx-q-duplicate-handling-9",
+          "test_id": "pt-dbms-sql-18-duplicate-handling",
+          "question_text": "What does SELECT DISTINCT compare?",
+          "options": [
+            "The entire selected tuple",
+            "Only the first column",
+            "Only the primary key even if absent",
+            "Only numeric values"
+          ],
+          "correct_index": 0,
+          "explanation": "All selected expressions define result equality.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "cx-q-duplicate-handling-10",
+          "test_id": "pt-dbms-sql-18-duplicate-handling",
+          "question_text": "Does DISTINCT modify stored rows?",
+          "options": [
+            "Yes, it deletes copies",
+            "No",
+            "Yes, it creates a unique index",
+            "Only for NULL values"
+          ],
+          "correct_index": 1,
+          "explanation": "It changes the returned result only.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "cx-test-duplicate-handling-2",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "cx-q-duplicate-handling-11",
+          "test_id": "cx-test-duplicate-handling-2",
+          "question_text": "What does UNION ALL preserve?",
+          "options": [
+            "Only one copy per tuple",
+            "Only unmatched rows",
+            "Result multiplicity",
+            "Only nonnull values"
+          ],
+          "correct_index": 2,
+          "explanation": "All branch rows remain.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "cx-q-duplicate-handling-12",
+          "test_id": "cx-test-duplicate-handling-2",
+          "question_text": "Can UNION remove repeats from within one branch?",
+          "options": [
+            "No, only cross-branch copies",
+            "Only if a key is declared",
+            "Only for empty input",
+            "Yes"
+          ],
+          "correct_index": 3,
+          "explanation": "Duplicate removal covers the combined output.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "cx-q-duplicate-handling-13",
+          "test_id": "cx-test-duplicate-handling-2",
+          "question_text": "Why can adding source_name preserve two previously merged rows?",
+          "options": [
+            "It changes the compared tuple",
+            "It disables all comparisons",
+            "It changes every key",
+            "It forces a Cartesian join"
+          ],
+          "correct_index": 0,
+          "explanation": "Different source labels make the selected tuples different.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "cx-q-duplicate-handling-14",
+          "test_id": "cx-test-duplicate-handling-2",
+          "question_text": "Do two NULL values always survive DISTINCT as separate set values?",
+          "options": [
+            "Yes, always",
+            "No",
+            "Only if no ORDER BY exists",
+            "Only for integer columns"
+          ],
+          "correct_index": 1,
+          "explanation": "Nulls are not distinct for duplicate elimination.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "cx-q-duplicate-handling-15",
+          "test_id": "cx-test-duplicate-handling-2",
+          "question_text": "Why can repeated workshop titles be legitimate?",
+          "options": [
+            "Every repeated title is corruption",
+            "Titles are always primary keys",
+            "Different workshop identities may share a title",
+            "DISTINCT validates event identity"
+          ],
+          "correct_index": 2,
+          "explanation": "A display label need not be unique.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "cx-q-duplicate-handling-16",
+          "test_id": "cx-test-duplicate-handling-2",
+          "question_text": "What can a case-insensitive collation affect?",
+          "options": [
+            "The integer primary-key range",
+            "Whether tables can be joined",
+            "The number of selected columns",
+            "Whether differently cased text compares as duplicate"
+          ],
+          "correct_index": 3,
+          "explanation": "Text comparison follows the applicable collation.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "cx-q-duplicate-handling-17",
+          "test_id": "cx-test-duplicate-handling-2",
+          "question_text": "Why is DISTINCT an unsafe blind fix for join repetition?",
+          "options": [
+            "It can hide incorrect relationships or erase intended facts",
+            "It always makes queries slower",
+            "It always changes stored data",
+            "It prevents null comparisons"
+          ],
+          "correct_index": 0,
+          "explanation": "First verify the intended grain and predicates.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "cx-q-duplicate-handling-18",
+          "test_id": "cx-test-duplicate-handling-2",
+          "question_text": "Which mechanism enforces an approved write-time uniqueness invariant?",
+          "options": [
+            "SELECT DISTINCT alone",
+            "A suitable unique constraint or index",
+            "An ORDER BY clause",
+            "UNION ALL"
+          ],
+          "correct_index": 1,
+          "explanation": "Read-time projection does not protect writes.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "cx-q-duplicate-handling-19",
+          "test_id": "cx-test-duplicate-handling-2",
+          "question_text": "What does COUNT after UNION ALL count?",
+          "options": [
+            "Distinct people automatically",
+            "Only source tables",
+            "Retained combined observations",
+            "Only shared tuples"
+          ],
+          "correct_index": 2,
+          "explanation": "The result population includes multiplicity.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "cx-q-duplicate-handling-20",
+          "test_id": "cx-test-duplicate-handling-2",
+          "question_text": "Which fixture exposes unsafe distinct amount summing?",
+          "options": [
+            "Only one transaction",
+            "All different amounts",
+            "An empty table alone",
+            "Two separate transactions with equal amounts"
+          ],
+          "correct_index": 3,
+          "explanation": "Equal measures can belong to different legitimate facts.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cx-duplicates-distinct-membership",
+      "slug": "duplicates-distinct-membership",
+      "title": "Combine distinct learner-course pairs",
+      "difficulty": "Easy",
+      "task": "Return distinct learner_id,course_code pairs across both upload tables, ordered by learner_id,course_code.",
+      "schema_sql": "CREATE TABLE morning_uploads(learner_id INT,course_code INT NULL); CREATE TABLE afternoon_uploads(learner_id INT,course_code INT NULL);",
+      "seed_sql": "INSERT INTO morning_uploads VALUES (1,10),(1,10),(2,NULL); INSERT INTO afternoon_uploads VALUES (1,10),(3,20),(2,NULL);",
+      "solution_sql": "SELECT learner_id,course_code FROM morning_uploads UNION SELECT learner_id,course_code FROM afternoon_uploads ORDER BY learner_id,course_code;",
+      "expected": "learner_id\tcourse_code\n1\t10\n2\tNULL\n3\t20",
+      "ordering": "As specified by the task and explicit ORDER BY.",
+      "constraints": [
+        "Return distinct learner_id,course_code pairs across both upload tables, ordered by learner_id,course_code."
+      ],
+      "edge_cases": [
+        "Within-source repetition is removed.",
+        "Identical null-valued pairs collapse."
+      ],
+      "hints": [
+        "UNION compares full selected pairs, including null-valued course positions."
+      ],
+      "explanation": "UNION compares full selected pairs, including null-valued course positions.",
+      "validation_cases": [
+        {
+          "name": "repetition in one source only",
+          "seed_sql": "INSERT INTO morning_uploads VALUES (1,10),(1,10);",
+          "expected": "learner_id\tcourse_code\n1\t10"
+        },
+        {
+          "name": "both empty",
+          "seed_sql": "",
+          "expected": ""
+        }
+      ]
+    },
+    {
+      "id": "cx-duplicates-count-observations",
+      "slug": "duplicates-count-observations",
+      "title": "Count upload multiplicity across sources",
+      "difficulty": "Medium",
+      "task": "Return learner_id,course_code,observations by pair across both sources, preserving repeated uploads before counting. Order by learner_id,course_code.",
+      "schema_sql": "CREATE TABLE morning_uploads(learner_id INT,course_code INT NULL); CREATE TABLE afternoon_uploads(learner_id INT,course_code INT NULL);",
+      "seed_sql": "INSERT INTO morning_uploads VALUES (1,10),(1,10),(2,NULL); INSERT INTO afternoon_uploads VALUES (1,10),(3,20),(2,NULL);",
+      "solution_sql": "SELECT learner_id,course_code,COUNT(*) AS observations FROM (SELECT learner_id,course_code FROM morning_uploads UNION ALL SELECT learner_id,course_code FROM afternoon_uploads) AS combined GROUP BY learner_id,course_code ORDER BY learner_id,course_code;",
+      "expected": "learner_id\tcourse_code\tobservations\n1\t10\t3\n2\tNULL\t2\n3\t20\t1",
+      "ordering": "As specified by the task and explicit ORDER BY.",
+      "constraints": [
+        "Return learner_id,course_code,observations by pair across both sources, preserving repeated uploads before counting. Order by learner_id,course_code."
+      ],
+      "edge_cases": [
+        "The course dimension must not be dropped.",
+        "Repeated observations remain meaningful for this count."
+      ],
+      "hints": [
+        "UNION ALL preserves observations and grouping counts their multiplicity."
+      ],
+      "explanation": "UNION ALL preserves observations and grouping counts their multiplicity.",
+      "validation_cases": [
+        {
+          "name": "same learner distinct course identities",
+          "seed_sql": "INSERT INTO morning_uploads VALUES (1,10),(1,10); INSERT INTO afternoon_uploads VALUES (1,20),(1,20);",
+          "expected": "learner_id\tcourse_code\tobservations\n1\t10\t2\n1\t20\t2"
+        },
+        {
+          "name": "both empty",
+          "seed_sql": "",
+          "expected": ""
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-18-duplicate-handling-1",
+      "test_id": "pt-dbms-sql-18-duplicate-handling",
+      "question_text": "What is the default duplicate-handling behavior of UNION, INTERSECT, and EXCEPT?",
+      "options": [
+        "All three keep every duplicate by default",
+        "All three remove duplicates by default (set semantics)",
+        "UNION keeps duplicates, but INTERSECT and EXCEPT remove them",
+        "Duplicate handling is undefined and varies randomly"
+      ],
+      "correct_index": 1,
+      "explanation": "Every one of these three operations deduplicates by default.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-18-duplicate-handling-2",
+      "test_id": "pt-dbms-sql-18-duplicate-handling",
+      "question_text": "Which set operation has a universally-available 'ALL' variant to keep duplicates?",
+      "options": [
+        "INTERSECT ALL",
+        "EXCEPT ALL",
+        "UNION ALL",
+        "None of them support an ALL variant"
+      ],
+      "correct_index": 2,
+      "explanation": "UNION ALL is the widely-supported, commonly-used bag-semantics variant.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-18-duplicate-handling-3",
+      "test_id": "pt-dbms-sql-18-duplicate-handling",
+      "question_text": "Are INTERSECT ALL and EXCEPT ALL as widely supported as UNION ALL?",
+      "options": [
+        "Yes, identically supported everywhere",
+        "No — they exist in some dialects (like PostgreSQL) but are far less commonly available or needed",
+        "No dialect supports INTERSECT ALL or EXCEPT ALL",
+        "They are more widely supported than UNION ALL"
+      ],
+      "correct_index": 1,
+      "explanation": "UNION ALL is the dominant, most broadly available bag-semantics variant among the three operations.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-18-duplicate-handling-4",
+      "test_id": "pt-dbms-sql-18-duplicate-handling",
+      "question_text": "Do you ever need to explicitly opt OUT of deduplication to get the default deduplicating behavior?",
+      "options": [
+        "Yes, deduplication must always be explicitly requested",
+        "No — deduplication IS the default; you explicitly opt INTO keeping duplicates instead (e.g. via ALL)",
+        "Deduplication cannot be controlled at all",
+        "This varies unpredictably by query"
+      ],
+      "correct_index": 1,
+      "explanation": "The direction of the opt-in/opt-out is consistent: plain forms deduplicate, ALL variants keep duplicates.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-18-duplicate-handling-5",
+      "test_id": "pt-dbms-sql-18-duplicate-handling",
+      "question_text": "Why does duplicate handling matter for a downstream COUNT(*) on a combined result?",
+      "options": [
+        "COUNT(*) is unaffected by whether duplicates were removed",
+        "Whether duplicates were removed directly changes how many rows COUNT(*) sees",
+        "COUNT(*) automatically ignores duplicates regardless of the set operation used",
+        "This only matters for INTERSECT, never UNION"
+      ],
+      "correct_index": 1,
+      "explanation": "The actual row count of the combined result depends directly on whether deduplication happened.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-18-duplicate-handling-6",
+      "test_id": "pt-dbms-sql-18-duplicate-handling",
+      "question_text": "What practical question should precede choosing between a plain set operation and its ALL variant?",
+      "options": [
+        "Whether the tables have the same name",
+        "Whether duplicates actually need to be removed for this specific use case",
+        "Whether ORDER BY will be used",
+        "Whether the query involves more than one table"
+      ],
+      "correct_index": 1,
+      "explanation": "This is the core cost/correctness trade-off to consider before defaulting to the deduplicating form.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-18-duplicate-handling-7",
+      "test_id": "pt-dbms-sql-18-duplicate-handling",
+      "question_text": "Is deduplication free from a performance standpoint?",
+      "options": [
+        "Yes, it costs nothing",
+        "No — comparing and removing duplicate rows requires real computational work",
+        "It only costs time for INTERSECT, not UNION or EXCEPT",
+        "Deduplication cost only applies to very large tables"
+      ],
+      "correct_index": 1,
+      "explanation": "Deduplication always requires real comparison work, regardless of table size.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-18-duplicate-handling-8",
+      "test_id": "pt-dbms-sql-18-duplicate-handling",
+      "question_text": "If you know two data sources genuinely cannot overlap, is deduplication via plain UNION still useful?",
+      "options": [
+        "Yes, it's always beneficial regardless",
+        "No — if overlap is impossible, UNION ALL produces the identical result faster, since there's nothing to deduplicate",
+        "Deduplication becomes mandatory in this case",
+        "This scenario cannot occur in practice"
+      ],
+      "correct_index": 1,
+      "explanation": "When duplicates are provably impossible, UNION ALL gives the same correct result without paying the deduplication cost.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "worker_3",
+    "independent_review": "passed",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "author review; independent review pending",
+    "canonical_answer_indices_preserved": true,
+    "editorial_record": "Original explanations and assessments; seeded identities and canonical answer positions retained. External originality clearance unavailable.",
+    "independent_reviewer": "/root",
+    "independent_review_scope": "Full notes,20 MCQs/options/reasoning,both exercises with six predicted outputs and table diagram reviewed; portable fixtures passed. Full-tuple identity, within-branch versus cross-branch repetition, NULL duplicate semantics and provenance effects correct. Corrected inherited universal ALL support, multiset multiplicities, redundant-dedup cost and disjoint-but-internally-repeated UNION equivalence claims. Exact MySQL/provider, browser and release validation remain separate."
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-18-duplicate-handling",
+    "original_note_sha256": "014d9eaddb57c6a3740da859a1e83cb6e2b68ea9dc36265bcf13470285626146",
+    "status": "drafted; not included in prepared paired migrations"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "One tuple can have several observation copies",
+      "description": "A distinct union answers membership; an all union retains how many source observations were supplied.",
+      "columns": [
+        "Selected pair",
+        "Morning copies",
+        "Afternoon copies",
+        "UNION copies",
+        "UNION ALL copies"
+      ],
+      "rows": [
+        [
+          "1 + 10",
+          "2",
+          "1",
+          "1",
+          "3"
+        ],
+        [
+          "2 + NULL",
+          "1",
+          "1",
+          "1",
+          "2"
+        ],
+        [
+          "3 + 20",
+          "0",
+          "1",
+          "1",
+          "1"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "coordinator independent manual review passed",
+    "server_rendering": "passed",
+    "browser_rendering": "unverified",
+    "independent_review": "passed",
+    "server_rendering_evidence": "2026-10-29 full Vitest:1310 passed/12 skipped; actual LessonBlock/TopicDiagrams render over230 packages. Browser visual QA remains unverified."
+  },
+  "authoring_status": "drafted; verification pending",
+  "sql_verification": {
+    "scope": "not executed; exact MySQL/provider execution pending",
+    "all_passed": false,
+    "cases": []
+  }
+}

@@ -51,7 +51,7 @@ export function AccountLearningCard({ courses }: { courses: AccountCourse[] }) {
       {started.length === 0 ? (
         <div className="flex flex-1 flex-col items-start justify-center py-6">
           <p className="text-sm text-ink-muted">You haven&apos;t started a course on this device yet.</p>
-          <Link href="/learning" className="btn-secondary mt-4 h-10 text-sm">
+          <Link href="/learning" className="btn-secondary mt-4 min-h-11 text-sm">
             <BookOpen className="h-4 w-4" aria-hidden /> Browse courses
           </Link>
         </div>
@@ -73,9 +73,9 @@ export function AccountLearningCard({ courses }: { courses: AccountCourse[] }) {
           <ul className="mt-4 space-y-3.5">
             {started.map(({ c, p }) => (
               <li key={c.slug}>
-                <Link href={`/learning/${c.slug}`} className="group block">
+                <Link href={`/learning/${c.slug}`} className="group block min-h-11">
                   <span className="flex items-baseline justify-between gap-3 text-sm">
-                    <span className="truncate font-semibold text-ink group-hover:text-primary">{c.name}</span>
+                    <span className="min-w-0 truncate font-semibold text-ink group-hover:text-primary">{c.name}</span>
                     <span className="flex-shrink-0 text-xs text-ink-faint">
                       {p.completed}/{p.total} · {p.percent}%
                     </span>

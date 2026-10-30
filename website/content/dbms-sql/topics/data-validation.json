@@ -1,0 +1,603 @@
+{
+  "source_ref": "chapter-11-dml-and-data-modification/data-validation",
+  "slug": "data-validation",
+  "title": "Data Validation",
+  "description": "Validate SQL data with trusted input checks, NOT NULL, CHECK, unique and foreign keys, staged diagnostics, and explicit concurrency rules.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Valid data depends on explicit rules\n\nData validation decides whether supplied facts satisfy a stated contract. A campus equipment request might require a known requester, an existing equipment code and a positive quantity. These are separate rules with separate failure explanations. A value can be the correct SQL type while still being unacceptable: negative three is an integer, but it is not a permitted requested quantity.\n\nStart by describing accepted values and relationships rather than collecting convenient checks. Identify required fields, permitted ranges, protected identities and references to other facts. Then identify rules that depend on changing state, such as available stock. A useful validation design places each rule at a boundary capable of enforcing it and makes rejection understandable to the caller.\n\n## Interface checks improve the conversation\n\nA form can flag missing quantities or explain the permitted range before submission. That feedback saves effort and lets a student correct a request immediately. However, a client is controlled by its user. Scripts and alternate applications may submit the same operation without using that form. Client checks are a useful interaction feature, not the authoritative guarantee that every accepted row is valid.\n\nRepeat essential input validation at the trusted mutation boundary. Parse values deliberately, bound text lengths and reject malformed identifiers. Parameter binding keeps supplied values separate from SQL structure; it does not decide whether the quantity is positive or whether the requester may act on that identity. Value validation and access enforcement need to cooperate without being confused with each other.\n\n## Constraints protect stored invariants\n\nA [NOT NULL](/learning/dbms-sql-tutorial/not-null) constraint expresses required storage. A CHECK can reject a quantity outside an accepted range. A UNIQUE rule protects an identity or business combination, and a foreign key requires a permitted reference where its conditions apply. These rules are enforced when supported writes reach the table, including writes from a different client that bypasses the original form.\n\nTheir strength depends on what they actually express. A [foreign key](/learning/dbms-sql-tutorial/foreign-key) to equipment says that the referenced equipment exists; it does not prove that the caller is allowed to borrow it. A unique request identifier prevents duplicate identifiers; it does not prevent two distinct identifiers from representing the same delivery unless the relevant event identity also has a uniqueness rule.\n\n## Missing input is not a failed comparison\n\nMySQL CHECK expressions accept TRUE or UNKNOWN and reject FALSE. A nullable quantity can therefore pass a positive-quantity check when its value is NULL, because the comparison is unknown. Combine NOT NULL with the domain check when quantity is required. Treating CHECK as an implicit required-value declaration leaves a gap between the intended rule and the actual stored invariant.\n\nAn empty string is another distinct input. It is text of length zero rather than SQL NULL. Whitespace can also require a deliberate normalization policy. If equipment codes are trimmed, case-normalized or compared with a particular collation, apply that contract consistently to validation, identity matching and uniqueness. Otherwise the form and the database may disagree about which codes are the same.\n\n```sql\nCREATE TABLE requested_items (\n  request_id INT PRIMARY KEY,\n  equipment_code VARCHAR(12) NOT NULL,\n  quantity INT NOT NULL CHECK (quantity > 0)\n);\n```\n\n## Database settings affect interpretation\n\nA declared integer column does not by itself explain every malformed input outcome. SQL modes and conversion rules influence whether some values are rejected, coerced or accompanied by warnings. An import path may have different error handling from an ordinary insert. Validate raw input before coercion and test the intended engine settings rather than assume that a successful statement preserves the original meaning.\n\nKeep raw receipt separate from accepted typed values when diagnosing imports. If an invalid quantity has already become zero, later range checks may identify a domain problem but cannot necessarily recover the original text. Preserve safe source-row references and explicit error categories so the input can be corrected. Do not expose private fields or credentials merely to make diagnostics more detailed.\n\n## Cross-row rules need a trusted concurrency design\n\nA single MySQL CHECK cannot express an arbitrary query across unrelated tables. Some relationships fit foreign keys or uniqueness rules; others need a trusted operation with appropriate transaction and locking behaviour. For example, ensuring that total accepted reservations never exceed available equipment involves several facts that concurrent writers can change. An isolated form calculation cannot reserve stock.\n\nSuppose two requests each observe four available cameras and both ask for three. Each request appears acceptable under its own read, but accepting both oversubscribes the stock. A protected state transition can atomically test and decrement a stock counter, or a reviewed locking design can serialize relevant decisions. The exact implementation depends on the authoritative model; validation needs to cover the race, not only sequential examples.\n\n## Stage uncertain records before acceptance\n\nA staging table is useful when input quality varies. Each received record keeps a source identity and can be classified without immediately mutating the authoritative target. Distinguish missing reference, invalid quantity, duplicate identity and accepted row. If one row violates several rules, define whether diagnostics list all reasons or choose a documented priority rather than assign whichever error happens to appear first.\n\nAccepted rows must still satisfy target constraints. A preflight query can become stale while another transaction changes referenced state. The database remains responsible for its enforced invariants at write time, and the caller must handle rejection. Staging does not make an earlier validation result permanent; it provides an explainable workflow for deciding what may be attempted and reconciling what actually committed.\n\n## Verification measures results without replacing enforcement\n\nAfter a bulk change, queries can compare accepted counts, detect unexpected NULLs, check references and reconcile requested quantities with the intended source. These checks help discover mistakes in transformation and scope. They are observations after a transition, not substitutes for preventing invalid concurrent writes or enforcing access. A later cleanup cannot always undo an external consequence of an earlier invalid acceptance.\n\nChoose checks that match the business meaning. A total quantity can reveal a lost row in an additive delivery batch but may be meaningless across successive snapshots of the same inventory. Count distinct protected identities where identity matters, and retain a preserved-row sample to expose accidental overwrites. Expected output should describe which records belong in the accepted state and which must remain excluded.\n\n## Define a clear rejection contract\n\nA trusted service should distinguish malformed input, a missing permitted reference, a state conflict and a denied operation when that distinction is safe and useful. Avoid returning raw SQL error text directly to every caller. Translate recognized failures into clear explanations without revealing whether another user's private request exists. Logs should identify the operation and safe failure category, not secret values or unnecessary personal data.\n\nDo not turn every failure into a default value. Replacing an invalid requester with an anonymous identity or an unknown quantity with one invents facts. Defaults are appropriate only when the contract defines their meaning. If a field is genuinely optional, explain what its absence means and make downstream calculations handle that absence explicitly rather than hiding it during ingestion.\n\n## Test acceptance and refusal together\n\nUseful fixtures include the boundary values around each rule: zero, the smallest positive quantity, NULL where raw input permits it and a nonexistent equipment code. Add a known valid request so an exclusion query cannot pass by returning nothing. Also test that accepted rows preserve their intended properties and that unrelated target rows remain unchanged after a rejected proposal.\n\nThe first exercise selects only staged positive quantities with a known code. The second classifies every staged row using an explicit error priority. Together they teach that validation is more than a WHERE clause that happens to remove the sample's bad row. A complete explanation connects each accepted or rejected record to a named rule, states which boundary enforces it, and identifies any concurrency assumptions still required by the application.\n",
+  "references": [
+    {
+      "title": "MySQL 8.4 CHECK constraint semantics",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/create-table-check-constraints.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-11-data-validation",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-11-data-validation-1",
+          "test_id": "pt-dbms-sql-11-data-validation",
+          "question_text": "Which mechanism can enforce a stored invariant across different ordinary writers?",
+          "options": [
+            "A placeholder in one form",
+            "An appropriate enforced database constraint",
+            "A comment in application code",
+            "A spreadsheet instruction"
+          ],
+          "correct_index": 1,
+          "explanation": "Writers bypassing the original interface still meet table enforcement.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-11-data-validation-2",
+          "test_id": "pt-dbms-sql-11-data-validation",
+          "question_text": "Why is client-only validation insufficient?",
+          "options": [
+            "Browsers cannot display numbers",
+            "Other clients can bypass that interface",
+            "SQL constraints are always slower",
+            "Every client is trusted equally"
+          ],
+          "correct_index": 1,
+          "explanation": "Essential acceptance rules need a trusted boundary.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-11-data-validation-3",
+          "test_id": "pt-dbms-sql-11-data-validation",
+          "question_text": "What benefit does early form validation provide?",
+          "options": [
+            "Authority over all direct database writers",
+            "Clear, timely feedback before submission",
+            "Guaranteed stock reservation",
+            "A replacement for access checks"
+          ],
+          "correct_index": 1,
+          "explanation": "Good interaction complements trusted enforcement.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-11-data-validation-4",
+          "test_id": "pt-dbms-sql-11-data-validation",
+          "question_text": "What can a post-write verification query establish?",
+          "options": [
+            "That every future concurrent write is valid",
+            "Whether observed results match the expected contract",
+            "That no invalid state ever existed",
+            "That constraints are unnecessary"
+          ],
+          "correct_index": 1,
+          "explanation": "Verification observes outcomes rather than replacing enforcement.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-11-data-validation-5",
+          "test_id": "pt-dbms-sql-11-data-validation",
+          "question_text": "Why review import warning and conversion policies?",
+          "options": [
+            "Bulk input always skips all constraints",
+            "Accepted stored values may differ from malformed original input",
+            "Every loader has identical strictness",
+            "Warnings always mean no data changed"
+          ],
+          "correct_index": 1,
+          "explanation": "Interpretation rules depend on the actual path and settings.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-11-data-validation-6",
+          "test_id": "pt-dbms-sql-11-data-validation",
+          "question_text": "Where should a changing cross-table stock rule be enforced?",
+          "options": [
+            "Only in a form read",
+            "In a trusted operation with suitable transaction and concurrency controls",
+            "In a single arbitrary CHECK subquery",
+            "In an unprotected cached count"
+          ],
+          "correct_index": 1,
+          "explanation": "The decision must remain valid under concurrent writers.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-11-data-validation-7",
+          "test_id": "pt-dbms-sql-11-data-validation",
+          "question_text": "Which overall design is appropriate?",
+          "options": [
+            "Only interface checks",
+            "Helpful interface checks, trusted validation, constraints and result verification",
+            "Only after-the-fact cleanup",
+            "No checks after initial table creation"
+          ],
+          "correct_index": 1,
+          "explanation": "Each boundary addresses different failure modes.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-11-data-validation-8",
+          "test_id": "pt-dbms-sql-11-data-validation",
+          "question_text": "Do constraints eliminate the need for input validation?",
+          "options": [
+            "Yes, all business logic is a key",
+            "No, parsing, feedback and other business rules still matter",
+            "Yes, including authorization",
+            "Only for numeric forms"
+          ],
+          "correct_index": 1,
+          "explanation": "Constraints protect the rules they actually express.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-11-data-validation-new-9",
+          "test_id": "pt-dbms-sql-11-data-validation",
+          "question_text": "A nullable quantity is NULL under CHECK(quantity>0). What is the CHECK result?",
+          "options": [
+            "UNKNOWN, which MySQL CHECK accepts",
+            "FALSE in every case",
+            "TRUE because NULL equals zero",
+            "A syntax error for every insert"
+          ],
+          "correct_index": 0,
+          "explanation": "Add NOT NULL when absence must be forbidden.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-11-data-validation-new-10",
+          "test_id": "pt-dbms-sql-11-data-validation",
+          "question_text": "What does a foreign key to an equipment code establish?",
+          "options": [
+            "That the borrower is authorized",
+            "A permitted referenced identity under the key rule",
+            "That stock is available",
+            "That the quantity is positive"
+          ],
+          "correct_index": 1,
+          "explanation": "Reference integrity is narrower than borrowing permission.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-11-data-validation-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-11-data-validation-application-new-1",
+          "test_id": "pt-dbms-sql-11-data-validation-application",
+          "question_text": "Why retain raw import fields before typed acceptance?",
+          "options": [
+            "To remove all target constraints",
+            "To diagnose malformed input before conversion loses its original form",
+            "To let every caller view private input",
+            "To guarantee automatic recovery"
+          ],
+          "correct_index": 1,
+          "explanation": "Staging can preserve safe evidence of source meaning.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-11-data-validation-application-new-2",
+          "test_id": "pt-dbms-sql-11-data-validation-application",
+          "question_text": "Two writers each see four available and ask for three. What is missing?",
+          "options": [
+            "A different field label",
+            "Another unprotected preview",
+            "A concurrency-safe acceptance boundary",
+            "A larger result font"
+          ],
+          "correct_index": 2,
+          "explanation": "Separate reads do not reserve the same limited stock.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-11-data-validation-application-new-3",
+          "test_id": "pt-dbms-sql-11-data-validation-application",
+          "question_text": "What does parameter binding ensure most directly?",
+          "options": [
+            "That every value satisfies the domain",
+            "That the caller owns the row",
+            "That the requested item is available",
+            "Values are supplied separately from SQL statement structure"
+          ],
+          "correct_index": 3,
+          "explanation": "Representation, validation and authority are separate responsibilities.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-11-data-validation-application-new-4",
+          "test_id": "pt-dbms-sql-11-data-validation-application",
+          "question_text": "What should a rule for empty text specify?",
+          "options": [
+            "Whether empty or whitespace-only input is accepted or normalized",
+            "That empty text is always NULL",
+            "That every empty value becomes zero",
+            "That no text can be constrained"
+          ],
+          "correct_index": 0,
+          "explanation": "Absence and blank strings need a deliberate contract.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-11-data-validation-application-new-5",
+          "test_id": "pt-dbms-sql-11-data-validation-application",
+          "question_text": "What is the purpose of a diagnostic priority?",
+          "options": [
+            "Hide every rejected row",
+            "Make classification deterministic when several rules fail",
+            "Guarantee no concurrency conflicts",
+            "Replace referential integrity"
+          ],
+          "correct_index": 1,
+          "explanation": "A row can have several independent invalid properties.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-11-data-validation-application-new-6",
+          "test_id": "pt-dbms-sql-11-data-validation-application",
+          "question_text": "What must still happen after a staging preflight passes?",
+          "options": [
+            "Disable target keys before insertion",
+            "Assume referenced state cannot change",
+            "The write must satisfy current target constraints and handle rejection",
+            "Commit every batch without checking"
+          ],
+          "correct_index": 2,
+          "explanation": "Earlier observations can become stale.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-11-data-validation-application-new-7",
+          "test_id": "pt-dbms-sql-11-data-validation-application",
+          "question_text": "Which diagnostic should generally be avoided for untrusted callers?",
+          "options": [
+            "A safe invalid-quantity message",
+            "A clear state-conflict outcome",
+            "A documented input category",
+            "Raw internal SQL errors with private details"
+          ],
+          "correct_index": 3,
+          "explanation": "Translate failures without disclosing internal or private data.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-11-data-validation-application-new-8",
+          "test_id": "pt-dbms-sql-11-data-validation-application",
+          "question_text": "When is substituting a default valid?",
+          "options": [
+            "When the contract explicitly defines that default meaning",
+            "Whenever any input is invalid",
+            "Whenever an error is inconvenient",
+            "Only when no constraints exist"
+          ],
+          "correct_index": 0,
+          "explanation": "A default must not invent an unsupported business fact.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-11-data-validation-application-new-9",
+          "test_id": "pt-dbms-sql-11-data-validation-application",
+          "question_text": "Which fixture proves a validation query does more than reject everything?",
+          "options": [
+            "Only invalid rows",
+            "A known valid row expected to be accepted",
+            "No rows in every fixture",
+            "Only duplicate identifiers"
+          ],
+          "correct_index": 1,
+          "explanation": "Acceptance behaviour needs direct evidence as well as rejection.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-11-data-validation-application-new-10",
+          "test_id": "pt-dbms-sql-11-data-validation-application",
+          "question_text": "Why can summing snapshots mislead reconciliation?",
+          "options": [
+            "SUM never works on integers",
+            "Every snapshot must be unique by quantity",
+            "Successive snapshots may describe the same stock rather than additive events",
+            "Totals automatically detect all losses"
+          ],
+          "correct_index": 2,
+          "explanation": "Checks need the same semantics as the underlying facts.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cx-validation-known-positive",
+      "slug": "validation-known-positive",
+      "title": "Select accepted equipment requests",
+      "difficulty": "Easy",
+      "task": "Return source_row,equipment_code,quantity for proposed rows with a known equipment_code and quantity greater than zero. Unknown or NULL codes, NULL quantities and nonpositive quantities are excluded. Order by source_row.",
+      "schema_sql": "CREATE TABLE known_equipment(equipment_code VARCHAR(12) PRIMARY KEY); CREATE TABLE proposed_items(source_row INT PRIMARY KEY,equipment_code VARCHAR(12),quantity INT);",
+      "seed_sql": "INSERT INTO known_equipment VALUES ('CAM'),('MIC'); INSERT INTO proposed_items VALUES (1,'CAM',2),(2,'CAM',0),(3,'BAD',1),(4,'MIC',NULL),(5,'MIC',3);",
+      "expected": "source_row\tequipment_code\tquantity\n1\tCAM\t2\n5\tMIC\t3",
+      "ordering": "As explicitly ordered in the result query.",
+      "constraints": [
+        "Use only the supplied synthetic tables and requested transition.",
+        "Preserve unrelated rows."
+      ],
+      "edge_cases": [
+        "NULL cannot pass a positive comparison in WHERE.",
+        "A valid code with zero quantity is rejected."
+      ],
+      "hints": [
+        "WHERE retains only TRUE predicates.",
+        "Use EXISTS to require the reference."
+      ],
+      "solution_sql": "SELECT p.source_row,p.equipment_code,p.quantity FROM proposed_items p WHERE p.quantity>0 AND EXISTS(SELECT 1 FROM known_equipment k WHERE k.equipment_code=p.equipment_code) ORDER BY p.source_row;",
+      "explanation": "Positive quantity filters out NULL and nonpositive values under WHERE semantics. EXISTS requires a known code without multiplying rows.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO known_equipment VALUES ('CAM'); INSERT INTO proposed_items VALUES (1,NULL,2),(2,'CAM',-1);",
+          "expected": ""
+        },
+        {
+          "seed_sql": "INSERT INTO known_equipment VALUES ('CAM'); INSERT INTO proposed_items VALUES (8,'CAM',1);",
+          "expected": "source_row\tequipment_code\tquantity\n8\tCAM\t1"
+        }
+      ]
+    },
+    {
+      "id": "cx-validation-classify-rows",
+      "slug": "validation-classify-rows",
+      "title": "Explain every staged request outcome",
+      "difficulty": "Medium",
+      "task": "Return source_row,outcome for every proposed row. First classify NULL or nonpositive quantity as invalid_quantity; otherwise classify a code with no known match, including NULL, as unknown_equipment; otherwise use accepted. This priority is required. Order by source_row.",
+      "schema_sql": "CREATE TABLE known_equipment(equipment_code VARCHAR(12) PRIMARY KEY); CREATE TABLE proposed_items(source_row INT PRIMARY KEY,equipment_code VARCHAR(12),quantity INT);",
+      "seed_sql": "INSERT INTO known_equipment VALUES ('CAM'); INSERT INTO proposed_items VALUES (1,'CAM',2),(2,'BAD',0),(3,'BAD',2),(4,NULL,1),(5,'CAM',NULL);",
+      "expected": "source_row\toutcome\n1\taccepted\n2\tinvalid_quantity\n3\tunknown_equipment\n4\tunknown_equipment\n5\tinvalid_quantity",
+      "ordering": "As explicitly ordered in the result query.",
+      "constraints": [
+        "Use only the supplied synthetic tables and requested transition.",
+        "Preserve unrelated rows."
+      ],
+      "edge_cases": [
+        "A row can violate both rules.",
+        "An empty known-equipment table makes all otherwise-valid codes unknown."
+      ],
+      "hints": [
+        "Test quantity defects before testing the reference.",
+        "Classify without filtering away rejected rows."
+      ],
+      "solution_sql": "SELECT p.source_row,CASE WHEN p.quantity IS NULL OR p.quantity<=0 THEN 'invalid_quantity' WHEN NOT EXISTS(SELECT 1 FROM known_equipment k WHERE k.equipment_code=p.equipment_code) THEN 'unknown_equipment' ELSE 'accepted' END AS outcome FROM proposed_items p ORDER BY p.source_row;",
+      "explanation": "CASE evaluates the documented priority. Quantity defects win even when the code is also unknown, and NOT EXISTS classifies NULL codes as unmatched.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO proposed_items VALUES (4,'BAD',-2),(6,'BAD',3);",
+          "expected": "source_row\toutcome\n4\tinvalid_quantity\n6\tunknown_equipment"
+        },
+        {
+          "seed_sql": "INSERT INTO known_equipment VALUES ('MIC'); INSERT INTO proposed_items VALUES (9,'MIC',1);",
+          "expected": "source_row\toutcome\n9\taccepted"
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-11-data-validation-1",
+      "test_id": "pt-dbms-sql-11-data-validation",
+      "question_text": "What is the strongest layer of data validation, enforced regardless of which application writes the data?",
+      "options": [
+        "Application-level form validation",
+        "Database-level constraints (NOT NULL, CHECK, FOREIGN KEY, UNIQUE)",
+        "Post-modification verification queries",
+        "Code comments describing the expected data shape"
+      ],
+      "correct_index": 1,
+      "explanation": "Database constraints are enforced by the engine itself, regardless of which script or app writes to the table.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-11-data-validation-2",
+      "test_id": "pt-dbms-sql-11-data-validation",
+      "question_text": "Why is relying only on application-level validation, with no database constraints, risky?",
+      "options": [
+        "It's not risky at all",
+        "Any future script, migration, or admin tool that writes directly to the database bypasses application logic entirely, leaving no protection",
+        "Application validation is always slower than database constraints",
+        "Database constraints are deprecated in modern SQL"
+      ],
+      "correct_index": 1,
+      "explanation": "Only database-level enforcement protects against writes that don't go through the application layer.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-11-data-validation-3",
+      "test_id": "pt-dbms-sql-11-data-validation",
+      "question_text": "Why might relying only on database constraints, without any application-level validation, hurt user experience?",
+      "options": [
+        "It never affects user experience",
+        "A raw constraint-violation error is often less helpful to an end user than a clear, specific validation message shown before submission",
+        "Database constraints are always instant, unlike application checks",
+        "Constraints cannot produce any error message at all"
+      ],
+      "correct_index": 1,
+      "explanation": "Application-level validation can give friendlier, more specific feedback before ever reaching the database.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-11-data-validation-4",
+      "test_id": "pt-dbms-sql-11-data-validation",
+      "question_text": "What is a post-modification verification query useful for?",
+      "options": [
+        "Replacing the need for any database constraints",
+        "Confirming, after a bulk change, that the expected number of rows were affected and no unexpected bad values appeared",
+        "Making an UPDATE statement run faster",
+        "Automatically fixing bad data"
+      ],
+      "correct_index": 1,
+      "explanation": "A sanity-check query after a large change catches problems that might have slipped past other validation layers.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-11-data-validation-5",
+      "test_id": "pt-dbms-sql-11-data-validation",
+      "question_text": "Why does bulk-loaded or migrated data especially benefit from explicit post-load verification queries?",
+      "options": [
+        "Bulk-loaded data is always perfectly clean by definition",
+        "Bulk-load paths can validate less strictly by default (for performance), making it more likely that bad data slips through unnoticed",
+        "Verification queries are required by SQL syntax for bulk loads",
+        "Migrated data cannot be queried at all"
+      ],
+      "correct_index": 1,
+      "explanation": "Since bulk-load mechanisms may trade off some validation for speed, explicit follow-up checks matter more.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-11-data-validation-6",
+      "test_id": "pt-dbms-sql-11-data-validation",
+      "question_text": "Which validation layer would catch a business rule spanning multiple unrelated tables that a single CHECK constraint can't express?",
+      "options": [
+        "Only a PRIMARY KEY constraint",
+        "Application-level validation logic, since some cross-table business rules exceed what a single-row CHECK can express",
+        "Only a UNIQUE constraint",
+        "This kind of rule can never be validated anywhere"
+      ],
+      "correct_index": 1,
+      "explanation": "Complex, multi-table business logic often needs application-level (or trigger-based) enforcement beyond a simple CHECK.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-11-data-validation-7",
+      "test_id": "pt-dbms-sql-11-data-validation",
+      "question_text": "What is the recommended overall approach to data validation, according to this topic?",
+      "options": [
+        "Pick exactly one layer and rely on it exclusively",
+        "A layered combination: strong database constraints, application-level checks for good UX, and post-modification verification for what slips through",
+        "Validation is unnecessary if the schema was designed correctly once",
+        "Only validate data once, at initial table creation"
+      ],
+      "correct_index": 1,
+      "explanation": "The layered approach captures the strengths of each validation mechanism.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-11-data-validation-8",
+      "test_id": "pt-dbms-sql-11-data-validation",
+      "question_text": "Does having database constraints eliminate the value of application-level validation entirely?",
+      "options": [
+        "Yes, constraints alone are always sufficient",
+        "No — application-level validation still improves user experience and can express rules constraints can't, even though constraints are the stronger safety net",
+        "Application-level validation is illegal once constraints exist",
+        "Constraints replace the need for any testing"
+      ],
+      "correct_index": 1,
+      "explanation": "The two layers serve complementary purposes rather than being redundant with each other.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "coordinator",
+    "independent_review": "passed",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Independent manual review passed; native MySQL fixture evidence recorded separately; provider/browser/Supabase release gates remain separate.",
+    "existing_question_corrections": [
+      "tq-dbms-sql-11-data-validation-1",
+      "tq-dbms-sql-11-data-validation-2",
+      "tq-dbms-sql-11-data-validation-3",
+      "tq-dbms-sql-11-data-validation-4",
+      "tq-dbms-sql-11-data-validation-5",
+      "tq-dbms-sql-11-data-validation-6",
+      "tq-dbms-sql-11-data-validation-7",
+      "tq-dbms-sql-11-data-validation-8"
+    ],
+    "canonical_answer_indices_preserved": true,
+    "editorial_record": "Original snapshots retained. Questions rewritten for precise dialect and topic coverage while preserving identities and canonical answer positions; technical and independent review pending.",
+    "independent_reviewer": "Codex reviewer, current 2026-10-30 session",
+    "independent_review_scope": "Read full notes, all 640 MCQ stems/options/canonical answers/explanations, 64 exercise contracts/solutions/fixtures, and all 32 diagrams. Verified retained identities/answers through source-continuity tests; SQL execution evidence is recorded separately. No external originality, provider, live application or Supabase authorization clearance.",
+    "independent_review_record": "reports/independent-review-2026-10-30.json",
+    "content_sha256": "2451115b65bc3ef0ba1a18fd8d0b422936110cc364840ffbf712351aa57d6b11"
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-11-data-validation",
+    "original_note_sha256": "00ac65c2cab0f67f2a5b1e7d3664b8082973483f45485e091446054704a1d20b",
+    "status": "drafted; not yet included in prepared paired migrations"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Required positive quantity and reference checks are separate",
+      "description": "The diagnostic exercise gives quantity failure priority before missing equipment.",
+      "columns": [
+        "Code",
+        "Quantity",
+        "Reference known",
+        "Outcome"
+      ],
+      "rows": [
+        [
+          "CAM",
+          "2",
+          "Yes",
+          "accepted"
+        ],
+        [
+          "BAD",
+          "0",
+          "No",
+          "invalid_quantity"
+        ],
+        [
+          "BAD",
+          "2",
+          "No",
+          "unknown_equipment"
+        ],
+        [
+          "CAM",
+          "NULL",
+          "Yes",
+          "invalid_quantity"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "drafted — verification pending",
+    "server_rendering": "pending",
+    "browser_rendering": "unverified",
+    "independent_review": "pending"
+  },
+  "authoring_status": "drafted — verification pending",
+  "sql_verification": {
+    "scope": "not executed; exact MySQL/provider verification pending",
+    "all_passed": false,
+    "cases": []
+  }
+}

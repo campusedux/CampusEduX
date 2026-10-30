@@ -1,0 +1,508 @@
+{
+  "source_ref": "chapter-2-dbms-architecture/database-middleware",
+  "slug": "database-middleware",
+  "title": "Database Middleware",
+  "description": "Understand database middleware as a request, adaptation, and coordination layer while examining type fidelity, transaction limits, routing, pooling, authorization, and operational dependencies.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Connecting applications to database capabilities\n\nDatabase middleware is software between application behavior and one or more database services. Depending on its purpose, it can adapt interfaces, route requests, manage connection lifecycles, or coordinate access through supported database drivers. The term describes a broad role rather than one universal product category. A client library, an integration service, and a database proxy can occupy different places in the request path.\n\nThe useful starting point is the responsibility the layer actually owns. Does it translate a common call into a vendor-specific driver operation? Does it choose a backend? Does it pool sessions, combine results, or expose a trusted application API? Naming something middleware does not establish that it performs all these functions, and several components may share them.\n\nConsider an enterprise report that needs data from an Oracle database and a SQL Server database. A middleware layer can offer an application-facing access pattern while using suitable backend-specific capabilities underneath. This can reduce repeated integration code. It does not make the two databases identical, merge their authority automatically, or guarantee that every SQL statement runs unchanged on both products.\n\n## Distinguishing middleware from a driver\n\nA database driver implements a supported interface for communicating with a database system or family of systems. It handles protocol interaction and data representation under its API contract. Middleware can sit above drivers and add broader routing, policy, pooling, or integration behavior. Some drivers and providers themselves include substantial additional capabilities, so the boundary is conceptual rather than an absolute rule about software packaging.\n\nAn ODBC/JDBC bridge illustrates interface adaptation between access technologies where supported. It is a useful historical category, not a recommendation to install a bridge for a modern project without evidence of need. Existing native drivers and established repository abstractions should normally be inspected first. An extra translation layer creates another contract that can fail or limit supported features.\n\nA common API helps callers avoid some low-level details, but it cannot erase every backend difference. SQL syntax, identifiers, transaction behavior, date semantics, generated keys, and supported types still matter. A driver successfully connecting to two products is not proof that the application's query meanings and error handling are portable between them.\n\n## Following an adapted request\n\nSuppose the report requests order identifiers and recorded totals from each backend. The application supplies a defined operation and parameters. The middleware selects the appropriate backend adapter, binds values through the supported driver, and obtains a result. It then exposes that result under the application-facing contract. Each step needs an explicit account of ownership and expected behavior.\n\nParameters must remain data rather than being concatenated into SQL structure. If one backend uses a different binding API, the adapter should implement that difference safely. Object names and optional query fragments require their own validated design; a generic parameter mechanism does not automatically make arbitrary dynamic SQL safe.\n\nResult conversion also deserves review. A decimal amount should not silently lose precision, a missing value should not become zero, and timestamps need a defined interpretation. The layer can simplify representation, but it must preserve the facts consumers rely on. A uniform object shape is not enough if equivalent-looking values have changed meaning during conversion.\n\n## Preserving type fidelity\n\nA backend may introduce a type that an older driver or adapter does not understand. Depending on the implementation, the operation might fail explicitly, expose an unsupported representation, or perform a conversion that loses information. Do not claim that silent corruption is inevitable; the actual behavior must be tested and unsupported cases should fail clearly where appropriate.\n\nBoundary values expose problems that ordinary samples can miss. Test large integers, high-precision decimals, NULL values, Unicode text, and relevant date or timestamp limits under the actual driver and backend versions. The correct cases depend on the contract, so use representative edge cases rather than an unrelated exhaustive type catalog.\n\nFor example, converting a large identifier into a numeric representation that cannot preserve every integer can make two distinct records appear identical. A middleware interface should choose a representation that preserves its identifier domain. This is an application data-contract decision, not a formatting detail that can be deferred until the UI happens to display an incorrect value.\n\n## Understanding routing and transaction scope\n\nRouting can choose a backend based on an explicit configuration or supported request property. That choice must preserve the operation's intended authority and consistency requirements. A query routed to a delayed replica may return an older state than a caller expects after a write. The middleware must not hide that consistency difference behind a claim that all backends are interchangeable.\n\nUsing one common interface for two databases does not create one atomic transaction across them. A write to Oracle and a write to SQL Server can succeed or fail independently unless a verified coordination mechanism provides the required guarantees. The application needs an explicit contract for partial failure, recovery, and repeated requests. Retrying both blindly can duplicate a previously successful effect.\n\nEven within one database, pooling and routing can affect session affinity. A transaction's statements need the correct connection context. Temporary objects and session variables may not survive arbitrary routing modes. Inspect the actual middleware semantics rather than assuming every feature of a direct session remains available through a proxy or pooled interface.\n\n## Placing middleware in an application architecture\n\nMiddleware often operates inside the application tier of a three-tier system, helping trusted services communicate with the database tier. It can also run as a separate proxy or process, or as a library in a direct client. Its location does not determine whether it is trusted. The deployment, available credentials, and enforceable access boundaries determine which responsibilities it may safely own.\n\nA browser-facing API can validate requests and enforce product authorization, but those checks must actually be implemented. A routing library alone does not know which customer records an actor may read. Preserve database privileges and any existing trusted ownership checks when changing the integration path. Interface adaptation is not a reason to grant broader access.\n\nSecrets belong in approved trusted configuration mechanisms, not in client bundles or diagnostic output. Connection errors can contain sensitive context, so use bounded classifications and approved references rather than printing full connection strings. A support log that makes debugging easier by exposing credentials has violated the integration boundary rather than improved it.\n\n## Accounting for operational dependencies\n\nA shared middleware instance can become a bottleneck or single point of failure if all database traffic depends on it. Multiple instances can improve capacity and availability under a correct design, but they also multiply connection demand and coordination requirements. A shared bad configuration or unsupported conversion can affect every instance, so redundancy is not a substitute for correctness.\n\nThe middleware adds work: adaptation, serialization, queueing, routing, or result combination. Those costs may be justified by reuse and policy, but performance must be measured. An additional layer does not inherently speed up queries, and a slow request may be waiting for middleware capacity rather than executing in the database.\n\nObserve the request path with enough separation to identify where time and failures occur. Distinguish acquisition waiting, backend execution, conversion, and response work where the implementation supports it. Avoid private data in telemetry. Clear component boundaries should make a failed report easier to diagnose without assuming every error originated in the final database server.\n\n## Reviewing whether the layer earns its place\n\nInspect direct callers, existing drivers, supported backend versions, required types, transactions, and failure behavior before adding or changing middleware. Test valid operations, denied access, unsupported features, boundary values, backend outages, and partial success. A successful ordinary SELECT does not establish that cross-backend writes or type conversions are reliable.\n\nMiddleware is valuable when it owns a demonstrated integration responsibility and preserves a clear application contract. Reuse established layers where possible, expose unavoidable backend differences honestly, and verify the boundaries where representation, routing, or transaction scope changes. The aim is manageable integration with preserved meaning and authority, not a promise that one extra layer makes heterogeneous databases behave identically.\n",
+  "references": [],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-2-database-middleware",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-2-database-middleware-1",
+          "test_id": "pt-dbms-sql-2-database-middleware",
+          "question_text": "What is the primary role of Database Middleware?",
+          "options": [
+            "To physically store the database's data files",
+            "To sit between applications and one or more database servers, translating/routing requests and hiding heterogeneity",
+            "To render the user interface for end users",
+            "To replace the need for a conceptual schema"
+          ],
+          "correct_index": 1,
+          "explanation": "Middleware's defining role is mediating between applications and database servers, especially across different vendors or protocols.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-2-database-middleware-2",
+          "test_id": "pt-dbms-sql-2-database-middleware",
+          "question_text": "In the notes' example, what two systems does an enterprise application need to query, motivating the use of middleware?",
+          "options": [
+            "Two identical Oracle instances",
+            "An Oracle database and a SQL Server database",
+            "A file server and a web server",
+            "Two different external schemas of the same database"
+          ],
+          "correct_index": 1,
+          "explanation": "The example describes an application needing to query both Oracle and SQL Server through one uniform middleware interface.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-2-database-middleware-3",
+          "test_id": "pt-dbms-sql-2-database-middleware",
+          "question_text": "Which of these is listed as an example of database middleware?",
+          "options": [
+            "A B+-tree index",
+            "An ODBC/JDBC bridge",
+            "A conceptual schema",
+            "A primary key constraint"
+          ],
+          "correct_index": 1,
+          "explanation": "ODBC/JDBC bridges are explicitly named as examples of database middleware.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-2-database-middleware-4",
+          "test_id": "pt-dbms-sql-2-database-middleware",
+          "question_text": "Where can database middleware be located?",
+          "options": [
+            "Inside or as part of the presentation tier (Tier 1)",
+            "Commonly in the application tier, but also in a proxy or client library depending on its responsibility",
+            "Inside the database server tier (Tier 3) only",
+            "It replaces all three tiers"
+          ],
+          "correct_index": 1,
+          "explanation": "The term describes an integration role, not a mandatory deployment tier.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-2-database-middleware-5",
+          "test_id": "pt-dbms-sql-2-database-middleware",
+          "question_text": "What can middleware help with when an application accesses Oracle and SQL Server?",
+          "options": [
+            "It forces both databases to merge into a single physical database",
+            "Provide a shared access pattern while adapting supported backend-specific calls and exposing remaining differences",
+            "It removes the need for either database to store data",
+            "It converts SQL Server into Oracle automatically"
+          ],
+          "correct_index": 1,
+          "explanation": "A uniform interface does not guarantee portable SQL, types, or transaction semantics.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-2-database-middleware-6",
+          "test_id": "pt-dbms-sql-2-database-middleware",
+          "question_text": "Why can a single, non-redundant middleware instance become a serious operational risk?",
+          "options": [
+            "Because middleware never fails",
+            "Because if it is the only instance handling traffic to production databases, it becomes a bottleneck or single point of failure",
+            "Because middleware only supports one query at a time by design",
+            "Because middleware cannot be scaled at all"
+          ],
+          "correct_index": 1,
+          "explanation": "A single middleware instance without redundancy risks becoming a bottleneck or point of failure for all traffic routed through it.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-2-database-middleware-7",
+          "test_id": "pt-dbms-sql-2-database-middleware",
+          "question_text": "A new backend type is unsupported by an older adapter. What behavior must be verified?",
+          "options": [
+            "The middleware will immediately crash with an obvious error every time",
+            "Whether it fails clearly or converts values without unacceptable information loss",
+            "The new data type will be automatically upgraded across all databases",
+            "Nothing; middleware versions never affect data type support"
+          ],
+          "correct_index": 1,
+          "explanation": "The outcome depends on the adapter. Silent truncation is a risk to test, not an inevitable result.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-2-database-middleware-8",
+          "test_id": "pt-dbms-sql-2-database-middleware",
+          "question_text": "How does database middleware commonly differ in scope from a driver?",
+          "options": [
+            "They are identical concepts with different names",
+            "It can coordinate routing, adaptation, or policy above drivers, while a driver implements its database access contract",
+            "A driver always sits above middleware in the stack",
+            "Middleware only works with a single database vendor, unlike drivers"
+          ],
+          "correct_index": 1,
+          "explanation": "Capabilities can overlap; not every driver is limited to one narrowly packaged product.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-2-database-middleware-new-9",
+          "test_id": "pt-dbms-sql-2-database-middleware",
+          "question_text": "Does a common database API guarantee identical SQL semantics across backends?",
+          "options": [
+            "Yes; all SQL becomes interchangeable",
+            "No; syntax, types, and guarantees can still differ",
+            "Yes; connection success proves portability",
+            "Only if both products store strings"
+          ],
+          "correct_index": 1,
+          "explanation": "An interface abstracts some mechanics without erasing every backend-specific contract.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-2-database-middleware-new-10",
+          "test_id": "pt-dbms-sql-2-database-middleware",
+          "question_text": "What must a result conversion preserve for a high-precision amount?",
+          "options": [
+            "Only its column position",
+            "Only the number of rows",
+            "The precision and meaning promised by the application contract",
+            "Only the database server name"
+          ],
+          "correct_index": 2,
+          "explanation": "A neat uniform shape is not enough when conversion changes values.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-2-database-middleware-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-2-database-middleware-application-new-1",
+          "test_id": "pt-dbms-sql-2-database-middleware-application",
+          "question_text": "An identifier is converted to a number that cannot represent its full range exactly. What is at risk?",
+          "options": [
+            "Only a tooltip color",
+            "Only the pool name",
+            "Distinct identifiers may lose their identity distinction",
+            "The number of database tiers necessarily changes"
+          ],
+          "correct_index": 2,
+          "explanation": "Lossy representation can make different records appear to have the same identifier.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-2-database-middleware-application-new-2",
+          "test_id": "pt-dbms-sql-2-database-middleware-application",
+          "question_text": "A write succeeds in one backend and fails in another. What does a shared API alone not provide?",
+          "options": [
+            "A way to call a driver",
+            "A defined method name",
+            "A place to return an error",
+            "Atomic rollback across both databases"
+          ],
+          "correct_index": 3,
+          "explanation": "Cross-database atomicity requires a verified mechanism, not a common object interface.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-2-database-middleware-application-new-3",
+          "test_id": "pt-dbms-sql-2-database-middleware-application",
+          "question_text": "A post-write read is routed to a delayed replica. What contract must be reviewed?",
+          "options": [
+            "The consistency level the caller expects",
+            "Only whether the column names match",
+            "Only whether the result contains JSON",
+            "Only how many middleware files exist"
+          ],
+          "correct_index": 0,
+          "explanation": "Replica freshness can differ from the writer's current state.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-2-database-middleware-application-new-4",
+          "test_id": "pt-dbms-sql-2-database-middleware-application",
+          "question_text": "A driver error prints an entire connection string into logs. What must be corrected?",
+          "options": [
+            "The student's preferred heading",
+            "Secret-safe bounded diagnostics",
+            "The number of SQL result columns",
+            "The order of unrelated imports"
+          ],
+          "correct_index": 1,
+          "explanation": "Integration diagnostics must not expose credentials or private values.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-2-database-middleware-application-new-5",
+          "test_id": "pt-dbms-sql-2-database-middleware-application",
+          "question_text": "All production access passes through one middleware process. Which operational risk is introduced?",
+          "options": [
+            "Guaranteed distributed atomicity",
+            "Automatic removal of every backend limit",
+            "A bottleneck or single point of failure",
+            "Guaranteed type portability"
+          ],
+          "correct_index": 2,
+          "explanation": "A shared dependency needs capacity and availability review.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-2-database-middleware-application-new-6",
+          "test_id": "pt-dbms-sql-2-database-middleware-application",
+          "question_text": "A proxy changes sessions between statements in one intended transaction. What requires verification?",
+          "options": [
+            "Only the report title",
+            "Only the database brand logo",
+            "Only the timestamp display format",
+            "Session affinity and supported transaction semantics"
+          ],
+          "correct_index": 3,
+          "explanation": "Transaction state cannot be assumed to follow arbitrary session routing.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-2-database-middleware-application-new-7",
+          "test_id": "pt-dbms-sql-2-database-middleware-application",
+          "question_text": "A developer builds a second adapter without inspecting the existing data-access layer. What should happen first?",
+          "options": [
+            "Trace existing callers and contracts to establish a demonstrated need",
+            "Install every possible driver",
+            "Duplicate all route handlers",
+            "Remove the database checks"
+          ],
+          "correct_index": 0,
+          "explanation": "Reusing established boundaries avoids unnecessary parallel implementations.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-2-database-middleware-application-new-8",
+          "test_id": "pt-dbms-sql-2-database-middleware-application",
+          "question_text": "An unsupported type fails explicitly rather than truncating data. Is silent corruption inevitable?",
+          "options": [
+            "Yes; every old adapter silently corrupts",
+            "No; behavior depends on the actual adapter and must be tested",
+            "Only if there are two tiers",
+            "Only Oracle can report errors"
+          ],
+          "correct_index": 1,
+          "explanation": "Unsupported features can fail clearly; review must establish the actual result.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-2-database-middleware-application-new-9",
+          "test_id": "pt-dbms-sql-2-database-middleware-application",
+          "question_text": "Several middleware instances share the same erroneous conversion. Does redundancy repair it?",
+          "options": [
+            "Yes; more instances guarantee precision",
+            "Yes; load balancing changes data types",
+            "No; it replicates the same correctness defect",
+            "Only adding a second database fixes all conversions"
+          ],
+          "correct_index": 2,
+          "explanation": "Availability and correctness are separate concerns.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-2-database-middleware-application-new-10",
+          "test_id": "pt-dbms-sql-2-database-middleware-application",
+          "question_text": "A request is slow before reaching the backend. What should diagnostics distinguish?",
+          "options": [
+            "Only the total table count",
+            "Only the database's marketing name",
+            "Only the response font",
+            "Middleware queueing and adaptation from backend execution"
+          ],
+          "correct_index": 3,
+          "explanation": "Separate timings help locate the actual bottleneck without guessing.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [],
+  "coding_not_applicable": "The objective is integration-layer contracts, type conversion, routing, and failure coordination. SQL-only outputs cannot verify these middleware responsibilities; backend query and transaction syntax are assessed in their dedicated topics.",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-2-database-middleware-1",
+      "test_id": "pt-dbms-sql-2-database-middleware",
+      "question_text": "What is the primary role of Database Middleware?",
+      "options": [
+        "To physically store the database's data files",
+        "To sit between applications and one or more database servers, translating/routing requests and hiding heterogeneity",
+        "To render the user interface for end users",
+        "To replace the need for a conceptual schema"
+      ],
+      "correct_index": 1,
+      "explanation": "Middleware's defining role is mediating between applications and database servers, especially across different vendors or protocols.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-2-database-middleware-2",
+      "test_id": "pt-dbms-sql-2-database-middleware",
+      "question_text": "In the notes' example, what two systems does an enterprise application need to query, motivating the use of middleware?",
+      "options": [
+        "Two identical Oracle instances",
+        "An Oracle database and a SQL Server database",
+        "A file server and a web server",
+        "Two different external schemas of the same database"
+      ],
+      "correct_index": 1,
+      "explanation": "The example describes an application needing to query both Oracle and SQL Server through one uniform middleware interface.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-2-database-middleware-3",
+      "test_id": "pt-dbms-sql-2-database-middleware",
+      "question_text": "Which of these is listed as an example of database middleware?",
+      "options": [
+        "A B+-tree index",
+        "An ODBC/JDBC bridge",
+        "A conceptual schema",
+        "A primary key constraint"
+      ],
+      "correct_index": 1,
+      "explanation": "ODBC/JDBC bridges are explicitly named as examples of database middleware.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-2-database-middleware-4",
+      "test_id": "pt-dbms-sql-2-database-middleware",
+      "question_text": "Where does database middleware typically live in relation to the three-tier architecture?",
+      "options": [
+        "Inside or as part of the presentation tier (Tier 1)",
+        "Inside or as part of the application tier (Tier 2), enabling it to talk to the database tier uniformly",
+        "Inside the database server tier (Tier 3) only",
+        "It replaces all three tiers"
+      ],
+      "correct_index": 1,
+      "explanation": "Middleware commonly operates within the application tier, serving as the mechanism that lets Tier 2 talk to Tier 3 uniformly.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-2-database-middleware-5",
+      "test_id": "pt-dbms-sql-2-database-middleware",
+      "question_text": "What specific benefit does the middleware layer provide when the application queries both Oracle and SQL Server?",
+      "options": [
+        "It forces both databases to merge into a single physical database",
+        "It translates the application's uniform API calls into each backend's own native protocol, so application code doesn't need vendor-specific paths",
+        "It removes the need for either database to store data",
+        "It converts SQL Server into Oracle automatically"
+      ],
+      "correct_index": 1,
+      "explanation": "Middleware absorbs the protocol-translation work per vendor, letting the application code remain uniform across backends.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-2-database-middleware-6",
+      "test_id": "pt-dbms-sql-2-database-middleware",
+      "question_text": "Why can a single, non-redundant middleware instance become a serious operational risk?",
+      "options": [
+        "Because middleware never fails",
+        "Because if it is the only instance handling traffic to production databases, it becomes a bottleneck or single point of failure",
+        "Because middleware only supports one query at a time by design",
+        "Because middleware cannot be scaled at all"
+      ],
+      "correct_index": 1,
+      "explanation": "A single middleware instance without redundancy risks becoming a bottleneck or point of failure for all traffic routed through it.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-2-database-middleware-7",
+      "test_id": "pt-dbms-sql-2-database-middleware",
+      "question_text": "A database vendor introduces a new column data type, but the middleware version in production predates support for it. What is the likely, subtle consequence described in the notes?",
+      "options": [
+        "The middleware will immediately crash with an obvious error every time",
+        "The middleware may not recognize the new type correctly, causing subtle data corruption or truncation rather than an obvious error",
+        "The new data type will be automatically upgraded across all databases",
+        "Nothing; middleware versions never affect data type support"
+      ],
+      "correct_index": 1,
+      "explanation": "Version mismatches between middleware and a database driver can silently mishandle newer features, leading to subtle issues rather than obvious failures.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-2-database-middleware-8",
+      "test_id": "pt-dbms-sql-2-database-middleware",
+      "question_text": "How does database middleware differ from a database driver (2.13) in scope?",
+      "options": [
+        "They are identical concepts with different names",
+        "Middleware is a broader layer that can coordinate one or many vendor-specific drivers, while a driver handles protocol translation for just one specific database product",
+        "A driver always sits above middleware in the stack",
+        "Middleware only works with a single database vendor, unlike drivers"
+      ],
+      "correct_index": 1,
+      "explanation": "Middleware is described as a broader coordinating layer that may use multiple drivers, whereas each driver is scoped to one vendor's protocol.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "coordinator",
+    "independent_review": "unavailable; no agent tools",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Definitions and examples checked against questions; no plagiarism certification.",
+    "existing_question_corrections": [
+      "tq-dbms-sql-2-database-middleware-4",
+      "tq-dbms-sql-2-database-middleware-5",
+      "tq-dbms-sql-2-database-middleware-7",
+      "tq-dbms-sql-2-database-middleware-8"
+    ],
+    "canonical_answer_indices_preserved": true
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-2-database-middleware",
+    "original_note_sha256": "72ed44d48f67556653a4ee67f12f1b7470bb7089ba2537c1f9b038e4659aa751",
+    "status": "paired migration prepared; not applied"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "A heterogeneous report request path",
+      "description": "A common application interface can use backend-specific adapters, but type fidelity, consistency, and transaction scope must remain explicit. The two database services do not become one atomic system merely by sharing an API.",
+      "columns": [
+        "Responsibility",
+        "Example",
+        "Contract to preserve"
+      ],
+      "rows": [
+        [
+          "Application-facing operation",
+          "Request report identifiers and totals",
+          "Actor scope and output meaning"
+        ],
+        [
+          "Middleware adaptation",
+          "Choose the supported backend adapter",
+          "Parameter safety and type fidelity"
+        ],
+        [
+          "Backend driver",
+          "Execute the supported operation",
+          "Actual protocol and session behavior"
+        ],
+        [
+          "Result integration",
+          "Expose defined rows and status",
+          "No invented cross-backend atomicity or currency conversion"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "coordinator review",
+    "server_rendering": "passed",
+    "browser_rendering": "unverified",
+    "independent_review": "unavailable; no agent tools",
+    "rendering_check": "2026-10-28: actual LessonBlock/TopicDiagrams server rendering; 30 authored-package tests passed. Desktop/mobile browser rendering unverified."
+  }
+}

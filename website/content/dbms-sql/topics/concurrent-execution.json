@@ -1,0 +1,522 @@
+{
+  "slug": "concurrent-execution",
+  "source_ref": "chapter-23-concurrency-control/concurrent-execution",
+  "title": "Concurrent Execution",
+  "description": "Explore database interleavings, lost updates, atomic updates, locks, MVCC, version checks, and deadlocks through worked concurrent scenarios.",
+  "dialect": "MySQL 8.4; engine-specific behavior labeled",
+  "references": [
+    {
+      "title": "MySQL InnoDB locking and transactions",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/innodb-locking-transaction-model.html"
+    },
+    {
+      "title": "PostgreSQL transaction isolation",
+      "url": "https://www.postgresql.org/docs/current/transaction-iso.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-23-concurrent-execution",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-23-concurrent-execution-1",
+          "test_id": "pt-dbms-sql-23-concurrent-execution",
+          "question_text": "A transaction reads balance A and computes A = A * 1.10. What arithmetic effect is it computing?",
+          "options": [
+            "A withdrawal of ₹100 from A",
+            "A ten percent increase of the value it read",
+            "A transfer from A to B",
+            "A rollback of T1's change"
+          ],
+          "correct_index": 1,
+          "explanation": "Multiplying the read value by 1.10 adds ten percent; whether the later write is safe depends on the concurrent schedule.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-23-concurrent-execution-2",
+          "test_id": "pt-dbms-sql-23-concurrent-execution",
+          "question_text": "Why can a database interleave multiple transactions instead of always running them one at a time?",
+          "options": [
+            "Interleaving is required by the SQL standard",
+            "To overlap eligible work during waits and potentially improve throughput or response time",
+            "It is the only way to prevent transactions from reading each other's data",
+            "It guarantees correctness automatically"
+          ],
+          "correct_index": 1,
+          "explanation": "The benefit depends on workload and contention; concurrency does not guarantee a universal speedup.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-23-concurrent-execution-3",
+          "test_id": "pt-dbms-sql-23-concurrent-execution",
+          "question_text": "What is the 'correctness challenge' that concurrent execution introduces?",
+          "options": [
+            "Concurrent transactions might use different SQL dialects",
+            "Interleaved operations may produce a database state that no serial execution of the same transactions could have produced",
+            "Concurrent execution always corrupts the database",
+            "Concurrent execution is slower than serial execution"
+          ],
+          "correct_index": 1,
+          "explanation": "Arbitrary interleaving can cause one transaction to read a stale value the other was about to overwrite, yielding a result impossible under any one-at-a-time ordering — that's the problem serializability theory addresses.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-23-concurrent-execution-4",
+          "test_id": "pt-dbms-sql-23-concurrent-execution",
+          "question_text": "T1 reads A to compute a decrement; before T1 writes, T2 also reads A to compute an increase, and both later write absolute replacements. What risk needs analysis?",
+          "options": [
+            "No risk — A is never touched by both transactions",
+            "A stale replacement may overwrite another intended effect, producing a result outside the required serial behavior",
+            "T1 will automatically abort",
+            "The database will refuse to allow this interleaving"
+          ],
+          "correct_index": 1,
+          "explanation": "The reads alone do not prove an anomaly, but the full read-compute-overwrite history can lose an effect; inspect the writes and engine conflict handling.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-23-concurrent-execution-5",
+          "test_id": "pt-dbms-sql-23-concurrent-execution",
+          "question_text": "In the classical independent-item schedule model, assuming no shared predicates or cross-item business dependencies, which pair can interleave without cross-transaction conflicts?",
+          "options": [
+            "Two transactions that both read and write the same account balance",
+            "Two transactions accessing completely disjoint logical items",
+            "T1 and T2 as defined in the running example",
+            "Any two transactions, as long as both eventually commit"
+          ],
+          "correct_index": 1,
+          "explanation": "The conclusion depends on complete independence in the stated model; real predicates, shared resources, or cross-item invariants may introduce additional dependencies.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-23-concurrent-execution-6",
+          "test_id": "pt-dbms-sql-23-concurrent-execution",
+          "question_text": "What is the key distinction between 'concurrency' and 'parallelism' as used in this chapter?",
+          "options": [
+            "They are exactly the same thing",
+            "Concurrency means simultaneous execution on multiple cores; parallelism means interleaving on one core",
+            "Concurrency means interleaving execution (even on a single core via time-slicing); parallelism means literally simultaneous execution on multiple cores — both raise the same correctness issues",
+            "Parallelism only applies to read-only transactions"
+          ],
+          "correct_index": 2,
+          "explanation": "Even a single-core system interleaving transactions via time-slicing faces the same correctness questions this chapter covers; parallelism (true simultaneity) is a separate, additional case.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-23-concurrent-execution-7",
+          "test_id": "pt-dbms-sql-23-concurrent-execution",
+          "question_text": "If a system truly permits only one transaction to be active at a time, what intertransaction concern is absent in that model?",
+          "options": [
+            "Full concurrency control machinery, just in case",
+            "Interleaving between simultaneously active transactions",
+            "Only view serializability checking",
+            "Precedence graphs for every query"
+          ],
+          "correct_index": 1,
+          "explanation": "One active transaction rules out the particular overlap problem; it does not remove validation, atomicity, durability, or other requirements, and a connection count alone is not the definition.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-23-concurrent-execution-8",
+          "test_id": "pt-dbms-sql-23-concurrent-execution",
+          "question_text": "When a database promises serializable execution under its documented model, what relationship should admitted concurrent results have?",
+          "options": [
+            "That every transaction runs faster than it would serially",
+            "They are equivalent to some permitted serial execution of the same transactions",
+            "That no transaction ever waits for another",
+            "That all transactions read the same values"
+          ],
+          "correct_index": 1,
+          "explanation": "This is a serializable contract; weaker isolation levels can allow histories that do not satisfy it.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "cx-concurrent-execution-fundamentals-9",
+          "test_id": "pt-dbms-sql-23-concurrent-execution",
+          "question_text": "What distinguishes concurrency from physical parallelism?",
+          "options": [
+            "Concurrent work can interleave on one processor",
+            "Concurrency always requires several processors",
+            "Parallelism means no overlap",
+            "Concurrency forbids interleaving"
+          ],
+          "correct_index": 0,
+          "explanation": "Overlapping progress can occur through interleaving without simultaneous execution.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "cx-concurrent-execution-fundamentals-10",
+          "test_id": "pt-dbms-sql-23-concurrent-execution",
+          "question_text": "Two transactions read 10 and each writes 11 after intending an increment. Which anomaly is illustrated?",
+          "options": [
+            "Lossless join",
+            "Lost update",
+            "Durable commit",
+            "Foreign key cascade"
+          ],
+          "correct_index": 1,
+          "explanation": "A stale replacement overwrites the effect of the other increment.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "cx-concurrent-execution-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "cx-concurrent-execution-application-1",
+          "test_id": "cx-concurrent-execution-application",
+          "question_text": "Why prefer SET visits = visits + 1 for a shared counter?",
+          "options": [
+            "It disables all locking",
+            "It expresses an arithmetic operation on the protected row",
+            "It guarantees every crossrow invariant",
+            "It prevents every deadlock"
+          ],
+          "correct_index": 1,
+          "explanation": "The engine can coordinate a row update without relying on a stale client replacement.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "cx-concurrent-execution-application-2",
+          "test_id": "cx-concurrent-execution-application",
+          "question_text": "A version-checked UPDATE affects zero rows. What must the caller do?",
+          "options": [
+            "Assume the new version was stored",
+            "Commit an unrelated value",
+            "Handle the failed condition instead of claiming success",
+            "Delete the version column"
+          ],
+          "correct_index": 2,
+          "explanation": "The optimistic condition or target row did not match.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "cx-concurrent-execution-application-3",
+          "test_id": "cx-concurrent-execution-application",
+          "question_text": "What does MVCC primarily provide?",
+          "options": [
+            "Automatic removal of every anomaly",
+            "No need for transaction boundaries",
+            "Only one transaction at a time",
+            "Visibility of suitable row versions for readers"
+          ],
+          "correct_index": 3,
+          "explanation": "Version visibility can reduce blocking while still depending on isolation semantics.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "cx-concurrent-execution-application-4",
+          "test_id": "cx-concurrent-execution-application",
+          "question_text": "Why does uniqueness of student and course not enforce capacity one?",
+          "options": [
+            "Different students can still enroll in the same course",
+            "Unique constraints never work",
+            "The course identifier must be text",
+            "Capacity is always a primary key"
+          ],
+          "correct_index": 0,
+          "explanation": "Capacity is a set level invariant beyond duplicate enrollment prevention.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "cx-concurrent-execution-application-5",
+          "test_id": "cx-concurrent-execution-application",
+          "question_text": "Which evidence exercises a concurrency decision window?",
+          "options": [
+            "Only a sequential SELECT",
+            "An ordered two-session test with final invariant checks",
+            "A formatted SQL snippet",
+            "A successful schema import"
+          ],
+          "correct_index": 1,
+          "explanation": "A multi-session schedule must actually overlap the competing operations.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "cx-concurrent-execution-application-6",
+          "test_id": "cx-concurrent-execution-application",
+          "question_text": "What defines a deadlock?",
+          "options": [
+            "Any slow query",
+            "Any transaction with two statements",
+            "A cycle of incompatible transaction waits",
+            "Any row lock"
+          ],
+          "correct_index": 2,
+          "explanation": "A cycle prevents all participating transactions from progressing without intervention.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "cx-concurrent-execution-application-7",
+          "test_id": "cx-concurrent-execution-application",
+          "question_text": "Why retry the coherent transaction after a deadlock victim rollback?",
+          "options": [
+            "The last statement always contains the whole business action",
+            "Retries remove all locks permanently",
+            "A deadlock proves invalid SQL syntax",
+            "Earlier reads and assumptions may need reevaluation"
+          ],
+          "correct_index": 3,
+          "explanation": "A safe retry repeats the decision under a new valid transaction state.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "cx-concurrent-execution-application-8",
+          "test_id": "cx-concurrent-execution-application",
+          "question_text": "What is a dirty read?",
+          "options": [
+            "Reading another transaction’s uncommitted change",
+            "Reading a committed older version",
+            "Reading an indexed row",
+            "Reading a primary key twice"
+          ],
+          "correct_index": 0,
+          "explanation": "The source value is not yet committed and may be rolled back.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "cx-concurrent-execution-application-9",
+          "test_id": "cx-concurrent-execution-application",
+          "question_text": "What does a serializable outcome aim to match?",
+          "options": [
+            "Only the order requests arrived",
+            "Some serial ordering of the transactions",
+            "A schedule with no SQL reads",
+            "A sorted list of row identifiers"
+          ],
+          "correct_index": 1,
+          "explanation": "Correct interleavings can be equivalent to a serial execution.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "cx-concurrent-execution-application-10",
+          "test_id": "cx-concurrent-execution-application",
+          "question_text": "Which practice reduces the illustrated account lock ordering deadlock?",
+          "options": [
+            "Randomize lock order per request",
+            "Hold locks during user input",
+            "Acquire accounts in a consistent identifier order",
+            "Ignore all deadlock errors"
+          ],
+          "correct_index": 2,
+          "explanation": "A shared acquisition order reduces opposite-order wait cycles.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-23-concurrent-execution-1",
+      "test_id": "pt-dbms-sql-23-concurrent-execution",
+      "question_text": "In the running example, what is T2 computing when it executes step 2 (`A = A * 1.10`)?",
+      "options": [
+        "A withdrawal of ₹100 from A",
+        "10% interest credited on A's balance",
+        "A transfer from A to B",
+        "A rollback of T1's change"
+      ],
+      "correct_index": 1,
+      "explanation": "T2 is defined as crediting 10% interest to both A and B; step 2 multiplies A's current value by 1.10.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-23-concurrent-execution-2",
+      "test_id": "pt-dbms-sql-23-concurrent-execution",
+      "question_text": "Why do database systems interleave the operations of multiple transactions instead of running them strictly one at a time?",
+      "options": [
+        "Interleaving is required by the SQL standard",
+        "It improves throughput and response time by keeping the CPU busy while other transactions wait on I/O",
+        "It is the only way to prevent transactions from reading each other's data",
+        "It guarantees correctness automatically"
+      ],
+      "correct_index": 1,
+      "explanation": "Transactions spend much of their time waiting on I/O; interleaving lets the CPU do useful work for other transactions during that wait, boosting throughput and responsiveness.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-23-concurrent-execution-3",
+      "test_id": "pt-dbms-sql-23-concurrent-execution",
+      "question_text": "What is the 'correctness challenge' that concurrent execution introduces?",
+      "options": [
+        "Concurrent transactions might use different SQL dialects",
+        "Interleaved operations may produce a database state that no serial execution of the same transactions could have produced",
+        "Concurrent execution always corrupts the database",
+        "Concurrent execution is slower than serial execution"
+      ],
+      "correct_index": 1,
+      "explanation": "Arbitrary interleaving can cause one transaction to read a stale value the other was about to overwrite, yielding a result impossible under any one-at-a-time ordering — that's the problem serializability theory addresses.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-23-concurrent-execution-4",
+      "test_id": "pt-dbms-sql-23-concurrent-execution",
+      "question_text": "If T2's R(A) executes between T1's R(A) and T1's W(A) in the running example, what risk does this create?",
+      "options": [
+        "No risk — A is never touched by both transactions",
+        "T2 may compute its 10% interest using a value of A that T1 is about to overwrite, producing a result inconsistent with any serial order",
+        "T1 will automatically abort",
+        "The database will refuse to allow this interleaving"
+      ],
+      "correct_index": 1,
+      "explanation": "T2 reading A before T1's write means T2's computation is based on a value T1 is mid-way through changing — exactly the kind of interference that motivates serializability checks.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-23-concurrent-execution-5",
+      "test_id": "pt-dbms-sql-23-concurrent-execution",
+      "question_text": "Which pair of transactions could safely be interleaved in ANY order with zero correctness risk?",
+      "options": [
+        "Two transactions that both read and write the same account balance",
+        "Two transactions that touch completely disjoint data items",
+        "T1 and T2 as defined in the running example",
+        "Any two transactions, as long as both eventually commit"
+      ],
+      "correct_index": 1,
+      "explanation": "Concurrency control issues only arise when transactions' data accesses overlap; disjoint data means no conflicting operations exist, so any interleaving is safe.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-23-concurrent-execution-6",
+      "test_id": "pt-dbms-sql-23-concurrent-execution",
+      "question_text": "What is the key distinction between 'concurrency' and 'parallelism' as used in this chapter?",
+      "options": [
+        "They are exactly the same thing",
+        "Concurrency means simultaneous execution on multiple cores; parallelism means interleaving on one core",
+        "Concurrency means interleaving execution (even on a single core via time-slicing); parallelism means literally simultaneous execution on multiple cores — both raise the same correctness issues",
+        "Parallelism only applies to read-only transactions"
+      ],
+      "correct_index": 2,
+      "explanation": "Even a single-core system interleaving transactions via time-slicing faces the same correctness questions this chapter covers; parallelism (true simultaneity) is a separate, additional case.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-23-concurrent-execution-7",
+      "test_id": "pt-dbms-sql-23-concurrent-execution",
+      "question_text": "A single-user embedded database that never has two connections open at once needs which of the following?",
+      "options": [
+        "Full concurrency control machinery, just in case",
+        "No concurrency control at all, since no two transactions are ever 'in flight' simultaneously",
+        "Only view serializability checking",
+        "Precedence graphs for every query"
+      ],
+      "correct_index": 1,
+      "explanation": "Concurrency control exists to manage interleaving between multiple in-flight transactions; with only one transaction ever active, the problem this chapter addresses simply doesn't arise.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-23-concurrent-execution-8",
+      "test_id": "pt-dbms-sql-23-concurrent-execution",
+      "question_text": "What is the ultimate correctness property the DBMS wants to guarantee under concurrent execution?",
+      "options": [
+        "That every transaction runs faster than it would serially",
+        "That the result of any interleaved execution is equivalent to the result of some serial execution of the same transactions",
+        "That no transaction ever waits for another",
+        "That all transactions read the same values"
+      ],
+      "correct_index": 1,
+      "explanation": "This is the definition of serializability — the formal goal that lets the DBMS gain interleaving's performance benefits without sacrificing the illusion that transactions ran one at a time.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "coding_problems": [],
+  "coding_not_applicable": "Concurrency requires scheduled multi-session reads, writes, blocking, and failure checks. A single statement judge cannot establish those properties; the notes contain worked schedules and three solved coordination exercises.",
+  "review": {
+    "reviewer": "/root/finish_e_transactions",
+    "independent_review": "passed",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Independent manual content review passed within independent_review_scope; engine/browser/release gates separate.",
+    "editorial_record": "Original scenario-led prose and assessments. External originality and AdSense review unperformed.",
+    "canonical_answer_indices_preserved": true,
+    "independent_reviewer": "/root/review_e_and_gaps",
+    "independent_review_scope": "Full notes,20MCQs with every option,canonical answer position and explanation,original diagrams,and all exercise contracts/fixtures or solved conceptual labs. Original identities/indices checked against public seed cache where applicable. Reported substantive findings corrected by coordinator and filtered recheck accepted;identified learner-facing spacing polished. Manual technical/editorial reasoning only;engine,provider,browser,external originality and AdSense evidence separate."
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-23-concurrent-execution",
+    "original_note_sha256": "a327f218f02bcd0c1404e882ecd1fe5514d886e392e87d27ba85614ce14552d4",
+    "status": "drafted; not included in prepared paired migrations"
+  },
+  "notes": "## Why database work overlaps\n\nConcurrent execution means that multiple transactions make progress during overlapping periods. Their operations can be interleaved on one processor or run in parallel on several processors. These are different execution mechanisms, but both require a database to coordinate shared state. A campus registration service should let students browse courses while administrators edit rooms and other students enroll. Running every request strictly one after another would waste resources during storage waits and limit useful throughput.\n\nConcurrency creates a correctness question as well as a performance opportunity. If two requests both see the last available seat, allowing both to enroll can violate capacity. A transaction can be individually correct when run alone yet contribute to an incorrect interleaving. The database and application must coordinate the complete decision, including reads used to justify writes. Merely wrapping each write in a transaction does not prove that competing decisions observe a safe state.\n\n## Read a schedule\n\nA schedule lists transaction operations in an order that preserves each transaction's internal order. Use r1(X) for transaction T1 reading X, w1(X) for its write, and c1 for commit. A serial schedule runs one transaction to completion before starting another. An interleaved schedule alternates operations. Some interleavings produce the same effect as a serial order and are desirable; others allow anomalies. The target is correct overlap, not overlap without any coordination cost.\n\n```text\nInitial counter X = 10\nr1(X=10)\nr2(X=10)\nw1(X=11)\nc1\nw2(X=11)\nc2\nFinal counter X = 11\n```\n\nBoth transactions intended to increment the counter once, so serial execution would produce 12. Instead, the second write overwrites the first increment with a value calculated from the same old 10. This is a lost update in the abstract read then overwrite pattern. The example is not a claim that every engine executes every SQL update in this fashion. Engines can lock updates, detect conflicts, or abort transactions; evaluate the actual statement and isolation semantics before predicting a result.\n\n## Prefer a protected operation\n\nFor a counter, a single arithmetic update usually expresses the intent better than selecting a value into application memory and later writing an absolute replacement. In InnoDB the update acquires the necessary row locks while modifying the stored value. Two successful increments then both contribute to the result, although one may wait. Atomic arithmetic does not solve every crossrow invariant, so apply it to the property it actually protects.\n\n```sql\nCREATE TABLE visit_counter (\n  page_id INT PRIMARY KEY,\n  visits INT NOT NULL\n) ENGINE=InnoDB;\nINSERT INTO visit_counter VALUES (1, 10);\n-- Execute once in session A and once in session B.\nUPDATE visit_counter SET visits = visits + 1 WHERE page_id = 1;\n-- After both statements commit:\nSELECT visits FROM visit_counter WHERE page_id = 1;\n```\n\nThe expected final value is 12 after both successful autocommit statements complete. Contrast that with two clients independently computing 10 plus 1 and both submitting visits = 11. This comparison isolates the difference between an operation on the current protected row and a stale replacement value. If a request must use a separate read, consider an appropriate locking read or an optimistic version condition and check whether its write succeeded.\n\n## Understand the main coordination choices\n\nPessimistic concurrency control acquires locks so conflicting operations wait or fail rather than proceed unsafely. A locking read can reserve the relevant row before a dependent modification. The application must hold the lock through the decision by using an appropriate transaction boundary. Locking a row and immediately committing before performing the decision removes that protection. Row locks also cannot automatically protect an absent row or a range predicate unless the selected locking mechanism covers the required range.\n\nOptimistic control allows work to proceed but checks whether the observed state is still valid when applying a change. For example, an update can require version = 4 and increment the version to 5. If another writer already changed the version, zero affected rows tells the application that the assumption became stale. The application can reload, report a conflict, or retry the whole decision. Ignoring the affected row count defeats the point of the version check.\n\nMultiversion concurrency control, often called MVCC, lets readers observe appropriate row versions while writers create changes. It can reduce reader and writer blocking but does not mean every transaction sees the newest value or that all anomalies disappear. Snapshot visibility depends on isolation level and operation type. Locking reads, ordinary snapshot reads, and writes can follow different rules. InnoDB combines versioned reads with locking rather than choosing one universal mechanism for every statement.\n\n## Test a decision, not just a query\n\nSuppose a course capacity is one and no student is enrolled. Two transactions each count enrollment, both see zero, and each inserts a different enrollment row. A unique constraint on student and course prevents duplicate enrollment by the same student but does not enforce the course capacity. The invariant concerns a set of rows. A design can serialize on a course row, maintain an atomically updated seat counter, or use another correctly analyzed mechanism with suitable constraints and retry behavior.\n\nAn isolation level name alone is not a complete proof. The SQL standard's minimum phenomena differ from engine implementations, and some engines provide stronger behavior for a named level. Read the engine documentation and construct the actual competing schedule. A test must specify session setup, isolation, statement order, expected blocking or errors, and final invariant checks. A single sequential script that returns the expected count never exercises the competing decision window.\n\n## Blocking, deadlocks, and fairness\n\nWaiting is not automatically a failure. A transaction may safely wait for another writer and then continue using a valid state. A deadlock is different: transactions form a cycle of incompatible waits, so none can proceed without intervention. Databases commonly detect such a cycle and abort a victim. Applications should retry the coherent transaction when appropriate, using bounded retries and preserving operation identity. Continuing only the last statement can miss earlier assumptions that must be reevaluated.\n\nAcquire shared resources in a consistent order and keep transactions short to reduce deadlock opportunities. Avoid waiting on user input or remote services while holding locks. Monitor lock waits and transaction duration alongside throughput, because increased concurrency can eventually reduce useful work through contention. More client connections do not guarantee more completed business operations. Measure latency distributions and failure rates rather than treating processor utilization or connection count as the sole success metric.\n\n## Exercises with schedules and solutions\n\nExercise one: T1 writes X, T2 reads that uncommitted X, and T1 later aborts. What went wrong? T2 performed a dirty read and may have based later work on a value that never becomes committed. Preventing lost updates alone would not address this problem. The read visibility rule and the eventual commit dependency need separate analysis. Continue with [recoverable schedules](/learning/dbms-sql-tutorial/recoverable-schedule) to study that recovery dimension.\n\nExercise two: a versioned update expects version 8 but affects zero rows. Should the application report success because the SQL statement parsed? No. The optimistic condition did not hold, or the target row was absent. The application must distinguish those outcomes using its contract and decide whether to reload or retry. The version field is useful only when the conditional write result is actually enforced.\n\nExercise three: T1 locks account A then requests B, while T2 locks B then requests A. Explain the risk and a mitigation. The transactions can deadlock because each waits for the other's lock. Locking both accounts in the same identifier order reduces this pattern, and the caller still needs a safe retry policy. Compare [serial schedules](/learning/dbms-sql-tutorial/serial-schedule) with real interleavings to understand why equivalent outcomes matter more than an absence of overlap.\n\n\nWhen documenting a concurrency test, include the initial committed fixture and reset it between attempts. Record whether an operation waited, returned rows, affected zero rows, or raised an error. Those observations have different meanings. Repeat the final invariant check after both sessions have terminated, because an intermediate read can reflect a snapshot or unfinished work. Keep test coordination separate from ordinary production request logic, and never infer a universal engine guarantee from one favorable scheduling outcome.\n",
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "A stale replacement loses an increment",
+      "description": "Both transactions compute eleven from the same old ten, so the second replacement erases one intended increment.",
+      "columns": [
+        "Order",
+        "T1",
+        "T2",
+        "Stored X"
+      ],
+      "rows": [
+        [
+          "1",
+          "Read 10",
+          "",
+          "10"
+        ],
+        [
+          "2",
+          "",
+          "Read 10",
+          "10"
+        ],
+        [
+          "3",
+          "Write 11; commit",
+          "",
+          "11"
+        ],
+        [
+          "4",
+          "",
+          "Write 11; commit",
+          "11"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "technical_review": "Independent manual diagram/content consistency review passed;actual static/browser rendering tracked separately.",
+    "server_rendering": "pending",
+    "browser_rendering": "unverified",
+    "independent_review": "passed"
+  },
+  "sql_verification": {
+    "scope": "not executed; concurrency/recovery/provider verification separate",
+    "all_passed": false,
+    "cases": []
+  }
+}

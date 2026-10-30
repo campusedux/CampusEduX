@@ -1,0 +1,640 @@
+{
+  "source_ref": "chapter-16-joins/inner-join",
+  "slug": "inner-join",
+  "title": "INNER JOIN",
+  "description": "Learn INNER JOIN through explicit employee-department relationships, matching-pair cardinality, nullable references, composite keys and stable output contracts.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Return relationships that actually match\n\nAn INNER JOIN combines rows from two inputs when its join condition evaluates true. A campus employer directory can combine each employee with the department referenced by that employee's department_id. The output then describes a matching employee-department relationship. Employees without a matching department are absent, and departments without employees do not appear merely because they exist in the department table.\n\nThis is more precise than saying that an inner join keeps common records. The inputs can have completely different columns and different kinds of entities. They share a relationship expressed by the predicate, not necessarily a whole row or a common name. Read [join predicates](/learning/dbms-sql-tutorial/join-predicate) to distinguish the relationship rule from the columns selected for display.\n\n## Trace a primary-key relationship\n\nThe retained exercise uses departments with a primary-key id and employees with a nullable department_id. The query must return employee identity, employee name and the matching department name. Aliases make the two name columns unambiguous and make the relationship direction visible.\n\n```sql\nSELECT e.id, e.name, d.name AS department\nFROM employees AS e\nINNER JOIN departments AS d\n  ON e.department_id = d.id\nORDER BY e.id;\n```\n\nIf Asha references department one and that department is Engineering, the query emits Asha with Engineering. If Vikram has a null department reference, the equality is not true for any department and no joined row is emitted for Vikram. There is no automatic placeholder department and no automatic correction to an arbitrary existing department.\n\n## Count matching pairs rather than input rows\n\nA join produces one result row for every qualifying pair. Because departments.id is unique, an employee can match at most one department in this example. Several employees can still reference the same department, so Engineering can appear on several output rows. Repeated department labels are not necessarily duplicate errors; they describe different employee relationships.\n\nIf the right-side matching column is not unique, one left row can match several right rows. Three candidate rows on the left and two matching rows on the right can produce six pairs for one shared key. Predict that multiplication before adding aggregates. The keyword INNER does not mean one result per left entity, and it does not deduplicate either input.\n\n## State the intended output grain\n\nFor the employee query, one output row represents one employee with one real department. That grain follows from both the join predicate and the unique department key. If the requirement changes to departments having at least one employee, the same joined relationship contains more detail than needed. A department with ten employees would appear ten times unless the query changes its result policy.\n\nUse [semi joins](/learning/dbms-sql-tutorial/semi-join) when the requirement is membership without child detail. Use a grouped count when the requirement is a measure per department. DISTINCT can be appropriate when duplicate elimination is the actual requested projection, but it should not hide an accidental many-to-many relationship or remove distinct employees with the same displayed name.\n\n## Match identities instead of convenient labels\n\nTwo departments can share a display name in different campuses, or a department can be renamed. Joining employees to departments on a name copied into an employee record can therefore match the wrong entity or several entities. A stable reference to a verified unique key expresses the intended relationship more directly. The actual schema determines which key is authoritative.\n\nComposite relationships require every necessary component. If department numbers are unique only within a campus, both campus_id and department_number belong in the relationship predicate. Omitting the campus component can silently connect an employee to another campus's department with the same local number. A fixture with one campus cannot reveal that error, so add repeated local numbers across owners when testing such a contract.\n\n## Keep qualification and display separate\n\nThe ON condition decides which input rows form matching pairs. The SELECT list decides which values from those pairs the caller sees. Leaving the department key out of the SELECT list does not remove it from the relationship. Conversely, selecting two columns with the same alias does not create a relationship between them.\n\nPrefer explicit output columns to SELECT * when the result is an application or exercise contract. A later schema addition could otherwise change the output shape, introduce duplicate column names, or expose detail the caller never requested. Qualifying id and name references with their aliases also prevents ambiguity and makes code review easier when both tables use familiar column names.\n\n## Understand filters on matched rows\n\nFor a simple inner join, an additional ordinary row predicate can often be written in ON or WHERE without changing which pairs survive. Keeping relationship conditions in ON and report filters in WHERE is a useful readability convention. It does not mean the optimizer must execute those clauses in the written physical order.\n\n```sql\nSELECT e.id, e.name, d.name AS department\nFROM employees AS e\nJOIN departments AS d ON d.id = e.department_id\nWHERE e.salary >= 70000\nORDER BY e.id;\n```\n\nHere the department equality defines the relationship and the salary threshold defines the requested employee population. Do not carry the same placement assumptions into an outer join without review: a WHERE predicate on the optional side can remove null-extended rows. Inner and outer joins have different preservation rules even when their predicates look similar.\n\n## Handle missing and invalid references honestly\n\nOrdinary equality involving a null reference is unknown, so it cannot form an inner-join match. A nonnull employee reference with no corresponding department also produces no match. These two cases look alike in this result, although they may represent different data-quality conditions. An absence from the joined output does not by itself identify why the relationship failed.\n\nA properly enforced foreign key can prevent invalid nonnull references, while still permitting null if the column contract allows it. A join does not create that constraint. The retained exercise deliberately supplies a simple synthetic schema, so the explanation must not pretend that a missing foreign-key declaration is enforced. Use a separate diagnostic or outer join if the task requires investigating unmatched source records.\n\n## Avoid accidental Cartesian multiplication\n\nA missing relationship condition can combine every employee with every department. With four employees and three departments, an unconditional pairing has twelve rows. Some SQL forms allow that behavior intentionally, but it does not answer the employee's real-department question. Modern explicit JOIN syntax helps reviewers locate the intended condition, though it cannot prove the condition is complete or correct.\n\nA weak condition can be just as dangerous as no condition. For example, comparing salary to an unrelated department budget might produce many true pairs while looking syntactically valid. During review, explain why each predicate connects the identities the domain intends. Then examine the result count against the expected cardinality, rather than accepting a query solely because it runs without an error.\n\n## Join multiple relationships without changing the fact\n\nIf a query also joins employee skills, an employee with several skills can appear several times. Summing employee salary over those joined rows can multiply salary even though the original employee-department join was correct. Each new relationship changes the possible pair count. Preserve the original fact identity while tracing how many right-side rows each new predicate can match.\n\nWhen only the existence of a skill is needed, EXISTS can filter employees without expanding them. When skill summaries are needed, aggregate to the desired employee grain before combining the result. A final GROUP BY is not automatically a repair because the inflated salary may already have been summed. Equal salaries across employees also make SUM(DISTINCT salary) an incorrect general solution.\n\n## Verify matching, exclusions and output identity\n\nA focused fixture includes two employees in one department, an employee in another department, a null reference, and a nonnull unmatched reference when the synthetic schema allows it. Include two employees with equal names to prove the query preserves employee identity. Test an empty department table and an empty employee table separately; either empty side makes a simple inner join empty.\n\nThe exercises retain the original employee-directory problem and add an intermediate relationship task. Review the expected columns, aliases and explicit ordering as part of the contract. Only after predicting the correct matching pairs should you inspect indexes or execution plans. An index may speed the search for related rows, but it cannot make an incorrect relationship predicate express the intended business rule.\n",
+  "references": [
+    {
+      "title": "MySQL 8.4 reference manual",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/join.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-16-inner-join",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-16-inner-join-1",
+          "test_id": "pt-dbms-sql-16-inner-join",
+          "question_text": "What does an INNER JOIN emit?",
+          "options": [
+            "Every left row regardless of match",
+            "Every pair satisfying its predicate",
+            "Every possible pair automatically",
+            "Only rows identical in every column"
+          ],
+          "correct_index": 1,
+          "explanation": "The predicate defines qualifying pairs.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-16-inner-join-2",
+          "test_id": "pt-dbms-sql-16-inner-join",
+          "question_text": "Which predicate connects the retained employee relation?",
+          "options": [
+            "e.name = e.name",
+            "e.department_id = d.id",
+            "e.salary = d.id",
+            "d.name IS NULL"
+          ],
+          "correct_index": 1,
+          "explanation": "The employee reference points to the department key.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-16-inner-join-3",
+          "test_id": "pt-dbms-sql-16-inner-join",
+          "question_text": "What happens to a NULL department reference under ordinary equality?",
+          "options": [
+            "It matches department zero",
+            "It produces no matching department pair",
+            "It matches every department",
+            "It creates a placeholder department"
+          ],
+          "correct_index": 1,
+          "explanation": "NULL equality is not true.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-16-inner-join-4",
+          "test_id": "pt-dbms-sql-16-inner-join",
+          "question_text": "Can several employees produce the same department label?",
+          "options": [
+            "No, INNER JOIN deduplicates labels",
+            "Yes, they are different employee relationships",
+            "Only when every salary is equal",
+            "Only without aliases"
+          ],
+          "correct_index": 1,
+          "explanation": "A many-to-one relationship repeats parent detail.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-16-inner-join-5",
+          "test_id": "pt-dbms-sql-16-inner-join",
+          "question_text": "What guarantees at most one department match here?",
+          "options": [
+            "The INNER keyword alone",
+            "The uniqueness of departments.id",
+            "The ORDER BY clause",
+            "The employee name"
+          ],
+          "correct_index": 1,
+          "explanation": "The matching parent key is unique.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-16-inner-join-6",
+          "test_id": "pt-dbms-sql-16-inner-join",
+          "question_text": "If two left rows each match three right rows, how many pairs result?",
+          "options": [
+            "Two",
+            "Six",
+            "Three",
+            "One"
+          ],
+          "correct_index": 1,
+          "explanation": "Pair multiplication follows the qualifying relationships.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-16-inner-join-7",
+          "test_id": "pt-dbms-sql-16-inner-join",
+          "question_text": "Does an inner join enforce a foreign key?",
+          "options": [
+            "Yes, automatically",
+            "No",
+            "Only if SELECT * is used",
+            "Only for nullable columns"
+          ],
+          "correct_index": 1,
+          "explanation": "A join queries relationships; constraints enforce integrity.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-16-inner-join-8",
+          "test_id": "pt-dbms-sql-16-inner-join",
+          "question_text": "Why qualify e.name and d.name?",
+          "options": [
+            "To force an index",
+            "To distinguish columns with the same name",
+            "To change stored names",
+            "To make every name unique"
+          ],
+          "correct_index": 1,
+          "explanation": "Aliases clarify input ownership.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "cx-q-inner-join-9",
+          "test_id": "pt-dbms-sql-16-inner-join",
+          "question_text": "Which clause specifies output order?",
+          "options": [
+            "ORDER BY",
+            "INNER JOIN alone",
+            "ON alone",
+            "The primary-key declaration alone"
+          ],
+          "correct_index": 0,
+          "explanation": "Relations do not promise result order without it.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "cx-q-inner-join-10",
+          "test_id": "pt-dbms-sql-16-inner-join",
+          "question_text": "What happens if either input is empty?",
+          "options": [
+            "All rows from the other side remain",
+            "A simple inner join has no pairs",
+            "One null row appears",
+            "The query becomes a full join"
+          ],
+          "correct_index": 1,
+          "explanation": "Each result requires a row from both inputs.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "cx-test-inner-join-2",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "cx-q-inner-join-11",
+          "test_id": "cx-test-inner-join-2",
+          "question_text": "Why is joining on display names risky?",
+          "options": [
+            "Names cannot be compared",
+            "Names always contain NULL",
+            "Names may be duplicated or renamed",
+            "Names automatically create constraints"
+          ],
+          "correct_index": 2,
+          "explanation": "A label need not identify the intended entity.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "cx-q-inner-join-12",
+          "test_id": "cx-test-inner-join-2",
+          "question_text": "What belongs in a campus-local department relationship?",
+          "options": [
+            "The local number alone always",
+            "Only the campus label",
+            "No predicate when names agree",
+            "Campus identity and local department number"
+          ],
+          "correct_index": 3,
+          "explanation": "Composite identity needs every required component.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "cx-q-inner-join-13",
+          "test_id": "cx-test-inner-join-2",
+          "question_text": "Why avoid SELECT * in a stable caller contract?",
+          "options": [
+            "Schema additions can change output shape",
+            "It always causes a syntax error",
+            "It removes all aliases",
+            "It never returns keys"
+          ],
+          "correct_index": 0,
+          "explanation": "Explicit projection keeps requested columns intentional.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "cx-q-inner-join-14",
+          "test_id": "cx-test-inner-join-2",
+          "question_text": "What does the shown salary WHERE condition do?",
+          "options": [
+            "Changes the department key",
+            "Filters the matching employee population",
+            "Creates a new department",
+            "Deduplicates employees"
+          ],
+          "correct_index": 1,
+          "explanation": "It restricts eligible joined rows.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "cx-q-inner-join-15",
+          "test_id": "cx-test-inner-join-2",
+          "question_text": "Which join is appropriate for departments with any employee, without child detail?",
+          "options": [
+            "An unconditional Cartesian join",
+            "A self-join on every column",
+            "A semi-join membership query",
+            "An inner join with no output rule"
+          ],
+          "correct_index": 2,
+          "explanation": "Existence is a different result grain from employee pairs.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "cx-q-inner-join-16",
+          "test_id": "cx-test-inner-join-2",
+          "question_text": "What can a subsequent one-to-many skills join do?",
+          "options": [
+            "Guarantee one row per employee",
+            "Remove all employees with skills",
+            "Enforce unique salaries",
+            "Multiply employee rows"
+          ],
+          "correct_index": 3,
+          "explanation": "Every additional relationship affects cardinality.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "cx-q-inner-join-17",
+          "test_id": "cx-test-inner-join-2",
+          "question_text": "Why is SUM(DISTINCT salary) not a general duplication fix?",
+          "options": [
+            "Different employees may have equal salaries",
+            "SUM cannot accept DISTINCT",
+            "Every salary is unique by definition",
+            "DISTINCT changes the foreign key"
+          ],
+          "correct_index": 0,
+          "explanation": "Equal measures are not necessarily duplicate facts.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "cx-q-inner-join-18",
+          "test_id": "cx-test-inner-join-2",
+          "question_text": "Which fixture tests unmatched nonnull references?",
+          "options": [
+            "Only valid employees",
+            "An employee referencing a department absent from the fixture",
+            "Two identical department names alone",
+            "An empty employee table alone"
+          ],
+          "correct_index": 1,
+          "explanation": "It distinguishes missing relationships from successful matches.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "cx-q-inner-join-19",
+          "test_id": "cx-test-inner-join-2",
+          "question_text": "What can a missing join predicate produce?",
+          "options": [
+            "An automatic foreign-key match",
+            "An automatic primary-key match",
+            "A Cartesian product",
+            "A guaranteed empty result"
+          ],
+          "correct_index": 2,
+          "explanation": "Without a relationship restriction every pair may qualify.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "cx-q-inner-join-20",
+          "test_id": "cx-test-inner-join-2",
+          "question_text": "What should precede performance tuning?",
+          "options": [
+            "Adding every available index",
+            "Removing all aliases",
+            "Disabling constraints",
+            "Verifying the intended matching pairs and grain"
+          ],
+          "correct_index": 3,
+          "explanation": "Speed does not establish relationship correctness.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cp-dbms-sql-employees-with-real-departments",
+      "slug": "employees-with-real-departments",
+      "title": "Employees With Real Departments",
+      "difficulty": "Easy",
+      "task": "Write a query returning `id`, `name` (employee), and `department` (department's name) for every employee who has a real department assigned, ordered by employee `id`. Employees with no department should NOT appear.\n\n```sql\nCREATE TABLE departments (\n  id INTEGER PRIMARY KEY,\n  name TEXT NOT NULL\n);\nCREATE TABLE employees (\n  id INTEGER PRIMARY KEY,\n  name TEXT NOT NULL,\n  department_id INTEGER,\n  manager_id INTEGER,\n  salary INTEGER NOT NULL\n);\n```\n\n**Sample data**:\n\n```sql\nINSERT INTO departments (id, name) VALUES (1, 'Engineering'), (2, 'Sales'), (3, 'Marketing');\nINSERT INTO employees (id, name, department_id, manager_id, salary) VALUES\n(1, 'Asha', 1, NULL, 90000),\n(2, 'Rohan', 1, 1, 70000),\n(3, 'Neha', 2, 1, 65000),\n(4, 'Vikram', NULL, 1, 50000);\n```\n",
+      "schema_sql": "CREATE TABLE departments (\n  id INTEGER PRIMARY KEY,\n  name TEXT NOT NULL\n);\nCREATE TABLE employees (\n  id INTEGER PRIMARY KEY,\n  name TEXT NOT NULL,\n  department_id INTEGER,\n  manager_id INTEGER,\n  salary INTEGER NOT NULL\n);",
+      "seed_sql": "INSERT INTO departments (id, name) VALUES (1, 'Engineering'), (2, 'Sales'), (3, 'Marketing');\nINSERT INTO employees (id, name, department_id, manager_id, salary) VALUES\n(1, 'Asha', 1, NULL, 90000),\n(2, 'Rohan', 1, 1, 70000),\n(3, 'Neha', 2, 1, 65000),\n(4, 'Vikram', NULL, 1, 50000);",
+      "solution_sql": "SELECT e.id, e.name, d.name AS department FROM employees e INNER JOIN departments d ON e.department_id = d.id ORDER BY e.id;",
+      "expected": "id\tname\tdepartment\n1\tAsha\tEngineering\n2\tRohan\tEngineering\n3\tNeha\tSales",
+      "ordering": "As specified by the task and explicit ORDER BY.",
+      "constraints": [
+        "Return id, name and department for matching employees, ordered by id."
+      ],
+      "edge_cases": [
+        "NULL and unmatched references are excluded.",
+        "Equal employee names remain distinct identities."
+      ],
+      "hints": [
+        "A unique department key gives each valid employee at most one department match."
+      ],
+      "explanation": "A unique department key gives each valid employee at most one department match.",
+      "validation_cases": [
+        {
+          "hidden": true,
+          "seed_sql": "INSERT INTO departments (id, name) VALUES (10, 'Finance'), (20, 'Legal'), (30, 'HR');\nINSERT INTO employees (id, name, department_id, manager_id, salary) VALUES\n(1, 'Zara', 10, NULL, 95000),\n(2, 'Omar', 10, 1, 60000),\n(3, 'Leo', NULL, 1, 40000);",
+          "expected": "id\tname\tdepartment\n1\tZara\tFinance\n2\tOmar\tFinance"
+        },
+        {
+          "name": "empty department input",
+          "seed_sql": "INSERT INTO employees VALUES (1,'Asha',1,NULL,90000);",
+          "expected": ""
+        },
+        {
+          "name": "null unmatched and equal names",
+          "seed_sql": "INSERT INTO departments VALUES (1,'Engineering'),(2,'Sales'); INSERT INTO employees VALUES (1,'Sam',1,NULL,10),(2,'Sam',2,NULL,10),(3,'Null',NULL,NULL,10),(4,'Missing',99,NULL,10);",
+          "expected": "id\tname\tdepartment\n1\tSam\tEngineering\n2\tSam\tSales"
+        }
+      ],
+      "existing_problem": true,
+      "check_sql": "",
+      "original_check_sql": "",
+      "original_description": "Write a query returning `id`, `name` (employee), and `department` (department's name) for every employee who has a real department assigned, ordered by employee `id`. Employees with no department should NOT appear.\n\n```sql\nCREATE TABLE departments (\n  id INTEGER PRIMARY KEY,\n  name TEXT NOT NULL\n);\nCREATE TABLE employees (\n  id INTEGER PRIMARY KEY,\n  name TEXT NOT NULL,\n  department_id INTEGER,\n  manager_id INTEGER,\n  salary INTEGER NOT NULL\n);\n```\n\n**Sample data**:\n\n```sql\nINSERT INTO departments (id, name) VALUES (1, 'Engineering'), (2, 'Sales'), (3, 'Marketing');\nINSERT INTO employees (id, name, department_id, manager_id, salary) VALUES\n(1, 'Asha', 1, NULL, 90000),\n(2, 'Rohan', 1, 1, 70000),\n(3, 'Neha', 2, 1, 65000),\n(4, 'Vikram', NULL, 1, 50000);\n```\n",
+      "original_examples": [
+        {
+          "input": "",
+          "output": "id\tname\tdepartment\n1\tAsha\tEngineering\n2\tRohan\tEngineering\n3\tNeha\tSales"
+        }
+      ],
+      "original_test_cases": [
+        {
+          "hidden": true,
+          "seed_sql": "INSERT INTO departments (id, name) VALUES (10, 'Finance'), (20, 'Legal'), (30, 'HR');\nINSERT INTO employees (id, name, department_id, manager_id, salary) VALUES\n(1, 'Zara', 10, NULL, 95000),\n(2, 'Omar', 10, 1, 60000),\n(3, 'Leo', NULL, 1, 40000);",
+          "expected": "id\tname\tdepartment\n1\tZara\tFinance\n2\tOmar\tFinance"
+        }
+      ],
+      "original_schema_sql": "CREATE TABLE departments (\n  id INTEGER PRIMARY KEY,\n  name TEXT NOT NULL\n);\nCREATE TABLE employees (\n  id INTEGER PRIMARY KEY,\n  name TEXT NOT NULL,\n  department_id INTEGER,\n  manager_id INTEGER,\n  salary INTEGER NOT NULL\n);",
+      "original_seed_sql": "INSERT INTO departments (id, name) VALUES (1, 'Engineering'), (2, 'Sales'), (3, 'Marketing');\nINSERT INTO employees (id, name, department_id, manager_id, salary) VALUES\n(1, 'Asha', 1, NULL, 90000),\n(2, 'Rohan', 1, 1, 70000),\n(3, 'Neha', 2, 1, 65000),\n(4, 'Vikram', NULL, 1, 50000);",
+      "original_description_md5": "5ede09a2d4abbe956551b105539cd364",
+      "original_problem": {
+        "id": "cp-dbms-sql-employees-with-real-departments",
+        "topic_id": null,
+        "title": "Employees With Real Departments",
+        "difficulty": "Easy",
+        "slug": "employees-with-real-departments",
+        "description": "Write a query returning `id`, `name` (employee), and `department` (department's name) for every employee who has a real department assigned, ordered by employee `id`. Employees with no department should NOT appear.\n\n```sql\nCREATE TABLE departments (\n  id INTEGER PRIMARY KEY,\n  name TEXT NOT NULL\n);\nCREATE TABLE employees (\n  id INTEGER PRIMARY KEY,\n  name TEXT NOT NULL,\n  department_id INTEGER,\n  manager_id INTEGER,\n  salary INTEGER NOT NULL\n);\n```\n\n**Sample data**:\n\n```sql\nINSERT INTO departments (id, name) VALUES (1, 'Engineering'), (2, 'Sales'), (3, 'Marketing');\nINSERT INTO employees (id, name, department_id, manager_id, salary) VALUES\n(1, 'Asha', 1, NULL, 90000),\n(2, 'Rohan', 1, 1, 70000),\n(3, 'Neha', 2, 1, 65000),\n(4, 'Vikram', NULL, 1, 50000);\n```\n",
+        "examples": "[{\"input\": \"\", \"output\": \"id\\tname\\tdepartment\\n1\\tAsha\\tEngineering\\n2\\tRohan\\tEngineering\\n3\\tNeha\\tSales\"}]",
+        "test_cases": "[{\"hidden\": true, \"seed_sql\": \"INSERT INTO departments (id, name) VALUES (10, 'Finance'), (20, 'Legal'), (30, 'HR');\\nINSERT INTO employees (id, name, department_id, manager_id, salary) VALUES\\n(1, 'Zara', 10, NULL, 95000),\\n(2, 'Omar', 10, 1, 60000),\\n(3, 'Leo', NULL, 1, 40000);\", \"expected\": \"id\\tname\\tdepartment\\n1\\tZara\\tFinance\\n2\\tOmar\\tFinance\"}]",
+        "starter_code": null,
+        "editorial": "INNER JOIN naturally excludes employees with no matching department. Reference: `SELECT e.id, e.name, d.name AS department FROM employees e INNER JOIN departments d ON e.department_id = d.id ORDER BY e.id;`",
+        "supported_languages": null,
+        "sql_schema_sql": "CREATE TABLE departments (\n  id INTEGER PRIMARY KEY,\n  name TEXT NOT NULL\n);\nCREATE TABLE employees (\n  id INTEGER PRIMARY KEY,\n  name TEXT NOT NULL,\n  department_id INTEGER,\n  manager_id INTEGER,\n  salary INTEGER NOT NULL\n);",
+        "sql_seed_sql": "INSERT INTO departments (id, name) VALUES (1, 'Engineering'), (2, 'Sales'), (3, 'Marketing');\nINSERT INTO employees (id, name, department_id, manager_id, salary) VALUES\n(1, 'Asha', 1, NULL, 90000),\n(2, 'Rohan', 1, 1, 70000),\n(3, 'Neha', 2, 1, 65000),\n(4, 'Vikram', NULL, 1, 50000);",
+        "sql_check_sql": "",
+        "learning_topic_id": null,
+        "status": "published",
+        "is_premium": null,
+        "show_on_website": null,
+        "show_on_mobile": null,
+        "sort_order": 1,
+        "source_ref": "chapter-16-joins/inner-join"
+      }
+    },
+    {
+      "id": "cx-inner-high-salary-directory",
+      "slug": "inner-high-salary-directory",
+      "title": "Filter a matched employee directory",
+      "difficulty": "Medium",
+      "task": "Return id, name and department for employees with a real matching department and salary at least 70000, ordered by id.",
+      "schema_sql": "CREATE TABLE departments(id INT PRIMARY KEY,name TEXT NOT NULL); CREATE TABLE employees(id INT PRIMARY KEY,name TEXT NOT NULL,department_id INT NULL,manager_id INT NULL,salary INT NOT NULL);",
+      "seed_sql": "INSERT INTO departments VALUES (1,'Engineering'),(2,'Sales'); INSERT INTO employees VALUES (1,'Asha',1,NULL,90000),(2,'Rohan',1,1,70000),(3,'Neha',2,1,65000),(4,'Vikram',NULL,1,80000);",
+      "solution_sql": "SELECT e.id,e.name,d.name AS department FROM employees e JOIN departments d ON e.department_id=d.id WHERE e.salary>=70000 ORDER BY e.id;",
+      "expected": "id\tname\tdepartment\n1\tAsha\tEngineering\n2\tRohan\tEngineering",
+      "ordering": "As specified by the task and explicit ORDER BY.",
+      "constraints": [
+        "Return id, name and department for employees with a real matching department and salary at least 70000, ordered by id."
+      ],
+      "edge_cases": [
+        "Exactly 70000 qualifies.",
+        "A high salary with no department match remains excluded."
+      ],
+      "hints": [
+        "The salary boundary applies to matched employees; a high salary cannot create a missing relationship."
+      ],
+      "explanation": "The salary boundary applies to matched employees; a high salary cannot create a missing relationship.",
+      "validation_cases": [
+        {
+          "name": "salary boundary and unmatched high earner",
+          "seed_sql": "INSERT INTO departments VALUES (1,'Engineering'); INSERT INTO employees VALUES (1,'Below',1,NULL,69999),(2,'Boundary',1,NULL,70000),(3,'Missing',99,NULL,100000);",
+          "expected": "id\tname\tdepartment\n2\tBoundary\tEngineering"
+        },
+        {
+          "name": "empty employees",
+          "seed_sql": "INSERT INTO departments VALUES (1,'Engineering');",
+          "expected": ""
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-16-inner-join-1",
+      "test_id": "pt-dbms-sql-16-inner-join",
+      "question_text": "What does INNER JOIN return?",
+      "options": [
+        "Every row from both tables regardless of match",
+        "Only rows that have a match on both sides",
+        "Only unmatched rows",
+        "Every possible combination of rows"
+      ],
+      "correct_index": 1,
+      "explanation": "INNER JOIN keeps only matched rows from both tables.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-16-inner-join-2",
+      "test_id": "pt-dbms-sql-16-inner-join",
+      "question_text": "Is plain JOIN (no qualifier) the same as INNER JOIN?",
+      "options": [
+        "No, plain JOIN means something different",
+        "Yes — INNER is optional and plain JOIN defaults to it",
+        "Plain JOIN means CROSS JOIN",
+        "Plain JOIN is invalid syntax"
+      ],
+      "correct_index": 1,
+      "explanation": "INNER is the implicit default when no join type is specified.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-16-inner-join-3",
+      "test_id": "pt-dbms-sql-16-inner-join",
+      "question_text": "In the running example, is Vikram included in the INNER JOIN result?",
+      "options": [
+        "Yes, with a NULL department",
+        "No — his NULL department_id matches nothing in departments, so he's excluded",
+        "Yes, matched to Marketing",
+        "This cannot be determined"
+      ],
+      "correct_index": 1,
+      "explanation": "INNER JOIN drops rows with no match, and Vikram has no department_id to match on.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-16-inner-join-4",
+      "test_id": "pt-dbms-sql-16-inner-join",
+      "question_text": "Does Marketing appear in the INNER JOIN result?",
+      "options": [
+        "Yes, once",
+        "No — no employee references department 3, so it has no matching row to join with",
+        "Yes, multiple times",
+        "Only if it has a manager"
+      ],
+      "correct_index": 1,
+      "explanation": "With no employees referencing Marketing, INNER JOIN produces no row for it.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-16-inner-join-5",
+      "test_id": "pt-dbms-sql-16-inner-join",
+      "question_text": "What happens if a JOIN condition accidentally uses the wrong column (e.g. matching id to id instead of department_id to id)?",
+      "options": [
+        "SQL detects and raises a clear error",
+        "It silently produces a wrong result with no error — a common, dangerous type of bug",
+        "The join is automatically ignored",
+        "It always returns zero rows"
+      ],
+      "correct_index": 1,
+      "explanation": "An incorrect join column is not a syntax error, making it a genuinely dangerous silent-failure class of bug.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-16-inner-join-6",
+      "test_id": "pt-dbms-sql-16-inner-join",
+      "question_text": "Which relational algebra concept does INNER JOIN correspond to?",
+      "options": [
+        "Cartesian Product",
+        "Equi Join (a Theta Join restricted to equality)",
+        "Difference",
+        "Projection"
+      ],
+      "correct_index": 1,
+      "explanation": "A standard equality-based INNER JOIN is exactly relational algebra's Equi Join.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-16-inner-join-7",
+      "test_id": "pt-dbms-sql-16-inner-join",
+      "question_text": "What happens to rows with no match on either side of an INNER JOIN?",
+      "options": [
+        "They're kept with NULLs filled in",
+        "They are silently dropped from the result",
+        "They cause the query to fail",
+        "They're moved to a separate error table"
+      ],
+      "correct_index": 1,
+      "explanation": "INNER JOIN's defining behavior is dropping any row lacking a match.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-16-inner-join-8",
+      "test_id": "pt-dbms-sql-16-inner-join",
+      "question_text": "Is the INNER keyword required syntax, or purely stylistic?",
+      "options": [
+        "Required — omitting it is a syntax error",
+        "Purely stylistic/clarifying — JOIN alone means the same thing",
+        "Required only in PostgreSQL",
+        "INNER changes the join's behavior compared to plain JOIN"
+      ],
+      "correct_index": 1,
+      "explanation": "INNER adds clarity but changes nothing about the query's actual behavior.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "worker_3",
+    "independent_review": "passed",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "author review; independent review pending",
+    "canonical_answer_indices_preserved": true,
+    "editorial_record": "Original explanations and assessments; seeded identities and canonical answer positions retained. External originality clearance unavailable.",
+    "independent_reviewer": "/root",
+    "independent_review_scope": "Full notes,20 MCQs/options/reasoning,both exercises with seven sample/alternative outputs and table diagram reviewed. Predicate truth, NULL/unmatched exclusions, unique-key multiplicity, composite identity and salary boundary correct. Retained canonical employee-directory exercise inspected; portable SQLite fixture execution separate. Exact MySQL/provider and browser verification pending."
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-16-inner-join",
+    "original_note_sha256": "8d707fcfd6242c6d1bc83a185ed14f2936499b002a42ea77a54b6a0cd9ce5f85",
+    "status": "drafted; not included in prepared paired migrations"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Matched employee-department pairs",
+      "description": "The unique department identity limits each employee to at most one match; unmatched references produce no pair.",
+      "columns": [
+        "Employee",
+        "Reference",
+        "Department exists?",
+        "Output"
+      ],
+      "rows": [
+        [
+          "Asha",
+          "1",
+          "Engineering",
+          "Asha + Engineering"
+        ],
+        [
+          "Rohan",
+          "1",
+          "Engineering",
+          "Rohan + Engineering"
+        ],
+        [
+          "Vikram",
+          "NULL",
+          "No true equality",
+          "Excluded"
+        ],
+        [
+          "Unknown",
+          "99",
+          "No department 99",
+          "Excluded"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "coordinator independent manual review passed",
+    "server_rendering": "passed",
+    "browser_rendering": "unverified",
+    "independent_review": "passed",
+    "server_rendering_evidence": "2026-10-29 full Vitest:1310 passed/12 skipped; actual LessonBlock/TopicDiagrams render over230 packages. Browser visual QA remains unverified."
+  },
+  "authoring_status": "drafted; verification pending",
+  "sql_verification": {
+    "scope": "not executed; exact MySQL/provider execution pending",
+    "all_passed": false,
+    "cases": []
+  }
+}

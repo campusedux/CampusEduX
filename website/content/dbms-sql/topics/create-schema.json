@@ -1,0 +1,620 @@
+{
+  "source_ref": "chapter-9-ddl-and-schema-design/create-schema",
+  "slug": "create-schema",
+  "title": "CREATE SCHEMA",
+  "description": "Interpret schema creation in the correct engine, distinguish namespace grouping from authorization, and make object qualification explicit when identical local names coexist.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Schema has more than one database meaning\n\nA schema can mean the structural design of a dataset, such as the relation headings and constraints in a course model. In SQL commands, schema can also name an actual catalog object or namespace. These meanings are related but not interchangeable. Writing down a conceptual schema does not execute CREATE SCHEMA, and executing that statement does not design the complete application automatically.\n\nThe command's object level depends on the database product. PostgreSQL creates a namespace inside the connected database. MySQL treats CREATE SCHEMA as a synonym for CREATE DATABASE. A tutorial that omits that distinction can lead students to create a different kind of object than they intended, even when the statement is accepted without an error.\n\n## PostgreSQL schemas group names inside one database\n\nImagine a PostgreSQL campus database with admissions and library schemas. Both can contain a table named requests because the qualified names admissions.requests and library.requests identify different objects. Each local table name is interpreted together with its schema. The shared word requests does not make the tables duplicates or require them to store the same kind of fact.\n\nA schema can group more than tables, including views and other supported named objects. The grouping helps organize a database with several areas of responsibility. It does not give each schema a separate server process, a separate connection endpoint, or an automatic independent recovery schedule. Those are operational properties that need their own design and product-specific support.\n\n## MySQL creates a database under the schema keyword\n\nIn MySQL, CREATE SCHEMA admissions and CREATE DATABASE admissions name the same database-creation operation. There is no extra admissions namespace being created underneath whichever database was previously selected in the connection. This is the central portability boundary for the exercises, which use MySQL-style execution rather than pretending to execute PostgreSQL namespace semantics on a compatible server.\n\nA qualified MySQL table reference such as admissions.requests identifies a table in database admissions. A PostgreSQL reference with the same spelling identifies a table in schema admissions of the connected database. The punctuation looks similar while the catalog hierarchy differs. Read the engine and connection context before interpreting the first component of a qualified name.\n\n```sql\nCREATE SCHEMA IF NOT EXISTS cx_dbms_lab_admissions\n  DEFAULT CHARACTER SET utf8mb4\n  COLLATE utf8mb4_unicode_ci;\n```\n\n## Qualification makes the intended object visible\n\nWhen multiple namespaces contain an orders or requests table, a qualified reference makes the intended source explicit. This is especially useful in reports joining several subsystems with similar naming conventions. A local table alias then distinguishes query roles without changing the persistent namespace. The alias is a query-local label, whereas the qualified object name identifies the stored object being referenced.\n\nQualification is not an authorization bypass. A user who can spell another schema's table name still needs the required access to that object. Similarly, omitting qualification does not make an object private. Resolve naming, privileges and the application's trusted access boundary as separate concerns; each contributes a different property to the final behaviour.\n\n## Unqualified references depend on resolution rules\n\nPostgreSQL uses its search_path when resolving appropriate unqualified object references. The position of schemas in that path can change which same-named object is found. Therefore a report can depend on configuration outside its visible SELECT text. A schema's creation time does not by itself determine that resolution, and alphabetical order is not a general substitute for the configured path.\n\nMySQL uses the connection's selected default database for unqualified table names. Creating another schema does not automatically select it. USE changes the MySQL default database for that session, while an explicit database.table reference can target a different accessible database directly. Do not describe these two products as if they share one universal schema-search algorithm.\n\n## Ownership and access need deliberate choices\n\nPostgreSQL CREATE SCHEMA supports ownership-related syntax, subject to the executing role's privileges. Ownership is significant because the owner can exercise the applicable control over that object. An application design should identify who provisions namespaces, who may create objects inside them, and who may use existing objects. Those are different capabilities and should not be collapsed into a single vague access flag.\n\nUSAGE on a PostgreSQL schema permits the relevant namespace access, but it does not by itself grant SELECT on every contained table. Table privileges and other applicable access rules still matter. A statement that schema USAGE alone securely isolates a tenant is incomplete. Explain the full intended access contract rather than presenting namespace grouping as automatic row-level or tenant-level enforcement.\n\n## Same names can coexist without sharing definitions\n\nAdmissions requests might contain applicant_id and submitted_on, while library requests might contain borrower_id and book_id. The shared local name is a naming convenience, not a promise of compatible columns. A UNION or join still needs a compatible output shape or meaningful relationship predicate. Namespace separation does not make unrelated identifiers globally interchangeable.\n\nThis is why the second exercise keeps an explicit source label in a combined report. Two local tables can each contain request_id 1 without referring to the same request. Including the area role preserves that distinction. Removing it and applying DISTINCT could merge different facts, which would change the report's grain rather than simply tidy its output.\n\n## Guarded creation does not reconcile an existing namespace\n\nMySQL IF NOT EXISTS handles an already-taken database name without rebuilding the database to match new defaults. PostgreSQL's supported IF NOT EXISTS schema form likewise does not establish that an existing namespace has the intended ownership and contents. The existence condition is narrower than a complete configuration agreement check, even though the relevant metadata differs between products.\n\nInspect the actual object properties required by the contract after a guarded operation. Do not respond to an unexpected existing object by deleting it automatically. A name collision can indicate earlier work, another owner, or an incorrect target connection. Resolving that situation belongs to an explicit change decision; a successful no-op is not evidence that every expected property was verified.\n\n## Removal syntax must remain engine specific\n\nPostgreSQL DROP SCHEMA with CASCADE can remove contained objects and dependent objects according to dependency rules. Its impact can extend beyond the casually described set of tables inside the named schema. A dependency review is therefore more accurate than saying CASCADE merely hides a namespace or always affects only one small isolated grouping.\n\nMySQL DROP SCHEMA is database removal because schema and database are synonyms there. Do not carry PostgreSQL's namespace mental model into that operation. This tutorial explains the distinction without executing a removal against application objects. Creating disposable lab names does not authorize removing similarly named production objects or assuming there are no external callers.\n\n## Choose namespace structure for understandable ownership\n\nA campus project might group admissions and library definitions to clarify responsibilities, naming and change review. That is a useful organization goal. A different project might choose one namespace with consistent table prefixes. Neither layout alone proves better performance, stronger authorization or easier recovery. Evaluate those outcomes against actual access patterns and administrative requirements rather than treating schema count as a quality measure.\n\nPer-tenant namespaces introduce additional provisioning and migration responsibilities. Every tenant's objects need compatible definitions, deliberate access and a reliable routing decision. Naming a namespace after a tenant does not prove a caller belongs to that tenant. These operational considerations follow from the proposed layout and should be addressed before describing it as complete isolation.\n\n## Verify the hierarchy you actually exercised\n\nThe introductory exercise uses CREATE SCHEMA in a MySQL-style lab and verifies the resulting database defaults. The second creates two disposable database namespaces with identically named temporary tables and reports each source explicitly. It demonstrates name qualification and source identity without claiming to test PostgreSQL ownership, search_path or schema-level privileges.\n\nUse matching and empty inputs, repeated local identifiers across namespaces, and a clear expected source label. Recorded MariaDB compatibility results apply to those MySQL-style lab statements. PostgreSQL namespace execution, exact MySQL behaviour and hosted-provider capabilities require their own verification. A correct structural illustration can clarify the product distinction while leaving those unperformed execution checks honestly open.\n",
+  "references": [
+    {
+      "title": "MySQL 8.4 CREATE DATABASE and CREATE SCHEMA",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/create-database.html"
+    },
+    {
+      "title": "PostgreSQL 18 CREATE SCHEMA",
+      "url": "https://www.postgresql.org/docs/18/sql-createschema.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-9-create-schema",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-9-create-schema-1",
+          "test_id": "pt-dbms-sql-9-create-schema",
+          "question_text": "In PostgreSQL, what best describes a schema?",
+          "options": [
+            "A synonym for a database",
+            "A namespace inside a database that groups related objects",
+            "A backup file format",
+            "A type of index"
+          ],
+          "correct_index": 1,
+          "explanation": "In PostgreSQL, SQL Server, and Oracle, a schema is a namespace living inside one database.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-9-create-schema-2",
+          "test_id": "pt-dbms-sql-9-create-schema",
+          "question_text": "In MySQL, what does CREATE SCHEMA actually do?",
+          "options": [
+            "Nothing — MySQL has no such statement",
+            "It creates a namespace inside the current database",
+            "It is a literal synonym for CREATE DATABASE, creating an entirely new database",
+            "It creates a view"
+          ],
+          "correct_index": 2,
+          "explanation": "MySQL treats 'schema' as a synonym for 'database' — CREATE SCHEMA and CREATE DATABASE do exactly the same thing.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-9-create-schema-3",
+          "test_id": "pt-dbms-sql-9-create-schema",
+          "question_text": "Why can `sales.orders` and `hr.orders` coexist in the same PostgreSQL database?",
+          "options": [
+            "PostgreSQL allows duplicate table names anywhere",
+            "They are in different schemas, which act as separate namespaces",
+            "One of them must be a view",
+            "PostgreSQL silently renames the second table"
+          ],
+          "correct_index": 1,
+          "explanation": "Schemas namespace objects, so identically named tables in different schemas don't collide.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-9-create-schema-4",
+          "test_id": "pt-dbms-sql-9-create-schema",
+          "question_text": "In PostgreSQL, what can DROP SCHEMA sales CASCADE remove?",
+          "options": [
+            "Only the schema's metadata is removed; tables remain accessible",
+            "The schema, contained objects and objects affected through dependency cascading",
+            "It renames the schema to 'sales_old'",
+            "It is a no-op unless the schema is empty"
+          ],
+          "correct_index": 1,
+          "explanation": "The dependency impact can extend beyond an informal picture of tables contained in that namespace.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-9-create-schema-5",
+          "test_id": "pt-dbms-sql-9-create-schema",
+          "question_text": "Which PostgreSQL setting influences resolution of unqualified object references?",
+          "options": [
+            "Alphabetical order of schema names",
+            "The configured search_path",
+            "The most recently created schema",
+            "It is always resolved to the public schema and nothing else"
+          ],
+          "correct_index": 1,
+          "explanation": "Do not generalize this as the exact MySQL or SQL Server resolution algorithm.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-9-create-schema-6",
+          "test_id": "pt-dbms-sql-9-create-schema",
+          "question_text": "A developer moving from PostgreSQL to MySQL writes `CREATE SCHEMA sales;` expecting a namespace inside their existing database. What actually happens in MySQL?",
+          "options": [
+            "An error, since MySQL requires CREATE DATABASE for this",
+            "A brand new database named 'sales' is created, separate from their current one",
+            "MySQL creates a view named sales",
+            "Nothing changes since MySQL ignores CREATE SCHEMA"
+          ],
+          "correct_index": 1,
+          "explanation": "Because MySQL treats schema and database as synonyms, this creates a whole new database rather than a namespace.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-9-create-schema-7",
+          "test_id": "pt-dbms-sql-9-create-schema",
+          "question_text": "What does PostgreSQL schema USAGE establish by itself?",
+          "options": [
+            "Improving query performance",
+            "Namespace access under its rules, while contained-object privileges still need their own grants",
+            "Compressing table storage",
+            "Encrypting column data"
+          ],
+          "correct_index": 1,
+          "explanation": "USAGE alone does not grant SELECT on every table or prove tenant isolation.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-9-create-schema-8",
+          "test_id": "pt-dbms-sql-9-create-schema",
+          "question_text": "Why must you know which database engine you are using before interpreting schema-related SQL scripts?",
+          "options": [
+            "Schema syntax is identical everywhere so it doesn't matter",
+            "Because 'schema' means a namespace inside a database on some engines but is a database synonym on MySQL",
+            "Because only Oracle supports schemas",
+            "Because schemas are deprecated on all modern engines"
+          ],
+          "correct_index": 1,
+          "explanation": "The dialect nuance between namespace-style schemas (Postgres/SQL Server/Oracle) and database-synonym schemas (MySQL) changes what the same SQL actually does.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-9-create-schema-new-9",
+          "test_id": "pt-dbms-sql-9-create-schema",
+          "question_text": "What does admissions.requests identify in MySQL?",
+          "options": [
+            "A namespace nested inside the selected database",
+            "A requests table in database admissions",
+            "A table alias only",
+            "A remote server automatically"
+          ],
+          "correct_index": 1,
+          "explanation": "The first component is a database qualifier in this illustrated form.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-9-create-schema-new-10",
+          "test_id": "pt-dbms-sql-9-create-schema",
+          "question_text": "Can identical request_id values from two namespaces represent different facts?",
+          "options": [
+            "No, numbers have global identity",
+            "Only if names differ",
+            "Yes",
+            "Only with NULL"
+          ],
+          "correct_index": 2,
+          "explanation": "The source role can be part of the result identity.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-9-create-schema-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-9-create-schema-application-new-1",
+          "test_id": "pt-dbms-sql-9-create-schema-application",
+          "question_text": "Does creating a MySQL schema change the default database automatically?",
+          "options": [
+            "Yes",
+            "Only when empty",
+            "No",
+            "Only with UTF-8 text"
+          ],
+          "correct_index": 2,
+          "explanation": "Creation and session targeting are separate.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-9-create-schema-application-new-2",
+          "test_id": "pt-dbms-sql-9-create-schema-application",
+          "question_text": "Which statement about PostgreSQL schemas is accurate?",
+          "options": [
+            "Each is automatically another server",
+            "Each requires a separate host",
+            "They are only backup files",
+            "They can group named objects within the connected database"
+          ],
+          "correct_index": 3,
+          "explanation": "Namespace organization is distinct from server deployment.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-9-create-schema-application-new-3",
+          "test_id": "pt-dbms-sql-9-create-schema-application",
+          "question_text": "Does an explicit qualified reference bypass permissions?",
+          "options": [
+            "No",
+            "Yes, for every object",
+            "Only if names are lowercase",
+            "Only with an alias"
+          ],
+          "correct_index": 0,
+          "explanation": "Naming and authorization are separate boundaries.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-9-create-schema-application-new-4",
+          "test_id": "pt-dbms-sql-9-create-schema-application",
+          "question_text": "Why retain an area label when combining requests from two sources?",
+          "options": [
+            "To grant schema ownership",
+            "To preserve source identity when local identifiers overlap",
+            "To choose a physical join algorithm",
+            "To remove all duplicates automatically"
+          ],
+          "correct_index": 1,
+          "explanation": "Projection must retain the intended grain.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-9-create-schema-application-new-5",
+          "test_id": "pt-dbms-sql-9-create-schema-application",
+          "question_text": "What can change PostgreSQL unqualified-name resolution?",
+          "options": [
+            "Only object creation time",
+            "Only alphabetic ordering",
+            "The applicable search_path configuration",
+            "The number of rows alone"
+          ],
+          "correct_index": 2,
+          "explanation": "The chosen namespace path matters.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-9-create-schema-application-new-6",
+          "test_id": "pt-dbms-sql-9-create-schema-application",
+          "question_text": "Does IF NOT EXISTS prove that an existing namespace has intended ownership?",
+          "options": [
+            "Yes, on every engine",
+            "Only if it contains tables",
+            "Only with DISTINCT",
+            "No"
+          ],
+          "correct_index": 3,
+          "explanation": "Existence and configuration agreement are different checks.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-9-create-schema-application-new-7",
+          "test_id": "pt-dbms-sql-9-create-schema-application",
+          "question_text": "What does a local query alias change?",
+          "options": [
+            "The query role label",
+            "Persistent schema ownership",
+            "The database name stored on disk",
+            "Access grants"
+          ],
+          "correct_index": 0,
+          "explanation": "Aliasing does not move the underlying object.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-9-create-schema-application-new-8",
+          "test_id": "pt-dbms-sql-9-create-schema-application",
+          "question_text": "Which MySQL command is synonymous with CREATE SCHEMA?",
+          "options": [
+            "CREATE VIEW",
+            "CREATE DATABASE",
+            "ALTER USER",
+            "SELECT DISTINCT"
+          ],
+          "correct_index": 1,
+          "explanation": "The synonym defines the object level.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-9-create-schema-application-new-9",
+          "test_id": "pt-dbms-sql-9-create-schema-application",
+          "question_text": "Why can CASCADE removal need a dependency review?",
+          "options": [
+            "It only changes output names",
+            "It never removes anything",
+            "Dependent objects can be affected beyond a simple contained-table list",
+            "It grants SELECT first"
+          ],
+          "correct_index": 2,
+          "explanation": "Removal impact follows dependency rules.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-9-create-schema-application-new-10",
+          "test_id": "pt-dbms-sql-9-create-schema-application",
+          "question_text": "Does a MySQL-style compatibility exercise verify PostgreSQL search_path?",
+          "options": [
+            "Yes, because the names look similar",
+            "Only when it has two tables",
+            "Only when empty",
+            "No"
+          ],
+          "correct_index": 3,
+          "explanation": "The executed engine determines the scope of evidence.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cx-create-schema-synonym",
+      "slug": "create-schema-synonym",
+      "title": "Use the MySQL schema synonym and inspect its database defaults",
+      "difficulty": "Easy",
+      "task": "In an authorized disposable lab, use CREATE SCHEMA IF NOT EXISTS for cx_dbms_lab_admissions with utf8mb4 and utf8mb4_unicode_ci defaults. Return schema_name, character_set_name and collation_name from the actual catalog for that fixed target. The supplied expected_defaults row describes the intended comparison contract. Existing lab target, if present, already has those defaults.",
+      "schema_sql": "CREATE TABLE expected_defaults (character_set_name VARCHAR(40), collation_name VARCHAR(80));",
+      "seed_sql": "INSERT INTO expected_defaults VALUES ('utf8mb4','utf8mb4_unicode_ci');",
+      "expected": "schema_name\tcharacter_set_name\tcollation_name\ncx_dbms_lab_admissions\tutf8mb4\tutf8mb4_unicode_ci",
+      "ordering": "Exactly one target catalog row.",
+      "constraints": [
+        "Requires database-creation capability in an isolated lab.",
+        "This is MySQL schema-as-database syntax, not PostgreSQL namespace creation."
+      ],
+      "edge_cases": [
+        "Guarded repetition must preserve the same target.",
+        "The returned metadata is observed rather than copied from expected_defaults."
+      ],
+      "hints": [
+        "CREATE SCHEMA is accepted as the database synonym.",
+        "Filter INFORMATION_SCHEMA.SCHEMATA by the exact target name."
+      ],
+      "solution_sql": "CREATE SCHEMA IF NOT EXISTS cx_dbms_lab_admissions DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; SELECT SCHEMA_NAME AS schema_name,DEFAULT_CHARACTER_SET_NAME AS character_set_name,DEFAULT_COLLATION_NAME AS collation_name FROM information_schema.SCHEMATA WHERE SCHEMA_NAME='cx_dbms_lab_admissions';",
+      "explanation": "The statement creates a MySQL database; the result reads the actual database-level text defaults.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO expected_defaults VALUES ('utf8mb4','utf8mb4_unicode_ci');",
+          "expected": "schema_name\tcharacter_set_name\tcollation_name\ncx_dbms_lab_admissions\tutf8mb4\tutf8mb4_unicode_ci"
+        }
+      ]
+    },
+    {
+      "id": "cx-create-schema-qualified",
+      "slug": "create-schema-qualified",
+      "title": "Preserve source identity across equal local table names",
+      "difficulty": "Medium",
+      "task": "Create disposable MySQL schemas cx_dbms_lab_area_a and cx_dbms_lab_area_b if absent. In each create TEMPORARY requests(request_id INT NOT NULL). Copy incoming_requests rows for area A or B into the corresponding qualified table. Return area and request_id from both, preserving all occurrences and distinguishing equal local ids.",
+      "schema_sql": "CREATE TABLE incoming_requests (area CHAR(1) NOT NULL, request_id INT NOT NULL);",
+      "seed_sql": "INSERT INTO incoming_requests VALUES ('A',1),('A',2),('B',1);",
+      "expected": "area\trequest_id\nA\t1\nA\t2\nB\t1",
+      "ordering": "Ascending area, request_id. Identical occurrences remain repeated.",
+      "constraints": [
+        "Only fixed disposable database names may be created.",
+        "Preserve the area role and occurrence multiplicity."
+      ],
+      "edge_cases": [
+        "The same request_id in each area represents different source facts.",
+        "One area can be empty.",
+        "Repeated occurrences remain repeated."
+      ],
+      "hints": [
+        "Qualify each temporary table with its database name.",
+        "Use UNION ALL with an explicit area label."
+      ],
+      "solution_sql": "CREATE SCHEMA IF NOT EXISTS cx_dbms_lab_area_a; CREATE SCHEMA IF NOT EXISTS cx_dbms_lab_area_b; CREATE TEMPORARY TABLE cx_dbms_lab_area_a.requests (request_id INT NOT NULL); CREATE TEMPORARY TABLE cx_dbms_lab_area_b.requests (request_id INT NOT NULL); INSERT INTO cx_dbms_lab_area_a.requests SELECT request_id FROM incoming_requests WHERE area='A'; INSERT INTO cx_dbms_lab_area_b.requests SELECT request_id FROM incoming_requests WHERE area='B'; SELECT 'A' AS area,request_id FROM cx_dbms_lab_area_a.requests UNION ALL SELECT 'B' AS area,request_id FROM cx_dbms_lab_area_b.requests ORDER BY area,request_id;",
+      "explanation": "Database qualification makes identical local names unambiguous, while area labels and UNION ALL preserve source identity and occurrences.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO incoming_requests VALUES ('B',2),('B',2);",
+          "expected": "area\trequest_id\nB\t2\nB\t2"
+        },
+        {
+          "seed_sql": "",
+          "expected": ""
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-9-create-schema-1",
+      "test_id": "pt-dbms-sql-9-create-schema",
+      "question_text": "In PostgreSQL, what best describes a schema?",
+      "options": [
+        "A synonym for a database",
+        "A namespace inside a database that groups related objects",
+        "A backup file format",
+        "A type of index"
+      ],
+      "correct_index": 1,
+      "explanation": "In PostgreSQL, SQL Server, and Oracle, a schema is a namespace living inside one database.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-9-create-schema-2",
+      "test_id": "pt-dbms-sql-9-create-schema",
+      "question_text": "In MySQL, what does CREATE SCHEMA actually do?",
+      "options": [
+        "Nothing — MySQL has no such statement",
+        "It creates a namespace inside the current database",
+        "It is a literal synonym for CREATE DATABASE, creating an entirely new database",
+        "It creates a view"
+      ],
+      "correct_index": 2,
+      "explanation": "MySQL treats 'schema' as a synonym for 'database' — CREATE SCHEMA and CREATE DATABASE do exactly the same thing.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-9-create-schema-3",
+      "test_id": "pt-dbms-sql-9-create-schema",
+      "question_text": "Why can `sales.orders` and `hr.orders` coexist in the same PostgreSQL database?",
+      "options": [
+        "PostgreSQL allows duplicate table names anywhere",
+        "They are in different schemas, which act as separate namespaces",
+        "One of them must be a view",
+        "PostgreSQL silently renames the second table"
+      ],
+      "correct_index": 1,
+      "explanation": "Schemas namespace objects, so identically named tables in different schemas don't collide.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-9-create-schema-4",
+      "test_id": "pt-dbms-sql-9-create-schema",
+      "question_text": "What happens when you run DROP SCHEMA sales CASCADE?",
+      "options": [
+        "Only the schema's metadata is removed; tables remain accessible",
+        "Every object contained in the schema (tables, views, etc.) is dropped along with the schema",
+        "It renames the schema to 'sales_old'",
+        "It is a no-op unless the schema is empty"
+      ],
+      "correct_index": 1,
+      "explanation": "CASCADE on DROP SCHEMA removes every object inside it — just as destructive as dropping a database, but scoped smaller.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-9-create-schema-5",
+      "test_id": "pt-dbms-sql-9-create-schema",
+      "question_text": "What PostgreSQL/SQL Server mechanism determines which schema an unqualified table reference resolves to?",
+      "options": [
+        "Alphabetical order of schema names",
+        "The search_path (Postgres) or default schema (SQL Server)",
+        "The most recently created schema",
+        "It is always resolved to the public schema and nothing else"
+      ],
+      "correct_index": 1,
+      "explanation": "The search_path (or default schema) governs how unqualified names are resolved.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-9-create-schema-6",
+      "test_id": "pt-dbms-sql-9-create-schema",
+      "question_text": "A developer moving from PostgreSQL to MySQL writes `CREATE SCHEMA sales;` expecting a namespace inside their existing database. What actually happens in MySQL?",
+      "options": [
+        "An error, since MySQL requires CREATE DATABASE for this",
+        "A brand new database named 'sales' is created, separate from their current one",
+        "MySQL creates a view named sales",
+        "Nothing changes since MySQL ignores CREATE SCHEMA"
+      ],
+      "correct_index": 1,
+      "explanation": "Because MySQL treats schema and database as synonyms, this creates a whole new database rather than a namespace.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-9-create-schema-7",
+      "test_id": "pt-dbms-sql-9-create-schema",
+      "question_text": "What is a common real-world use of per-schema permissions (e.g. GRANT USAGE ON SCHEMA tenant_acme)?",
+      "options": [
+        "Improving query performance",
+        "Logically isolating groups of tables/users, such as per-tenant data in a multi-tenant app",
+        "Compressing table storage",
+        "Encrypting column data"
+      ],
+      "correct_index": 1,
+      "explanation": "Schema-level grants are a common pattern for sandboxing tenants or subsystems within one database.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-9-create-schema-8",
+      "test_id": "pt-dbms-sql-9-create-schema",
+      "question_text": "Why must you know which database engine you are using before interpreting schema-related SQL scripts?",
+      "options": [
+        "Schema syntax is identical everywhere so it doesn't matter",
+        "Because 'schema' means a namespace inside a database on some engines but is a database synonym on MySQL",
+        "Because only Oracle supports schemas",
+        "Because schemas are deprecated on all modern engines"
+      ],
+      "correct_index": 1,
+      "explanation": "The dialect nuance between namespace-style schemas (Postgres/SQL Server/Oracle) and database-synonym schemas (MySQL) changes what the same SQL actually does.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "coordinator",
+    "independent_review": "unavailable; no agent tools",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Definitions and examples checked against questions; no plagiarism certification.",
+    "existing_question_corrections": [
+      "tq-dbms-sql-9-create-schema-4",
+      "tq-dbms-sql-9-create-schema-5",
+      "tq-dbms-sql-9-create-schema-7"
+    ],
+    "canonical_answer_indices_preserved": true,
+    "batch_review": {
+      "reviewer": "coordinator",
+      "independent": false,
+      "scope": "This new package: explained definitions and boundaries, retained source question identities/canonical indices, new correct answers and explanations, exercise solutions and recorded fixtures, diagram trace and prepared integration.",
+      "execution_evidence": "Focused MariaDB reference cases and selected actual LessonBlock rendering passed; no browser QA or exact MySQL/provider execution.",
+      "source_preservation": "Original snapshots retained; eight retained exercises across this continuation matched source identity, difficulty, schema, seed and trailing checker.",
+      "limits": "No independent worker available. Output fixtures do not prove arbitrary student submissions used a requested technique. Native PostgreSQL/other-engine concepts remain documented or explicitly mirrored, not verified by MariaDB."
+    }
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-9-create-schema",
+    "original_note_sha256": "390b27d1ac2c6bfb0c6ea908766e839f5033494eb256e1330825d6f90d9d9452",
+    "status": "paired migration prepared; not applied"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "The same qualification spelling sits in different catalog hierarchies",
+      "description": "PostgreSQL schemas are inside a database; MySQL schema is a database synonym. The qualified local name needs the engine context.",
+      "columns": [
+        "Engine",
+        "Hierarchy example",
+        "Meaning of admissions.requests"
+      ],
+      "rows": [
+        [
+          "PostgreSQL",
+          "Server → campus database → admissions schema → requests table",
+          "Table in a schema within the connected database"
+        ],
+        [
+          "MySQL",
+          "Server → admissions database/schema → requests table",
+          "Table in database admissions"
+        ],
+        [
+          "Both",
+          "Qualification plus applicable privileges",
+          "Spelling a name alone does not grant access"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "coordinator checked engine-specific hierarchy, duplicate local identifiers, source grain and namespace versus object grants",
+    "server_rendering": "passed",
+    "browser_rendering": "unverified",
+    "independent_review": "unavailable; no agent tools",
+    "server_rendering_evidence": "Selected actual LessonBlock Vitest rendering passed for this batch; no browser QA."
+  },
+  "sql_verification": {
+    "engine": "11.8.6-MariaDB-0+deb13u1 from Debian",
+    "scope": "MariaDB compatibility execution; exact MySQL 8.4/provider execution unverified",
+    "fingerprint": "bc08c24bd206794b3cd8b04a0277e2b4dccd8d23b6941620df2e5079bd7940a0",
+    "cases": [
+      {
+        "problem": "create-schema-synonym",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "create-schema-synonym",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "create-schema-qualified",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "create-schema-qualified",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "create-schema-qualified",
+        "case": 2,
+        "passed": true
+      }
+    ],
+    "all_passed": true
+  }
+}

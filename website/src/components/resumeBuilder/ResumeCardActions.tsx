@@ -14,28 +14,42 @@ export default function ResumeCardActions({ resumeId, title }: { resumeId: strin
   const [error, setError] = useState<string | null>(null);
 
   async function duplicate() {
+    if (busy) return;
     setBusy("dup");
     setError(null);
-    const res = await duplicateResumeAction(resumeId);
-    setBusy(null);
-    if ("error" in res) {
-      setError(res.error);
-      return;
+    try {
+      const res = await duplicateResumeAction(resumeId);
+      setBusy(null);
+      if ("error" in res) {
+        setError(res.error);
+        return;
+      }
+      router.push(`/account/resume/${res.resumeId}/edit`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
+    } finally {
+      setBusy(null);
     }
-    router.push(`/account/resume/${res.resumeId}/edit`);
   }
 
   async function remove() {
+    if (busy) return;
     setBusy("del");
     setError(null);
-    const res = await deleteResumeAction(resumeId);
-    setBusy(null);
-    if ("error" in res) {
-      setError(res.error);
-      return;
+    try {
+      const res = await deleteResumeAction(resumeId);
+      setBusy(null);
+      if ("error" in res) {
+        setError(res.error);
+        return;
+      }
+      setConfirmOpen(false);
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
+    } finally {
+      setBusy(null);
     }
-    setConfirmOpen(false);
-    router.refresh();
   }
 
   return (

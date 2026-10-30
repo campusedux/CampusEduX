@@ -1,0 +1,593 @@
+{
+  "source_ref": "chapter-12-select-and-filtering/distinct",
+  "slug": "distinct",
+  "title": "DISTINCT",
+  "description": "Learn SQL DISTINCT across one or multiple columns, NULL values, counting, joins, and ordering with worked examples and practice exercises.",
+  "dialect": "MySQL 8.4",
+  "notes": "## A result can repeat a selected fact\n\nSQL queries commonly return bags of rows, meaning that repeated rows can appear. Suppose an equipment checkout table records several checkouts from the same department. Selecting department alone returns that department once for each matching checkout. The repeated label is not necessarily a storage error: the underlying checkouts may be separate legitimate events whose differences are no longer visible in the selected columns.\n\nDISTINCT asks for one occurrence of each distinct selected row. It changes the result's multiplicity rather than deleting data from the source table. A department list for a filter control is a reasonable use. A checkout report that needs every event should preserve its event identities instead of discard them simply because some displayed labels repeat.\n\n## The complete selected tuple defines a duplicate\n\nSelecting department alone compares department values. Selecting department and equipment_code compares the pair. Two rows from Media with different equipment codes remain distinct pairs even though the department repeats. The keyword applies to the whole selected row; it does not independently deduplicate each column into separate lists and then combine arbitrary surviving values.\n\nConsider three checkouts: Media with CAM, Media with MIC, and Media with CAM again. A distinct department query produces one Media row. A distinct department-and-code query produces two pairs. Adding checkout_id can produce three rows because the identifiers differ. Each result answers a different question about the same source facts, so choose the projection before deciding whether deduplication is appropriate.\n\n```sql\nSELECT DISTINCT department, equipment_code\nFROM equipment_checkouts\nORDER BY department, equipment_code;\n```\n\n## Projection explains apparently duplicated output\n\nWhen learners see repeated names, they often assume the database duplicated an entire record. Inspect the source identities and the query's selected columns first. Two different people can share a name, and one person can perform several checkouts. Selecting only name hides those distinctions. DISTINCT may create the desired name vocabulary while still being unsuitable for a list of people or events.\n\nThe remedy depends on the required result grain: one row per department, one per equipment type or one per checkout. State that grain in plain English. If a UI needs one person per row, a protected person identifier is usually essential even when the displayed name repeats. Deduplicating by name alone can merge separate people and lose legitimate information.\n\n## NULL participates in duplicate elimination\n\nFor DISTINCT, repeated [NULL](/learning/dbms-sql-tutorial/null-values) values in the same selected position are treated as duplicates when the rest of the selected row also matches. A single-column result with Media, Media, NULL and NULL therefore has two distinct rows: Media and NULL. DISTINCT does not automatically remove missing values. Add an explicit filter if the requirement excludes an unknown department.\n\nThis differs from ordinary equality comparisons, where NULL equals NULL is unknown rather than true. It also differs from MySQL UNIQUE index behaviour for nullable columns, which can permit multiple NULL values. Avoid transferring one feature's NULL rule to another without checking its semantics. Query deduplication, predicate evaluation and storage uniqueness solve related but distinct problems.\n\n## Counting values changes the result shape\n\nSELECT DISTINCT department returns a row for each unique department representation, including a possible NULL row. [COUNT](/learning/dbms-sql-tutorial/count)(DISTINCT department) returns one aggregate count of distinct non-NULL department values. With Media, Media, Science and NULL, the first query returns three rows while the aggregate returns the number two. Neither result is a substitute for the other without considering missing values.\n\nMySQL also supports multiple expressions inside COUNT DISTINCT. Its NULL rules require care: combinations containing NULL are not counted. When the task is to count all distinct selected pairs including missing positions, form the distinct pairs in a derived query and count its rows. That makes the intended row set explicit and avoids accidentally excluding meaningful incomplete combinations.\n\n## Expressions determine what is compared\n\nDISTINCT compares selected expression results, not only raw stored columns. Selecting a lowercased department expression can collapse values that remain different under a case-sensitive source comparison. Rounding prices or extracting dates can also make separate original values produce the same result. Such transformations should reflect the requested grouping of meanings rather than serve as accidental duplicate suppression.\n\nText comparison depends on types and collation. A case-insensitive collation can regard differently cased strings as equal for deduplication. Accent and padding behaviour can also matter. If an example requires exact byte-sensitive distinctions, declare and test that contract instead of assume every VARCHAR behaves identically. A database result can be internally consistent while differing from a student's visual expectation of character equality.\n\n## Sorting is a separate promise\n\nDISTINCT does not guarantee presentation order. An engine may internally use an index, sort or another strategy, and the resulting sequence can change as the plan changes. Write ORDER BY when the consumer requires stable ordering. For a distinct pair result, ordering by both selected values provides an understandable deterministic sequence under the specified comparison semantics.\n\nOrdering by an unselected property can be ambiguous after deduplication. If several checkouts from Media have different checkout times, which time should determine the one Media row's position? MySQL restricts some DISTINCT and ORDER BY combinations for this reason. If the requirement is earliest checkout per department, express that aggregate or representative-row choice explicitly rather than attach an arbitrary hidden timestamp.\n\n## Join fanout can hide behind DISTINCT\n\nJoining departments to their checkouts naturally produces several joined rows for a department with several checkouts. If the requirement asks only which departments have at least one checkout, DISTINCT on department identity can be appropriate, and an EXISTS query may communicate existence more directly. The result grain explains the deliberate collapse of repeated qualifying department identities.\n\nHowever, DISTINCT can also conceal a missing join condition. If an accidental cross join produces extra combinations, removing repeated displayed columns does not establish that the relationship was correct. Inspect the join predicate and intermediate cardinality first. A query that looks plausible after deduplication can still attach unrelated properties or do much more work than the intended relationship requires.\n\n## Uniqueness of full rows can make it redundant\n\nSELECT DISTINCT star compares every returned column. If a protected primary key is included and each source row appears once, every full source row is already distinct. In that setting the keyword does not change the result. That observation does not extend automatically to an arbitrary join that can repeat the same selected source row through multiple matching related rows.\n\nRemoving a redundant DISTINCT should follow evidence about keys and multiplicity. A visible sample with no duplicates does not prove uniqueness for future data. Conversely, adding the keyword everywhere adds ambiguity about whether deduplication is part of the contract. State whether repeated selected rows are meaningful, prohibited by keys or intentionally collapsed by the query.\n\n## Limit the intended vocabulary deliberately\n\nWhen a consumer wants only the first few distinct department values, define the ordering before applying the row limit. Returning the first two source checkouts and then deduplicating them can yield just one department even when other departments exist. Limiting a query that selects distinct departments answers a different question because its output population is the department vocabulary. This difference matters for filter menus and paginated lists. Test several repeated early values and a later new value so a premature source limit cannot accidentally appear correct.\n\n## Deduplication has a cost worth measuring\n\nThe engine must determine which selected rows repeat, although indexes and other optimizations may reduce the work. Wider selected rows can increase comparison and temporary-storage needs. DISTINCT combined with ordering can require additional processing. Use a representative execution plan and workload measurement before promising a performance benefit from adding or removing the keyword.\n\nFilter irrelevant source rows before the requested deduplication and select only properties needed by the result contract. Do not change the answer merely to reduce row width. The first exercise builds a known department vocabulary; the second returns distinct department-and-code pairs after a quantity filter. Their fixtures include repeated pairs and NULL values so both the row grain and missing-value policy remain visible in the expected output.\n",
+  "references": [
+    {
+      "title": "MySQL 8.4 DISTINCT optimization and ordering",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/distinct-optimization.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-12-distinct",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-12-distinct-1",
+          "test_id": "pt-dbms-sql-12-distinct",
+          "question_text": "What does SELECT DISTINCT remove?",
+          "options": [
+            "Rows from the stored source table",
+            "Repeated complete rows in the selected result",
+            "Only repeated first-column values",
+            "All NULL values automatically"
+          ],
+          "correct_index": 1,
+          "explanation": "Deduplication applies to the selected tuple.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-12-distinct-2",
+          "test_id": "pt-dbms-sql-12-distinct",
+          "question_text": "For DISTINCT department,equipment_code, when do two selected rows collapse?",
+          "options": [
+            "Whenever the departments match",
+            "When both selected positions match under their comparison semantics",
+            "Whenever quantities match",
+            "Only when all source columns match"
+          ],
+          "correct_index": 1,
+          "explanation": "The selected pair defines the result grain.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-12-distinct-3",
+          "test_id": "pt-dbms-sql-12-distinct",
+          "question_text": "Is duplicate elimination always computationally free?",
+          "options": [
+            "Yes, in every plan",
+            "No, the engine must establish uniqueness, though plans can optimize it",
+            "Only when all columns are numeric",
+            "It is free if headings are short"
+          ],
+          "correct_index": 1,
+          "explanation": "Measure actual plans and workloads.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-12-distinct-4",
+          "test_id": "pt-dbms-sql-12-distinct",
+          "question_text": "Media appears four times and Science twice, with no NULL. How many DISTINCT department rows result?",
+          "options": [
+            "Six",
+            "Two",
+            "Four",
+            "One"
+          ],
+          "correct_index": 1,
+          "explanation": "Only the two department values are selected.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-12-distinct-5",
+          "test_id": "pt-dbms-sql-12-distinct",
+          "question_text": "How does COUNT(DISTINCT department) differ from SELECT DISTINCT department?",
+          "options": [
+            "It returns each department name",
+            "It returns an aggregate count of unique non-NULL values",
+            "It deletes duplicate departments",
+            "It always includes NULL as one counted value"
+          ],
+          "correct_index": 1,
+          "explanation": "Result shape and NULL treatment differ.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-12-distinct-6",
+          "test_id": "pt-dbms-sql-12-distinct",
+          "question_text": "Does DISTINCT guarantee sorted presentation?",
+          "options": [
+            "Yes, always ascending",
+            "No, use an explicit ORDER BY",
+            "Yes, in primary-key order",
+            "Only if no WHERE exists"
+          ],
+          "correct_index": 1,
+          "explanation": "An internal implementation order is not a result guarantee.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-12-distinct-7",
+          "test_id": "pt-dbms-sql-12-distinct",
+          "question_text": "When is DISTINCT over all source columns redundant for a simple table read?",
+          "options": [
+            "When an included protected primary key already makes every returned row unique",
+            "Whenever a table has no keys",
+            "When every department repeats",
+            "Only if there are no text columns"
+          ],
+          "correct_index": 0,
+          "explanation": "The key prevents duplicate full selected source rows.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-12-distinct-8",
+          "test_id": "pt-dbms-sql-12-distinct",
+          "question_text": "What happens to repeated NULL department rows under single-column DISTINCT?",
+          "options": [
+            "They all disappear automatically",
+            "They collapse to one NULL result row",
+            "They remain infinitely distinct",
+            "They become an empty string"
+          ],
+          "correct_index": 1,
+          "explanation": "Duplicate elimination treats repeated NULL positions as duplicates.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-12-distinct-new-9",
+          "test_id": "pt-dbms-sql-12-distinct",
+          "question_text": "Does DISTINCT delete duplicate stored checkouts?",
+          "options": [
+            "No, it changes only the query result",
+            "Yes, unless rolled back",
+            "Only when ORDER BY is present",
+            "Yes, if there is no primary key"
+          ],
+          "correct_index": 0,
+          "explanation": "It is a read-query modifier.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-12-distinct-new-10",
+          "test_id": "pt-dbms-sql-12-distinct",
+          "question_text": "What can adding checkout_id do to a distinct department result?",
+          "options": [
+            "Always keep exactly one row per department",
+            "Increase the row count because event identities distinguish rows",
+            "Make NULL disappear",
+            "Prevent every index from existing"
+          ],
+          "correct_index": 1,
+          "explanation": "Changing the projection changes what counts as a duplicate.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-12-distinct-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-12-distinct-application-new-1",
+          "test_id": "pt-dbms-sql-12-distinct-application",
+          "question_text": "What should be stated before choosing deduplication columns?",
+          "options": [
+            "Only the result font",
+            "The intended result grain",
+            "The network port",
+            "A fixed row count for all data"
+          ],
+          "correct_index": 1,
+          "explanation": "The question must identify one row per what.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-12-distinct-application-new-2",
+          "test_id": "pt-dbms-sql-12-distinct-application",
+          "question_text": "Two people share a name. Why can DISTINCT name be wrong for a people list?",
+          "options": [
+            "Names can never repeat",
+            "DISTINCT creates person identities",
+            "It can merge different people into one displayed value",
+            "A name is always a primary key"
+          ],
+          "correct_index": 2,
+          "explanation": "Display labels need not be protected identities.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-12-distinct-application-new-3",
+          "test_id": "pt-dbms-sql-12-distinct-application",
+          "question_text": "Media, Media, Science and NULL produce what COUNT(DISTINCT department)?",
+          "options": [
+            "Three",
+            "Four",
+            "One",
+            "Two"
+          ],
+          "correct_index": 3,
+          "explanation": "The aggregate ignores NULL.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-12-distinct-application-new-4",
+          "test_id": "pt-dbms-sql-12-distinct-application",
+          "question_text": "How can one count distinct pairs including pairs with NULL?",
+          "options": [
+            "Count rows of a derived SELECT DISTINCT pair result",
+            "Assume COUNT(DISTINCT a,b) includes every NULL pair",
+            "Use COUNT(a) without deduplication",
+            "Replace every NULL with zero regardless of types"
+          ],
+          "correct_index": 0,
+          "explanation": "The derived row set makes included combinations explicit.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-12-distinct-application-new-5",
+          "test_id": "pt-dbms-sql-12-distinct-application",
+          "question_text": "Why can LOWER(department) change the distinct result?",
+          "options": [
+            "LOWER always creates more rows",
+            "It transforms values before duplicate comparison",
+            "It disables all collations",
+            "It sorts by event time"
+          ],
+          "correct_index": 1,
+          "explanation": "Expression results define the compared tuple.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-12-distinct-application-new-6",
+          "test_id": "pt-dbms-sql-12-distinct-application",
+          "question_text": "What affects whether differently cased text values deduplicate?",
+          "options": [
+            "Only the number of source rows",
+            "Whether a WHERE clause is uppercase",
+            "The expression type and collation",
+            "The maximum checkout identifier"
+          ],
+          "correct_index": 2,
+          "explanation": "Comparison semantics must be stated and tested.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-12-distinct-application-new-7",
+          "test_id": "pt-dbms-sql-12-distinct-application",
+          "question_text": "Why is ordering one distinct department row by an unselected event timestamp ambiguous?",
+          "options": [
+            "Timestamps cannot ever be sorted",
+            "Every department has exactly one event",
+            "DISTINCT selects the newest source row automatically",
+            "Different source events can offer different timestamps for the same surviving value"
+          ],
+          "correct_index": 3,
+          "explanation": "Choose an explicit aggregate or representative-row rule.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-12-distinct-application-new-8",
+          "test_id": "pt-dbms-sql-12-distinct-application",
+          "question_text": "What should be inspected before hiding join duplicates with DISTINCT?",
+          "options": [
+            "The join predicate and intended relationship cardinality",
+            "Only the final row count",
+            "Only the title spelling",
+            "Whether all IDs are consecutive"
+          ],
+          "correct_index": 0,
+          "explanation": "A missing relationship cannot be repaired by cosmetic deduplication.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-12-distinct-application-new-9",
+          "test_id": "pt-dbms-sql-12-distinct-application",
+          "question_text": "When may EXISTS better express a deduplicated join requirement?",
+          "options": [
+            "When every related row must be returned",
+            "When only the presence of a qualifying related row matters",
+            "When a sum must be calculated",
+            "When all tables are unrelated"
+          ],
+          "correct_index": 1,
+          "explanation": "Existence does not require exposing each matching child.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-12-distinct-application-new-10",
+          "test_id": "pt-dbms-sql-12-distinct-application",
+          "question_text": "Which fixture detects confusion between distinct departments and distinct pairs?",
+          "options": [
+            "Only one input row",
+            "All rows with identical pairs",
+            "One department with two different equipment codes",
+            "No equipment column"
+          ],
+          "correct_index": 2,
+          "explanation": "The two result grains then produce visibly different counts.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cx-distinct-known-departments",
+      "slug": "distinct-known-departments",
+      "title": "Build a known department vocabulary",
+      "difficulty": "Easy",
+      "task": "Return each non-NULL department once as department, sorted ascending. Do not change source rows.",
+      "schema_sql": "CREATE TABLE equipment_checkouts(checkout_id INT PRIMARY KEY,department VARCHAR(30),equipment_code VARCHAR(12) NOT NULL,quantity INT NOT NULL);",
+      "seed_sql": "INSERT INTO equipment_checkouts VALUES (1,'Media','CAM',1),(2,'Media','MIC',2),(3,'Science','CAM',1),(4,NULL,'TRI',1);",
+      "expected": "department\nMedia\nScience",
+      "ordering": "As explicitly ordered in the result query.",
+      "constraints": [
+        "Use only the supplied synthetic tables and requested transition.",
+        "Preserve unrelated rows."
+      ],
+      "edge_cases": [
+        "All departments may be NULL.",
+        "Different checkouts from one department collapse to one vocabulary row."
+      ],
+      "hints": [
+        "Select only department.",
+        "Exclude NULL explicitly before deduplication."
+      ],
+      "solution_sql": "SELECT DISTINCT department FROM equipment_checkouts WHERE department IS NOT NULL ORDER BY department;",
+      "explanation": "Filtering removes unknown departments; DISTINCT collapses repeated selected labels, independently of checkout identities.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO equipment_checkouts VALUES (1,NULL,'CAM',1);",
+          "expected": ""
+        },
+        {
+          "seed_sql": "INSERT INTO equipment_checkouts VALUES (1,'Arts','CAM',1),(2,'Arts','CAM',2);",
+          "expected": "department\nArts"
+        }
+      ]
+    },
+    {
+      "id": "cx-distinct-eligible-checkout-pairs",
+      "slug": "distinct-eligible-checkout-pairs",
+      "title": "Find unique eligible department and equipment pairs",
+      "difficulty": "Medium",
+      "task": "Return each distinct department,equipment_code pair among rows with quantity>=2. Retain NULL department as a meaningful unknown group. Order known departments ascending with NULL last, then equipment_code ascending. Distinctness is over the pair, not checkout identity.",
+      "schema_sql": "CREATE TABLE equipment_checkouts(checkout_id INT PRIMARY KEY,department VARCHAR(30),equipment_code VARCHAR(12) NOT NULL,quantity INT NOT NULL);",
+      "seed_sql": "INSERT INTO equipment_checkouts VALUES (1,'Media','CAM',2),(2,'Media','CAM',3),(3,'Media','MIC',2),(4,'Science','CAM',1),(5,NULL,'TRI',2),(6,NULL,'TRI',4);",
+      "expected": "department\tequipment_code\nMedia\tCAM\nMedia\tMIC\nNULL\tTRI",
+      "ordering": "As explicitly ordered in the result query.",
+      "constraints": [
+        "Use only the supplied synthetic tables and requested transition.",
+        "Preserve unrelated rows."
+      ],
+      "edge_cases": [
+        "Repeated NULL positions with the same code collapse.",
+        "Quantity exactly two qualifies."
+      ],
+      "hints": [
+        "Filter by quantity before comparing selected pairs.",
+        "For NULL last, sort on whether department IS NULL before department."
+      ],
+      "solution_sql": "SELECT DISTINCT department,equipment_code FROM equipment_checkouts WHERE quantity>=2 ORDER BY department IS NULL,department,equipment_code;",
+      "explanation": "The quantity predicate selects eligible events; projecting the pair and deduplicating collapses repeated pairs, including repeated NULL-and-code pairs. The explicit boolean sort expression puts unknown departments last.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO equipment_checkouts VALUES (1,'Arts','MIC',1),(2,NULL,'CAM',2),(3,'Arts','CAM',2);",
+          "expected": "department\tequipment_code\nArts\tCAM\nNULL\tCAM"
+        },
+        {
+          "seed_sql": "INSERT INTO equipment_checkouts VALUES (1,'Media','CAM',1);",
+          "expected": ""
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-12-distinct-1",
+      "test_id": "pt-dbms-sql-12-distinct",
+      "question_text": "What does DISTINCT do?",
+      "options": [
+        "Sorts the result",
+        "Removes duplicate rows from the result, based on the selected columns",
+        "Filters rows by a condition",
+        "Limits the number of rows returned"
+      ],
+      "correct_index": 1,
+      "explanation": "DISTINCT de-duplicates the result set.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-12-distinct-2",
+      "test_id": "pt-dbms-sql-12-distinct",
+      "question_text": "In SELECT DISTINCT category, price FROM products, what counts as a 'duplicate' to be removed?",
+      "options": [
+        "Any row sharing the same category, regardless of price",
+        "Rows where the (category, price) COMBINATION matches exactly",
+        "Any row sharing the same price, regardless of category",
+        "DISTINCT cannot be used with two columns"
+      ],
+      "correct_index": 1,
+      "explanation": "DISTINCT considers the full combination of selected columns together, not each independently.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-12-distinct-3",
+      "test_id": "pt-dbms-sql-12-distinct",
+      "question_text": "Does DISTINCT have a performance cost?",
+      "options": [
+        "No, it is always free",
+        "Yes — comparing and de-duplicating rows takes real computational work, especially on large result sets",
+        "Only when used with ORDER BY",
+        "Only on tables with fewer than 10 rows"
+      ],
+      "correct_index": 1,
+      "explanation": "De-duplication is genuine work the database must perform, not a free operation.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-12-distinct-4",
+      "test_id": "pt-dbms-sql-12-distinct",
+      "question_text": "If products has 4 Electronics rows and 2 Books rows, how many rows does SELECT DISTINCT category return?",
+      "options": [
+        "6",
+        "2",
+        "4",
+        "0"
+      ],
+      "correct_index": 1,
+      "explanation": "Only the distinct category values (Electronics, Books) are returned — 2 rows.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-12-distinct-5",
+      "test_id": "pt-dbms-sql-12-distinct",
+      "question_text": "Is COUNT(DISTINCT column) the same syntax position as SELECT DISTINCT?",
+      "options": [
+        "Yes, identical usage",
+        "No — they're related but different: one counts distinct values inside an aggregate, the other returns distinct full rows",
+        "COUNT(DISTINCT column) is invalid SQL",
+        "SELECT DISTINCT can only be used inside COUNT"
+      ],
+      "correct_index": 1,
+      "explanation": "Both use the DISTINCT keyword for de-duplication but in different syntactic roles.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-12-distinct-6",
+      "test_id": "pt-dbms-sql-12-distinct",
+      "question_text": "Can DISTINCT be combined with ORDER BY?",
+      "options": [
+        "No, they are mutually exclusive",
+        "Yes — DISTINCT de-duplicates first, and the result can still be sorted with ORDER BY",
+        "ORDER BY undoes the effect of DISTINCT",
+        "DISTINCT automatically sorts the result, making ORDER BY redundant"
+      ],
+      "correct_index": 1,
+      "explanation": "DISTINCT and ORDER BY can be combined; DISTINCT doesn't inherently guarantee any particular order.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-12-distinct-7",
+      "test_id": "pt-dbms-sql-12-distinct",
+      "question_text": "What is the effect of SELECT DISTINCT * FROM products (using every column)?",
+      "options": [
+        "It returns only unique full rows — equivalent to how a relational-algebra Projection onto all columns behaves",
+        "It has no effect since every row already has a unique id",
+        "It causes a syntax error",
+        "It only removes duplicate ids"
+      ],
+      "correct_index": 0,
+      "explanation": "DISTINCT * removes any fully-duplicate rows across every column, matching the set-based row-uniqueness idea from relational algebra Projection.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-12-distinct-8",
+      "test_id": "pt-dbms-sql-12-distinct",
+      "question_text": "Does DISTINCT distinguish between NULL and other NULL values when de-duplicating?",
+      "options": [
+        "Every NULL is always treated as distinct from every other NULL",
+        "For de-duplication purposes, DISTINCT treats multiple NULLs in the same column as duplicates of each other (unlike UNIQUE constraint semantics)",
+        "DISTINCT cannot be used on columns that allow NULL",
+        "NULLs are always removed entirely by DISTINCT"
+      ],
+      "correct_index": 1,
+      "explanation": "This is a genuine SQL subtlety — DISTINCT groups NULLs together as equal for de-duplication, differing from how NULL is treated in most other comparisons.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "coordinator",
+    "independent_review": "passed",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Independent manual review passed; native MySQL fixture evidence recorded separately; provider/browser/Supabase release gates remain separate.",
+    "existing_question_corrections": [
+      "tq-dbms-sql-12-distinct-1",
+      "tq-dbms-sql-12-distinct-2",
+      "tq-dbms-sql-12-distinct-3",
+      "tq-dbms-sql-12-distinct-4",
+      "tq-dbms-sql-12-distinct-5",
+      "tq-dbms-sql-12-distinct-6",
+      "tq-dbms-sql-12-distinct-7",
+      "tq-dbms-sql-12-distinct-8"
+    ],
+    "canonical_answer_indices_preserved": true,
+    "editorial_record": "Original snapshots retained. Questions rewritten for precise dialect and topic coverage while preserving identities and canonical answer positions; technical and independent review pending.",
+    "independent_reviewer": "Codex reviewer, current 2026-10-30 session",
+    "independent_review_scope": "Read full notes, all 640 MCQ stems/options/canonical answers/explanations, 64 exercise contracts/solutions/fixtures, and all 32 diagrams. Verified retained identities/answers through source-continuity tests; SQL execution evidence is recorded separately. No external originality, provider, live application or Supabase authorization clearance.",
+    "independent_review_record": "reports/independent-review-2026-10-30.json",
+    "content_sha256": "7c043457bd8aaea95d7eb96ac5b259afc23712797675bd04a3dc280e23021880"
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-12-distinct",
+    "original_note_sha256": "bfb55efeee42086915b61cc824dc68ee3fd67f8c5c2125ef5db4a47e51fa80c7",
+    "status": "drafted; not yet included in prepared paired migrations"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Changing the projection changes the distinct result",
+      "description": "Three separate events describe one department and two department-code combinations.",
+      "columns": [
+        "Checkout id",
+        "Department",
+        "Equipment code"
+      ],
+      "rows": [
+        [
+          "1",
+          "Media",
+          "CAM"
+        ],
+        [
+          "2",
+          "Media",
+          "MIC"
+        ],
+        [
+          "3",
+          "Media",
+          "CAM"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "drafted — verification pending",
+    "server_rendering": "pending",
+    "browser_rendering": "unverified",
+    "independent_review": "pending"
+  },
+  "authoring_status": "drafted — verification pending",
+  "sql_verification": {
+    "scope": "not executed; exact MySQL/provider verification pending",
+    "all_passed": false,
+    "cases": []
+  }
+}

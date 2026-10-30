@@ -1,13 +1,14 @@
 import { safeHref } from "@/lib/safeUrl";
-import { cache } from "react";
+import { cache, Suspense } from "react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import Image from "next/image";
 import { ArrowRight, Plus } from "lucide-react";
 import ProjectCard, { ProjectCardData } from "@/components/ProjectCard";
 import JobCard, { JobCardData } from "@/components/JobCard";
-import { SectionHeader, Reveal } from "@/components/ui";
+import { SectionHeader, Reveal, ListLoading } from "@/components/ui";
 import { HomeHero } from "@/components/home/HomeHero";
+import { ContinueLearningRow } from "./learning/_components/ContinueLearningRow";
 import { HomePersonal } from "@/components/home/HomePersonal";
 import { CustomProjectPromo } from "@/components/home/CustomProjectPromo";
 import { ModuleGrid } from "@/components/home/ModuleGrid";
@@ -76,7 +77,7 @@ export async function generateMetadata(): Promise<Metadata> {
   };
 }
 
-export default async function HomePage() {
+async function HomeContent() {
   const [{ trending, jobs, testimonials, faqs, banner }, latestPosts, grids, practiceCategories, interviewCategories] =
     await Promise.all([
       getHomeData(),
@@ -101,19 +102,17 @@ export default async function HomePage() {
   const featuredFirst = [...grids].sort((a, b) => Number(b.is_featured) - Number(a.is_featured));
 
   return (
-    <div className="pb-6">
+    <div className="home-page pb-6">
       {/* 1 · Hero — first for every visitor (server-rendered, crawlable, LCP). */}
       <HomeHero
         stats={stats}
         courses={featuredFirst.slice(0, 3).map(({ slug, name, topic_count }) => ({ slug, name, topic_count }))}
       />
 
-      {/* 2 · Signed-in students only: Welcome back / Continue learning / streak / jobs.
-          Client island — renders nothing for signed-out visitors, so the page stays ISR. */}
-      <HomePersonal
-        courses={grids.map(({ slug, name, topic_count, is_featured, is_premium }) => ({ slug, name, topic_count, is_featured, is_premium }))}
-        jobs={jobs.slice(0, 3)}
-      />
+      <div className="container-page">
+        <ContinueLearningRow courses={grids.map(({ slug, name, topic_count }) => ({ slug, name, topic_count }))} />
+      </div>
+      <PopularCourses courses={grids} />
 
       {/* Admin `banners` row (placement 'home') — shown as a promo card under the hero. */}
       {banner && (
@@ -154,10 +153,12 @@ export default async function HomePage() {
         <ModuleGrid />
       </Reveal>
 
-      {/* 5 · Popular courses */}
-      <Reveal>
-        <PopularCourses courses={grids} />
-      </Reveal>
+      {/* Keep the personalized dashboard; the resume card is already above. */}
+      <HomePersonal
+        showContinue={false}
+        courses={grids.map(({ slug, name, topic_count, is_featured, is_premium }) => ({ slug, name, topic_count, is_featured, is_premium }))}
+        jobs={jobs.slice(0, 3)}
+      />
 
       {/* 6 · Latest jobs */}
       {jobs.length > 0 && (
@@ -261,4 +262,9 @@ export default async function HomePage() {
       {/* Final CTA — the site footer's call-to-action band directly follows. */}
     </div>
   );
+}
+
+// Keep streaming local to this index page: ancestor loading routes change nested 404 status.
+export default function HomePage() {
+  return <Suspense fallback={<ListLoading title="Home" />}><HomeContent /></Suspense>;
 }

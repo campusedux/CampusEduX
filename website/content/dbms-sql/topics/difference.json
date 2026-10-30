@@ -1,0 +1,631 @@
+{
+  "source_ref": "chapter-7-relational-algebra/difference",
+  "slug": "difference",
+  "title": "Difference",
+  "description": "Compute directional missing membership, compare complete tuple roles, and distinguish native distinct difference from NULL-sensitive exclusion predicates and duplicate-preserving anti-joins.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Difference keeps the left-side facts lacking a match\n\nRelational difference A minus B returns tuples present in A but absent from B. If Required contains course identifiers ten, twenty, and thirty while Completed contains ten and forty, the difference contains twenty and thirty. Course forty does not enter the result because it was not a left-side requirement. The operation answers a directional missing-membership question.\n\nOperand order matters. Completed minus Required would contain forty in the example, not the missing required courses. Unlike union and intersection, exchanging the inputs generally changes the result. Write the question in words before choosing the operands: required but not completed differs from completed but not required, even though both statements compare the same two populations.\n\n## Compatible roles define what counts as absent\n\nClassical set difference requires compatible tuple structures and corresponding domains. SQL EXCEPT also requires supported positional column compatibility. A course_id should be compared with the relevant course identity, not a student identifier merely because both use integers. Type conversion that makes a query executable does not prove it compares the same kind of fact.\n\nFor a required student-course pair, absence must be tested against the complete pair. If Student 1 completed Course 10 but still requires Course 20, a student-only comparison can incorrectly remove both requirements. Campus, offering, term, or attempt roles can similarly matter when they are part of the intended identity. Projection before difference changes which facts are being compared.\n\n## Native EXCEPT expresses distinct directional difference\n\nMySQL 8.4 supports EXCEPT. In the illustrated plain form, it produces distinct selected left tuples that do not appear in the right result. PostgreSQL and SQL Server also use EXCEPT, while Oracle has historically used MINUS for a related set-difference form. Product-specific syntax and current feature availability should be stated precisely rather than assumed from a generic textbook label.\n\n```sql\nSELECT course_id FROM required_courses\nEXCEPT\nSELECT course_id FROM completed_courses\nORDER BY course_id;\n```\n\nThe final result is a listing of missing course identities. Its order is explicit; mathematical difference does not establish a presentation sequence. If Required is empty, the result is empty. If Completed is empty, the result contains the distinct Required identities. These cases test direction and empty-population meaning without needing a large fixture.\n\n## Duplicates follow the selected operation\n\nClassical difference returns a set. Plain EXCEPT removes repeated equal selected left tuples in its distinct form. If a requirement id appears three times and is absent from Completed, the distinct result still lists it once. A simple anti-join without DISTINCT can instead retain all three qualifying source occurrences. Both can be useful contracts, but they are not identical.\n\nWhere a dialect supports an ALL variant, its bag multiplicity needs its own definition and tests. It is not automatically the same as removing every left occurrence whenever any right match exists. The exercises deliberately target distinct membership. Count the selected result afterward if the task asks how many distinct requirements remain, rather than counting unchecked duplicate proposal rows.\n\n## Anti-existence can implement a required-value case\n\nFor nonmissing identities, a NOT EXISTS query can retain left rows without a matching right tuple. Add the appropriate distinct projection when the left source can repeat and the desired result is a set. The matching predicate must compare every component that defines the fact being excluded. A successful condition over one column is insufficient for a multi-role identity.\n\nA preserving join followed by an unmatched-right identity test is another common formulation. Use a right attribute guaranteed nonmissing for matched rows. An optional right description can be NULL even when the right fact exists, so testing that label would produce false missing reports. Identity, presence, and descriptive completeness remain separate concepts in the translation.\n\n## NOT IN can be affected by NULL\n\nAn exclusion predicate using NOT IN can behave unexpectedly if its comparison set contains NULL. SQL three-valued logic can make the predicate UNKNOWN for a candidate that is not otherwise matched, excluding a row that a careless two-valued interpretation expected to retain. Do not present NOT IN as an unconditional replacement for every set difference query.\n\nThe task's comparison policy must be explicit. A required nonmissing left identifier and nonmissing right identifiers avoid that particular absence case. When nullable components are part of the desired value comparison, native distinct set operations and ordinary equality-based translations can differ. A justified NULL-safe comparison can be needed for an equivalent translation on the intended engine.\n\n## Missing information is not completed work\n\nA completion row with a missing course identifier does not establish that any particular required course was completed. A row with a missing score can also have a separate status meaning. Define which source population counts as completion before computing the difference. A query that excludes every requirement because the student has some unrelated completion answers the wrong question.\n\nSimilarly, an absent completion record does not necessarily mean a student failed or never attempted the course. It means no matching accepted fact was found in the compared dataset under the query's scope. Data latency, historical periods, or eligibility rules can affect interpretation. A diagnostic report should avoid inventing a reason or authorizing a correction merely from the observed missing match.\n\n## Filters establish the compared populations\n\nRequired courses can depend on a programme, curriculum version, or term. Completed courses can depend on a passing status or recognized award policy. Apply those eligibility rules to the intended inputs. Comparing all catalogue courses with all attempted courses can produce a plausible missing list that has little relation to the actual programme requirement.\n\nA selected output attribute can also alter equality. If completion_date is retained on only one side's conceptual comparison, the tuple roles no longer align with a simple course identity question. Decide whether the report is about courses, student-course requirements, or historical award occurrences, then project compatible roles and keep descriptive data in a deliberate later enrichment step.\n\n## Difference does not delete source facts\n\nAn ordinary EXCEPT query derives a result without removing matching rows from Required or Completed. The word minus describes logical result membership rather than a persistent deletion. A student whose completion removes a course from the missing report still has the requirement and completion facts recorded according to the source model.\n\nReal cleanup, waiver, registration, or deletion operations need their own trusted authority and transition policies. Knowing an identifier in a missing-course report does not authorize adding a completion for it. The exercises use synthetic data to verify query meaning and preserve the distinction between diagnosis, source truth, and actions that change accepted records.\n\n## Logical laws help check direction\n\nUnder compatible classical set semantics, A minus A is empty, and A minus the empty set is A. The empty set minus A is empty. Difference is generally not commutative, and careless regrouping of mixed set expressions can change results. Use explicit grouping or named stages when combining union, intersection, and exclusion in a richer report.\n\nThese laws describe logical membership under their assumptions. They do not guarantee that different SQL expressions execute with the same plan, cost, or NULL behaviour. A rewrite that changes predicate comparison rules or preserves extra duplicates can break equivalence. Verify the actual result contract before interpreting a shorter statement as an optimization.\n\n## Grouped missing reports retain participant scope\n\nA student-specific missing report should keep both student identity and course identity when requirements vary across students. Distinct pairs can be listed first and then grouped to count each student's missing courses. Equal course identifiers across different students are separate requirement facts, not duplicate output to remove globally.\n\nThe more advanced division operation asks which candidates satisfy every item in a defined requirement population. Difference can help formulate that absence-of-missing-facts condition, but division and one directional difference are not interchangeable names. The candidate universe, empty requirement policy, and per-owner scope introduce additional requirements. Preserve those distinctions when introducing universal queries later.\n\n## Validate exclusion with targeted counterexamples\n\nUse overlapping inputs, right-only courses, repeated left requirements, disjoint sets, and either input empty. For pair difference, include one student with a completed course and another still-missing course, plus another student taking the same course. A nullable right-source fixture can test a deliberately chosen NOT EXISTS translation without accidentally invoking NOT IN's unknown comparisons.\n\nThe exercises verify native distinct course difference and a student-course anti-existence report with an explicit absence policy. Local MariaDB results remain compatibility evidence rather than exact MySQL/provider proof. Difference is useful when operand direction, complete tuple meaning, source eligibility, duplicate policy, NULL treatment, and diagnostic scope are all clear, making a missing-membership report precise without implying source deletion or unsupported explanations for the missing facts.\n",
+  "references": [
+    {
+      "title": "MySQL 8.4 set operations",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/set-operations.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-7-difference",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-7-difference-1",
+          "test_id": "pt-dbms-sql-7-difference",
+          "question_text": "What does the Difference operation (A − B) return?",
+          "options": [
+            "Rows in either A or B",
+            "Rows in A that are NOT in B",
+            "Rows in both A and B",
+            "Rows in B that are not in A"
+          ],
+          "correct_index": 1,
+          "explanation": "Difference specifically returns what's in the first relation but absent from the second.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-7-difference-2",
+          "test_id": "pt-dbms-sql-7-difference",
+          "question_text": "Which SQL keyword expresses distinct set difference in MySQL 8.4 as well as the cited PostgreSQL and SQL Server forms?",
+          "options": [
+            "INTERSECT",
+            "EXCEPT",
+            "MINUS",
+            "SUBTRACT"
+          ],
+          "correct_index": 1,
+          "explanation": "EXCEPT is supported in the stated MySQL 8.4 target. Actual provider execution remains separate from documentation and local MariaDB checks.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-7-difference-3",
+          "test_id": "pt-dbms-sql-7-difference",
+          "question_text": "Which vendor historically uses MINUS for the same operation as EXCEPT?",
+          "options": [
+            "MySQL",
+            "PostgreSQL",
+            "Oracle",
+            "SQLite"
+          ],
+          "correct_index": 2,
+          "explanation": "Oracle's MINUS is the same relational-algebra Difference operation, just a different keyword spelling.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-7-difference-4",
+          "test_id": "pt-dbms-sql-7-difference",
+          "question_text": "Does operand order matter for the Difference operation?",
+          "options": [
+            "No, A - B always equals B - A",
+            "Yes — A - B and B - A are generally different results, unlike Union and Intersection",
+            "Order only matters if the relations are empty",
+            "Order matters only for numeric columns"
+          ],
+          "correct_index": 1,
+          "explanation": "Unlike Union/Intersection, Difference is order-sensitive: subtracting A from B is different from subtracting B from A.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-7-difference-5",
+          "test_id": "pt-dbms-sql-7-difference",
+          "question_text": "What real-world question does `all_required_courses EXCEPT completed_courses` answer?",
+          "options": [
+            "Which courses were completed",
+            "Which required courses are still missing/not yet completed",
+            "The total number of courses offered",
+            "Which courses have the highest enrollment"
+          ],
+          "correct_index": 1,
+          "explanation": "This is the classic 'what's missing' pattern that Difference is well suited for.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-7-difference-6",
+          "test_id": "pt-dbms-sql-7-difference",
+          "question_text": "What requirement do the two relations combined by EXCEPT/MINUS share with UNION and INTERSECT?",
+          "options": [
+            "They must be union-compatible: same column count, compatible types",
+            "They must have identical primary keys",
+            "They must both be non-empty",
+            "There is no shared requirement"
+          ],
+          "correct_index": 0,
+          "explanation": "Compatible positions and types are implementation requirements; corresponding tuple roles must also represent the same kind of fact.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-7-difference-7",
+          "test_id": "pt-dbms-sql-7-difference",
+          "question_text": "If honors = {1,2,5} and deans = {2,3}, what is honors EXCEPT deans?",
+          "options": [
+            "{2}",
+            "{1,5}",
+            "{1,2,3,5}",
+            "{3}"
+          ],
+          "correct_index": 1,
+          "explanation": "Removing the overlapping value (2) from honors leaves {1,5}.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-7-difference-8",
+          "test_id": "pt-dbms-sql-7-difference",
+          "question_text": "Is Difference closely related to the Division operation (7.12)?",
+          "options": [
+            "No, they are completely unrelated",
+            "Yes — both are commonly used for 'what satisfies/is missing relative to a full set' style questions, though Division answers a more complex per-group version of that question",
+            "Division is simply another name for Difference",
+            "Difference can only be used with numeric relations, unlike Division"
+          ],
+          "correct_index": 1,
+          "explanation": "Difference helps express missing memberships; division adds a per-candidate universal requirement and needs its own candidate universe and empty-set policy.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-7-difference-new-9",
+          "test_id": "pt-dbms-sql-7-difference",
+          "question_text": "Required is {10,20,30} and Completed is {10,40}. What is Required minus Completed?",
+          "options": [
+            "{40}",
+            "{20,30}",
+            "{10}",
+            "{10,20,30,40}"
+          ],
+          "correct_index": 1,
+          "explanation": "Only left-side requirements lacking a right match qualify.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-7-difference-new-10",
+          "test_id": "pt-dbms-sql-7-difference",
+          "question_text": "Why is course 40 absent from that missing requirement result?",
+          "options": [
+            "Every completion must be a requirement",
+            "Difference always returns both sides",
+            "It was not in the left requirement population",
+            "Only even numbers qualify"
+          ],
+          "correct_index": 2,
+          "explanation": "Right-only facts are not introduced into left difference.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-7-difference-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-7-difference-application-new-1",
+          "test_id": "pt-dbms-sql-7-difference-application",
+          "question_text": "Does exchanging the operands preserve difference generally?",
+          "options": [
+            "Yes; all set operations commute",
+            "Only if sorted",
+            "No",
+            "Only if the ids are integers"
+          ],
+          "correct_index": 2,
+          "explanation": "The operation is directional.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-7-difference-application-new-2",
+          "test_id": "pt-dbms-sql-7-difference-application",
+          "question_text": "Three identical left requirements lack a right match. How many rows does plain distinct EXCEPT return for that identity?",
+          "options": [
+            "Three always",
+            "Zero",
+            "Nine",
+            "One"
+          ],
+          "correct_index": 3,
+          "explanation": "Distinct set semantics collapse repeated selected tuples.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-7-difference-application-new-3",
+          "test_id": "pt-dbms-sql-7-difference-application",
+          "question_text": "What can a raw anti-join omit if distinct semantics are required?",
+          "options": [
+            "Explicit duplicate elimination for repeated left values",
+            "The source table name",
+            "Every right key",
+            "The final attribute definition"
+          ],
+          "correct_index": 0,
+          "explanation": "Qualifying repeated source occurrences can otherwise remain repeated.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-7-difference-application-new-4",
+          "test_id": "pt-dbms-sql-7-difference-application",
+          "question_text": "Why can NOT IN with a nullable subquery exclude unexpected candidates?",
+          "options": [
+            "NULL automatically matches every id as TRUE",
+            "NULL can make the predicate UNKNOWN",
+            "The operation deletes source rows",
+            "NOT IN always creates a key"
+          ],
+          "correct_index": 1,
+          "explanation": "WHERE does not retain UNKNOWN.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-7-difference-application-new-5",
+          "test_id": "pt-dbms-sql-7-difference-application",
+          "question_text": "What should a complete student-course exclusion compare?",
+          "options": [
+            "Only student_id universally",
+            "Only a shared name",
+            "Both student_id and course_id",
+            "Only the source row count"
+          ],
+          "correct_index": 2,
+          "explanation": "Completion of another course is not completion of the selected requirement.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-7-difference-application-new-6",
+          "test_id": "pt-dbms-sql-7-difference-application",
+          "question_text": "Does an EXCEPT query remove stored requirements?",
+          "options": [
+            "Yes; minus means DELETE",
+            "Only if Completed is nonempty",
+            "Only if output is empty",
+            "No; it derives an output population"
+          ],
+          "correct_index": 3,
+          "explanation": "Logical difference and mutation differ.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-7-difference-application-new-7",
+          "test_id": "pt-dbms-sql-7-difference-application",
+          "question_text": "What does no matching completion fact establish?",
+          "options": [
+            "No match under the compared dataset and scope",
+            "A guaranteed reason such as failure",
+            "Permission to award completion",
+            "That the person never attended"
+          ],
+          "correct_index": 0,
+          "explanation": "Absence diagnosis does not establish every external explanation.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-7-difference-application-new-8",
+          "test_id": "pt-dbms-sql-7-difference-application",
+          "question_text": "What is A minus A under classical compatible set semantics?",
+          "options": [
+            "A",
+            "Empty",
+            "The union of A twice",
+            "One NULL row"
+          ],
+          "correct_index": 1,
+          "explanation": "Every left tuple has a right match.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-7-difference-application-new-9",
+          "test_id": "pt-dbms-sql-7-difference-application",
+          "question_text": "Why keep student identity when counting missing courses per student?",
+          "options": [
+            "Course id always identifies the student",
+            "Every missing fact is global",
+            "The same course can be a separate requirement for different students",
+            "Only names determine scope"
+          ],
+          "correct_index": 2,
+          "explanation": "The requirement grain is owner-specific.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-7-difference-application-new-10",
+          "test_id": "pt-dbms-sql-7-difference-application",
+          "question_text": "What additional concern distinguishes division from a simple difference?",
+          "options": [
+            "Only the operator’s font",
+            "Only one selected course id",
+            "Only sorting",
+            "A defined candidate universe and an every-required-item condition"
+          ],
+          "correct_index": 3,
+          "explanation": "Universal satisfaction is a richer per-candidate query.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cx-difference-required",
+      "slug": "difference-required",
+      "title": "List distinct required courses without a completion",
+      "difficulty": "Easy",
+      "task": "Use plain EXCEPT to return course_id present in required_courses but not completed_courses. Repeated left occurrences produce one distinct missing course.",
+      "schema_sql": "CREATE TABLE required_courses (course_id INT NOT NULL);\nCREATE TABLE completed_courses (course_id INT NOT NULL);",
+      "seed_sql": "INSERT INTO required_courses VALUES (10),(20),(20),(30); INSERT INTO completed_courses VALUES (10),(40);",
+      "expected": "course_id\n20\n30",
+      "ordering": "Ascending course_id.",
+      "constraints": [
+        "Identifiers are nonmissing integers; syntax targets MySQL 8.4."
+      ],
+      "edge_cases": [
+        "Right-only courses are excluded.",
+        "One or both source sets can be empty."
+      ],
+      "hints": [
+        "Place requirements on the left side.",
+        "Order the distinct combined result explicitly."
+      ],
+      "solution_sql": "SELECT course_id FROM required_courses EXCEPT SELECT course_id FROM completed_courses ORDER BY course_id;",
+      "explanation": "The directional set result lists missing left memberships, without deleting any recorded facts.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO required_courses VALUES (7),(7);",
+          "expected": "course_id\n7"
+        },
+        {
+          "seed_sql": "INSERT INTO completed_courses VALUES (7);",
+          "expected": ""
+        }
+      ]
+    },
+    {
+      "id": "cx-difference-pairs",
+      "slug": "difference-pairs",
+      "title": "Find missing student-course requirements with a complete anti-existence test",
+      "difficulty": "Medium",
+      "task": "Return distinct student_id and course_id pairs in required_pairs without a matching completed_pairs row. Requirement components are nonmissing. Completion rows with a missing component do not establish a match to a required pair.",
+      "schema_sql": "CREATE TABLE required_pairs (student_id INT NOT NULL, course_id INT NOT NULL);\nCREATE TABLE completed_pairs (student_id INT NULL, course_id INT NULL);",
+      "seed_sql": "INSERT INTO required_pairs VALUES (1,10),(1,20),(1,20),(2,10); INSERT INTO completed_pairs VALUES (1,10),(1,NULL),(NULL,20),(2,30);",
+      "expected": "student_id\tcourse_id\n1\t20\n2\t10",
+      "ordering": "Ascending student_id, course_id.",
+      "constraints": [
+        "This is an explicit nonmissing required-identity membership contract, not a general nullable tuple-equivalence claim."
+      ],
+      "edge_cases": [
+        "A completion of another course for the same student is not enough.",
+        "NULL completion components must not suppress an unrelated missing requirement."
+      ],
+      "hints": [
+        "Compare both participant components in NOT EXISTS.",
+        "Use DISTINCT for the requested set of missing pairs."
+      ],
+      "solution_sql": "SELECT DISTINCT r.student_id, r.course_id FROM required_pairs r WHERE NOT EXISTS (SELECT 1 FROM completed_pairs c WHERE c.student_id = r.student_id AND c.course_id = r.course_id) ORDER BY r.student_id, r.course_id;",
+      "explanation": "The complete nonmissing requirement comparison avoids an incomplete student-only exclusion and the nullable NOT IN trap under the stated policy.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO required_pairs VALUES (1,20); INSERT INTO completed_pairs VALUES (1,10),(1,NULL);",
+          "expected": "student_id\tcourse_id\n1\t20"
+        },
+        {
+          "seed_sql": "INSERT INTO required_pairs VALUES (1,10),(1,10); INSERT INTO completed_pairs VALUES (1,10);",
+          "expected": ""
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-7-difference-1",
+      "test_id": "pt-dbms-sql-7-difference",
+      "question_text": "What does the Difference operation (A − B) return?",
+      "options": [
+        "Rows in either A or B",
+        "Rows in A that are NOT in B",
+        "Rows in both A and B",
+        "Rows in B that are not in A"
+      ],
+      "correct_index": 1,
+      "explanation": "Difference specifically returns what's in the first relation but absent from the second.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-7-difference-2",
+      "test_id": "pt-dbms-sql-7-difference",
+      "question_text": "Which SQL keyword implements Difference in PostgreSQL and SQL Server?",
+      "options": [
+        "INTERSECT",
+        "EXCEPT",
+        "MINUS",
+        "SUBTRACT"
+      ],
+      "correct_index": 1,
+      "explanation": "EXCEPT is the standard SQL keyword most dialects use for this operation.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-7-difference-3",
+      "test_id": "pt-dbms-sql-7-difference",
+      "question_text": "Which vendor historically uses MINUS for the same operation as EXCEPT?",
+      "options": [
+        "MySQL",
+        "PostgreSQL",
+        "Oracle",
+        "SQLite"
+      ],
+      "correct_index": 2,
+      "explanation": "Oracle's MINUS is the same relational-algebra Difference operation, just a different keyword spelling.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-7-difference-4",
+      "test_id": "pt-dbms-sql-7-difference",
+      "question_text": "Does operand order matter for the Difference operation?",
+      "options": [
+        "No, A - B always equals B - A",
+        "Yes — A - B and B - A are generally different results, unlike Union and Intersection",
+        "Order only matters if the relations are empty",
+        "Order matters only for numeric columns"
+      ],
+      "correct_index": 1,
+      "explanation": "Unlike Union/Intersection, Difference is order-sensitive: subtracting A from B is different from subtracting B from A.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-7-difference-5",
+      "test_id": "pt-dbms-sql-7-difference",
+      "question_text": "What real-world question does `all_required_courses EXCEPT completed_courses` answer?",
+      "options": [
+        "Which courses were completed",
+        "Which required courses are still missing/not yet completed",
+        "The total number of courses offered",
+        "Which courses have the highest enrollment"
+      ],
+      "correct_index": 1,
+      "explanation": "This is the classic 'what's missing' pattern that Difference is well suited for.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-7-difference-6",
+      "test_id": "pt-dbms-sql-7-difference",
+      "question_text": "What requirement do the two relations combined by EXCEPT/MINUS share with UNION and INTERSECT?",
+      "options": [
+        "They must be union-compatible: same column count, compatible types",
+        "They must have identical primary keys",
+        "They must both be non-empty",
+        "There is no shared requirement"
+      ],
+      "correct_index": 0,
+      "explanation": "All three set operations (Union, Intersection, Difference) require union-compatible operand relations.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-7-difference-7",
+      "test_id": "pt-dbms-sql-7-difference",
+      "question_text": "If honors = {1,2,5} and deans = {2,3}, what is honors EXCEPT deans?",
+      "options": [
+        "{2}",
+        "{1,5}",
+        "{1,2,3,5}",
+        "{3}"
+      ],
+      "correct_index": 1,
+      "explanation": "Removing the overlapping value (2) from honors leaves {1,5}.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-7-difference-8",
+      "test_id": "pt-dbms-sql-7-difference",
+      "question_text": "Is Difference closely related to the Division operation (7.12)?",
+      "options": [
+        "No, they are completely unrelated",
+        "Yes — both are commonly used for 'what satisfies/is missing relative to a full set' style questions, though Division answers a more complex per-group version of that question",
+        "Division is simply another name for Difference",
+        "Difference can only be used with numeric relations, unlike Division"
+      ],
+      "correct_index": 1,
+      "explanation": "Difference finds simple set gaps; Division extends that idea to a per-group 'has ALL of' question, making them conceptually related.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "coordinator",
+    "independent_review": "unavailable; no agent tools",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Definitions and examples checked against questions; no plagiarism certification.",
+    "existing_question_corrections": [
+      "tq-dbms-sql-7-difference-2",
+      "tq-dbms-sql-7-difference-6",
+      "tq-dbms-sql-7-difference-8"
+    ],
+    "canonical_answer_indices_preserved": true,
+    "batch_review": {
+      "reviewer": "coordinator",
+      "independent": false,
+      "scope": "New package only: notes, keyed examples, original question identities and canonical indices, every correct answer, exercises and recorded fixture outputs, diagram trace, content-only paired integration.",
+      "findings_resolved": "Outer Join retained absence question clarified: missing parent is a violation only when the modeled relationship requires it. Division retains its original Hard exercise; validator permits retained Hard alongside Easy while rejecting a new Hard substitute.",
+      "remaining": "Exact MySQL/provider execution, browser QA, independent review and applied-migration behavior unverified; output fixtures do not prove required source technique."
+    }
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-7-difference",
+    "original_note_sha256": "702dfa8b99260a626575addeda91bd9fea52d5f03e1d9948b9de29323845753f",
+    "status": "paired migration prepared; not applied"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Directional difference does not introduce right-only facts",
+      "description": "Required-minus-completed returns only absent left-side requirements. Reversing the inputs asks a different question.",
+      "columns": [
+        "Course id",
+        "In Required?",
+        "In Completed?",
+        "Required minus Completed"
+      ],
+      "rows": [
+        [
+          "10",
+          "Yes",
+          "Yes",
+          "Exclude: matched"
+        ],
+        [
+          "20",
+          "Yes, repeated",
+          "No",
+          "Include once"
+        ],
+        [
+          "30",
+          "Yes",
+          "No",
+          "Include once"
+        ],
+        [
+          "40",
+          "No",
+          "Yes",
+          "Exclude: not a left requirement"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "coordinator checked operand direction, distinct left membership and explicit nullable completion policy",
+    "server_rendering": "passed",
+    "browser_rendering": "unverified",
+    "independent_review": "unavailable; no agent tools",
+    "server_rendering_evidence": "Selected actual LessonBlock tests passed for the new set-operation batch; unchanged packages intentionally skipped."
+  },
+  "sql_verification": {
+    "engine": "11.8.6-MariaDB-0+deb13u1 from Debian",
+    "scope": "MariaDB compatibility execution; exact MySQL 8.4/provider execution unverified",
+    "fingerprint": "ba55b2dfe2152c11f43030f916c78b0705aec3c7ef2cd896eb7543824769d53b",
+    "cases": [
+      {
+        "problem": "difference-required",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "difference-required",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "difference-required",
+        "case": 2,
+        "passed": true
+      },
+      {
+        "problem": "difference-pairs",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "difference-pairs",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "difference-pairs",
+        "case": 2,
+        "passed": true
+      }
+    ],
+    "all_passed": true
+  }
+}

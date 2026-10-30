@@ -1,0 +1,565 @@
+{
+  "source_ref": "chapter-21-normalization-and-functional-dependencies/5nf",
+  "slug": "5nf",
+  "title": "5NF",
+  "description": "Understand fifth normal form through join dependencies, ternary relationship meaning and an original pair-projection counterexample that exposes spurious triples.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Ask whether smaller projections reconstruct exactly\n\nFifth normal form addresses join dependencies: situations in which a relation can be reconstructed exactly by joining several projections. It is also called project-join normal form. The concern is not merely repeated text or an obvious functional dependency. A relation can satisfy familiar key-based normal forms while still encoding a decomposable higher-arity relationship.\n\nReview [4NF](/learning/dbms-sql-tutorial/4nf), [relational design](/learning/dbms-sql-tutorial/4nf) and [functional dependency](/learning/dbms-sql-tutorial/functional-dependency). Before decomposing a three-column relation into pairs, establish the domain rule that makes reconstruction valid. Three tidy tables are not an improvement if their join invents combinations that were never authorized by the original relationship.\n\n## Distinguish a triple fact from three pair facts\n\nImagine a mentoring programme with mentor, subject and site. A triple records that a particular mentor may teach a particular subject at a particular site. Pair facts could instead record which subjects a mentor knows, which sites the mentor visits and which subjects a site offers. Those facts sound related, but they do not automatically establish every compatible teaching triple.\n\nA mentor may know databases, visit the north site for another activity and have no permission to teach databases there. If north also offers databases taught by someone else, all three pairs exist without the specific triple being valid. The original ternary fact can therefore carry information that none of the pair projections can express independently.\n\n## Define the join dependency precisely\n\nA join dependency over projections says that every valid relation state equals the natural join of those projections. Projecting removes attributes and joining reconstructs combinations agreeing on shared attributes. For the three pair projections mentor-subject, mentor-site and subject-site, the dependency requires the reconstructed triples to be exactly the original triples in every permitted state.\n\nThe original tuples are not lost when all three correct projections are joined: each original tuple has its own pair witnesses. The danger is additional tuples, commonly called spurious tuples. Lossless reconstruction requires that no such invented tuple appears. This is a statement about the domain's legal states, not just an example whose join happens to work.\n\n## Trace a counterexample with three original triples\n\nUse compact identifiers M1,M2 for mentors, T1,T2 for subjects and S1,S2 for sites. The original triples are M1-T1-S1, M1-T2-S2 and M2-T1-S2. Their pair projections include M1-T1, M1-S2 and T1-S2, even though those three pair witnesses came from different original tuples.\n\nJoining the pair projections therefore adds M1-T1-S2. The mentor-subject pair came from the first triple, mentor-site from the second and subject-site from the third. No original row authorized their combined triple. This concrete witness proves that the proposed projection-and-join decomposition is not lossless for a domain that permits this original state.\n\n## State the stronger rule if pair compatibility is sufficient\n\nA different programme may explicitly define teaching eligibility as exactly the conjunction of the three pair approvals. Under that rule, M1-T1-S2 must be valid whenever all its pair approvals exist. The additional combination is no longer spurious relative to the domain; it is a required implication of the policy.\n\nIn that domain, storing the three independent pair relations can be the appropriate design. The triple relation is derived rather than independently asserted. The important difference is the business rule, not a syntactic change in the join. Ask stakeholders whether three pair approvals are sufficient or whether a separate triple-level approval is required.\n\n## Relate fifth normal form to candidate keys\n\nA relation is in fifth normal form when every nontrivial join dependency that holds is implied by its candidate keys. A trivial join dependency includes the full relation as one of its components and offers no meaningful decomposition. Nontrivial dependencies describe reconstruction from proper projections and need closer examination.\n\nCandidate keys alone may not explain a genuine three-way decomposition rule. In the teaching example, the whole triple can be the only candidate key, yet a pairwise-approval policy can impose a nontrivial join dependency. That is why checking only functional dependencies and candidate keys does not settle every higher-order redundancy question.\n\n## Connect the idea to fourth normal form\n\nMultivalued dependencies capture certain independent multi-valued facts and correspond to a special kind of join dependency. Fourth normal form addresses those dependencies. Fifth normal form generalizes the reconstruction question to join dependencies that may require three or more projections rather than a simple two-way decomposition.\n\nThis does not mean every three-column table violates fourth or fifth normal form. Nor does it mean every relation should be split until only pairs remain. A genuine irreducible ternary relationship may need all three attributes together. Normalization follows the dependencies that actually hold, not a preference for tables with fewer columns.\n\n## Inspect reconstruction with explicit SQL\n\nWhen the pairwise-approval policy is the intended model, compatible triples can be generated by joining the three pair relations. Explicit predicates make the shared attributes visible and avoid unintended effects from unrelated same-named columns.\n\n```sql\nSELECT ms.mentor_id, ms.subject_code, mt.site_code\nFROM mentor_subject AS ms\nJOIN mentor_site AS mt ON mt.mentor_id = ms.mentor_id\nJOIN subject_site AS st\n ON st.subject_code = ms.subject_code\nAND st.site_code = mt.site_code\nORDER BY ms.mentor_id, ms.subject_code, mt.site_code;\n```\n\nThis query computes pair-compatible triples. It does not prove that pair compatibility is the right policy. Compare the result with independently authorized triples when evaluating a proposed decomposition. A NOT EXISTS difference query can expose reconstructed rows missing from that authoritative triple set.\n\n## Separate relational sets from SQL multiplicity\n\nClassical normalization reasoning treats relations as sets. SQL queries can retain duplicate appearances, so repeated pair rows can multiply a reconstructed triple. Use appropriate uniqueness constraints in a real design, or deliberate DISTINCT projections in a demonstration, to align the SQL representation with the mathematical model.\n\nDo not add DISTINCT to hide a semantic spurious-tuple problem. It removes repeated appearances of the same triple, not an invented distinct triple. The M1-T1-S2 counterexample remains after deduplication because it is a new value combination. Row multiplicity and lossless reconstruction are separate correctness questions.\n\n## Treat sample checks as evidence with limits\n\nA sample join that produces no extra tuples is useful but cannot establish the join dependency for every future valid state. A counterexample is enough to refute an asserted universal rule, while successful samples only show agreement for those samples. Domain confirmation and formal reasoning remain necessary before decomposing stored authoritative facts.\n\nThe two exercises expose this distinction directly. One generates the compatible triples from pair relations; the other returns the reconstructed triple absent from the supplied authorized relation. Both are read-only reasoning tools. They do not delete the original triple relation or decide that a newly reconstructed combination should become authorized automatically.\n\n## Evaluate the operational design after the proof\n\nEven a logically justified decomposition introduces write and query responsibilities. Independent pair approvals may be managed by different roles, and removing one pair can invalidate many derived triples. A retained materialized triple list would need a consistency policy. Consider those responsibilities separately from the normal-form proof.\n\nWhen the relationship is genuinely ternary, keep its authority explicit and avoid describing every apparent repeated pair as harmful redundancy. The useful habit is to ask what combinations a join implies and whether the domain actually accepts them. Fifth-normal-form reasoning is most valuable when it prevents a neat-looking schema from silently changing the meaning of permitted relationships.\n\n## Keep approval semantics visible to reviewers\n\nThe counterexample deliberately uses identifiers rather than personal names. This keeps the reconstruction question independent of duplicate display labels. The site and subject values are also nonnull, matching the classical set-model assumptions. A production schema with unknown references would need an additional missing-value policy before its SQL joins could be compared with that model.\n\nWhen presenting a proposed decomposition, show both a valid reconstruction and an attempted counterexample. Ask whether the domain allows the latter original state. If it does, the pair decomposition is unsafe. If it does not because pair compatibility itself authorizes every combination, write that dependency explicitly. This conversation often reveals a previously unstated policy that matters more than the normal-form label attached to the final tables.\n",
+  "references": [
+    {
+      "title": "Primary reference",
+      "url": "https://www.db-book.com/slides-dir/PDF-dir/ch7.pdf"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-21-5nf",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-21-5nf-1",
+          "test_id": "pt-dbms-sql-21-5nf",
+          "question_text": "What does5NF focus on?",
+          "options": [
+            "Only text duplication",
+            "Join dependencies",
+            "Only physical indexes",
+            "Only row sorting"
+          ],
+          "correct_index": 1,
+          "explanation": "It examines whether proper projections reconstruct permitted relations exactly.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-21-5nf-2",
+          "test_id": "pt-dbms-sql-21-5nf",
+          "question_text": "What is another name for5NF?",
+          "options": [
+            "Primary-index form",
+            "Project-join normal form",
+            "Pair-only normal form",
+            "Null-free form"
+          ],
+          "correct_index": 1,
+          "explanation": "The name emphasizes projection and reconstruction by join.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-21-5nf-3",
+          "test_id": "pt-dbms-sql-21-5nf",
+          "question_text": "Does a ternary fact always equal three pair facts?",
+          "options": [
+            "Yes",
+            "No",
+            "Only if sorted",
+            "Only if numeric"
+          ],
+          "correct_index": 1,
+          "explanation": "A specific triple can require authority not captured by its pairs.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-21-5nf-4",
+          "test_id": "pt-dbms-sql-21-5nf",
+          "question_text": "What is a spurious tuple?",
+          "options": [
+            "A duplicated column name",
+            "A reconstructed combination absent from the original relation",
+            "Any null value",
+            "Any primary key"
+          ],
+          "correct_index": 1,
+          "explanation": "Pair witnesses from different tuples can combine into an invented triple.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-21-5nf-5",
+          "test_id": "pt-dbms-sql-21-5nf",
+          "question_text": "Which triple is added in the worked example?",
+          "options": [
+            "M2-T2-S1",
+            "M1-T1-S2",
+            "M1-T2-S1",
+            "M2-T2-S2"
+          ],
+          "correct_index": 1,
+          "explanation": "Its three pairs exist across different original triples.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-21-5nf-6",
+          "test_id": "pt-dbms-sql-21-5nf",
+          "question_text": "What makes pair decomposition legitimate?",
+          "options": [
+            "Only fewer columns",
+            "A domain rule that pair compatibility is sufficient",
+            "Only a successful small sample",
+            "Only shorter SQL"
+          ],
+          "correct_index": 1,
+          "explanation": "The join dependency must hold across every permitted state.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-21-5nf-7",
+          "test_id": "pt-dbms-sql-21-5nf",
+          "question_text": "What does a join dependency assert?",
+          "options": [
+            "Every pair is unique globally",
+            "The relation equals the join of stated projections",
+            "Every attribute determines every other",
+            "Every join is fast"
+          ],
+          "correct_index": 1,
+          "explanation": "Exact reconstruction requires no missing or additional tuples.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-21-5nf-8",
+          "test_id": "pt-dbms-sql-21-5nf",
+          "question_text": "What does a nontrivial join dependency use?",
+          "options": [
+            "Only the full relation itself",
+            "Proper projections without the full relation component",
+            "Only a primary key alias",
+            "No shared attributes"
+          ],
+          "correct_index": 1,
+          "explanation": "Including the whole relation makes the decomposition trivial.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-21-5nf-new-9",
+          "test_id": "pt-dbms-sql-21-5nf",
+          "question_text": "When is a relation in5NF?",
+          "options": [
+            "Every nontrivial join dependency is implied by candidate keys",
+            "It has exactly five columns",
+            "It has only pair tables",
+            "It contains no text"
+          ],
+          "correct_index": 0,
+          "explanation": "The definition concerns the dependencies that hold, not table width.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-21-5nf-new-10",
+          "test_id": "pt-dbms-sql-21-5nf",
+          "question_text": "Can the full triple be the only candidate key?",
+          "options": [
+            "No",
+            "Yes",
+            "Only with NULL",
+            "Only after sorting"
+          ],
+          "correct_index": 1,
+          "explanation": "No proper subset may determine the remaining attribute in a genuine triple relation.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-21-5nf-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-21-5nf-application-new-1",
+          "test_id": "pt-dbms-sql-21-5nf-application",
+          "question_text": "Does checking functional dependencies settle all higher-order joins?",
+          "options": [
+            "Yes",
+            "Only for identifiers",
+            "No",
+            "Only with primary keys"
+          ],
+          "correct_index": 2,
+          "explanation": "Join dependencies can express information beyond functional dependency checks.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-21-5nf-application-new-2",
+          "test_id": "pt-dbms-sql-21-5nf-application",
+          "question_text": "How are multivalued dependencies related?",
+          "options": [
+            "They are physical index hints",
+            "They forbid all joins",
+            "They always mean duplicate rows",
+            "They correspond to a special join-dependency case"
+          ],
+          "correct_index": 3,
+          "explanation": "Fourth-normal-form reasoning is a narrower reconstruction problem.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-21-5nf-application-new-3",
+          "test_id": "pt-dbms-sql-21-5nf-application",
+          "question_text": "Should every three-column table be split into pairs?",
+          "options": [
+            "No",
+            "Yes",
+            "Only for short names",
+            "Only in MySQL"
+          ],
+          "correct_index": 0,
+          "explanation": "Irreducible ternary meaning must remain intact when no valid decomposition rule holds.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-21-5nf-application-new-4",
+          "test_id": "pt-dbms-sql-21-5nf-application",
+          "question_text": "What does the demonstrated SQL compute?",
+          "options": [
+            "Guaranteed authorized triples under every policy",
+            "Pair-compatible triples",
+            "Only missing mentors",
+            "A normalization proof"
+          ],
+          "correct_index": 1,
+          "explanation": "Query execution cannot decide whether the domain accepts the pairwise policy.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-21-5nf-application-new-5",
+          "test_id": "pt-dbms-sql-21-5nf-application",
+          "question_text": "Does DISTINCT remove a distinct spurious triple?",
+          "options": [
+            "Yes",
+            "Only if ordered",
+            "No",
+            "Only with numeric keys"
+          ],
+          "correct_index": 2,
+          "explanation": "Deduplication removes repeated appearances, not new value combinations.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-21-5nf-application-new-6",
+          "test_id": "pt-dbms-sql-21-5nf-application",
+          "question_text": "Why enforce pair uniqueness in a set-model design?",
+          "options": [
+            "To prove the business rule",
+            "To eliminate every join",
+            "To grant authority",
+            "To avoid SQL multiplicity inflating reconstruction"
+          ],
+          "correct_index": 3,
+          "explanation": "Relational set reasoning and SQL bag behavior must be aligned deliberately.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-21-5nf-application-new-7",
+          "test_id": "pt-dbms-sql-21-5nf-application",
+          "question_text": "Can one counterexample refute a universal join-dependency claim?",
+          "options": [
+            "Yes",
+            "No",
+            "Only after deployment",
+            "Only with a large table"
+          ],
+          "correct_index": 0,
+          "explanation": "A permitted state that reconstructs incorrectly disproves the claimed invariant.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-21-5nf-application-new-8",
+          "test_id": "pt-dbms-sql-21-5nf-application",
+          "question_text": "Can one successful sample prove that universal claim?",
+          "options": [
+            "Yes",
+            "No",
+            "Only with three rows",
+            "Only if empty"
+          ],
+          "correct_index": 1,
+          "explanation": "Future permitted states may still produce spurious combinations.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-21-5nf-application-new-9",
+          "test_id": "pt-dbms-sql-21-5nf-application",
+          "question_text": "What can removing one pair approval affect?",
+          "options": [
+            "Only its display caption",
+            "No derived result",
+            "Many derived triples",
+            "Every unrelated table"
+          ],
+          "correct_index": 2,
+          "explanation": "Several triples can rely on the same pair witness.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-21-5nf-application-new-10",
+          "test_id": "pt-dbms-sql-21-5nf-application",
+          "question_text": "What should remain authoritative for a true ternary approval?",
+          "options": [
+            "Any arbitrary pair join",
+            "Only mentor names",
+            "Only sorting",
+            "The explicit triple-level fact"
+          ],
+          "correct_index": 3,
+          "explanation": "Pair compatibility must not silently replace a required three-way authorization.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cx-5nf-pair-compatible-triples",
+      "slug": "5nf-pair-compatible-triples",
+      "title": "Reconstruct pair-compatible teaching triples",
+      "difficulty": "Easy",
+      "task": "Return mentor_id,subject_code,site_code triples compatible with all three pair relations. Order by all three columns.",
+      "schema_sql": "CREATE TABLE mentor_subject(mentor_id INT NOT NULL,subject_code VARCHAR(5) NOT NULL,PRIMARY KEY(mentor_id,subject_code)); CREATE TABLE mentor_site(mentor_id INT NOT NULL,site_code VARCHAR(5) NOT NULL,PRIMARY KEY(mentor_id,site_code)); CREATE TABLE subject_site(subject_code VARCHAR(5) NOT NULL,site_code VARCHAR(5) NOT NULL,PRIMARY KEY(subject_code,site_code)); CREATE TABLE authorized_sessions(mentor_id INT NOT NULL,subject_code VARCHAR(5) NOT NULL,site_code VARCHAR(5) NOT NULL,PRIMARY KEY(mentor_id,subject_code,site_code));",
+      "seed_sql": "INSERT INTO mentor_subject VALUES (1,'T1'),(1,'T2'),(2,'T1'); INSERT INTO mentor_site VALUES (1,'S1'),(1,'S2'),(2,'S2'); INSERT INTO subject_site VALUES ('T1','S1'),('T1','S2'),('T2','S2'); INSERT INTO authorized_sessions VALUES (1,'T1','S1'),(1,'T2','S2'),(2,'T1','S2');",
+      "solution_sql": "SELECT ms.mentor_id,ms.subject_code,mt.site_code FROM mentor_subject AS ms JOIN mentor_site AS mt ON mt.mentor_id=ms.mentor_id JOIN subject_site AS st ON st.subject_code=ms.subject_code AND st.site_code=mt.site_code ORDER BY ms.mentor_id,ms.subject_code,mt.site_code;",
+      "expected": "mentor_id\tsubject_code\tsite_code\n1\tT1\tS1\n1\tT1\tS2\n1\tT2\tS2\n2\tT1\tS2",
+      "validation_cases": [
+        {
+          "seed_sql": "",
+          "expected": ""
+        }
+      ],
+      "ordering": "Order by keys explicitly stated in the task.",
+      "constraints": [
+        "Use supplied synthetic data.",
+        "Return only requested columns."
+      ],
+      "edge_cases": [
+        "Three pair witnesses can come from different original triples"
+      ],
+      "hints": [
+        "Join all shared pair attributes explicitly."
+      ],
+      "explanation": "Join all shared pair attributes explicitly."
+    },
+    {
+      "id": "cx-5nf-spurious-triple-witness",
+      "slug": "5nf-spurious-triple-witness",
+      "title": "Detect reconstructed triples lacking approval",
+      "difficulty": "Medium",
+      "task": "Return pair-compatible triples absent from authorized_sessions, ordered by mentor_id,subject_code,site_code. Do not authorize or mutate them.",
+      "schema_sql": "CREATE TABLE mentor_subject(mentor_id INT NOT NULL,subject_code VARCHAR(5) NOT NULL,PRIMARY KEY(mentor_id,subject_code)); CREATE TABLE mentor_site(mentor_id INT NOT NULL,site_code VARCHAR(5) NOT NULL,PRIMARY KEY(mentor_id,site_code)); CREATE TABLE subject_site(subject_code VARCHAR(5) NOT NULL,site_code VARCHAR(5) NOT NULL,PRIMARY KEY(subject_code,site_code)); CREATE TABLE authorized_sessions(mentor_id INT NOT NULL,subject_code VARCHAR(5) NOT NULL,site_code VARCHAR(5) NOT NULL,PRIMARY KEY(mentor_id,subject_code,site_code));",
+      "seed_sql": "INSERT INTO mentor_subject VALUES (1,'T1'),(1,'T2'),(2,'T1'); INSERT INTO mentor_site VALUES (1,'S1'),(1,'S2'),(2,'S2'); INSERT INTO subject_site VALUES ('T1','S1'),('T1','S2'),('T2','S2'); INSERT INTO authorized_sessions VALUES (1,'T1','S1'),(1,'T2','S2'),(2,'T1','S2');",
+      "solution_sql": "SELECT ms.mentor_id,ms.subject_code,mt.site_code FROM mentor_subject AS ms JOIN mentor_site AS mt ON mt.mentor_id=ms.mentor_id JOIN subject_site AS st ON st.subject_code=ms.subject_code AND st.site_code=mt.site_code WHERE NOT EXISTS (SELECT 1 FROM authorized_sessions AS a WHERE a.mentor_id=ms.mentor_id AND a.subject_code=ms.subject_code AND a.site_code=mt.site_code) ORDER BY ms.mentor_id,ms.subject_code,mt.site_code;",
+      "expected": "mentor_id\tsubject_code\tsite_code\n1\tT1\tS2",
+      "validation_cases": [
+        {
+          "seed_sql": "",
+          "expected": ""
+        }
+      ],
+      "ordering": "Order by keys explicitly stated in the task.",
+      "constraints": [
+        "Use supplied synthetic data.",
+        "Return only requested columns."
+      ],
+      "edge_cases": [
+        "Distinct spurious tuple survives DISTINCT"
+      ],
+      "hints": [
+        "Compare reconstruction against the independently stored triple facts."
+      ],
+      "explanation": "Compare reconstruction against the independently stored triple facts."
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-21-5nf-1",
+      "test_id": "pt-dbms-sql-21-5nf",
+      "question_text": "What does 5NF (Project-Join Normal Form) specifically require beyond 4NF?",
+      "options": [
+        "That every attribute be numeric",
+        "That the relation have no non-trivial join dependency that isn't already implied by its candidate keys — it cannot require three or more relations rejoined to reconstruct it losslessly, beyond what keys already guarantee",
+        "That every table have exactly three columns",
+        "That all foreign keys be nullable"
+      ],
+      "correct_index": 1,
+      "explanation": "5NF's defining concern is join dependency: whether a relation must be split into three-plus pieces (not just two) to eliminate redundancy without losing information, beyond what candidate keys already imply.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-21-5nf-2",
+      "test_id": "pt-dbms-sql-21-5nf",
+      "question_text": "How commonly do real-world production schemas encounter a genuine 5NF violation, according to standard practice?",
+      "options": [
+        "Extremely commonly — nearly every schema needs a 5NF pass",
+        "Very rarely — 5NF issues require a specific irreducible three-way interdependency that most everyday schemas never produce",
+        "Only in schemas without foreign keys",
+        "5NF violations are more common than 1NF violations"
+      ],
+      "correct_index": 1,
+      "explanation": "5NF is the most advanced and least frequently needed normal form; genuine irreducible three-way join dependencies are uncommon in typical business schemas.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-21-5nf-3",
+      "test_id": "pt-dbms-sql-21-5nf",
+      "question_text": "In the Capability(InstructorID, CourseID, Classroom) example, what would indicate the relation does NOT actually need a full 5NF three-way decomposition?",
+      "options": [
+        "If the table has fewer than 10 rows",
+        "If two of the pairwise relationships (e.g., 'instructor teaches course' and 'course meets in classroom') already fully determine the third, valid triples can be reconstructed from just a two-way decomposition, meaning there's no genuine irreducible join dependency",
+        "If InstructorID is a foreign key",
+        "If Classroom values are alphabetically sorted"
+      ],
+      "correct_index": 1,
+      "explanation": "A real 5NF/join-dependency case specifically requires that NO combination of two smaller relations can reconstruct the valid data — if two pairwise facts suffice, it's not a genuine 5NF situation.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-21-5nf-4",
+      "test_id": "pt-dbms-sql-21-5nf",
+      "question_text": "What is a join dependency, in plain terms?",
+      "options": [
+        "A rule that a table must always have a primary key",
+        "A property where a relation can be losslessly split into three or more smaller relations such that rejoining all of them exactly reconstructs the original, with no smaller (two-way) split able to do so",
+        "A constraint requiring all joins to use INNER JOIN syntax",
+        "A dependency between two tables linked by a single foreign key"
+      ],
+      "correct_index": 1,
+      "explanation": "Join dependency is specifically about needing three-plus pieces (not fewer) rejoined to reconstruct the data losslessly — this is exactly what 5NF checks for and eliminates when not implied by keys.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-21-5nf-5",
+      "test_id": "pt-dbms-sql-21-5nf",
+      "question_text": "Should a standard three-column junction table like Enrollment(StudentID, CourseID, Semester), modeling a normal ternary relationship, be assumed to have a hidden 5NF join dependency?",
+      "options": [
+        "Yes, all three-column tables automatically violate 5NF",
+        "No — most such junction/bridge tables model a straightforward relationship with no hidden join dependency at all; genuine 5NF cases are a distinct, much rarer situation",
+        "Yes, but only if StudentID is the primary key",
+        "No, because 5NF never applies to tables with a composite key"
+      ],
+      "correct_index": 1,
+      "explanation": "A simple ternary relationship table is normal and typically fine; conflating it with a genuine (and rare) join-dependency violation is a common misunderstanding of 5NF.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-21-5nf-6",
+      "test_id": "pt-dbms-sql-21-5nf",
+      "question_text": "What is the practical, hands-on way to test whether a suspected three-way relationship genuinely needs a 5NF-style decomposition?",
+      "options": [
+        "Count the number of columns in the table",
+        "Decompose it into candidate smaller relations and rejoin them, verifying no spurious extra rows appear and no valid combinations are lost",
+        "Check whether the table has a foreign key",
+        "Assume every ternary relationship always needs a 5NF fix"
+      ],
+      "correct_index": 1,
+      "explanation": "Since 5NF cases are subtle and rare, the practical validation is empirical: decompose, rejoin, and confirm the join reconstructs exactly the original valid data with nothing spurious or missing.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-21-5nf-7",
+      "test_id": "pt-dbms-sql-21-5nf",
+      "question_text": "Which best describes who, in practice, most needs to deeply master 5NF as a working, everyday design tool?",
+      "options": [
+        "Every application developer writing basic CRUD schemas",
+        "Primarily those working on schema-normalization theory or academic/algorithmic database design, rather than typical day-to-day application schema design",
+        "Only mobile app developers",
+        "Anyone who uses a composite primary key"
+      ],
+      "correct_index": 1,
+      "explanation": "5NF is largely a theoretical completeness tool; most working engineers rarely, if ever, need to deliberately design for it in ordinary application schemas.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-21-5nf-8",
+      "test_id": "pt-dbms-sql-21-5nf",
+      "question_text": "What is the relationship between 5NF and the normal forms preceding it (1NF through 4NF) in terms of strictness?",
+      "options": [
+        "5NF is less strict than 4NF",
+        "5NF is at least as strict as 4NF — every 5NF relation is also in 4NF, BCNF, 3NF, 2NF, and 1NF, but not every 4NF relation is in 5NF",
+        "5NF and 4NF are unrelated, independent conditions",
+        "5NF only applies to relations that are NOT in 1NF"
+      ],
+      "correct_index": 1,
+      "explanation": "Normal forms form a strictly increasing hierarchy of requirements; 5NF sits at the top, requiring everything the lower forms require plus freedom from non-trivial join dependencies.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "/root/worker_2",
+    "independent_review": "passed",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "authored; independent review pending",
+    "canonical_answer_indices_preserved": true,
+    "editorial_record": "Original prose and assessments. Seed snapshots and canonical answer indices retained; external originality clearance pending.",
+    "independent_reviewer": "/root",
+    "independent_review_scope": "Full notes,20 MCQs/options/reasoning,two read-only exercises with four predicted outputs and witness diagram reviewed. Three original triples reconstruct exactly one additional triple; pairwise approval policy versus independently authorized ternary facts distinguished. Candidate-key join-dependency definition, SQL multiplicity and sample-proof limits correct. Replaced nonexistent lossless-decomposition prerequisite target; portable fixture cases passed. Exact MySQL/provider, browser and release validation remain separate."
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-21-5nf",
+    "original_note_sha256": "275e32d864d224e349b2e94da456b6c6445761acf828e93252ee7ace577f544f",
+    "status": "drafted; not included in prepared paired migrations"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Three pair witnesses can invent a new triple",
+      "description": "M1-T1-S2 is reconstructed even though no original triple asserted it.",
+      "columns": [
+        "Required pair",
+        "Witness original triple"
+      ],
+      "rows": [
+        [
+          "M1-T1",
+          "M1-T1-S1"
+        ],
+        [
+          "M1-S2",
+          "M1-T2-S2"
+        ],
+        [
+          "T1-S2",
+          "M2-T1-S2"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "technical_review": "coordinator independent manual review passed",
+    "browser_rendering": "unverified",
+    "independent_review": "passed",
+    "server_rendering": "passed",
+    "server_rendering_evidence": "2026-10-29 full Vitest:1310 passed/12 skipped; actual LessonBlock/TopicDiagrams render over230 packages. Browser visual QA remains unverified."
+  },
+  "authoring_status": "drafted; verification pending",
+  "sql_verification": {
+    "scope": "not executed; exact MySQL/provider execution pending",
+    "all_passed": false,
+    "cases": []
+  }
+}

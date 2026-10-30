@@ -1,0 +1,666 @@
+{
+  "source_ref": "chapter-10-sql-constraints/check",
+  "slug": "check",
+  "title": "CHECK",
+  "description": "Express row-domain predicates with explicit UNKNOWN handling, distinguish presence from comparison, and diagnose legacy invalid salaries without inventing repairs or cross-table guarantees.",
+  "dialect": "MySQL 8.4",
+  "notes": "## A check expresses an accepted row condition\n\nA CHECK constraint states a Boolean condition that accepted table state must satisfy under the engine's enforcement semantics. A campus activity might require a supplied age to be at least eighteen, or a booking might require check_out to be later than check_in. These are domain rules over the row's properties, distinct from uniqueness and parent-reference rules.\n\nBegin by writing the rule in ordinary language and deciding whether missing properties are permitted. The condition age >= 18 expresses a comparison for supplied ages, but it does not alone make age mandatory. A precise explanation separates the accepted value range from the presence requirement instead of letting a familiar predicate conceal that difference.\n\n## FALSE rejects a row, while UNKNOWN matters\n\nSQL predicates can produce TRUE, FALSE or UNKNOWN. For an ordinary enforced CHECK, a definite FALSE violates the rule, while an UNKNOWN result does not by itself reject the row. A missing age makes age >= 18 UNKNOWN rather than TRUE, so an optional age can remain absent under that declaration. This is not evidence that the database verified adulthood.\n\nIf age must be recorded and at least eighteen, combine an appropriate NOT NULL rule with the comparison. These constraints express different requirements and make the final accepted domain readable. Replacing missing values with zero merely to force a comparison would alter the data meaning and is not a substitute for a deliberate presence policy.\n\n```sql\nCREATE TABLE activity_claims (\n  claim_id INT PRIMARY KEY,\n  age INT NULL,\n  CONSTRAINT chk_supplied_age CHECK (age >= 18)\n);\n```\n\n## Boundaries deserve exact comparison operators\n\nAt least eighteen includes eighteen, so >= is appropriate. More than eighteen excludes eighteen, so > answers a different question. Similarly, check_out > check_in rejects equal endpoints, while >= permits a zero-length interval. Choose the operator from the accepted domain rather than copy a nearby sample without reading the wording.\n\nUse a value exactly at the boundary and one just outside it. For an integer age rule, eighteen and seventeen distinguish inclusive acceptance from rejection clearly. For an optional property, also include NULL to expose UNKNOWN handling. A good set of fixtures tests these different semantic states instead of adding several redundant ordinary valid ages.\n\n## Column and table placement have product rules\n\nA single-column rule can often appear near the column definition, while a table-level rule can express relationships among several row properties. In the illustrated MySQL form, a column CHECK has restrictions on its referenced roles, so a rule involving both booking endpoints belongs in a supported table-level declaration. State that dialect scope rather than claim every engine enforces the same placement restriction.\n\nPostgreSQL permits its own forms and expression rules. The broader lesson is that constraint placement should be readable and valid for the actual target. The condition's intended meaning does not override parser restrictions, and a legal declaration on another engine is not proof that the exact MySQL version accepts the same form.\n\n## Check enforcement is versioned behaviour\n\nMySQL versions before 8.0.16 could accept CHECK syntax without enforcing it as the modern feature does. A successful parse in such a setup was not evidence that invalid values would be rejected. Version and engine verification therefore matter when reviewing old tutorials or a database whose definitions look stricter than the data it has accepted.\n\nThe target for this content is modern MySQL-style enforced checks, with local execution recorded on MariaDB separately. An accepted negative age would need investigation of the actual definition, settings and target rather than an assumption that the sample secretly proves the rule correct. A rejected invalid write provides meaningful behaviour evidence for its precise environment and case.\n\n## Name the rule by its actual purpose\n\nA descriptive name such as chk_supplied_age or chk_interval_order helps connect an error to the intended invariant. It does not change the predicate's truth table. Naming a rule chk_required_age does not make age required if the expression still permits UNKNOWN. The definition and name should communicate the same contract rather than rely on the name to supply missing semantics.\n\nConstraint catalog and removal syntax differ between products. Inspect the actual supported definition when maintaining a rule. Removing a check changes accepted future writes even when existing rows stay the same. That can affect application assumptions, so do not treat constraint removal as a harmless response to a rejected import without reviewing the intended domain.\n\n## Existing data must be compatible with a new enforced rule\n\nAdding an enforced positive-salary check to a table containing salary -100 encounters an incompatible existing row under normal validation. The conflict belongs to the accepted domain and repair policy. A migration should not silently delete the employee or replace the amount with an invented positive number simply to make the ALTER statement succeed.\n\nA diagnostic query can identify the known nonpositive values for review. That is different from adding the check, repairing facts or making salary required. A NULL salary is not selected by salary <= 0, and it also produces UNKNOWN for salary > 0. If missing salaries are invalid under the real policy, that needs a separate stated presence requirement and its own diagnostic or enforcement step.\n\n## The retained salary task is deliberately diagnostic\n\nThe original exercise supplies employees with several departments and a negative sample salary. It asks for id, name and salary when the supplied salary is zero or negative. Its identity, schema and sample data are preserved. The query must not exclude an invalid salary because the employee's department is absent, since department is not part of the stated predicate.\n\nThe hidden sample includes zero so the <= boundary matters. Additional cases include an unknown salary and multiple nonpositive values. The expected result reports only known violations of the positive comparison. It does not claim missing salary is valid for every business model; it simply stays faithful to the requested diagnostic population.\n\n## Row checks are not general cross-table assertions\n\nA simple CHECK should not be presented as a portable subquery-based assertion over another table. Products restrict such expressions, and a row-local predicate cannot automatically protect every concurrent change to an external relation. If the requirement is a parent reference, a supported foreign key is the appropriate mechanism rather than a hand-written cross-table existence check inside an unsupported expression.\n\nOther cross-row or cross-table invariants can need a different supported design with careful concurrency handling. A trigger is not a universal magic replacement: its timing, reads and concurrent writers must still preserve the intended rule. Explain the actual invariant before selecting a mechanism, instead of telling students every unsupported CHECK can safely be replaced with one unreviewed trigger.\n\n## Computation and acceptance are different roles\n\nA generated column can calculate a row expression, while a CHECK can reject states outside a defined condition. One does not automatically replace the other. A generated line_total can correctly multiply a negative quantity by a price; if negative quantity is invalid, an explicit accepted-domain rule is still needed. Likewise, a check does not produce a missing derived total for the application.\n\nDEFAULT, NOT NULL, UNIQUE, FOREIGN KEY and CHECK each contribute different properties. A robust table can combine them deliberately, but adding every possible declaration is not automatically better. Each must reflect a real contract and have a clear explanation of accepted and rejected states. Unstated constraints can reject legitimate data just as missing constraints can admit invalid facts.\n\n## Exercise UNKNOWN and rejected-domain states\n\nThe introductory exercise defines an optional supplied-age check and copies only compatible fixture values. Eighteen is accepted, seventeen is rejected separately, and NULL remains accepted because the task explicitly leaves age optional. A distinct primary key preserves claim identity without implying that every claim has verified demographic evidence.\n\nThe retained medium exercise stays read-only and reports nonpositive salaries in identifier order. Empty input and unknown salary distinguish no observed violation from an invented value. These two tasks teach both enforcing a row predicate and diagnosing legacy state, without merging them into an assessment that silently changes the original dataset or adds unrelated filters.\n\n## Attach validity claims to the actual evidence\n\nA useful truth-table illustration shows TRUE, FALSE and UNKNOWN outcomes alongside acceptance under the stated optional check. The notes, MCQs and expected results should agree on that distinction. Then a student can explain why a NULL row was permitted without claiming the comparison returned TRUE or the underlying fact was verified.\n\nRecorded MariaDB compatibility execution verifies the supplied checks and diagnostic results. Exact MySQL/provider execution, historical-version behaviour, unsupported cross-table forms and production validation concurrency remain separately unverified. The content package and prepared migrations are locally reviewable artifacts, not evidence that instructional CHECK statements were applied to application tables or that every business-quality invariant has been completed.\n",
+  "references": [
+    {
+      "title": "MySQL 8.4 CHECK constraints",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/create-table-check-constraints.html"
+    },
+    {
+      "title": "PostgreSQL 18 Constraints",
+      "url": "https://www.postgresql.org/docs/18/ddl-constraints.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-10-check",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-10-check-1",
+          "test_id": "pt-dbms-sql-10-check",
+          "question_text": "What happens to a row where a CHECK constraint's boolean expression evaluates to UNKNOWN (e.g., due to a NULL operand)?",
+          "options": [
+            "The row is rejected, same as FALSE",
+            "The row is accepted, since only a definite FALSE result blocks a row",
+            "The row is accepted but flagged with a warning",
+            "The behavior is undefined and engine-specific"
+          ],
+          "correct_index": 1,
+          "explanation": "CHECK constraints use three-valued logic: only a definite FALSE evaluation rejects the row; UNKNOWN (typically from NULL) is treated as passing.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-10-check-2",
+          "test_id": "pt-dbms-sql-10-check",
+          "question_text": "Before which MySQL version did CHECK constraints parse successfully but get silently ignored at runtime?",
+          "options": [
+            "MySQL 5.0",
+            "MySQL 8.0.16",
+            "MySQL 8.0.30",
+            "MySQL never had this issue"
+          ],
+          "correct_index": 1,
+          "explanation": "MySQL versions prior to 8.0.16 (released 2019) accepted CHECK syntax but did not enforce it; 8.0.16 onward actually enforces CHECK constraints.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-10-check-3",
+          "test_id": "pt-dbms-sql-10-check",
+          "question_text": "Which column declaration checks that a supplied integer age is at least 18 without itself requiring presence?",
+          "options": [
+            "CHECK age >= 18",
+            "age INT CHECK (age >= 18)",
+            "age INT DEFAULT (age >= 18)",
+            "CONSTRAINT age >= 18"
+          ],
+          "correct_index": 1,
+          "explanation": "A separate NOT NULL rule is needed when missing age is forbidden.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-10-check-4",
+          "test_id": "pt-dbms-sql-10-check",
+          "question_text": "Why use a table-level MySQL CHECK for a relation between check_out and check_in?",
+          "options": [
+            "Because DATE columns cannot have column-level CHECK constraints",
+            "The supported table-level form can express the required multi-column condition",
+            "Because table-level CHECK constraints execute faster",
+            "Because MySQL forbids column-level CHECK entirely"
+          ],
+          "correct_index": 1,
+          "explanation": "Placement restrictions are product specific; do not generalize this to every engine.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-10-check-5",
+          "test_id": "pt-dbms-sql-10-check",
+          "question_text": "What happens when you run ALTER TABLE employees ADD CONSTRAINT chk_salary_positive CHECK (salary > 0); on a table that already has a row with salary = -100?",
+          "options": [
+            "The constraint is added and applies only to future rows",
+            "The ALTER TABLE statement fails because the existing row violates the new constraint",
+            "MySQL fixes the row automatically to salary = 0",
+            "PostgreSQL ignores the violation silently"
+          ],
+          "correct_index": 1,
+          "explanation": "Adding a CHECK constraint validates all existing rows; any row violating the new condition causes the ALTER TABLE to fail in standard-conforming engines.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-10-check-6",
+          "test_id": "pt-dbms-sql-10-check",
+          "question_text": "What should replace an unsupported cross-table CHECK proposal?",
+          "options": [
+            "Yes, in all major SQL engines",
+            "A suitable supported integrity design, such as a foreign key for references, with concurrency reviewed",
+            "Yes, but only in MySQL",
+            "Yes, but only for foreign key columns"
+          ],
+          "correct_index": 1,
+          "explanation": "A trigger is not a universal automatic solution for every cross-table invariant.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-10-check-7",
+          "test_id": "pt-dbms-sql-10-check",
+          "question_text": "Which of these is functionally redundant with a plain NOT NULL constraint, though technically valid as a CHECK?",
+          "options": [
+            "CHECK (salary > 0)",
+            "CHECK (col IS NOT NULL)",
+            "CHECK (age >= 18)",
+            "CHECK (check_out > check_in)"
+          ],
+          "correct_index": 1,
+          "explanation": "CHECK (col IS NOT NULL) duplicates what a dedicated NOT NULL constraint already does more directly and efficiently.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-10-check-8",
+          "test_id": "pt-dbms-sql-10-check",
+          "question_text": "A developer on an old MySQL 5.7 database declares CHECK (price >= 0) and then successfully inserts a row with price = -50 with no error. What is the most likely explanation?",
+          "options": [
+            "MySQL 5.7 rounds negative prices to zero automatically",
+            "MySQL 5.7 predates CHECK enforcement, so the constraint was parsed but never enforced",
+            "The column must not actually be of a numeric type",
+            "The insert used a different connection without constraints enabled"
+          ],
+          "correct_index": 1,
+          "explanation": "This is the well-known historical MySQL gotcha: versions before 8.0.16 accepted CHECK syntax without error but never enforced it at runtime.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-10-check-new-9",
+          "test_id": "pt-dbms-sql-10-check",
+          "question_text": "Does age >= 18 become TRUE for NULL?",
+          "options": [
+            "Yes",
+            "No; it is UNKNOWN",
+            "It is always FALSE",
+            "It becomes age zero"
+          ],
+          "correct_index": 1,
+          "explanation": "Check acceptance of UNKNOWN is not verification of the comparison.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-10-check-new-10",
+          "test_id": "pt-dbms-sql-10-check",
+          "question_text": "Which rule also requires age to be recorded?",
+          "options": [
+            "Only renaming the check",
+            "ORDER BY age",
+            "An appropriate NOT NULL constraint",
+            "A nullable DEFAULT alone"
+          ],
+          "correct_index": 2,
+          "explanation": "Presence and range are independent requirements.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-10-check-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-10-check-application-new-1",
+          "test_id": "pt-dbms-sql-10-check-application",
+          "question_text": "Which value distinguishes at least 18 from more than 18?",
+          "options": [
+            "25",
+            "40",
+            "18",
+            "NULL alone"
+          ],
+          "correct_index": 2,
+          "explanation": "The exact boundary separates >= from >.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-10-check-application-new-2",
+          "test_id": "pt-dbms-sql-10-check-application",
+          "question_text": "Does a correct generated total automatically reject negative quantity?",
+          "options": [
+            "Yes",
+            "Only if STORED",
+            "Only if it has an alias",
+            "No"
+          ],
+          "correct_index": 3,
+          "explanation": "Calculation and accepted-domain constraints differ.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-10-check-application-new-3",
+          "test_id": "pt-dbms-sql-10-check-application",
+          "question_text": "Why test an invalid write after creating a check?",
+          "options": [
+            "Parser acceptance alone does not prove enforcement",
+            "To remove the constraint",
+            "To benchmark production locks",
+            "To grant access"
+          ],
+          "correct_index": 0,
+          "explanation": "Versions and settings affect actual behaviour.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-10-check-application-new-4",
+          "test_id": "pt-dbms-sql-10-check-application",
+          "question_text": "Does the salary diagnostic add an enforcement rule?",
+          "options": [
+            "Yes",
+            "No",
+            "Only with TEXT",
+            "Only if ordered"
+          ],
+          "correct_index": 1,
+          "explanation": "A SELECT observes, rather than modifies, the accepted-state boundary.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-10-check-application-new-5",
+          "test_id": "pt-dbms-sql-10-check-application",
+          "question_text": "Why is NULL salary not in salary <= 0 results?",
+          "options": [
+            "It is automatically positive",
+            "It was converted to zero",
+            "The comparison is UNKNOWN rather than TRUE",
+            "It is always deleted"
+          ],
+          "correct_index": 2,
+          "explanation": "The diagnostic reports known nonpositive values only.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-10-check-application-new-6",
+          "test_id": "pt-dbms-sql-10-check-application",
+          "question_text": "Can naming a check required_age make it reject NULL?",
+          "options": [
+            "Yes",
+            "Only with a short label",
+            "Only on an empty table",
+            "No"
+          ],
+          "correct_index": 3,
+          "explanation": "Names do not alter predicate semantics.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-10-check-application-new-7",
+          "test_id": "pt-dbms-sql-10-check-application",
+          "question_text": "What must existing negative salaries receive before valid enforcement?",
+          "options": [
+            "An accepted domain decision or repair, without invented facts",
+            "Silent arbitrary replacement",
+            "Unconditional employee deletion",
+            "Only a query alias"
+          ],
+          "correct_index": 0,
+          "explanation": "DDL success does not justify fabricating data.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-10-check-application-new-8",
+          "test_id": "pt-dbms-sql-10-check-application",
+          "question_text": "Why is a foreign key useful for a parent-reference invariant?",
+          "options": [
+            "Every CHECK can use subqueries identically",
+            "It is a supported trusted-boundary reference mechanism",
+            "It invents absent parents",
+            "It removes all other constraints"
+          ],
+          "correct_index": 1,
+          "explanation": "Choose a mechanism matching the actual invariant.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-10-check-application-new-9",
+          "test_id": "pt-dbms-sql-10-check-application",
+          "question_text": "Which old MySQL boundary is relevant to enforced CHECK support?",
+          "options": [
+            "Every 5.7 version enforced them",
+            "Only version 9 introduced SQL",
+            "8.0.16",
+            "No version distinction exists"
+          ],
+          "correct_index": 2,
+          "explanation": "Historical parsing was not equivalent to modern enforcement.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-10-check-application-new-10",
+          "test_id": "pt-dbms-sql-10-check-application",
+          "question_text": "What does these tests’ success not establish?",
+          "options": [
+            "The supplied check rejection",
+            "The retained diagnostic output",
+            "The recorded NULL acceptance",
+            "Every cross-table invariant and provider behaviour"
+          ],
+          "correct_index": 3,
+          "explanation": "Execution evidence has a stated limited scope.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cx-check-optional-age",
+      "slug": "check-optional-age",
+      "title": "Enforce a supplied-age range while retaining optional absence",
+      "difficulty": "Easy",
+      "task": "Create TEMPORARY activity_claims(claim_id INT PRIMARY KEY,age INT NULL,CHECK(age >= 18)). Copy the compatible claim_input rows and return claim_id,age. NULL is intentionally allowed; do not add NOT NULL or treat it as verified adulthood.",
+      "schema_sql": "CREATE TABLE claim_input (claim_id INT PRIMARY KEY,age INT NULL);",
+      "seed_sql": "INSERT INTO claim_input VALUES (1,18),(2,NULL),(3,22);",
+      "expected": "claim_id\tage\n1\t18\n2\tNULL\n3\t22",
+      "ordering": "Ascending claim_id.",
+      "constraints": [
+        "Optional source age; supplied values must satisfy the comparison.",
+        "Positive fixtures contain valid ages or NULL."
+      ],
+      "edge_cases": [
+        "The inclusive boundary 18 is accepted.",
+        "NULL produces UNKNOWN and remains accepted."
+      ],
+      "hints": [
+        "Declare the intended comparison without changing optionality.",
+        "Copy the supplied values without replacement."
+      ],
+      "solution_sql": "CREATE TEMPORARY TABLE activity_claims (claim_id INT PRIMARY KEY,age INT NULL,CONSTRAINT chk_supplied_age CHECK(age>=18)); INSERT INTO activity_claims SELECT claim_id,age FROM claim_input; SELECT claim_id,age FROM activity_claims ORDER BY claim_id;",
+      "explanation": "The constraint rejects FALSE comparison outcomes while the explicitly optional NULL state remains permitted.",
+      "validation_cases": [
+        {
+          "seed_sql": "",
+          "expected": ""
+        },
+        {
+          "seed_sql": "INSERT INTO claim_input VALUES (8,NULL),(7,18);",
+          "expected": "claim_id\tage\n7\t18\n8\tNULL"
+        }
+      ],
+      "negative_validation_cases": [
+        {
+          "sql": "INSERT INTO activity_claims VALUES (99,17);",
+          "error_codes": [
+            3819,
+            4025
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cp-dbms-sql-employees-with-an-invalid-salary",
+      "slug": "employees-with-an-invalid-salary",
+      "title": "Employees With an Invalid Salary",
+      "difficulty": "Medium",
+      "existing_problem": true,
+      "original_description_md5": "4125f2c5f0fc093cdac6e884071af100",
+      "original_check_sql": "",
+      "check_sql": "",
+      "task": "Return id,name,salary for employees with a supplied salary <= 0, ordered by id. This retained read-only diagnostic does not add a CHECK or repair values. NULL salary is unknown and is not selected by the nonpositive comparison; department is unrelated to the predicate.",
+      "schema_sql": "CREATE TABLE employees (\n  id INTEGER PRIMARY KEY,\n  name TEXT NOT NULL,\n  department TEXT,\n  salary INTEGER\n);",
+      "seed_sql": "INSERT INTO employees (id, name, department, salary) VALUES\n(1, 'Asha', 'Engineering', 85000),\n(2, 'Rohan', NULL, 62000),\n(3, 'Neha', 'Sales', -500),\n(4, 'Vikram', 'Sales', 71000);",
+      "expected": "id\tname\tsalary\n3\tNeha\t-500",
+      "ordering": "Ascending id.",
+      "constraints": [
+        "Original identity, schema, sample rows and empty trailing checker retained.",
+        "Select known nonpositive values only."
+      ],
+      "edge_cases": [
+        "Zero is included.",
+        "NULL salary is not classified by the comparison."
+      ],
+      "hints": [
+        "Use the inclusive nonpositive predicate.",
+        "Keep unrelated department conditions out of the query."
+      ],
+      "solution_sql": "SELECT id,name,salary FROM employees WHERE salary<=0 ORDER BY id;",
+      "explanation": "The diagnostic identifies known violations of the positive comparison without claiming missing salary was verified or modifying legacy facts.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO employees (id, name, department, salary) VALUES\n(1, 'Zara', 'Finance', 50000),\n(2, 'Omar', NULL, 60000),\n(3, 'Leo', 'Finance', 0);",
+          "expected": "id\tname\tsalary\n3\tLeo\t0"
+        },
+        {
+          "seed_sql": "INSERT INTO employees VALUES (1,'Unknown','Arts',NULL),(2,'Zero',NULL,0),(3,'Negative','Arts',-1);",
+          "expected": "id\tname\tsalary\n2\tZero\t0\n3\tNegative\t-1"
+        },
+        {
+          "seed_sql": "",
+          "expected": ""
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-10-check-1",
+      "test_id": "pt-dbms-sql-10-check",
+      "question_text": "What happens to a row where a CHECK constraint's boolean expression evaluates to UNKNOWN (e.g., due to a NULL operand)?",
+      "options": [
+        "The row is rejected, same as FALSE",
+        "The row is accepted, since only a definite FALSE result blocks a row",
+        "The row is accepted but flagged with a warning",
+        "The behavior is undefined and engine-specific"
+      ],
+      "correct_index": 1,
+      "explanation": "CHECK constraints use three-valued logic: only a definite FALSE evaluation rejects the row; UNKNOWN (typically from NULL) is treated as passing.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-10-check-2",
+      "test_id": "pt-dbms-sql-10-check",
+      "question_text": "Before which MySQL version did CHECK constraints parse successfully but get silently ignored at runtime?",
+      "options": [
+        "MySQL 5.0",
+        "MySQL 8.0.16",
+        "MySQL 8.0.30",
+        "MySQL never had this issue"
+      ],
+      "correct_index": 1,
+      "explanation": "MySQL versions prior to 8.0.16 (released 2019) accepted CHECK syntax but did not enforce it; 8.0.16 onward actually enforces CHECK constraints.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-10-check-3",
+      "test_id": "pt-dbms-sql-10-check",
+      "question_text": "Which CHECK constraint declaration correctly enforces that an employee's age must be at least 18?",
+      "options": [
+        "CHECK age >= 18",
+        "age INT CHECK (age >= 18)",
+        "age INT DEFAULT (age >= 18)",
+        "CONSTRAINT age >= 18"
+      ],
+      "correct_index": 1,
+      "explanation": "The correct column-level syntax wraps the boolean expression in CHECK(...) attached to the column definition.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-10-check-4",
+      "test_id": "pt-dbms-sql-10-check",
+      "question_text": "Why must CHECK (check_out > check_in) be written as a table-level constraint rather than a column-level one?",
+      "options": [
+        "Because DATE columns cannot have column-level CHECK constraints",
+        "Because the expression references two columns, and column-level CHECK can only attach to a single column",
+        "Because table-level CHECK constraints execute faster",
+        "Because MySQL forbids column-level CHECK entirely"
+      ],
+      "correct_index": 1,
+      "explanation": "A CHECK expression spanning multiple columns cannot be inlined onto just one of them; it requires the table-level CHECK clause.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-10-check-5",
+      "test_id": "pt-dbms-sql-10-check",
+      "question_text": "What happens when you run ALTER TABLE employees ADD CONSTRAINT chk_salary_positive CHECK (salary > 0); on a table that already has a row with salary = -100?",
+      "options": [
+        "The constraint is added and applies only to future rows",
+        "The ALTER TABLE statement fails because the existing row violates the new constraint",
+        "MySQL fixes the row automatically to salary = 0",
+        "PostgreSQL ignores the violation silently"
+      ],
+      "correct_index": 1,
+      "explanation": "Adding a CHECK constraint validates all existing rows; any row violating the new condition causes the ALTER TABLE to fail in standard-conforming engines.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-10-check-6",
+      "test_id": "pt-dbms-sql-10-check",
+      "question_text": "Can a standard CHECK constraint reference a column in a different table via a subquery?",
+      "options": [
+        "Yes, in all major SQL engines",
+        "No, in most engines CHECK constraints cannot reference other tables; a trigger is needed for that",
+        "Yes, but only in MySQL",
+        "Yes, but only for foreign key columns"
+      ],
+      "correct_index": 1,
+      "explanation": "CHECK constraints are generally restricted to expressions over columns in the same row/table; cross-table validation logic requires a trigger instead.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-10-check-7",
+      "test_id": "pt-dbms-sql-10-check",
+      "question_text": "Which of these is functionally redundant with a plain NOT NULL constraint, though technically valid as a CHECK?",
+      "options": [
+        "CHECK (salary > 0)",
+        "CHECK (col IS NOT NULL)",
+        "CHECK (age >= 18)",
+        "CHECK (check_out > check_in)"
+      ],
+      "correct_index": 1,
+      "explanation": "CHECK (col IS NOT NULL) duplicates what a dedicated NOT NULL constraint already does more directly and efficiently.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-10-check-8",
+      "test_id": "pt-dbms-sql-10-check",
+      "question_text": "A developer on an old MySQL 5.7 database declares CHECK (price >= 0) and then successfully inserts a row with price = -50 with no error. What is the most likely explanation?",
+      "options": [
+        "MySQL 5.7 rounds negative prices to zero automatically",
+        "MySQL 5.7 predates CHECK enforcement, so the constraint was parsed but never enforced",
+        "The column must not actually be of a numeric type",
+        "The insert used a different connection without constraints enabled"
+      ],
+      "correct_index": 1,
+      "explanation": "This is the well-known historical MySQL gotcha: versions before 8.0.16 accepted CHECK syntax without error but never enforced it at runtime.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "coordinator",
+    "independent_review": "unavailable; no agent tools",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Definitions and examples checked against questions; no plagiarism certification.",
+    "existing_question_corrections": [
+      "tq-dbms-sql-10-check-3",
+      "tq-dbms-sql-10-check-4",
+      "tq-dbms-sql-10-check-6"
+    ],
+    "canonical_answer_indices_preserved": true,
+    "batch_review": {
+      "reviewer": "coordinator",
+      "independent": false,
+      "scope": "This new package: explained definitions and boundaries, retained source question identities/canonical indices, new correct answers and explanations, exercise solutions and recorded fixtures, diagram trace and prepared integration.",
+      "execution_evidence": "Focused MariaDB reference cases and selected actual LessonBlock rendering passed; no browser QA or exact MySQL/provider execution.",
+      "source_preservation": "Original snapshots retained; eight retained exercises across this continuation matched source identity, difficulty, schema, seed and trailing checker.",
+      "limits": "No independent worker available. Output fixtures do not prove arbitrary student submissions used a requested technique. Native PostgreSQL/other-engine concepts remain documented or explicitly mirrored, not verified by MariaDB."
+    }
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-10-check",
+    "original_note_sha256": "fd404fc37781987782535d7f43f5d7e702104bbb298c77b849b740464b3634f0",
+    "status": "paired migration prepared; not applied"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "An optional age CHECK rejects FALSE without turning UNKNOWN into verified truth",
+      "description": "The declared optionality allows the missing marker, while an additional NOT NULL rule would change that accepted state.",
+      "columns": [
+        "Age input",
+        "age >= 18 result",
+        "Accepted by this CHECK?",
+        "Meaning"
+      ],
+      "rows": [
+        [
+          "18",
+          "TRUE",
+          "Yes",
+          "Supplied boundary satisfies comparison"
+        ],
+        [
+          "17",
+          "FALSE",
+          "No",
+          "Known value outside range"
+        ],
+        [
+          "NULL",
+          "UNKNOWN",
+          "Yes",
+          "No verified age comparison"
+        ],
+        [
+          "NULL plus a separate NOT NULL rule",
+          "Presence violation",
+          "No under combined rules",
+          "Mandatory recording is another requirement"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "coordinator checked UNKNOWN acceptance, exact inclusive boundary and independent legacy diagnostic semantics",
+    "server_rendering": "passed",
+    "browser_rendering": "unverified",
+    "independent_review": "unavailable; no agent tools",
+    "server_rendering_evidence": "Selected actual LessonBlock Vitest rendering passed for this batch; no browser QA."
+  },
+  "sql_verification": {
+    "engine": "11.8.6-MariaDB-0+deb13u1 from Debian",
+    "scope": "MariaDB compatibility execution; exact MySQL 8.4/provider execution unverified",
+    "fingerprint": "30c4c7547376373b6ae2533b133e917926cca3a26d3a93e8419e90374596259b",
+    "cases": [
+      {
+        "problem": "check-optional-age",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "check-optional-age",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "check-optional-age",
+        "case": 2,
+        "passed": true
+      },
+      {
+        "problem": "check-optional-age",
+        "negative_case": 0,
+        "error_code": 4025,
+        "passed": true
+      },
+      {
+        "problem": "employees-with-an-invalid-salary",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "employees-with-an-invalid-salary",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "employees-with-an-invalid-salary",
+        "case": 2,
+        "passed": true
+      },
+      {
+        "problem": "employees-with-an-invalid-salary",
+        "case": 3,
+        "passed": true
+      }
+    ],
+    "all_passed": true
+  }
+}

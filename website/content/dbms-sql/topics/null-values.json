@@ -1,0 +1,631 @@
+{
+  "source_ref": "chapter-4-relational-model/null-values",
+  "slug": "null-values",
+  "title": "Null Values",
+  "description": "Model missing information deliberately, distinguish NULL from empty and zero values, and compare optional SQL values with precise semantics.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Missing information needs a meaning\n\nSQL NULL is a marker for absence of an ordinary value. A student's email might be unknown because it has not been supplied. An assessment score might be missing because marking has not finished. In each case, the schema and application should define what the absence means. NULL does not explain its own cause, and a consumer should not invent a reason merely because a cell appears blank.\n\nDifferent causes can matter to users. A missing supervisor identifier might mean the student has not yet been assigned a supervisor, while a missing optional accommodation detail might mean the field does not apply. SQL ordinarily represents both absences with the same NULL marker. If the distinction affects decisions, model an explicit reason or state rather than expecting NULL alone to encode several business meanings.\n\n## NULL differs from familiar placeholder values\n\nZero is a known numeric value. An empty string is a known string value, and the text 'NULL' is a string containing four letters. These values are different from SQL NULL. A student with zero recorded marks has a different fact from a student whose marks are not recorded. Treating the two identically can distort eligibility decisions, averages, and follow-up actions.\n\nAvoid using arbitrary sentinel values such as minus one unless the data contract deliberately reserves and explains them. A sentinel may accidentally enter calculations as an ordinary value. Likewise, replacing a missing email with an empty string discards the distinction between absence and an explicitly supplied empty string. The representation should preserve the distinctions the application actually needs instead of merely making a grid appear complete.\n\n## Ordinary equality does not test absence\n\nSQL comparisons can return TRUE, FALSE, or UNKNOWN. A standard equality comparison involving NULL yields UNKNOWN, including NULL = NULL. The inequality NULL <> NULL is also UNKNOWN, not TRUE. This is why reasoning that two NULLs are simply unequal is misleading. Missing information does not establish either ordinary equality or ordinary inequality through those operators.\n\nWHERE keeps rows whose predicate is TRUE. UNKNOWN rows do not pass, so WHERE email = NULL does not select missing emails. Use email IS NULL for absence and email IS NOT NULL for presence. Those predicates make the intended population explicit. A correctly named report can still be empty for the wrong reason if its filter uses ordinary equality against NULL.\n\n## Read predicates as statements about knowledge\n\nA score greater than fifty is unknown when score is absent. Negating that comparison does not magically establish that the student has a score of fifty or less. UNKNOWN remains UNKNOWN under NOT. A report of missing scores therefore needs its own absence condition rather than relying on the complement of a passing-score condition to include everybody else.\n\nCombining conditions also needs care. A known TRUE alternative can make an OR predicate true even when another alternative is unknown. A known FALSE requirement can make an AND predicate false. Test the intended combinations directly instead of replacing three-valued reasoning with assumptions borrowed from ordinary two-valued Boolean expressions. The result should follow the specified student population, not a convenient interpretation of a blank cell.\n\n## Optionality is separate from the value range\n\nA score domain may permit integers from zero through one hundred, while a separate nullability policy permits absence until marking finishes. NOT NULL makes an ordinary value mandatory. A primary key forbids NULL because each key component must supply a definite identifying value. A nullable descriptive attribute follows a different rule because it need not identify the tuple.\n\nAn enforced CHECK condition is also distinct from NOT NULL. In MySQL 8.4, CHECK accepts an unknown condition as well as a true one. A score-range check can therefore permit an absent score unless nullability forbids it. State both policies when designing required scores: which recorded values are allowed and whether missing information is allowed at all.\n\n## Duplicate handling has defined SQL rules\n\nOrdinary equality is not the only operation that compares information in SQL. DISTINCT and GROUP BY have specified handling for NULLs: repeated NULLs in a selected value can form one distinct output value or one group. It is incorrect to conclude that duplicate elimination becomes undefined simply because NULL = NULL is unknown in a WHERE predicate.\n\nA nullable UNIQUE column in MySQL can allow multiple NULLs while rejecting repeated ordinary non-NULL values according to its comparison rules. This is an engine-specific constraint behaviour, not proof that NULL <> NULL is true. Other products and constraint options can differ, so avoid presenting a vague majority-of-databases claim as a portable rule. Specify the actual database and intended uniqueness contract.\n\n## Aggregates can hide missing observations\n\nCOUNT(*) includes every qualifying row. COUNT(score) counts non-NULL score values. SUM and AVG ordinarily operate on non-NULL inputs, and an ungrouped SUM or AVG with no non-NULL inputs returns NULL. These behaviours can change the interpretation of a class report: an average of recorded scores does not describe a class-wide average that treats every unrecorded score as zero.\n\nIf a report needs both completeness and performance information, return a row count and a recorded-score count alongside the average. This shows how much data supports the statistic. A high average from two recorded scores should not be mistaken for complete evidence about a class of thirty students. Defaults used for presentation should not conceal missing observations from the underlying calculation.\n\n## Defaulting is a business decision\n\nCOALESCE returns the first non-NULL expression in its argument list. It can supply a display label such as 'not supplied' for a missing contact address. It does not replace an empty string unless the expression explicitly handles that case too. Keeping this distinction visible helps avoid surprising users who intentionally supplied an empty value under the application's accepted contract.\n\nA display fallback does not update the source column. It also should not be mistaken for the student's actual address or score. When numerical defaults are needed, explain why that replacement preserves the intended quantity. Using zero because it avoids a blank chart is insufficient if zero and unrecorded data imply different facts or actions.\n\n## Comparing optional values deliberately\n\nA change detector often needs to treat two absent optional values as unchanged and a transition between absent and present as changed. Ordinary inequality cannot implement that contract by itself because it produces UNKNOWN when either operand is NULL. MySQL provides the NULL-safe equality operator <=> for this purpose. It returns true for two NULL operands and false when exactly one operand is NULL.\n\n```sql\nSELECT student_id\nFROM contact_changes\nWHERE NOT (old_email <=> new_email)\nORDER BY student_id;\n```\n\nThis query identifies changed optional email values under the column's applicable comparison rules. It does not imply byte-for-byte comparison under every collation. If exact case or byte distinctions matter, the schema and comparison policy need to specify them. A robust test fixture should include unchanged ordinary values, both values missing, and transitions in both directions.\n\n## Joins can introduce missing output values\n\nA preserving join can return NULL child attributes when a parent has no matching child. That absence in the result is not necessarily a stored NULL in an existing child record. To distinguish those situations, inspect a child identity that is guaranteed non-NULL for matched rows. An optional child description can itself be NULL and therefore is a poor test of whether a match exists.\n\nThis distinction matters for counts and diagnostics. A student with no assessment record differs from a student with an assessment record whose score is unrecorded. The query and report should preserve whichever distinction the task needs. Modeling both as one unexplained blank can lead to the wrong follow-up action even when the SQL runs successfully.\n\n## Verify absence as an ordinary case\n\nTest NULL, an empty string, the literal text NULL, a recorded zero where relevant, and unchanged optional values. Include rows that should not match as well as rows that should. Keep identifiers in diagnostic results so repeated names remain separate student facts. These small cases provide clearer evidence than a large fixture containing only complete ordinary values.\n\nNULL handling becomes reliable when the missing-information policy is explicit. Separate absence from placeholders, use the correct predicates, interpret aggregates carefully, and choose comparison semantics that match the task. Then record the database engine used for verification instead of assuming one product's optional-value behaviour establishes every provider's behaviour.\n",
+  "references": [
+    {
+      "title": "MySQL 8.4 working with NULL",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/working-with-null.html"
+    },
+    {
+      "title": "MySQL 8.4 comparison operators",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/comparison-operators.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-4-null-values",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-4-null-values-1",
+          "test_id": "pt-dbms-sql-4-null-values",
+          "question_text": "What does SQL NULL represent in a nullable student attribute?",
+          "options": [
+            "The number zero",
+            "An absence marker whose business meaning must be defined, distinct from zero and the empty string",
+            "An empty string",
+            "The average of all other values in that column"
+          ],
+          "correct_index": 1,
+          "explanation": "SQL NULL marks missing information, and the application must define what absence means for the attribute.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-4-null-values-2",
+          "test_id": "pt-dbms-sql-4-null-values",
+          "question_text": "How does SQL NULL differ from an ordinary score-domain value?",
+          "options": [
+            "Yes, every domain implicitly includes NULL",
+            "It marks absence rather than an ordinary score; nullability is a separate policy",
+            "Only for numeric domains",
+            "Only if explicitly declared NOT NULL"
+          ],
+          "correct_index": 1,
+          "explanation": "SQL NULL marks missing information, and the application must define what absence means for the attribute.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-4-null-values-3",
+          "test_id": "pt-dbms-sql-4-null-values",
+          "question_text": "What does the expression WHERE gpa = NULL evaluate to in SQL, regardless of actual data?",
+          "options": [
+            "TRUE for rows where gpa is NULL",
+            "UNKNOWN, so it never matches any row (IS NULL must be used instead)",
+            "FALSE always",
+            "A syntax error that halts the query"
+          ],
+          "correct_index": 1,
+          "explanation": "Comparisons with NULL yield UNKNOWN under three-valued logic, so '= NULL' never returns rows; 'IS NULL' is the correct construct.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-4-null-values-4",
+          "test_id": "pt-dbms-sql-4-null-values",
+          "question_text": "Why must SQL NULL comparisons and duplicate handling be explained using the rules of each operation?",
+          "options": [
+            "It doesn't; NULL has no effect on set semantics",
+            "Ordinary NULL equality is UNKNOWN, while DISTINCT and grouping still have explicitly defined NULL handling",
+            "Because NULL always forces two tuples to be treated as identical",
+            "Because NULL increases cardinality automatically"
+          ],
+          "correct_index": 1,
+          "explanation": "SQL duplicate elimination is not undefined: ordinary equality predicates and DISTINCT or GROUP BY have different specified semantics.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-4-null-values-5",
+          "test_id": "pt-dbms-sql-4-null-values",
+          "question_text": "Why can a primary key attribute never be NULL (entity integrity)?",
+          "options": [
+            "Because NULL takes up more storage space",
+            "Because a key must uniquely and reliably identify every tuple, and NULL's ambiguous equality would undermine that guarantee",
+            "Because SQL syntax forbids it for performance reasons only",
+            "Primary keys actually CAN be NULL in the relational model"
+          ],
+          "correct_index": 1,
+          "explanation": "Primary-key constraints require unique, non-NULL identifying values for every component; optional attributes have a separate absence policy.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-4-null-values-6",
+          "test_id": "pt-dbms-sql-4-null-values",
+          "question_text": "How do aggregate functions like SUM and AVG typically treat NULL values in a column?",
+          "options": [
+            "They treat NULL as zero",
+            "They skip/ignore NULLs entirely when computing the aggregate",
+            "They cause the query to fail",
+            "They convert NULL to the column's maximum value"
+          ],
+          "correct_index": 1,
+          "explanation": "Standard SQL aggregate functions ignore NULLs, which can affect results like AVG in ways that surprise users expecting NULL to count as 0.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-4-null-values-7",
+          "test_id": "pt-dbms-sql-4-null-values",
+          "question_text": "In MySQL, can a nullable UNIQUE column permit multiple NULLs?",
+          "options": [
+            "No, UNIQUE forbids any NULLs at all",
+            "Yes; MySQL permits multiple NULLs in a nullable UNIQUE column while constraining non-NULL values",
+            "No, only exactly one NULL is ever allowed",
+            "Yes, but only if the column is also the primary key"
+          ],
+          "correct_index": 1,
+          "explanation": "This is MySQL uniqueness behaviour. Neither NULL = NULL nor NULL <> NULL evaluates to TRUE through ordinary comparison.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-4-null-values-8",
+          "test_id": "pt-dbms-sql-4-null-values",
+          "question_text": "Which of these best distinguishes 'missing but applicable' from 'missing and inapplicable' NULLs?",
+          "options": [
+            "SQL stores them using two different NULL markers",
+            "Conceptually, one means the value exists in reality but isn't recorded yet, while the other means the attribute doesn't apply at all to this tuple — though most DBMSs store both identically as one NULL marker",
+            "Missing but applicable NULLs are never allowed in primary keys, while inapplicable NULLs are",
+            "There is no conceptual difference between the two"
+          ],
+          "correct_index": 1,
+          "explanation": "The two are a useful conceptual distinction, but nearly all real DBMSs represent both cases with the same single NULL marker internally.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-4-null-values-new-9",
+          "test_id": "pt-dbms-sql-4-null-values",
+          "question_text": "Which predicate selects students with no supplied email?",
+          "options": [
+            "email = NULL",
+            "email IS NULL",
+            "email = 0",
+            "email = the string NULL"
+          ],
+          "correct_index": 1,
+          "explanation": "IS NULL tests the absence marker.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-4-null-values-new-10",
+          "test_id": "pt-dbms-sql-4-null-values",
+          "question_text": "What is NULL <> NULL under ordinary SQL comparison?",
+          "options": [
+            "TRUE",
+            "FALSE by ordinary inequality",
+            "UNKNOWN",
+            "A guaranteed syntax error"
+          ],
+          "correct_index": 2,
+          "explanation": "Absence does not establish ordinary inequality.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-4-null-values-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-4-null-values-application-new-1",
+          "test_id": "pt-dbms-sql-4-null-values-application",
+          "question_text": "Does an empty email string automatically count as SQL NULL?",
+          "options": [
+            "Yes; they are identical in MySQL",
+            "Only when sorted",
+            "No; it is a separate string value",
+            "Only when selected with an alias"
+          ],
+          "correct_index": 2,
+          "explanation": "An empty string and an absence marker differ.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-4-null-values-application-new-2",
+          "test_id": "pt-dbms-sql-4-null-values-application",
+          "question_text": "How does MySQL NULL-safe equality compare two NULLs?",
+          "options": [
+            "It returns UNKNOWN",
+            "It returns the string NULL",
+            "It always raises an error",
+            "It returns true"
+          ],
+          "correct_index": 3,
+          "explanation": "The <=> operator implements the explicitly null-safe comparison.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-4-null-values-application-new-3",
+          "test_id": "pt-dbms-sql-4-null-values-application",
+          "question_text": "What does NOT(old_email <=> new_email) select?",
+          "options": [
+            "Changes including transitions between absent and present",
+            "Only two missing values",
+            "Only unchanged values",
+            "Every row always"
+          ],
+          "correct_index": 0,
+          "explanation": "Negating NULL-safe equality detects those optional-value changes.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-4-null-values-application-new-4",
+          "test_id": "pt-dbms-sql-4-null-values-application",
+          "question_text": "What does COALESCE(email, fallback) do to an empty string email?",
+          "options": [
+            "It always returns fallback",
+            "It retains the empty string",
+            "It updates the source row",
+            "It creates a NULL"
+          ],
+          "correct_index": 1,
+          "explanation": "COALESCE replaces NULL, not every blank-looking value.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-4-null-values-application-new-5",
+          "test_id": "pt-dbms-sql-4-null-values-application",
+          "question_text": "What can COUNT(score) conceal if interpreted as class size?",
+          "options": [
+            "Every score equal to zero",
+            "The number of columns",
+            "Students whose score is missing",
+            "Every passing student"
+          ],
+          "correct_index": 2,
+          "explanation": "COUNT(expression) excludes NULL values.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-4-null-values-application-new-6",
+          "test_id": "pt-dbms-sql-4-null-values-application",
+          "question_text": "What does an ungrouped AVG return when it has no non-NULL inputs?",
+          "options": [
+            "Always zero",
+            "Always one hundred",
+            "An empty schema",
+            "NULL"
+          ],
+          "correct_index": 3,
+          "explanation": "There are no recorded values from which to compute an average.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-4-null-values-application-new-7",
+          "test_id": "pt-dbms-sql-4-null-values-application",
+          "question_text": "Does DISTINCT over a nullable selected value have undefined duplicate handling?",
+          "options": [
+            "No; SQL defines its treatment of NULLs",
+            "Yes; it can never run",
+            "Only if NULL equals zero",
+            "It requires a primary key on every result"
+          ],
+          "correct_index": 0,
+          "explanation": "Ordinary equality semantics do not make DISTINCT undefined.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-4-null-values-application-new-8",
+          "test_id": "pt-dbms-sql-4-null-values-application",
+          "question_text": "What distinguishes a missing child record from a child with an optional NULL description?",
+          "options": [
+            "Test only the description",
+            "Test a guaranteed non-NULL child identity after the preserving join",
+            "Compare the description = NULL",
+            "Count displayed blank cells"
+          ],
+          "correct_index": 1,
+          "explanation": "The identity indicates whether a child actually matched.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-4-null-values-application-new-9",
+          "test_id": "pt-dbms-sql-4-null-values-application",
+          "question_text": "If missing and inapplicable need different actions, what is useful?",
+          "options": [
+            "Assuming SQL has two automatic NULL markers",
+            "Replacing both with zero",
+            "An explicit documented reason or state",
+            "Relying on column order"
+          ],
+          "correct_index": 2,
+          "explanation": "One NULL marker does not encode multiple reasons automatically.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-4-null-values-application-new-10",
+          "test_id": "pt-dbms-sql-4-null-values-application",
+          "question_text": "Does a display fallback update stored missing data?",
+          "options": [
+            "Yes; COALESCE runs UPDATE",
+            "Only on empty tables",
+            "Only for numeric types",
+            "No; an ordinary SELECT computes an output value"
+          ],
+          "correct_index": 3,
+          "explanation": "Presentation expressions are distinct from writes.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cx-null-values-contacts",
+      "slug": "null-values-contacts",
+      "title": "Find absent contacts without confusing placeholders",
+      "difficulty": "Easy",
+      "task": "Return student_id for students whose email is SQL NULL. Do not include an empty string or the literal text NULL.",
+      "schema_sql": "CREATE TABLE students (student_id INT PRIMARY KEY, email VARCHAR(80) NULL);",
+      "seed_sql": "INSERT INTO students VALUES (1,NULL),(2,''),(3,'NULL'),(4,'asha@example.test');",
+      "expected": "student_id\n1",
+      "ordering": "Ascending student_id.",
+      "constraints": [
+        "Email strings are data; no emails are sent."
+      ],
+      "edge_cases": [
+        "Empty and literal NULL strings are distinct from absence.",
+        "Every row or no row can have an absent email."
+      ],
+      "hints": [
+        "Use the dedicated absence predicate.",
+        "Ordinary equality against NULL does not select missing contacts."
+      ],
+      "solution_sql": "SELECT student_id FROM students WHERE email IS NULL ORDER BY student_id;",
+      "explanation": "IS NULL selects the absence marker without interpreting ordinary strings as missing.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO students VALUES (1,''),(2,'NULL');",
+          "expected": ""
+        },
+        {
+          "seed_sql": "INSERT INTO students VALUES (9,NULL),(2,NULL);",
+          "expected": "student_id\n2\n9"
+        }
+      ]
+    },
+    {
+      "id": "cx-null-values-changes",
+      "slug": "null-values-changes",
+      "title": "Detect optional contact changes with NULL-safe equality",
+      "difficulty": "Medium",
+      "task": "Return student_id where old_email and new_email differ under MySQL NULL-safe equality. Both missing means unchanged; a change between NULL and empty string counts as changed. Use NOT with <=>. Comparisons follow the defined column collation; fixtures do not rely on case differences.",
+      "schema_sql": "CREATE TABLE contact_changes (student_id INT PRIMARY KEY, old_email VARCHAR(80) NULL, new_email VARCHAR(80) NULL);",
+      "seed_sql": "INSERT INTO contact_changes VALUES (1,NULL,NULL),(2,NULL,'a@example.test'),(3,'a@example.test',NULL),(4,'a@example.test','a@example.test'),(5,NULL,''),(6,'','');",
+      "expected": "student_id\n2\n3\n5",
+      "ordering": "Ascending student_id.",
+      "constraints": [
+        "No case-only differences occur in supplied fixtures.",
+        "The comparison syntax targets MySQL 8.4; local MariaDB checks are compatibility evidence."
+      ],
+      "edge_cases": [
+        "Both absent values are unchanged.",
+        "Absence-to-present and present-to-absence both count as changes."
+      ],
+      "hints": [
+        "Ordinary <> loses rows involving NULL.",
+        "Negate the result of NULL-safe equality."
+      ],
+      "solution_sql": "SELECT student_id FROM contact_changes WHERE NOT (old_email <=> new_email) ORDER BY student_id;",
+      "explanation": "The operator yields a definite comparison for NULL pairs, so negation preserves all specified transitions.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO contact_changes VALUES (8,'',NULL),(2,'NULL','NULL'),(3,'old','new');",
+          "expected": "student_id\n3\n8"
+        },
+        {
+          "seed_sql": "",
+          "expected": ""
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-4-null-values-1",
+      "test_id": "pt-dbms-sql-4-null-values",
+      "question_text": "What does a NULL value represent in a relation?",
+      "options": [
+        "The number zero",
+        "A missing, unknown, or inapplicable value — not a member of any domain",
+        "An empty string",
+        "The average of all other values in that column"
+      ],
+      "correct_index": 1,
+      "explanation": "NULL is a special marker for absent/unknown data, distinct from any real domain value including 0 or an empty string.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-4-null-values-2",
+      "test_id": "pt-dbms-sql-4-null-values",
+      "question_text": "Is NULL considered a value drawn from an attribute's domain?",
+      "options": [
+        "Yes, every domain implicitly includes NULL",
+        "No, NULL is not a member of any domain — it marks the absence of a value",
+        "Only for numeric domains",
+        "Only if explicitly declared NOT NULL"
+      ],
+      "correct_index": 1,
+      "explanation": "NULL sits outside all domains; it denotes missing data rather than a legitimate domain value.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-4-null-values-3",
+      "test_id": "pt-dbms-sql-4-null-values",
+      "question_text": "What does the expression WHERE gpa = NULL evaluate to in SQL, regardless of actual data?",
+      "options": [
+        "TRUE for rows where gpa is NULL",
+        "UNKNOWN, so it never matches any row (IS NULL must be used instead)",
+        "FALSE always",
+        "A syntax error that halts the query"
+      ],
+      "correct_index": 1,
+      "explanation": "Comparisons with NULL yield UNKNOWN under three-valued logic, so '= NULL' never returns rows; 'IS NULL' is the correct construct.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-4-null-values-4",
+      "test_id": "pt-dbms-sql-4-null-values",
+      "question_text": "How does NULL complicate the classical definition of a relation as a 'set of tuples with no duplicates'?",
+      "options": [
+        "It doesn't; NULL has no effect on set semantics",
+        "Because NULL = NULL evaluates to UNKNOWN rather than TRUE, equality between tuples containing NULLs becomes ambiguous, undermining clean duplicate detection",
+        "Because NULL always forces two tuples to be treated as identical",
+        "Because NULL increases cardinality automatically"
+      ],
+      "correct_index": 1,
+      "explanation": "Since NULL never compares as definitively equal to another NULL, the notion of 'duplicate tuple' (central to the set-based relation definition) becomes ambiguous.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-4-null-values-5",
+      "test_id": "pt-dbms-sql-4-null-values",
+      "question_text": "Why can a primary key attribute never be NULL (entity integrity)?",
+      "options": [
+        "Because NULL takes up more storage space",
+        "Because a key must uniquely and reliably identify every tuple, and NULL's ambiguous equality would undermine that guarantee",
+        "Because SQL syntax forbids it for performance reasons only",
+        "Primary keys actually CAN be NULL in the relational model"
+      ],
+      "correct_index": 1,
+      "explanation": "Entity integrity requires that primary keys always uniquely identify tuples; NULL's undecidable equality would break that guarantee.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-4-null-values-6",
+      "test_id": "pt-dbms-sql-4-null-values",
+      "question_text": "How do aggregate functions like SUM and AVG typically treat NULL values in a column?",
+      "options": [
+        "They treat NULL as zero",
+        "They skip/ignore NULLs entirely when computing the aggregate",
+        "They cause the query to fail",
+        "They convert NULL to the column's maximum value"
+      ],
+      "correct_index": 1,
+      "explanation": "Standard SQL aggregate functions ignore NULLs, which can affect results like AVG in ways that surprise users expecting NULL to count as 0.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-4-null-values-7",
+      "test_id": "pt-dbms-sql-4-null-values",
+      "question_text": "Does a UNIQUE constraint in most SQL databases typically allow more than one NULL in the same column?",
+      "options": [
+        "No, UNIQUE forbids any NULLs at all",
+        "Yes, because NULL is not considered equal to another NULL for uniqueness checks, multiple NULLs are usually allowed",
+        "No, only exactly one NULL is ever allowed",
+        "Yes, but only if the column is also the primary key"
+      ],
+      "correct_index": 1,
+      "explanation": "Since NULL <> NULL under three-valued logic, most DBMSs permit multiple NULLs in a UNIQUE column — a practical departure from pure set semantics.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-4-null-values-8",
+      "test_id": "pt-dbms-sql-4-null-values",
+      "question_text": "Which of these best distinguishes 'missing but applicable' from 'missing and inapplicable' NULLs?",
+      "options": [
+        "SQL stores them using two different NULL markers",
+        "Conceptually, one means the value exists in reality but isn't recorded yet, while the other means the attribute doesn't apply at all to this tuple — though most DBMSs store both identically as one NULL marker",
+        "Missing but applicable NULLs are never allowed in primary keys, while inapplicable NULLs are",
+        "There is no conceptual difference between the two"
+      ],
+      "correct_index": 1,
+      "explanation": "The two are a useful conceptual distinction, but nearly all real DBMSs represent both cases with the same single NULL marker internally.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "coordinator",
+    "independent_review": "unavailable; no agent tools",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Definitions and examples checked against questions; no plagiarism certification.",
+    "existing_question_corrections": [
+      "tq-dbms-sql-4-null-values-1",
+      "tq-dbms-sql-4-null-values-2",
+      "tq-dbms-sql-4-null-values-4",
+      "tq-dbms-sql-4-null-values-5",
+      "tq-dbms-sql-4-null-values-7"
+    ],
+    "canonical_answer_indices_preserved": true
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-4-null-values",
+    "original_note_sha256": "a42e509f544452825258526984956502e6c7b75ea205eab0053c7975ec525945",
+    "status": "paired migration prepared; not applied"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Different comparisons answer different absence questions",
+      "description": "Ordinary equality yields UNKNOWN with NULL, whereas IS NULL and MySQL NULL-safe equality produce definite results.",
+      "columns": [
+        "Expression",
+        "Result",
+        "Interpretation"
+      ],
+      "rows": [
+        [
+          "NULL = NULL",
+          "UNKNOWN",
+          "Ordinary equality does not establish a match"
+        ],
+        [
+          "NULL <> NULL",
+          "UNKNOWN",
+          "Absence does not establish inequality either"
+        ],
+        [
+          "NULL IS NULL",
+          "TRUE",
+          "Dedicated absence test"
+        ],
+        [
+          "NULL <=> NULL",
+          "TRUE",
+          "MySQL NULL-safe equality"
+        ],
+        [
+          "NULL <=> ''",
+          "FALSE",
+          "Absence differs from an empty string"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "coordinator checked three-valued comparisons against MySQL 8.4 manual; DISTINCT wording corrected",
+    "server_rendering": "passed",
+    "browser_rendering": "unverified",
+    "independent_review": "unavailable; no agent tools",
+    "server_rendering_evidence": "2026-10-29: actual LessonBlock static rendering passed for every authored package in focused Vitest suite."
+  },
+  "sql_verification": {
+    "engine": "11.8.6-MariaDB-0+deb13u1 from Debian",
+    "scope": "MariaDB compatibility execution; exact MySQL 8.4/provider execution unverified",
+    "fingerprint": "2c77e1a83a82c3ce7c5214440dae8c4e9548d3f2e36cd8cb31ff13b8162e892c",
+    "cases": [
+      {
+        "problem": "null-values-contacts",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "null-values-contacts",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "null-values-contacts",
+        "case": 2,
+        "passed": true
+      },
+      {
+        "problem": "null-values-changes",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "null-values-changes",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "null-values-changes",
+        "case": 2,
+        "passed": true
+      }
+    ],
+    "all_passed": true
+  }
+}

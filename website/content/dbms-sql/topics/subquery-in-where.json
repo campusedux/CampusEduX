@@ -1,0 +1,585 @@
+{
+  "source_ref": "chapter-17-subqueries/subquery-in-where",
+  "slug": "subquery-in-where",
+  "title": "Subquery in WHERE",
+  "description": "Filter SQL rows using scalar benchmarks, IN membership and correlated EXISTS while preserving result cardinality, NULL semantics and predicate scope.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Turn a related result into a row-selection rule\n\nA subquery inside WHERE supplies information used to decide whether an outer row should remain. The inner result can be a single comparison value, a collection of values or the existence of a qualifying relationship. Choosing the right shape matters more than the nesting itself. Comparing one price against one average is a different operation from checking membership in a set of eligible product identifiers.\n\nReview [scalar subquery](/learning/dbms-sql-tutorial/scalar-subquery), [IN](/learning/dbms-sql-tutorial/in) and [EXISTS](/learning/dbms-sql-tutorial/exists). This topic brings those forms together as row filters. The examples use MySQL 8.4 and keep column roles explicit so that a query remains understandable even when the same table appears at more than one query level.\n\n## Compare a row with a single benchmark\n\nSuppose books contains book_id, category_id and price. To list books priced above the average known book price, calculate the benchmark in a scalar subquery. The outer comparison then tests each candidate price against that value. The AVG expression produces one ungrouped summary row, avoiding an accidental multirow scalar result.\n\n```sql\nSELECT b.book_id, b.price\nFROM books AS b\nWHERE b.price > (SELECT AVG(x.price) FROM books AS x)\nORDER BY b.book_id;\n```\n\nAVG ignores null input prices. A candidate whose price is null does not satisfy the comparison because its result is unknown. If there are no known prices, the benchmark is null and no candidate passes the greater-than condition. Replacing missing values with zero would introduce a different pricing policy and must be justified separately.\n\n## Check the scalar result's cardinality\n\nA scalar subquery is expected to supply at most one row and one column. Zero rows become a null scalar value in the comparison context. More than one row is an error rather than an invitation for the database to choose any convenient value. Adding LIMIT 1 without a meaningful selection rule merely hides an unspecified benchmark.\n\nA grouped average can return several rows, one per category. It cannot be placed unqualified where one global average is expected. Either identify the intended category, correlate it to the outer book, or use a set-aware comparison that matches the task. Establish the required cardinality before trying to fix an error by changing syntax at random.\n\n## Correlate a category-specific benchmark\n\nA book can instead be compared with the average price in its own known category. The inner category reference must be related to the current outer book. That changes the benchmark from one global value to a category-dependent value, even though the written aggregate still returns one summary row for each evaluation context.\n\n```sql\nSELECT b.book_id, b.price\nFROM books AS b\nWHERE b.price > (\n SELECT AVG(x.price)\n FROM books AS x\n WHERE x.category_id = b.category_id\n)\nORDER BY b.book_id;\n```\n\nUnder ordinary equality, a null category does not match another null category. Consequently a book with an unknown category receives an empty category input and a null benchmark in this formulation. If the task deliberately treats unknown categories as one shared group, specify and implement that policy rather than assuming ordinary equality already does so.\n\n## Decide whether the candidate belongs in its own benchmark\n\nThe category-average query includes the candidate's own known price. For a category with only one known price, that book equals its benchmark and does not pass a strict greater-than test. If the requirement is comparison against other books only, add an identity exclusion inside the subquery. That produces a different population and can create an empty peer set.\n\nBoth interpretations can be reasonable educational exercises, but they are not interchangeable. Averages change when the candidate is excluded, and a two-book category can make the difference obvious. State whether the benchmark describes the full category, other category members or a separate reference catalogue before using the query in a recommendation feature.\n\n## Use membership for a set of eligible identifiers\n\nIf a promotions table lists qualifying category identifiers, IN asks whether a book's category belongs to that result set. Repeated inner identifiers do not multiply an outer book. A regular join might repeat the book once per promotion record, which is a different intermediate grain unless uniqueness is guaranteed.\n\n```sql\nSELECT b.book_id\nFROM books AS b\nWHERE b.category_id IN (\n SELECT p.category_id\n FROM promotions AS p\n WHERE p.is_active = 1\n)\nORDER BY b.book_id;\n```\n\nA null in the inner result can affect nonmatching membership through unknown truth values. Positive matching known values can still pass IN. Negating the condition with NOT IN requires particular care because a null member can make otherwise nonmatching candidates fail to pass. A correlated NOT EXISTS is often clearer for relationship absence.\n\n## Choose existence when only a witness is needed\n\nA WHERE EXISTS predicate can ask whether the candidate book has any active reservation without projecting reservation details. Its subquery must correlate reservation.book_id with the current book identity. A missing correlation changes the question to whether any active reservation exists anywhere, potentially selecting every outer book.\n\nUse separate existence predicates for independent requirements. Use one combined inner predicate when the same reservation must satisfy multiple attributes. Neither formulation requires the SQL writer to prescribe an exact physical loop order. The optimizer may transform suitable subqueries into joins or other plans while preserving their logical meaning.\n\n## Combine predicates without losing scope\n\nWHERE combines subquery conditions with ordinary conditions using AND, OR and NOT. Parenthesize mixed alternatives so that a status or tenant rule applies to the intended candidates. For example, availability AND either a benchmark condition or a membership condition differs from either available expensive books or every promoted book regardless of availability.\n\nNever interpolate untrusted user text into a nested SQL string. Parameters remain necessary inside subqueries just as in the outer query. Authorization and tenant restrictions must also remain intact at the trusted boundary; nesting a protected table does not make its data safe to expose indirectly through a price comparison or eligibility flag.\n\n## Inspect the population before optimizing\n\nA correlated expression conceptually depends on each candidate, but an engine may cache, transform or decorrelate suitable work. Avoid claiming that every correlated subquery necessarily performs one full table scan per outer row. Inspect an actual representative plan when performance matters, after confirming that proposed rewrites preserve cardinality, null behavior and candidate inclusion.\n\nA rewrite using a precomputed category-average relation can be useful when several outputs reuse that benchmark. A window function can express related comparisons too, with a separate outer level for filtering where required. Each alternative must retain the original category policy and fact grain. Shorter text is not proof of equivalent behavior or lower cost.\n\n## Test boundaries that distinguish query shapes\n\nThe exercises use several known prices, a missing price, an unknown category and a category with only one known price. The global-average task and category-average task return different identities on purpose. That contrast demonstrates that the subquery's population is a real requirement rather than a formatting choice.\n\nAlso test an empty table and an all-null price population. For membership examples, include repeated eligible identifiers and a null identifier. For scalar examples, distinguish an empty result from a multirow error. These small cases teach learners to explain why a candidate passes, fails or remains unknown instead of judging a nested query by whether it merely returns plausible rows.\n\n## Explain the result without executing it in your head as a loop\n\nIn the supplied book fixture, the four known prices total three hundred forty, giving a global average of eighty-five. The missing price contributes neither a value nor an additional divisor. The category-one benchmark is twenty, so its thirty-unit book qualifies locally while remaining below the global benchmark. Category two has only one known price, which equals its own average and therefore fails a strict greater-than comparison.\n\nThe unknown-category book is included in the global population because category identity is irrelevant to that benchmark. It is excluded by the category-specific query because the written ordinary equality cannot form a known category match for it. These differences follow directly from the stated populations, not from a special exception for that book. Being able to explain both outputs this way is stronger evidence of understanding than memorizing which subquery spelling appears in each answer. Always identify the benchmark population first.\n",
+  "references": [
+    {
+      "title": "Primary reference",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/subqueries.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-17-subquery-in-where",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-17-subquery-in-where-1",
+          "test_id": "pt-dbms-sql-17-subquery-in-where",
+          "question_text": "What should determine a WHERE subquery form?",
+          "options": [
+            "The shortest alias",
+            "Its required result shape",
+            "The table caption",
+            "The number of comments"
+          ],
+          "correct_index": 1,
+          "explanation": "Scalar comparison, set membership and existence require different inner outputs.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-17-subquery-in-where-2",
+          "test_id": "pt-dbms-sql-17-subquery-in-where",
+          "question_text": "What does a scalar subquery with zero rows supply?",
+          "options": [
+            "Zero automatically",
+            "NULL",
+            "An empty string always",
+            "An arbitrary previous value"
+          ],
+          "correct_index": 1,
+          "explanation": "An absent scalar result is treated as null in the comparison context.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-17-subquery-in-where-3",
+          "test_id": "pt-dbms-sql-17-subquery-in-where",
+          "question_text": "What happens when a scalar subquery returns several rows?",
+          "options": [
+            "The first row is always chosen",
+            "All rows are added",
+            "An error",
+            "The outer row is duplicated"
+          ],
+          "correct_index": 2,
+          "explanation": "A scalar context does not accept an unspecified collection of values.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-17-subquery-in-where-4",
+          "test_id": "pt-dbms-sql-17-subquery-in-where",
+          "question_text": "How many rows does an ungrouped AVG subquery normally return?",
+          "options": [
+            "One per input row",
+            "One summary row",
+            "No row for empty input",
+            "One per price"
+          ],
+          "correct_index": 1,
+          "explanation": "The aggregate summarizes its entire input, with a null value when none is known.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-17-subquery-in-where-5",
+          "test_id": "pt-dbms-sql-17-subquery-in-where",
+          "question_text": "What does AVG do with null prices?",
+          "options": [
+            "Treats them as one",
+            "Ignores them",
+            "Rejects the query",
+            "Copies the previous price"
+          ],
+          "correct_index": 1,
+          "explanation": "Unknown prices do not contribute to either the known total or known-value divisor.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-17-subquery-in-where-6",
+          "test_id": "pt-dbms-sql-17-subquery-in-where",
+          "question_text": "Can a null outer price pass price>known_average?",
+          "options": [
+            "Always",
+            "No",
+            "Only if ordered",
+            "Only if indexed"
+          ],
+          "correct_index": 1,
+          "explanation": "A comparison involving the unknown price is not true.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-17-subquery-in-where-7",
+          "test_id": "pt-dbms-sql-17-subquery-in-where",
+          "question_text": "Which predicate makes the average category-specific?",
+          "options": [
+            "x.book_id=b.category_id",
+            "x.category_id=b.category_id",
+            "x.price=b.book_id",
+            "x.category_id=x.category_id only"
+          ],
+          "correct_index": 1,
+          "explanation": "The inner category must be tied to the current outer book.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-17-subquery-in-where-8",
+          "test_id": "pt-dbms-sql-17-subquery-in-where",
+          "question_text": "Does ordinary equality match two NULL categories?",
+          "options": [
+            "Yes always",
+            "Only with AVG",
+            "No",
+            "Only with a unique index"
+          ],
+          "correct_index": 2,
+          "explanation": "Unknown category values do not establish a true equality relationship.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-17-subquery-in-where-new-9",
+          "test_id": "pt-dbms-sql-17-subquery-in-where",
+          "question_text": "Does the shown category benchmark include the candidate?",
+          "options": [
+            "Yes when its price and category qualify",
+            "No automatically",
+            "Only with DISTINCT",
+            "Only if the category has two books"
+          ],
+          "correct_index": 0,
+          "explanation": "There is no identity-exclusion predicate in the subquery.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-17-subquery-in-where-new-10",
+          "test_id": "pt-dbms-sql-17-subquery-in-where",
+          "question_text": "What happens for a sole known price in its category under strict greater-than?",
+          "options": [
+            "It always qualifies",
+            "It does not exceed its own average",
+            "It causes a multirow error",
+            "Its price becomes zero"
+          ],
+          "correct_index": 1,
+          "explanation": "A single known value equals that category's average.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-17-subquery-in-where-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-17-subquery-in-where-application-new-1",
+          "test_id": "pt-dbms-sql-17-subquery-in-where-application",
+          "question_text": "What construct checks membership in eligible category IDs?",
+          "options": [
+            "COUNT(*) alone",
+            "An unrestricted CROSS JOIN",
+            "IN",
+            "ORDER BY"
+          ],
+          "correct_index": 2,
+          "explanation": "Membership tests a candidate value against the subquery's set of values.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-17-subquery-in-where-application-new-2",
+          "test_id": "pt-dbms-sql-17-subquery-in-where-application",
+          "question_text": "Do repeated IN results multiply outer rows?",
+          "options": [
+            "Yes once per duplicate",
+            "Only for names",
+            "Only for numeric IDs",
+            "No"
+          ],
+          "correct_index": 3,
+          "explanation": "IN produces a truth condition rather than a projected matching pair.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-17-subquery-in-where-application-new-3",
+          "test_id": "pt-dbms-sql-17-subquery-in-where-application",
+          "question_text": "Why is nullable NOT IN risky?",
+          "options": [
+            "A null set member can make comparisons unknown",
+            "It sorts nulls first",
+            "It deletes outer rows",
+            "It always rejects syntax"
+          ],
+          "correct_index": 0,
+          "explanation": "WHERE does not retain unknown results, which can alter absence logic.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-17-subquery-in-where-application-new-4",
+          "test_id": "pt-dbms-sql-17-subquery-in-where-application",
+          "question_text": "What does EXISTS need to find the candidate book's reservation?",
+          "options": [
+            "Only an active state predicate",
+            "A correlation on book identity",
+            "Only a member name",
+            "Only a sort order"
+          ],
+          "correct_index": 1,
+          "explanation": "Without correlation any active reservation can qualify unrelated books.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-17-subquery-in-where-application-new-5",
+          "test_id": "pt-dbms-sql-17-subquery-in-where-application",
+          "question_text": "Why parenthesize AND and OR combinations?",
+          "options": [
+            "To force a physical scan",
+            "To remove nulls",
+            "To make eligibility scope explicit",
+            "To add an index"
+          ],
+          "correct_index": 2,
+          "explanation": "Different predicate groupings can admit different candidate populations.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-17-subquery-in-where-application-new-6",
+          "test_id": "pt-dbms-sql-17-subquery-in-where-application",
+          "question_text": "Does nesting make SQL interpolation safe?",
+          "options": [
+            "Yes",
+            "Only if aliases are short",
+            "Only inside AVG",
+            "No"
+          ],
+          "correct_index": 3,
+          "explanation": "Untrusted input still requires parameterization at every query level.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-17-subquery-in-where-application-new-7",
+          "test_id": "pt-dbms-sql-17-subquery-in-where-application",
+          "question_text": "Does correlation force one full scan per outer row?",
+          "options": [
+            "Not necessarily",
+            "Always",
+            "Only with prices",
+            "Only if the table is empty"
+          ],
+          "correct_index": 0,
+          "explanation": "The optimizer can transform suitable work while preserving semantics.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-17-subquery-in-where-application-new-8",
+          "test_id": "pt-dbms-sql-17-subquery-in-where-application",
+          "question_text": "Why is LIMIT1 not a general scalar-error repair?",
+          "options": [
+            "It always chooses the average",
+            "It can hide an unspecified selection rule",
+            "It enforces all constraints",
+            "It counts nulls"
+          ],
+          "correct_index": 1,
+          "explanation": "Choosing an arbitrary row does not define the intended benchmark.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-17-subquery-in-where-application-new-9",
+          "test_id": "pt-dbms-sql-17-subquery-in-where-application",
+          "question_text": "What is needed before comparing a join rewrite's speed?",
+          "options": [
+            "Only fewer parentheses",
+            "Only shorter names",
+            "Equivalent cardinality and NULL semantics",
+            "Only the same caption"
+          ],
+          "correct_index": 2,
+          "explanation": "A join can multiply candidates or change missing-value behavior.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-17-subquery-in-where-application-new-10",
+          "test_id": "pt-dbms-sql-17-subquery-in-where-application",
+          "question_text": "Which fixture separates global from category averages?",
+          "options": [
+            "Only one book globally",
+            "Only equal prices everywhere",
+            "Only null rows",
+            "Categories with different price distributions"
+          ],
+          "correct_index": 3,
+          "explanation": "Different category populations yield different benchmarks for the same candidate.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cx-subquery-where-global-benchmark",
+      "slug": "subquery-where-global-benchmark",
+      "title": "Compare book prices with the global average",
+      "difficulty": "Easy",
+      "task": "Return book_id,price for books priced above the average known price of all books. Order by book_id.",
+      "schema_sql": "CREATE TABLE books(book_id INT PRIMARY KEY,category_id INT NULL,price INT NULL);",
+      "seed_sql": "INSERT INTO books VALUES (1,1,10),(2,1,30),(3,2,100),(4,2,NULL),(5,NULL,200);",
+      "solution_sql": "SELECT b.book_id,b.price FROM books AS b WHERE b.price>(SELECT AVG(x.price) FROM books AS x) ORDER BY b.book_id;",
+      "expected": "book_id\tprice\n3\t100\n5\t200",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO books VALUES (1,1,NULL);",
+          "expected": ""
+        },
+        {
+          "seed_sql": "",
+          "expected": ""
+        }
+      ],
+      "ordering": "Order by keys explicitly stated in the task.",
+      "constraints": [
+        "Use supplied synthetic data.",
+        "Return only requested columns."
+      ],
+      "edge_cases": [
+        "Global population",
+        "All-null average"
+      ],
+      "hints": [
+        "The known global average is85, and unknown candidate prices do not pass."
+      ],
+      "explanation": "The known global average is85, and unknown candidate prices do not pass."
+    },
+    {
+      "id": "cx-subquery-where-category-benchmark",
+      "slug": "subquery-where-category-benchmark",
+      "title": "Compare prices within each known category",
+      "difficulty": "Medium",
+      "task": "Return book_id,price for books above the average known price in their own known category. Include the candidate in its category benchmark; unknown categories do not match. Order by book_id.",
+      "schema_sql": "CREATE TABLE books(book_id INT PRIMARY KEY,category_id INT NULL,price INT NULL);",
+      "seed_sql": "INSERT INTO books VALUES (1,1,10),(2,1,30),(3,2,100),(4,2,NULL),(5,NULL,200);",
+      "solution_sql": "SELECT b.book_id,b.price FROM books AS b WHERE b.price>(SELECT AVG(x.price) FROM books AS x WHERE x.category_id=b.category_id) ORDER BY b.book_id;",
+      "expected": "book_id\tprice\n2\t30",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO books VALUES (1,1,50),(2,2,100),(3,NULL,200);",
+          "expected": ""
+        }
+      ],
+      "ordering": "Order by keys explicitly stated in the task.",
+      "constraints": [
+        "Use supplied synthetic data.",
+        "Return only requested columns."
+      ],
+      "edge_cases": [
+        "Single known peer",
+        "Unknown category"
+      ],
+      "hints": [
+        "The first category average is20; the sole known price in category2 equals100."
+      ],
+      "explanation": "The first category average is20; the sole known price in category2 equals100."
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-17-subquery-in-where-1",
+      "test_id": "pt-dbms-sql-17-subquery-in-where",
+      "question_text": "What do IN, EXISTS, ANY, ALL, and plain `=` have in common in this chapter?",
+      "options": [
+        "They are all identical",
+        "They are all ways of using a subquery to filter rows in a WHERE clause",
+        "They can only be used in SELECT",
+        "None of them can be correlated"
+      ],
+      "correct_index": 1,
+      "explanation": "All of them are operators for combining a subquery's result with a WHERE-clause filter.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-17-subquery-in-where-2",
+      "test_id": "pt-dbms-sql-17-subquery-in-where",
+      "question_text": "In the composite example, which two conditions are combined with AND?",
+      "options": [
+        "Two EXISTS clauses",
+        "An IN subquery (department budget) and a correlated comparison subquery (above department average)",
+        "Two ALL subqueries",
+        "A JOIN and a GROUP BY"
+      ],
+      "correct_index": 1,
+      "explanation": "The example combines a multi-row IN filter with a correlated per-row average comparison.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-17-subquery-in-where-3",
+      "test_id": "pt-dbms-sql-17-subquery-in-where",
+      "question_text": "Which operator is safest when you only care whether a related row exists, ignoring its values, with possible NULLs involved?",
+      "options": [
+        "IN",
+        "=",
+        "EXISTS / NOT EXISTS",
+        "ALL"
+      ],
+      "correct_index": 2,
+      "explanation": "EXISTS/NOT EXISTS are immune to the NULL pitfalls that affect IN/NOT IN.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-17-subquery-in-where-4",
+      "test_id": "pt-dbms-sql-17-subquery-in-where",
+      "question_text": "Using the sample data and a budget threshold of >= 200000 (Engineering 300000, Sales 200000), which employees satisfy the composite example's full condition (department qualifies AND salary above own department average)?",
+      "options": [
+        "All employees in Engineering and Sales",
+        "Alice and Eve only",
+        "Alice, Bob, Dave, Eve, Frank",
+        "Only Grace"
+      ],
+      "correct_index": 1,
+      "explanation": "Only Alice and Eve individually beat their own department's average within the qualifying departments.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-17-subquery-in-where-5",
+      "test_id": "pt-dbms-sql-17-subquery-in-where",
+      "question_text": "What is the single biggest practical mistake described across the WHERE-subquery family?",
+      "options": [
+        "Using EXISTS too often",
+        "Using a plain comparison operator against a subquery that isn't actually guaranteed to return exactly one row",
+        "Using too many JOINs",
+        "Forgetting to use GROUP BY"
+      ],
+      "correct_index": 1,
+      "explanation": "This is the exact runtime-error gotcha detailed in 17.2 — data can change and break an assumption of uniqueness.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-17-subquery-in-where-6",
+      "test_id": "pt-dbms-sql-17-subquery-in-where",
+      "question_text": "Can multiple different subquery-based conditions be combined in one WHERE clause?",
+      "options": [
+        "No, only one subquery per WHERE clause is allowed",
+        "Yes, using AND/OR like any boolean expressions",
+        "Only if they use the same operator",
+        "Only EXISTS can be combined with others"
+      ],
+      "correct_index": 1,
+      "explanation": "WHERE-clause subqueries are ordinary boolean expressions and can be freely combined.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-17-subquery-in-where-7",
+      "test_id": "pt-dbms-sql-17-subquery-in-where",
+      "question_text": "Which choice correctly matches \"compare per-row against a related aggregate\" to its pattern?",
+      "options": [
+        "`col IN (SELECT ...)`",
+        "A correlated subquery like `col > (SELECT AVG(...) WHERE dep = e.dep)`",
+        "`EXISTS (SELECT 1 ...)`",
+        "A derived table in FROM"
+      ],
+      "correct_index": 1,
+      "explanation": "This is the correlated comparison pattern from 17.4, reused here as part of the toolkit.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-17-subquery-in-where-8",
+      "test_id": "pt-dbms-sql-17-subquery-in-where",
+      "question_text": "Why should deeply nested WHERE-clause subqueries (3+ levels) be used cautiously?",
+      "options": [
+        "SQL doesn't support more than 2 levels",
+        "They are always slower than joins with no exceptions",
+        "Readability degrades quickly, even though the engine may support arbitrary nesting",
+        "They cannot use correlation past the first level"
+      ],
+      "correct_index": 2,
+      "explanation": "Nesting is technically allowed to any depth an engine supports, but human readability suffers well before any technical limit.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "/root/worker_2",
+    "independent_review": "passed",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "authored; independent review pending",
+    "canonical_answer_indices_preserved": true,
+    "editorial_record": "Original prose and assessments. Seed snapshots and canonical answer indices retained; external originality clearance pending.",
+    "independent_reviewer": "/root",
+    "independent_review_scope": "Full notes,20 MCQs/options/reasoning,both exercises and five sample/alternative outputs, diagram and links reviewed. Global known average85, category-one average20, sole known price100 and NULL-category exclusion manually verified; scalar cardinality and candidate-inclusion policies correct. Portable SQLite subset separate; MySQL/provider and browser remain unverified."
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-17-subquery-in-where",
+    "original_note_sha256": "ae54bd2abe17809e1bad63cad543bc72c76d5f81a3bb6bda4ca7dc16ce17b1a9",
+    "status": "drafted; not included in prepared paired migrations"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "The benchmark population changes the selected identities",
+      "description": "Each candidate is compared with either all known prices or its known category.",
+      "columns": [
+        "Book",
+        "Price",
+        "Global average85",
+        "Own-category average"
+      ],
+      "rows": [
+        [
+          "1",
+          "10",
+          "Fails",
+          "20: fails"
+        ],
+        [
+          "2",
+          "30",
+          "Fails",
+          "20: passes"
+        ],
+        [
+          "3",
+          "100",
+          "Passes",
+          "100: fails"
+        ],
+        [
+          "5",
+          "200",
+          "Passes",
+          "NULL: unknown"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "technical_review": "coordinator independent manual review passed",
+    "browser_rendering": "unverified",
+    "independent_review": "passed",
+    "server_rendering": "passed",
+    "server_rendering_evidence": "2026-10-29 full Vitest:1310 passed/12 skipped; actual LessonBlock/TopicDiagrams render over230 packages. Browser visual QA remains unverified."
+  },
+  "authoring_status": "drafted; verification pending",
+  "sql_verification": {
+    "scope": "not executed; exact MySQL/provider execution pending",
+    "all_passed": false,
+    "cases": []
+  }
+}

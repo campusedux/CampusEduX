@@ -1,5 +1,6 @@
-import { ArrowRight, Briefcase } from "lucide-react";
-import { Button, SearchBar } from "@/components/ui";
+import Link from "next/link";
+import { ArrowRight, BookOpen, Briefcase, Code2, LayoutGrid } from "lucide-react";
+import { Button, PageHeader, Chip, ChipRow } from "@/components/ui";
 import { HeroVisual, type HeroCourse } from "./HeroVisual";
 
 export interface HeroStat {
@@ -8,70 +9,54 @@ export interface HeroStat {
 }
 
 const formatCount = (n: number) => new Intl.NumberFormat("en-IN").format(n);
+const MOBILE_STAT_LABELS: Record<string, string> = {
+  course: "Courses", courses: "Courses", lessons: "Lessons", "coding problems": "Problems", "interview topics": "Topics",
+};
+const QUICK_ACCESS = [
+  { label: "Learn", href: "/learning", icon: BookOpen, tint: "text-accent-teal" },
+  { label: "Practice", href: "/practice", icon: Code2, tint: "text-ink-muted" },
+  { label: "Projects", href: "/projects", icon: LayoutGrid, tint: "text-orange-400" },
+  { label: "Jobs", href: "/jobs", icon: Briefcase, tint: "text-accent-sky" },
+];
 
-/**
- * Home hero — the first thing on the page for every visitor (server-rendered,
- * so it's the LCP and fully crawlable). Trust numbers come straight from the
- * live catalogue; a stat with no real value (0) is simply not shown.
- */
+/** Compact, server-rendered hero using only live catalogue counts. */
 export function HomeHero({ stats, courses }: { stats: HeroStat[]; courses: HeroCourse[] }) {
   const shown = stats.filter((s) => s.value > 0);
   return (
-    <section className="container-page pt-6 sm:pt-10" aria-labelledby="home-hero-title">
-      <div className="relative overflow-hidden rounded-3xl border border-line bg-card px-5 py-10 shadow-card sm:px-10 sm:py-14 lg:px-14 lg:py-16">
-        {/* Decorative ground: dotted grid fading out + two colour washes. */}
-        <div aria-hidden className="bg-grid pointer-events-none absolute inset-0 [mask-image:radial-gradient(ellipse_at_top_left,#000_20%,transparent_70%)]" />
-        <div aria-hidden className="pointer-events-none absolute -left-24 -top-24 h-72 w-72 rounded-full bg-primary/15 blur-3xl" />
-        <div aria-hidden className="pointer-events-none absolute -bottom-32 right-10 h-72 w-72 rounded-full bg-accent-pink/10 blur-3xl" />
-
-        <div className="relative grid items-center gap-12 lg:grid-cols-[1.1fr_0.9fr] lg:gap-16">
-          {/* No entrance animation: this block holds the LCP headline, which should paint immediately. */}
-          <div>
-            <span className="inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary-50 px-3 py-1 text-xs font-semibold text-primary">
-              {/* Static dot — an infinite "ping" here kept the main thread busy on mid-range phones. */}
-              <span aria-hidden className="h-2 w-2 rounded-full bg-primary ring-4 ring-primary/15" />
-              Learn · Practice · Build · Get hired
-            </span>
-
-            <h1 id="home-hero-title" className="h-display mt-5 max-w-2xl">
-              Learn skills. Build projects. <span className="text-gradient">Land the job.</span>
-            </h1>
-            <p className="lede mt-5 max-w-xl sm:text-lg">
-              Tutorials, coding practice, placement prep, final-year projects and fresh jobs &amp; internships — one
-              student account on the web and the CampusEduX app.
-            </p>
-
-            <div className="mt-8 flex flex-wrap gap-3">
-              <Button href="/learning" size="lg" rightIcon={ArrowRight}>
+    <section className="container-page pt-4 sm:pt-6 lg:pt-8" aria-labelledby="home-hero-title">
+      <div className="relative min-w-0 sm:overflow-hidden sm:rounded-2xl sm:border sm:border-line sm:bg-card sm:px-6 sm:py-8 lg:px-10 lg:py-10">
+        <div className="relative grid items-center gap-5 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)] lg:gap-10">
+          <div className="min-w-0">
+            <PageHeader id="home-hero-title" title={<><span className="hero-headline-first">Learn skills. Build projects.</span>{" "}<span className="hero-headline-last">Land the <span className="text-gradient">job.</span></span></>} caption="Your next skill. Your next opportunity." />
+            <div className="home-hero-actions mt-3 flex flex-wrap items-center gap-2 sm:mt-4">
+              <Button href="/learning" size="md" rightIcon={ArrowRight} className="min-w-0 px-3 sm:px-5">
                 Start learning
               </Button>
-              <Button href="/jobs" size="lg" variant="ghost" leftIcon={Briefcase}>
-                Find jobs &amp; internships
-              </Button>
+              <Link href="/jobs" className="inline-flex min-h-11 items-center text-xs font-medium text-ink-muted hover:text-ink sm:text-sm">
+                <span className="hero-jobs-original">Find jobs &amp; internships</span><span className="hero-jobs-mobile" hidden>Find jobs</span>
+              </Link>
             </div>
-
-            <div className="mt-6 max-w-lg">
-              <SearchBar action="/search" placeholder="Search courses, projects, jobs…" />
-            </div>
-
+            <ChipRow label="Quick access" className="mt-3">
+              {QUICK_ACCESS.map(({ label, href, icon: Icon, tint }) => (
+                <Chip key={href} href={href} className="gap-2 whitespace-nowrap">
+                  <Icon className={`h-4 w-4 shrink-0 ${tint}`} aria-hidden />
+                  {label}
+                </Chip>
+              ))}
+            </ChipRow>
             {shown.length > 0 && (
-              <dl className="mt-9 grid grid-cols-2 gap-3 sm:flex sm:flex-wrap sm:gap-x-8 sm:gap-y-4">
-                {shown.map((s) => (
-                  <div key={s.label} className="rounded-2xl border border-line bg-surface/70 px-4 py-3 sm:border-0 sm:bg-transparent sm:p-0">
+              <dl className="mt-3 grid grid-cols-4 gap-3 sm:mt-5">
+                {stats.filter((s) => s.value > 0 || MOBILE_STAT_LABELS[s.label]).map((s) => (
+                  <div key={s.label} hidden={s.value <= 0} className="min-w-0 rounded-[14px] bg-card px-1 py-2 text-center sm:bg-surface sm:px-3 sm:py-3">
                     <dt className="sr-only">{s.label}</dt>
-                    <dd className="font-display text-2xl font-bold tracking-tight text-ink sm:text-[1.75rem]">
-                      {formatCount(s.value)}
-                    </dd>
-                    <dd className="text-xs font-medium text-ink-muted sm:text-sm">{s.label}</dd>
+                    <dd className="text-base font-semibold tabular-nums text-ink sm:text-2xl">{formatCount(s.value)}</dd>
+                    <dd className="text-xs leading-4 text-ink-muted"><span className="hero-stat-original">{s.label}</span><span className="hero-stat-mobile" hidden>{MOBILE_STAT_LABELS[s.label] ?? s.label}</span></dd>
                   </div>
                 ))}
               </dl>
             )}
           </div>
-
-          <div className="hidden lg:block">
-            <HeroVisual courses={courses} />
-          </div>
+          <div className="hidden lg:block"><HeroVisual courses={courses} /></div>
         </div>
       </div>
     </section>

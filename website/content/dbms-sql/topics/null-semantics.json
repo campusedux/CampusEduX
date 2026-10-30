@@ -1,0 +1,626 @@
+{
+  "source_ref": "chapter-8-sql-fundamentals/null-semantics",
+  "slug": "null-semantics",
+  "title": "NULL Semantics",
+  "description": "Handle SQL NULL with three-valued logic, presence predicates, aggregate counts, safe exclusion queries, COALESCE, and explicit MySQL ordering rules.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Representing a missing value honestly\n\nNULL is SQL's marker for an absent or unknown value. It is not the number zero, an empty string, or the word NULL stored as text. Those are different recorded values. If an employee's manager identifier is NULL, the database is not claiming that the manager's identifier is zero. It is recording that no ordinary identifier value is present in that field. The intended business meaning must still be documented.\n\nA missing value can arise for different reasons. A phone number may be unknown, a delivery date may not yet exist, or a question may be inapplicable. One NULL marker does not tell you which reason applies. If those distinctions affect the application, represent them explicitly with suitable additional information. Do not expect SQL to infer the reason from the absence of a value.\n\nThese examples use MySQL 8.4 behavior. MySQL treats an empty string as a string value rather than automatically treating it as NULL. Other database products can make different choices in particular contexts. That is why a clear dialect matters even when an example appears to contain only a simple comparison or an ordinary sort.\n\n## Understanding why ordinary equality is not an absence test\n\nAn equality comparison asks whether two known values are equal. When one side is NULL, ordinary equality does not establish TRUE or FALSE; its result is UNKNOWN. Even NULL compared to NULL using ordinary equality is UNKNOWN. Two missing values do not prove that the unavailable underlying values would be equal if they were known.\n\nWHERE retains rows whose condition is TRUE. Both FALSE and UNKNOWN fail to qualify. Consequently, a condition such as manager_id = NULL does not find employees with a missing manager identifier. It produces UNKNOWN for those rows and for rows with known identifiers. The query can execute without a syntax error and still return none of the records the writer intended to retrieve.\n\nUse IS NULL to test whether a value is absent and IS NOT NULL to test whether it is present. These predicates produce a definite truth result for that test. MySQL also provides a NULL-safe equality operator, written <=>, for cases where its specific equality behavior is wanted. The portable, direct expression for the beginner task of locating missing values remains IS NULL.\n\n```sql\nSELECT id, name\nFROM employees\nWHERE manager_id IS NULL\nORDER BY id;\n```\n\nThis query lists employees whose manager field has no identifier. It does not claim that their names are missing or that they have a manager with identifier zero. The selected output columns and the tested column can be different. Ordering by the unique employee identifier makes the expected result deterministic for a practice exercise or a report.\n\n## Reasoning with TRUE, FALSE, and UNKNOWN\n\nSQL conditions use three-valued logic: TRUE, FALSE, and UNKNOWN. The third value changes some familiar-looking transformations. NOT UNKNOWN is still UNKNOWN. Therefore, changing a condition from manager_id = NULL to NOT(manager_id = NULL) does not find the employees with known managers. To test presence, use the presence predicate rather than negating an equality that cannot establish a result.\n\nFor AND, a definite FALSE makes the combined condition FALSE even when the other side is UNKNOWN. For OR, a definite TRUE makes the combined condition TRUE even when the other side is UNKNOWN. When no such decisive value exists, UNKNOWN can remain. Understanding these rules helps explain which rows qualify; it is more reliable than assuming that NULL is just another spelling of FALSE.\n\nFor example, an employee with a missing manager identifier can still qualify for a condition that explicitly allows missing managers or a particular known manager. Use manager_id IS NULL OR manager_id = 7 when that is the intended policy. By contrast, manager_id <> 7 alone does not include the missing-manager rows. Their ordinary comparison is UNKNOWN, not a definite statement that the identifier differs from seven.\n\n## Keeping missing values distinct in calculations\n\nOrdinary arithmetic with NULL normally produces NULL. Five plus an unknown amount is not known to equal five, and multiplying an unknown price by zero does not turn that price into a known observation. This behavior prevents a query from silently inventing values. Before replacing missing values, decide what the replacement means in the report and whether the source information justifies it.\n\nCOALESCE selects the first non-NULL argument. A report can use it to display a documented replacement, such as an unassigned-manager label. It should not be used casually to rewrite missing measurements as zeros. An unknown mark and a known mark of zero describe different situations, and treating them alike can change totals, averages, and decisions based on the report.\n\nCOUNT(*) counts rows regardless of NULL fields. COUNT(manager_id) counts only the rows with a non-NULL manager identifier. Suppose four employees have manager identifiers NULL, 7, NULL, and 9. The first count is four and the second is two. Most ordinary numeric aggregates, including SUM and AVG, ignore NULL inputs rather than counting them as zero values. Be explicit about the population a reported aggregate represents.\n\n## Avoiding the NOT IN trap\n\nConsider a report that must exclude archived departments. A tempting condition is dept_id NOT IN a subquery returning archived identifiers. If the returned list contains NULL, the condition does not safely mean that every unlisted known department qualifies. A department matching a known archive key fails the test; a department with no known match can instead produce UNKNOWN because of the missing archive key.\n\n```sql\nSELECT d.dept_id, d.dept_name\nFROM departments AS d\nWHERE NOT EXISTS (\n  SELECT 1\n  FROM archived_depts AS a\n  WHERE a.dept_id = d.dept_id\n)\nORDER BY d.dept_id;\n```\n\nFor a non-NULL department primary key, this correlated NOT EXISTS condition asks whether any archive row actually matches that key. A NULL archive identifier does not establish such a match. If the archive contains the identifier two and a NULL, departments one and three can still qualify. Repeated archive entries for two do not change the existence question or duplicate the returned departments.\n\nAnother valid design can filter NULL out of the subquery used by NOT IN, but you must understand the outer column's nullability as well. Our department identifiers are primary keys and therefore non-NULL. If the outer identifier could also be NULL, an equality-based existence test and NOT IN would require an explicit business decision about those outer missing identifiers. Never assume two query forms are interchangeable without considering their input rules.\n\n## Specifying where missing values should appear in a sort\n\nMySQL places NULL before non-NULL values in ascending order and after them in descending order. Other engines have different defaults. A report should express its intended ordering rather than rely on a rule remembered from a different product. In MySQL, ordering first by manager_id IS NULL and then by manager_id can deliberately place known identifiers before missing ones in an ascending result.\n\nA final unique identifier can break ties between employees with the same manager, including several employees with missing manager identifiers. This makes the result repeatable without pretending that missing identifiers are equal through ordinary SQL equality. Sorting and equality are different operations with different purposes, so their treatment of missing values should not be conflated.\n\n## Testing the cases that expose a mistaken assumption\n\nUseful tests include an ordinary known value, a NULL, a known zero where the type permits it, duplicate non-key values, and an empty table. For an exclusion query, test a matching archive identifier, a nonmatching identifier, duplicate archive entries, and a NULL in the archive. These small datasets expose mistakes that a large dataset containing only ordinary known values can hide.\n\nFinally, distinguish a query error from a wrong result. Using equality against NULL often produces valid SQL with an empty result, not an exception explaining the mistake. State the intended treatment of missing information, choose predicates that implement it, and verify actual rows and aggregates against that stated policy. That discipline is the central skill behind using NULL correctly throughout later SQL topics.",
+  "references": [
+    {
+      "title": "MySQL working with NULL values",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/working-with-null.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-8-null-semantics",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-8-null-semantics-1",
+          "test_id": "pt-dbms-sql-8-null-semantics",
+          "question_text": "What does NULL represent in SQL?",
+          "options": [
+            "The number zero",
+            "An empty string",
+            "An unknown or absent value",
+            "The boolean value false"
+          ],
+          "correct_index": 2,
+          "explanation": "NULL means unknown/absent — it is distinct from zero, empty string, or false.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-8-null-semantics-2",
+          "test_id": "pt-dbms-sql-8-null-semantics",
+          "question_text": "How should you correctly test whether a column's value is NULL?",
+          "options": [
+            "WHERE column = NULL",
+            "WHERE column IS NULL",
+            "WHERE column == NULL",
+            "WHERE column <> ''"
+          ],
+          "correct_index": 1,
+          "explanation": "IS NULL is the direct, portable absence test among these options. Ordinary equality to NULL is UNKNOWN; MySQL separately supports the NULL-safe equality operator <=>.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-8-null-semantics-3",
+          "test_id": "pt-dbms-sql-8-null-semantics",
+          "question_text": "What does `WHERE manager_id = NULL` return, even for rows where manager_id genuinely is NULL?",
+          "options": [
+            "All rows where manager_id is NULL, correctly",
+            "Zero rows — the comparison evaluates to UNKNOWN, which WHERE treats like FALSE",
+            "A syntax error",
+            "Every row in the table, regardless of manager_id"
+          ],
+          "correct_index": 1,
+          "explanation": "Equality with NULL is always UNKNOWN, never TRUE, so WHERE silently filters out every row — a classic, hard-to-notice bug.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-8-null-semantics-4",
+          "test_id": "pt-dbms-sql-8-null-semantics",
+          "question_text": "What is the result of `5 + NULL`?",
+          "options": [
+            "5",
+            "0",
+            "NULL",
+            "An error"
+          ],
+          "correct_index": 2,
+          "explanation": "NULL propagates through arithmetic — any arithmetic operation involving NULL produces NULL.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-8-null-semantics-5",
+          "test_id": "pt-dbms-sql-8-null-semantics",
+          "question_text": "What is the difference between COUNT(*) and COUNT(column_name) when the column contains some NULLs?",
+          "options": [
+            "They always return the exact same number",
+            "COUNT(*) counts all rows regardless of NULLs; COUNT(column_name) only counts rows where that column is non-NULL",
+            "COUNT(column_name) always throws an error if any NULL exists",
+            "COUNT(*) ignores NULLs while COUNT(column_name) does not"
+          ],
+          "correct_index": 1,
+          "explanation": "COUNT(*) counts rows; COUNT(column) counts non-NULL values in that specific column — they can differ.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-8-null-semantics-6",
+          "test_id": "pt-dbms-sql-8-null-semantics",
+          "question_text": "Why is `three-valued logic` the correct name for how SQL handles conditions involving NULL?",
+          "options": [
+            "Because SQL conditions can only be TRUE or FALSE, so the name is misleading",
+            "Because a condition can evaluate to TRUE, FALSE, or UNKNOWN, and WHERE only keeps TRUE rows",
+            "Because SQL supports exactly three data types",
+            "Because there are three kinds of NULL in SQL"
+          ],
+          "correct_index": 1,
+          "explanation": "SQL's logic has three possible truth values — TRUE, FALSE, and UNKNOWN — with UNKNOWN arising from any NULL comparison.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-8-null-semantics-7",
+          "test_id": "pt-dbms-sql-8-null-semantics",
+          "question_text": "A query uses `WHERE dept_id NOT IN (SELECT dept_id FROM archived_depts)`, and archived_depts.dept_id contains one NULL row. What is the likely surprising outcome?",
+          "options": [
+            "The query always ignores NULL archive rows automatically",
+            "No rows pass: a known match is FALSE and a nonmatch can be UNKNOWN because of NULL",
+            "NULL is silently removed from the subquery result",
+            "The query necessarily reports a syntax error"
+          ],
+          "correct_index": 1,
+          "explanation": "For known outer keys, a match against a non-NULL archived key makes NOT IN FALSE. Without a known match, the NULL entry can make the result UNKNOWN. Neither result qualifies in WHERE.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-8-null-semantics-8",
+          "test_id": "pt-dbms-sql-8-null-semantics",
+          "question_text": "Given `ORDER BY manager_id`, where does NULL typically sort?",
+          "options": [
+            "NULLs always cause an error in ORDER BY",
+            "NULLs sort in an engine-defined position (commonly first or last, differing by dialect) — never assume a specific position without checking",
+            "NULLs are always excluded automatically from any ORDER BY result",
+            "NULLs always sort as if they were zero"
+          ],
+          "correct_index": 1,
+          "explanation": "Different engines place NULLs differently by default under ORDER BY, and this is genuinely dialect-dependent — a detail worth verifying rather than assuming.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "question_text": "What does NOT UNKNOWN evaluate to in SQL three-valued logic?",
+          "options": [
+            "TRUE",
+            "FALSE",
+            "Zero",
+            "UNKNOWN"
+          ],
+          "correct_index": 3,
+          "explanation": "Negation does not turn an unavailable truth result into a known result.",
+          "marks": 1,
+          "id": "tq-dbx2-null-semantics-1-9",
+          "test_id": "pt-dbms-sql-8-null-semantics",
+          "sort_order": 8
+        },
+        {
+          "question_text": "Which MySQL operator provides NULL-safe equality when that behavior is intended?",
+          "options": [
+            "==",
+            "<=>",
+            "= NULL",
+            "!=="
+          ],
+          "correct_index": 1,
+          "explanation": "MySQL <=> is NULL-safe equality. IS NULL remains the direct predicate for an absence test.",
+          "marks": 1,
+          "id": "tq-dbx2-null-semantics-1-10",
+          "test_id": "pt-dbms-sql-8-null-semantics",
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbx2-null-semantics-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "question_text": "Four manager identifiers are NULL, 7, NULL, and 9. What are COUNT(*) and COUNT(manager_id)?",
+          "options": [
+            "2 and 4",
+            "4 and 4",
+            "2 and 2",
+            "4 and 2"
+          ],
+          "correct_index": 3,
+          "explanation": "COUNT(*) counts all four rows. COUNT(manager_id) counts the two non-NULL identifier values.",
+          "marks": 1,
+          "id": "tq-dbx2-null-semantics-2-1",
+          "test_id": "pt-dbx2-null-semantics-application",
+          "sort_order": 0
+        },
+        {
+          "question_text": "A row has manager_id NULL. Does WHERE manager_id <> 7 retain it?",
+          "options": [
+            "Yes; NULL is automatically not seven",
+            "No; the ordinary comparison is UNKNOWN",
+            "Yes; NULL is converted to zero",
+            "The predicate must be a syntax error"
+          ],
+          "correct_index": 1,
+          "explanation": "Ordinary inequality with NULL cannot establish TRUE. Use an explicit absence branch if missing managers should qualify.",
+          "marks": 1,
+          "id": "tq-dbx2-null-semantics-2-2",
+          "test_id": "pt-dbx2-null-semantics-application",
+          "sort_order": 1
+        },
+        {
+          "question_text": "Which condition includes employees assigned to manager 7 as well as employees with no manager identifier?",
+          "options": [
+            "manager_id = NULL",
+            "manager_id <> 7",
+            "NOT(manager_id = NULL)",
+            "manager_id = 7 OR manager_id IS NULL"
+          ],
+          "correct_index": 3,
+          "explanation": "The equality covers the known identifier, and the explicit presence test covers the missing-value case.",
+          "marks": 1,
+          "id": "tq-dbx2-null-semantics-2-3",
+          "test_id": "pt-dbx2-null-semantics-application",
+          "sort_order": 2
+        },
+        {
+          "question_text": "What is FALSE AND UNKNOWN?",
+          "options": [
+            "FALSE",
+            "TRUE",
+            "UNKNOWN",
+            "A syntax error"
+          ],
+          "correct_index": 0,
+          "explanation": "A definite FALSE is enough to make the AND condition false regardless of the other truth value.",
+          "marks": 1,
+          "id": "tq-dbx2-null-semantics-2-4",
+          "test_id": "pt-dbx2-null-semantics-application",
+          "sort_order": 3
+        },
+        {
+          "question_text": "What is TRUE OR UNKNOWN?",
+          "options": [
+            "TRUE",
+            "FALSE",
+            "UNKNOWN",
+            "NULL converted to zero"
+          ],
+          "correct_index": 0,
+          "explanation": "A definite TRUE makes an OR condition true even when the other side is unknown.",
+          "marks": 1,
+          "id": "tq-dbx2-null-semantics-2-5",
+          "test_id": "pt-dbx2-null-semantics-application",
+          "sort_order": 4
+        },
+        {
+          "question_text": "The archive identifiers are 2 and NULL; department primary keys are 1, 2, 3. Which keys does the notes' NOT EXISTS query return?",
+          "options": [
+            "No keys",
+            "1 and 3",
+            "Only 2",
+            "1, 2, and 3"
+          ],
+          "correct_index": 1,
+          "explanation": "Only key 2 has an actual matching archive row. A NULL archive value does not match keys 1 or 3.",
+          "marks": 1,
+          "id": "tq-dbx2-null-semantics-2-6",
+          "test_id": "pt-dbx2-null-semantics-application",
+          "sort_order": 5
+        },
+        {
+          "question_text": "An archive contains department 2 three times. How does this affect an existence-based exclusion of department 2?",
+          "options": [
+            "Department 2 must be returned three times",
+            "A match exists, so department 2 is excluded once from the outer result",
+            "All other departments are excluded",
+            "The query must require a unique archive key"
+          ],
+          "correct_index": 1,
+          "explanation": "Existence depends on whether any matching row exists, not on how many duplicate matches there are.",
+          "marks": 1,
+          "id": "tq-dbx2-null-semantics-2-7",
+          "test_id": "pt-dbx2-null-semantics-application",
+          "sort_order": 6
+        },
+        {
+          "question_text": "In MySQL, where does a bare ascending ORDER BY manager_id place NULL values?",
+          "options": [
+            "After every non-NULL value in all circumstances",
+            "In no position because they are excluded",
+            "Before non-NULL identifiers",
+            "At a position guaranteed to match every other DBMS"
+          ],
+          "correct_index": 2,
+          "explanation": "MySQL's ascending default puts NULL first. Other products can have different defaults.",
+          "marks": 1,
+          "id": "tq-dbx2-null-semantics-2-8",
+          "test_id": "pt-dbx2-null-semantics-application",
+          "sort_order": 7
+        },
+        {
+          "question_text": "A report replaces unknown marks with zero before averaging. What assumption has it introduced?",
+          "options": [
+            "It has preserved every possible original meaning",
+            "It has proved every student took the test",
+            "It has treated a missing measurement as a known score of zero",
+            "It has changed only the output font"
+          ],
+          "correct_index": 2,
+          "explanation": "NULL and zero are different facts. A replacement changes the reporting policy and can affect aggregates.",
+          "marks": 1,
+          "id": "tq-dbx2-null-semantics-2-9",
+          "test_id": "pt-dbx2-null-semantics-application",
+          "sort_order": 8
+        },
+        {
+          "question_text": "Why include a NULL archive identifier in an exclusion-query test dataset?",
+          "options": [
+            "It exposes incorrect assumptions about NOT IN and ordinary comparisons",
+            "It guarantees every possible query is correct",
+            "It forces every SQL statement to fail parsing",
+            "It removes the need to state nullability rules"
+          ],
+          "correct_index": 0,
+          "explanation": "A missing archive key can turn nonmatching NOT IN comparisons into UNKNOWN. The test must exercise that boundary.",
+          "marks": 1,
+          "id": "tq-dbx2-null-semantics-2-10",
+          "test_id": "pt-dbx2-null-semantics-application",
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cp-dbms-sql-employees-without-a-manager",
+      "slug": "employees-without-a-manager",
+      "title": "Employees Without a Manager",
+      "difficulty": "Easy",
+      "task": "Return id and name for employees whose manager_id is NULL, ordered by id ascending.",
+      "schema_sql": "CREATE TABLE employees (\n  id INTEGER PRIMARY KEY,\n  name TEXT NOT NULL,\n  department TEXT NOT NULL,\n  salary INTEGER NOT NULL,\n  manager_id INTEGER\n);",
+      "seed_sql": "INSERT INTO employees (id, name, department, salary, manager_id) VALUES\n(1, 'Asha', 'Engineering', 85000, NULL),\n(2, 'Rohan', 'Engineering', 72000, 1),\n(3, 'Neha', 'Sales', 68000, NULL),\n(4, 'Vikram', 'Sales', 61000, 3),\n(5, 'Priya', 'Engineering', 79000, 1),\n(6, 'Karan', 'Marketing', 55000, NULL),\n(7, 'Divya', 'Marketing', 58000, 6),\n(8, 'Aman', 'Sales', 64000, 3);",
+      "expected": "id\tname\n1\tAsha\n3\tNeha\n6\tKaran",
+      "ordering": "Ascending id.",
+      "constraints": [
+        "id is unique and non-NULL.",
+        "name, department and salary are required.",
+        "manager_id may be NULL; no foreign key is declared in this practice schema."
+      ],
+      "edge_cases": [
+        "A non-NULL manager identifier is not an unassigned manager.",
+        "Duplicate employee names must remain separate rows.",
+        "No matching employees means an empty result."
+      ],
+      "hints": [
+        "Test for absence with IS NULL.",
+        "Do not use manager_id = NULL."
+      ],
+      "solution_sql": "SELECT id, name FROM employees WHERE manager_id IS NULL ORDER BY id;",
+      "explanation": "IS NULL is TRUE for missing manager identifiers. Ordinary equality to NULL yields UNKNOWN and cannot select these rows. The unique identifier fixes the output order.",
+      "validation_cases": [
+        {
+          "hidden": true,
+          "seed_sql": "INSERT INTO employees (id, name, department, salary, manager_id) VALUES\n(1, 'Zara', 'Engineering', 90000, NULL),\n(2, 'Omar', 'Engineering', 90000, 1),\n(3, 'Leo', 'Finance', 70000, NULL),\n(4, 'Mia', 'Finance', 66000, 3),\n(5, 'Sam', 'Engineering', 58000, 1),\n(6, 'Tia', 'Finance', 72000, 3);",
+          "expected": "id\tname\n1\tZara\n3\tLeo"
+        },
+        {
+          "seed_sql": "INSERT INTO employees VALUES (7,'Same','Design',20,NULL),(2,'Same','Design',30,NULL),(3,'Other','Science',40,2);",
+          "expected": "id\tname\n2\tSame\n7\tSame"
+        },
+        {
+          "seed_sql": "INSERT INTO employees VALUES (1,'Assigned','Design',30,7);",
+          "expected": ""
+        }
+      ],
+      "existing_problem": true,
+      "original_description_md5": "04c0fd75a39b96f24fe62602d7ed8e25",
+      "original_problem": {
+        "id": "cp-dbms-sql-employees-without-a-manager",
+        "topic_id": null,
+        "title": "Employees Without a Manager",
+        "difficulty": "Easy",
+        "slug": "employees-without-a-manager",
+        "description": "Some employees have no manager (`manager_id` is `NULL` — they're top-level staff). Write a query returning `id` and `name` for employees with no manager, ordered by `id` ascending.\n\n**Reminder:** test for NULL with `IS NULL`, never `= NULL` (see NULL Semantics) — `= NULL` never matches anything.\n\n```sql\nCREATE TABLE employees (\n  id INTEGER PRIMARY KEY,\n  name TEXT NOT NULL,\n  department TEXT NOT NULL,\n  salary INTEGER NOT NULL,\n  manager_id INTEGER\n);\n```\n\n**Sample data** (this is what your query runs against when you press Run):\n\n```sql\nINSERT INTO employees (id, name, department, salary, manager_id) VALUES\n(1, 'Asha', 'Engineering', 85000, NULL),\n(2, 'Rohan', 'Engineering', 72000, 1),\n(3, 'Neha', 'Sales', 68000, NULL),\n(4, 'Vikram', 'Sales', 61000, 3),\n(5, 'Priya', 'Engineering', 79000, 1),\n(6, 'Karan', 'Marketing', 55000, NULL),\n(7, 'Divya', 'Marketing', 58000, 6),\n(8, 'Aman', 'Sales', 64000, 3);\n```\n",
+        "examples": "[{\"input\": \"\", \"output\": \"id\\tname\\n1\\tAsha\\n3\\tNeha\\n6\\tKaran\"}]",
+        "test_cases": "[{\"hidden\": true, \"seed_sql\": \"INSERT INTO employees (id, name, department, salary, manager_id) VALUES\\n(1, 'Zara', 'Engineering', 90000, NULL),\\n(2, 'Omar', 'Engineering', 90000, 1),\\n(3, 'Leo', 'Finance', 70000, NULL),\\n(4, 'Mia', 'Finance', 66000, 3),\\n(5, 'Sam', 'Engineering', 58000, 1),\\n(6, 'Tia', 'Finance', 72000, 3);\", \"expected\": \"id\\tname\\n1\\tZara\\n3\\tLeo\"}]",
+        "starter_code": null,
+        "editorial": "`WHERE manager_id IS NULL` is the only correct way to test for NULL — `= NULL` always evaluates to UNKNOWN and matches nothing, even for NULL rows. Reference: `SELECT id, name FROM employees WHERE manager_id IS NULL ORDER BY id;`",
+        "supported_languages": null,
+        "sql_schema_sql": "CREATE TABLE employees (\n  id INTEGER PRIMARY KEY,\n  name TEXT NOT NULL,\n  department TEXT NOT NULL,\n  salary INTEGER NOT NULL,\n  manager_id INTEGER\n);",
+        "sql_seed_sql": "INSERT INTO employees (id, name, department, salary, manager_id) VALUES\n(1, 'Asha', 'Engineering', 85000, NULL),\n(2, 'Rohan', 'Engineering', 72000, 1),\n(3, 'Neha', 'Sales', 68000, NULL),\n(4, 'Vikram', 'Sales', 61000, 3),\n(5, 'Priya', 'Engineering', 79000, 1),\n(6, 'Karan', 'Marketing', 55000, NULL),\n(7, 'Divya', 'Marketing', 58000, 6),\n(8, 'Aman', 'Sales', 64000, 3);",
+        "learning_topic_id": null,
+        "status": "published",
+        "is_premium": null,
+        "show_on_website": null,
+        "show_on_mobile": null,
+        "sort_order": 1
+      }
+    },
+    {
+      "id": "cp-dbx2-null-active-departments",
+      "slug": "dbx2-null-active-departments",
+      "title": "Exclude Archived Departments Safely",
+      "difficulty": "Medium",
+      "task": "Return dept_id and dept_name for departments with no matching non-NULL dept_id in archived_depts. NULL entries and duplicate identifiers in archived_depts must not suppress unrelated departments.",
+      "schema_sql": "CREATE TABLE departments (dept_id INT PRIMARY KEY, dept_name VARCHAR(40) NOT NULL); CREATE TABLE archived_depts (dept_id INT NULL);",
+      "seed_sql": "INSERT INTO departments VALUES (1,'Design'),(2,'Science'),(3,'History'); INSERT INTO archived_depts VALUES (2),(NULL),(2);",
+      "expected": "dept_id\tdept_name\n1\tDesign\n3\tHistory",
+      "ordering": "Ascending dept_id.",
+      "constraints": [
+        "departments.dept_id is unique and non-NULL.",
+        "dept_name is required.",
+        "archived_depts.dept_id allows NULL and duplicates."
+      ],
+      "edge_cases": [
+        "A NULL archived identifier does not match an ordinary department key.",
+        "Duplicate archived identifiers do not duplicate or suppress unrelated rows.",
+        "An empty archive retains every department.",
+        "An empty department table returns no rows."
+      ],
+      "hints": [
+        "Use a correlated NOT EXISTS condition.",
+        "Compare archived and outer dept_id with ordinary equality."
+      ],
+      "solution_sql": "SELECT d.dept_id, d.dept_name FROM departments AS d WHERE NOT EXISTS (SELECT 1 FROM archived_depts AS a WHERE a.dept_id = d.dept_id) ORDER BY d.dept_id;",
+      "explanation": "For each known department identifier, the subquery finds matching archive rows. NULL archive keys do not produce TRUE equality matches. NOT EXISTS therefore excludes exactly the departments with a match, and duplicate matches do not change the existence test.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO departments VALUES (3,'Same'),(1,'Same'); INSERT INTO archived_depts VALUES (NULL);",
+          "expected": "dept_id\tdept_name\n1\tSame\n3\tSame"
+        },
+        {
+          "seed_sql": "INSERT INTO departments VALUES (1,'Design'),(2,'Science'); INSERT INTO archived_depts VALUES (1),(2),(NULL);",
+          "expected": ""
+        },
+        {
+          "seed_sql": "",
+          "expected": ""
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": null,
+  "review": {
+    "reviewer": "coordinator",
+    "independent_review": "unavailable; no agent tools",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "definitions, worked examples and question coverage checked; no external plagiarism certification",
+    "existing_question_corrections": [
+      "tq-dbms-sql-8-null-semantics-2",
+      "tq-dbms-sql-8-null-semantics-7"
+    ],
+    "canonical_answer_indices_preserved": true,
+    "answer_position_policy": "Original eight canonical indices retained for saved attempts; new questions use shuffled positions; the website shuffles displayed positions separately for each inline attempt."
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-8-null-semantics",
+    "original_note_sha256": "85d9f3344b69a2a2c87e2354f1c3c0f2daebb0b3f1591c0e6990f1599d470cd6",
+    "status": "paired migration prepared; not applied"
+  },
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-8-null-semantics-1",
+      "test_id": "pt-dbms-sql-8-null-semantics",
+      "question_text": "What does NULL represent in SQL?",
+      "options": [
+        "The number zero",
+        "An empty string",
+        "An unknown or absent value",
+        "The boolean value false"
+      ],
+      "correct_index": 2,
+      "explanation": "NULL means unknown/absent — it is distinct from zero, empty string, or false.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-8-null-semantics-2",
+      "test_id": "pt-dbms-sql-8-null-semantics",
+      "question_text": "How should you correctly test whether a column's value is NULL?",
+      "options": [
+        "WHERE column = NULL",
+        "WHERE column IS NULL",
+        "WHERE column == NULL",
+        "WHERE column <> ''"
+      ],
+      "correct_index": 1,
+      "explanation": "IS NULL is the only correct way to test for NULL; = NULL never evaluates to TRUE.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-8-null-semantics-3",
+      "test_id": "pt-dbms-sql-8-null-semantics",
+      "question_text": "What does `WHERE manager_id = NULL` return, even for rows where manager_id genuinely is NULL?",
+      "options": [
+        "All rows where manager_id is NULL, correctly",
+        "Zero rows — the comparison evaluates to UNKNOWN, which WHERE treats like FALSE",
+        "A syntax error",
+        "Every row in the table, regardless of manager_id"
+      ],
+      "correct_index": 1,
+      "explanation": "Equality with NULL is always UNKNOWN, never TRUE, so WHERE silently filters out every row — a classic, hard-to-notice bug.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-8-null-semantics-4",
+      "test_id": "pt-dbms-sql-8-null-semantics",
+      "question_text": "What is the result of `5 + NULL`?",
+      "options": [
+        "5",
+        "0",
+        "NULL",
+        "An error"
+      ],
+      "correct_index": 2,
+      "explanation": "NULL propagates through arithmetic — any arithmetic operation involving NULL produces NULL.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-8-null-semantics-5",
+      "test_id": "pt-dbms-sql-8-null-semantics",
+      "question_text": "What is the difference between COUNT(*) and COUNT(column_name) when the column contains some NULLs?",
+      "options": [
+        "They always return the exact same number",
+        "COUNT(*) counts all rows regardless of NULLs; COUNT(column_name) only counts rows where that column is non-NULL",
+        "COUNT(column_name) always throws an error if any NULL exists",
+        "COUNT(*) ignores NULLs while COUNT(column_name) does not"
+      ],
+      "correct_index": 1,
+      "explanation": "COUNT(*) counts rows; COUNT(column) counts non-NULL values in that specific column — they can differ.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-8-null-semantics-6",
+      "test_id": "pt-dbms-sql-8-null-semantics",
+      "question_text": "Why is `three-valued logic` the correct name for how SQL handles conditions involving NULL?",
+      "options": [
+        "Because SQL conditions can only be TRUE or FALSE, so the name is misleading",
+        "Because a condition can evaluate to TRUE, FALSE, or UNKNOWN, and WHERE only keeps TRUE rows",
+        "Because SQL supports exactly three data types",
+        "Because there are three kinds of NULL in SQL"
+      ],
+      "correct_index": 1,
+      "explanation": "SQL's logic has three possible truth values — TRUE, FALSE, and UNKNOWN — with UNKNOWN arising from any NULL comparison.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-8-null-semantics-7",
+      "test_id": "pt-dbms-sql-8-null-semantics",
+      "question_text": "A query uses `WHERE dept_id NOT IN (SELECT dept_id FROM archived_depts)`, and archived_depts.dept_id contains one NULL row. What is the likely surprising outcome?",
+      "options": [
+        "The query works exactly as intended, excluding archived departments",
+        "The entire NOT IN comparison can evaluate to UNKNOWN for every row, causing the query to unexpectedly return zero rows",
+        "NULL rows in the subquery are automatically ignored with no effect",
+        "The query throws a clear, obvious error pointing at the NULL"
+      ],
+      "correct_index": 1,
+      "explanation": "A NULL anywhere in a NOT IN subquery's result set can make the whole NOT IN condition UNKNOWN for every outer row, silently zeroing out the result — a well-known real-world gotcha.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-8-null-semantics-8",
+      "test_id": "pt-dbms-sql-8-null-semantics",
+      "question_text": "Given `ORDER BY manager_id`, where does NULL typically sort?",
+      "options": [
+        "NULLs always cause an error in ORDER BY",
+        "NULLs sort in an engine-defined position (commonly first or last, differing by dialect) — never assume a specific position without checking",
+        "NULLs are always excluded automatically from any ORDER BY result",
+        "NULLs always sort as if they were zero"
+      ],
+      "correct_index": 1,
+      "explanation": "Different engines place NULLs differently by default under ORDER BY, and this is genuinely dialect-dependent — a detail worth verifying rather than assuming.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "sql_verification": {
+    "engine": "11.8.6-MariaDB-0+deb13u1 from Debian",
+    "scope": "MariaDB compatibility execution; exact MySQL 8.4/provider execution unverified",
+    "fingerprint": "f99d187d622f45d0ea303093def48f49dc1a9bb3ff07b561ec79b3c3d605daf5",
+    "cases": [
+      {
+        "problem": "employees-without-a-manager",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "employees-without-a-manager",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "employees-without-a-manager",
+        "case": 2,
+        "passed": true
+      },
+      {
+        "problem": "employees-without-a-manager",
+        "case": 3,
+        "passed": true
+      },
+      {
+        "problem": "dbx2-null-active-departments",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "dbx2-null-active-departments",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "dbx2-null-active-departments",
+        "case": 2,
+        "passed": true
+      },
+      {
+        "problem": "dbx2-null-active-departments",
+        "case": 3,
+        "passed": true
+      }
+    ],
+    "all_passed": true
+  }
+}

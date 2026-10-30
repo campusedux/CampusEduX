@@ -1,0 +1,603 @@
+{
+  "source_ref": "chapter-12-select-and-filtering/comparison-operators",
+  "slug": "comparison-operators",
+  "title": "Comparison Operators",
+  "description": "Use SQL comparison operators for numbers, text, and dates; understand inclusive boundaries, collations, NULL, and MySQL NULL-safe equality.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Comparisons turn facts into conditions\n\nA comparison asks how two values relate. An equipment budget report might ask whether a quoted price exceeds the approved ceiling, whether a department code matches the requested code or whether a return date precedes a deadline. Each question combines two operands with an operator. Understanding the operands' types and possible absence is as important as choosing the operator itself.\n\nThe result normally represents TRUE, FALSE or UNKNOWN under SQL's three-valued logic. In a WHERE clause, only TRUE qualifies. This means a comparison can be syntactically correct yet exclude rows a learner expected to see. Diagnose the comparison's actual meaning before assuming the source data disappeared or the database failed to read the table.\n\n## Equality and inequality have precise roles\n\nThe equals operator tests equality according to the compared types and their applicable rules. The standard not-equal spelling is the angle-bracket pair. MySQL also accepts the exclamation-equals spelling. Prefer a consistent documented form when teaching shared SQL concepts, and label engine-specific alternatives rather than suggest that every possible operator spelling is accepted everywhere.\n\nEquality is not assignment inside an ordinary predicate. A condition comparing equipment_code with CAM asks whether the row matches that code; it does not change the stored code. UPDATE uses a SET clause for assignment. The same visible equals symbol therefore participates in different syntactic roles, and the surrounding statement determines whether the SQL is reading a condition or assigning a value.\n\n## Ordering operators define endpoints\n\nLess than and greater than exclude equality. Their inclusive counterparts admit the boundary value. If a price must be at most the budget, equality is permitted. If a request must strictly exceed a threshold, equality is excluded. Translate those words before writing SQL, then check a value exactly at the boundary rather than only a comfortable qualifying example.\n\nA numeric interval usually requires two comparisons joined with AND. For example, quantities from two through six require at least two and at most six. Writing a mathematical-looking chained comparison does not express that interval safely in MySQL. One comparison can produce a truth value that is then compared numerically with another operand, yielding a very different condition from the intended range.\n\n```sql\nSELECT quote_id, price\nFROM equipment_quotes\nWHERE price >= 200 AND price <= 600\nORDER BY quote_id;\n```\n\n## Missing values do not behave like ordinary values\n\nOrdinary equality, inequality and ordering comparisons involving [NULL](/learning/dbms-sql-tutorial/null-values) evaluate to UNKNOWN. Even comparing NULL with NULL using ordinary equals does not yield TRUE. Consequently, price equals NULL does not find unknown prices, and price not equal to NULL does not find known ones. Use IS NULL or IS NOT NULL when the condition is explicitly about missingness.\n\nThe negation of an unknown comparison remains UNKNOWN. A predicate saying price is not equal to two hundred excludes a NULL price as well as excluding two hundred itself. If the intended report includes unknown prices for investigation, add the missing-value case deliberately. Do not rely on not-equal to mean every row outside one known value regardless of whether the field is known.\n\n## MySQL offers an explicit NULL-safe equality\n\nMySQL's NULL-safe equality operator returns true when both operands are NULL, false when exactly one is NULL, and otherwise tests ordinary equality. It is useful when a comparison should regard two absent optional values as the same state. This is a dialect-specific tool and should not be confused with ordinary equality or assumed available under the same spelling in every engine.\n\nConsider expected and actual room codes in an audit. If both are absent, the audit might define them as matching. Ordinary not-equal would fail to flag a row with one absent side because its result is unknown. A NULL-safe comparison followed by negation can express mismatching optional values. The rule must still come from the audit contract rather than a guess about what absence should mean.\n\n## Types determine the comparison domain\n\nTwo integers have a straightforward numeric ordering, while text has a character comparison contract. Comparing a number with a numeric-looking string can trigger implicit conversion. Malformed strings, leading characters and precision can then produce surprising outcomes. Validate and bind values using intended types rather than rely on whichever coercion makes a sample appear to work.\n\nEquipment codes such as 002 and 2 are identifiers, not necessarily quantities. Treating them as numbers can erase a meaningful distinction. Conversely, storing numeric prices as text can make lexical ordering disagree with numeric magnitude. The schema and application should agree on which values represent measurements and which represent labels before comparisons are used for eligibility or matching.\n\n## Text equality follows collation\n\nA text collation defines comparison behaviour, including relevant case and accent sensitivity. Two differently cased labels can compare equal under one collation and different under another. The operator alone does not specify every text rule. When teaching exact-case matching, use an explicitly supported comparison contract and explain why the database's normal collation would otherwise affect the result.\n\nTrailing spaces and character types can introduce further distinctions. A visually identical rendered label is not sufficient evidence of byte identity. Avoid broad claims that all text equality is case sensitive or that every trailing space is always significant. Representative tests should include the exact variations the application promises to distinguish, using the actual column types and collations.\n\n## Temporal comparisons require temporal meaning\n\nDATE values represent calendar dates and can be compared chronologically. DATETIME and TIMESTAMP introduce times, precision and, for TIMESTAMP interpretation, session time-zone behaviour. A date-only upper bound against a timestamp-like value may describe the start of that date rather than the end. State whether the rule concerns a calendar day or an instant before choosing the bounds.\n\nFor a whole month of timestamps, a lower inclusive boundary and the next month's exclusive boundary usually expresses the interval clearly. It avoids inventing the largest fractional instant of the final day. Supply correctly typed values and define the relevant time zone. Comparing casually formatted text dates can instead invoke conversion or lexical behaviour that does not match chronological intent.\n\n## Precision can change apparent equality\n\nExact decimal types and approximate floating-point types serve different purposes. A currency-like value represented as [DECIMAL](/learning/dbms-sql-tutorial/data-types) can support the declared exact decimal scale, while approximate arithmetic can introduce small representation differences. A displayed rounded value may look identical to a threshold while its underlying approximate value compares differently. Choose types and rounding policy deliberately for the business quantity.\n\nAn approximate measurement comparison may need a documented tolerance, but a tolerance should not be added casually to a protected identity or financial rule. Define the accepted domain, units and precision first. Tests should include rounding boundaries and the actual arithmetic expressions the application uses, rather than only values written directly as convenient decimal literals.\n\n## Read expressions before optimizing them\n\nA comparison can involve a column, parameter or computed expression. Wrapping an indexed column in a function or comparing incompatible types can affect index use. That is a performance consideration after semantics are established. Changing a text code into a number simply to obtain a different plan can make the query faster at answering the wrong question.\n\nInspect representative execution plans when performance matters, and retain boundary, NULL and type-sensitive cases during tuning. A plan is not a correctness proof. Likewise, a correct sample result does not prove index use or stable latency at production scale. Keep the evidence for result meaning separate from the evidence for efficient access.\n\n## Design examples around distinctions\n\nThe first exercise compares known quote prices with an inclusive budget interval, including exact endpoint values. The second identifies mismatched optional room codes using explicitly labeled MySQL NULL-safe equality. Its fixtures distinguish both-missing values from one-missing values, exposing a solution that incorrectly uses ordinary not-equal for every row.\n\nFor each comparison, explain which domain is being compared, how equality at the boundary is treated, what happens to NULL and whether any conversion is involved. Then verify the ordered result against near misses as well as matches. That habit turns a handful of symbols into a reliable language for business conditions and makes dialect-specific behaviour visible before the same predicate appears in a write.\n",
+  "references": [
+    {
+      "title": "MySQL 8.4 comparison operators",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/comparison-operators.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-12-comparison-operators",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-12-comparison-operators-1",
+          "test_id": "pt-dbms-sql-12-comparison-operators",
+          "question_text": "Which spelling is standard SQL for not equal?",
+          "options": [
+            "><",
+            "<>",
+            "NOT=",
+            "=="
+          ],
+          "correct_index": 1,
+          "explanation": "MySQL also accepts !=, but <> is the standard form.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-12-comparison-operators-2",
+          "test_id": "pt-dbms-sql-12-comparison-operators",
+          "question_text": "What is the ordinary comparison NULL = NULL?",
+          "options": [
+            "TRUE",
+            "UNKNOWN",
+            "FALSE",
+            "A syntax error"
+          ],
+          "correct_index": 1,
+          "explanation": "NULL represents missing information under ordinary comparison semantics.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-12-comparison-operators-3",
+          "test_id": "pt-dbms-sql-12-comparison-operators",
+          "question_text": "Which predicate finds unknown prices?",
+          "options": [
+            "price = NULL",
+            "price IS NULL",
+            "price <> NULL",
+            "price < NULL"
+          ],
+          "correct_index": 1,
+          "explanation": "Missingness has an explicit predicate.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-12-comparison-operators-4",
+          "test_id": "pt-dbms-sql-12-comparison-operators",
+          "question_text": "What can determine whether differently cased labels compare equal?",
+          "options": [
+            "Only the equals character",
+            "The applicable text collation",
+            "Only the source row count",
+            "The query indentation"
+          ],
+          "correct_index": 1,
+          "explanation": "Text comparison is governed by more than operator spelling.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-12-comparison-operators-5",
+          "test_id": "pt-dbms-sql-12-comparison-operators",
+          "question_text": "Why avoid careless cross-type comparisons?",
+          "options": [
+            "All cross-type comparisons are forbidden",
+            "Implicit conversion can alter meaning and index use",
+            "Conversion always preserves every identifier",
+            "Types never affect comparisons"
+          ],
+          "correct_index": 1,
+          "explanation": "Bind and validate the intended operand types.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-12-comparison-operators-6",
+          "test_id": "pt-dbms-sql-12-comparison-operators",
+          "question_text": "Can DATE values use ordering comparisons?",
+          "options": [
+            "No, only text can be ordered",
+            "Yes, correctly typed dates have chronological order",
+            "Only with a DATE_COMPARE keyword",
+            "Only equality works"
+          ],
+          "correct_index": 1,
+          "explanation": "Temporal type and boundary interpretation still matter.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-12-comparison-operators-7",
+          "test_id": "pt-dbms-sql-12-comparison-operators",
+          "question_text": "Which group contains ordinary ordering operators?",
+          "options": [
+            "AND, OR and NOT",
+            "<, >, <= and >=",
+            "SELECT, FROM and WHERE",
+            "IS, AS and ON"
+          ],
+          "correct_index": 1,
+          "explanation": "These operators distinguish strict from inclusive endpoints.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-12-comparison-operators-8",
+          "test_id": "pt-dbms-sql-12-comparison-operators",
+          "question_text": "Which not-equal alternative does MySQL accept?",
+          "options": [
+            "><",
+            "!=",
+            "==!",
+            "NOT="
+          ],
+          "correct_index": 1,
+          "explanation": "Dialect acceptance should not be confused with standard spelling.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-12-comparison-operators-new-9",
+          "test_id": "pt-dbms-sql-12-comparison-operators",
+          "question_text": "What does price <= 600 include?",
+          "options": [
+            "A known price exactly 600",
+            "Only prices below 600",
+            "NULL prices automatically",
+            "Every text code"
+          ],
+          "correct_index": 0,
+          "explanation": "The inclusive endpoint permits equality.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-12-comparison-operators-new-10",
+          "test_id": "pt-dbms-sql-12-comparison-operators",
+          "question_text": "Why is 2 <= quantity <= 6 a poor MySQL range expression?",
+          "options": [
+            "MySQL requires every range to use LIKE",
+            "It can compare an intermediate truth value rather than express both range tests",
+            "All quantities become NULL",
+            "It always raises a syntax error"
+          ],
+          "correct_index": 1,
+          "explanation": "Use quantity>=2 AND quantity<=6.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-12-comparison-operators-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-12-comparison-operators-application-new-1",
+          "test_id": "pt-dbms-sql-12-comparison-operators-application",
+          "question_text": "Does price <> 200 retain NULL prices in WHERE?",
+          "options": [
+            "Yes, NULL is every value except 200",
+            "No, the comparison is UNKNOWN",
+            "Only with an index",
+            "Always when sorted"
+          ],
+          "correct_index": 1,
+          "explanation": "Add a deliberate IS NULL branch if missing prices belong in the report.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-12-comparison-operators-application-new-2",
+          "test_id": "pt-dbms-sql-12-comparison-operators-application",
+          "question_text": "What does MySQL NULL-safe equality return for two NULL operands?",
+          "options": [
+            "UNKNOWN",
+            "FALSE",
+            "TRUE",
+            "A missing result row"
+          ],
+          "correct_index": 2,
+          "explanation": "The dialect-specific operator deliberately treats both missing values as equal.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-12-comparison-operators-application-new-3",
+          "test_id": "pt-dbms-sql-12-comparison-operators-application",
+          "question_text": "What does NULL-safe equality return when only one operand is NULL?",
+          "options": [
+            "TRUE",
+            "UNKNOWN",
+            "The non-NULL operand",
+            "FALSE"
+          ],
+          "correct_index": 3,
+          "explanation": "This supports explicit optional-value mismatch detection.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-12-comparison-operators-application-new-4",
+          "test_id": "pt-dbms-sql-12-comparison-operators-application",
+          "question_text": "Why can numeric comparison be wrong for codes 002 and 2?",
+          "options": [
+            "They may be distinct labels whose numeric conversion erases identity",
+            "Codes are always decimal quantities",
+            "Every SQL comparison is byte based",
+            "Only spaces distinguish codes"
+          ],
+          "correct_index": 0,
+          "explanation": "Use the intended identifier domain.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-12-comparison-operators-application-new-5",
+          "test_id": "pt-dbms-sql-12-comparison-operators-application",
+          "question_text": "Why can displayed rounded numbers compare unexpectedly?",
+          "options": [
+            "Display always changes stored values",
+            "The stored approximate values can differ beyond displayed precision",
+            "Equality ignores types",
+            "DECIMAL and FLOAT are identical"
+          ],
+          "correct_index": 1,
+          "explanation": "Representation and display formatting are different.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-12-comparison-operators-application-new-6",
+          "test_id": "pt-dbms-sql-12-comparison-operators-application",
+          "question_text": "What is a clear whole-month timestamp interval?",
+          "options": [
+            "Equal to the last calendar date only",
+            "Strictly after month end",
+            "At or after month start and strictly before next month start",
+            "Any text beginning with a month abbreviation"
+          ],
+          "correct_index": 2,
+          "explanation": "A half-open interval handles fractional times without inventing an end-of-day maximum.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-12-comparison-operators-application-new-7",
+          "test_id": "pt-dbms-sql-12-comparison-operators-application",
+          "question_text": "Which property is relevant to TIMESTAMP interpretation?",
+          "options": [
+            "Only the column heading",
+            "Only the table sort order",
+            "The number of indexes",
+            "The session time zone"
+          ],
+          "correct_index": 3,
+          "explanation": "The interval contract should identify its temporal meaning.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-12-comparison-operators-application-new-8",
+          "test_id": "pt-dbms-sql-12-comparison-operators-application",
+          "question_text": "Should a numeric tolerance be invented for identifier equality?",
+          "options": [
+            "No, matching semantics must follow the identity contract",
+            "Yes, all equality needs rounding",
+            "Only for short identifiers",
+            "Always for primary keys"
+          ],
+          "correct_index": 0,
+          "explanation": "Tolerance can be useful for measurements but not arbitrary identity merging.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-12-comparison-operators-application-new-9",
+          "test_id": "pt-dbms-sql-12-comparison-operators-application",
+          "question_text": "What should be verified before changing comparison types for speed?",
+          "options": [
+            "Only whether the query is shorter",
+            "That the result semantics remain correct",
+            "Whether all values can be displayed",
+            "That UNKNOWN has been disabled"
+          ],
+          "correct_index": 1,
+          "explanation": "An optimization must preserve the answer.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-12-comparison-operators-application-new-10",
+          "test_id": "pt-dbms-sql-12-comparison-operators-application",
+          "question_text": "Which fixture best exposes an inclusive-boundary error?",
+          "options": [
+            "Only values far above the threshold",
+            "Only nonnumeric labels",
+            "A value exactly equal to the stated threshold",
+            "An empty table"
+          ],
+          "correct_index": 2,
+          "explanation": "Near-boundary examples distinguish < from <=.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cx-comparison-inclusive-quote-band",
+      "slug": "comparison-inclusive-quote-band",
+      "title": "Select quotes inside an inclusive budget band",
+      "difficulty": "Easy",
+      "task": "Return quote_id,price for known prices from 200 through 600 inclusive. NULL prices do not qualify. Order by quote_id.",
+      "schema_sql": "CREATE TABLE equipment_quotes(quote_id INT PRIMARY KEY,price DECIMAL(8,2));",
+      "seed_sql": "INSERT INTO equipment_quotes VALUES (1,199.99),(2,200.00),(3,600.00),(4,600.01),(5,NULL);",
+      "expected": "quote_id\tprice\n2\t200.00\n3\t600.00",
+      "ordering": "As explicitly ordered in the result query.",
+      "constraints": [
+        "Use only the supplied synthetic tables and requested transition.",
+        "Preserve unrelated rows."
+      ],
+      "edge_cases": [
+        "Both endpoints qualify.",
+        "NULL is not a known in-range price."
+      ],
+      "hints": [
+        "Use one comparison for each endpoint.",
+        "Combine them with AND."
+      ],
+      "solution_sql": "SELECT quote_id,price FROM equipment_quotes WHERE price>=200.00 AND price<=600.00 ORDER BY quote_id;",
+      "explanation": "Both inclusive comparisons must be true. Exact decimal endpoints qualify; NULL produces unknown and is excluded.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO equipment_quotes VALUES (7,400.00),(8,NULL);",
+          "expected": "quote_id\tprice\n7\t400.00"
+        },
+        {
+          "seed_sql": "INSERT INTO equipment_quotes VALUES (1,199.00),(2,601.00);",
+          "expected": ""
+        }
+      ]
+    },
+    {
+      "id": "cx-comparison-optional-room-mismatch",
+      "slug": "comparison-optional-room-mismatch",
+      "title": "Find mismatched optional room assignments",
+      "difficulty": "Medium",
+      "task": "Return audit_id for rows whose expected_room and actual_room differ. Treat two NULLs as matching, exactly one NULL as a mismatch, and compare non-NULL room codes exactly using their declared binary collation. Use MySQL NULL-safe equality and order by audit_id.",
+      "schema_sql": "CREATE TABLE room_audit(audit_id INT PRIMARY KEY,expected_room VARCHAR(12) CHARACTER SET ascii COLLATE ascii_bin,actual_room VARCHAR(12) CHARACTER SET ascii COLLATE ascii_bin);",
+      "seed_sql": "INSERT INTO room_audit VALUES (1,'R1','R1'),(2,'R1','R2'),(3,NULL,NULL),(4,NULL,'R1'),(5,'R2',NULL),(6,'R1','r1');",
+      "expected": "audit_id\n2\n4\n5\n6",
+      "ordering": "As explicitly ordered in the result query.",
+      "constraints": [
+        "Use only the supplied synthetic tables and requested transition.",
+        "Preserve unrelated rows."
+      ],
+      "edge_cases": [
+        "Two missing values match under this task contract.",
+        "Known codes with different letter case remain distinct in this fixture."
+      ],
+      "hints": [
+        "Ordinary <> misses one-NULL mismatches.",
+        "Negate the documented MySQL NULL-safe comparison."
+      ],
+      "solution_sql": "SELECT audit_id FROM room_audit WHERE NOT (expected_room <=> actual_room) ORDER BY audit_id;",
+      "explanation": "NULL-safe equality returns a definite match state for both missing and known values. Negation retains only mismatches, including one-missing rows; ascii_bin distinguishes the supplied case variants.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO room_audit VALUES (7,NULL,NULL),(8,'A','A');",
+          "expected": ""
+        },
+        {
+          "seed_sql": "INSERT INTO room_audit VALUES (1,NULL,'B'),(2,'A',NULL);",
+          "expected": "audit_id\n1\n2"
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-12-comparison-operators-1",
+      "test_id": "pt-dbms-sql-12-comparison-operators",
+      "question_text": "Which operator is the standard SQL 'not equal' comparison?",
+      "options": [
+        "!=",
+        "<>",
+        "><",
+        "NOT="
+      ],
+      "correct_index": 1,
+      "explanation": "<> is the standard SQL not-equal operator; != is a widely supported non-standard alternative.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-12-comparison-operators-2",
+      "test_id": "pt-dbms-sql-12-comparison-operators",
+      "question_text": "What does `price = NULL` evaluate to for a row where price actually is NULL?",
+      "options": [
+        "TRUE",
+        "UNKNOWN — comparisons to NULL never evaluate to TRUE, even when the value genuinely is NULL",
+        "FALSE",
+        "An error is raised"
+      ],
+      "correct_index": 1,
+      "explanation": "Ordinary comparison operators always produce UNKNOWN when compared to NULL, regardless of the actual value.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-12-comparison-operators-3",
+      "test_id": "pt-dbms-sql-12-comparison-operators",
+      "question_text": "How should you correctly test whether a column's value is NULL?",
+      "options": [
+        "WHERE column = NULL",
+        "WHERE column IS NULL",
+        "WHERE column <> NULL",
+        "WHERE column == NULL"
+      ],
+      "correct_index": 1,
+      "explanation": "IS NULL is the only comparison-operator-independent way to correctly test for NULL.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-12-comparison-operators-4",
+      "test_id": "pt-dbms-sql-12-comparison-operators",
+      "question_text": "What determines whether 'apple' = 'Apple' evaluates to TRUE or FALSE?",
+      "options": [
+        "The exact operator used (= vs ==)",
+        "The column's collation setting, which governs case sensitivity and locale-specific comparison rules",
+        "The length of the strings being compared",
+        "This is always FALSE in every SQL dialect"
+      ],
+      "correct_index": 1,
+      "explanation": "Collation, not the comparison operator itself, determines case-sensitivity behavior for string comparisons.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-12-comparison-operators-5",
+      "test_id": "pt-dbms-sql-12-comparison-operators",
+      "question_text": "What risk does comparing values of different data types (e.g. a number to a string) introduce?",
+      "options": [
+        "No risk — SQL always handles this identically everywhere",
+        "An implicit type conversion may occur, which can produce confusing or dialect-dependent results",
+        "This always causes an immediate syntax error",
+        "Different types can never be compared under any circumstances"
+      ],
+      "correct_index": 1,
+      "explanation": "Implicit conversions are a real, dialect-variable source of subtle bugs.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-12-comparison-operators-6",
+      "test_id": "pt-dbms-sql-12-comparison-operators",
+      "question_text": "Do comparison operators work on date values?",
+      "options": [
+        "No, dates cannot be compared",
+        "Yes — dates compare chronologically using the same operators (<, >, =, etc.)",
+        "Only using a special DATE_COMPARE function",
+        "Only the = operator works with dates"
+      ],
+      "correct_index": 1,
+      "explanation": "Standard comparison operators apply to dates just as they do to numbers, comparing chronological order.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-12-comparison-operators-7",
+      "test_id": "pt-dbms-sql-12-comparison-operators",
+      "question_text": "Which comparison operators exist in standard SQL for ordering (not just equality)?",
+      "options": [
+        "Only = and <>",
+        "<, >, <=, >= in addition to = and <>",
+        "Only < and >",
+        "SQL has no ordering comparison operators"
+      ],
+      "correct_index": 1,
+      "explanation": "The full set of six operators covers equality, inequality, and ordering.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-12-comparison-operators-8",
+      "test_id": "pt-dbms-sql-12-comparison-operators",
+      "question_text": "Is `!=` part of the official SQL standard?",
+      "options": [
+        "Yes, it is the standard operator",
+        "No — <> is the standard spelling; != is a widely-supported but non-standard alternative accepted by most dialects",
+        "Neither != nor <> is valid SQL",
+        "!= only works in NoSQL databases"
+      ],
+      "correct_index": 1,
+      "explanation": "<> is the ISO SQL standard spelling for not-equal; != is a common but technically non-standard addition.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "coordinator",
+    "independent_review": "passed",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Independent manual review passed; native MySQL fixture evidence recorded separately; provider/browser/Supabase release gates remain separate.",
+    "existing_question_corrections": [
+      "tq-dbms-sql-12-comparison-operators-1",
+      "tq-dbms-sql-12-comparison-operators-2",
+      "tq-dbms-sql-12-comparison-operators-3",
+      "tq-dbms-sql-12-comparison-operators-4",
+      "tq-dbms-sql-12-comparison-operators-5",
+      "tq-dbms-sql-12-comparison-operators-6",
+      "tq-dbms-sql-12-comparison-operators-7",
+      "tq-dbms-sql-12-comparison-operators-8"
+    ],
+    "canonical_answer_indices_preserved": true,
+    "editorial_record": "Original snapshots retained. Questions rewritten for precise dialect and topic coverage while preserving identities and canonical answer positions; technical and independent review pending.",
+    "independent_reviewer": "Codex reviewer, current 2026-10-30 session",
+    "independent_review_scope": "Read full notes, all 640 MCQ stems/options/canonical answers/explanations, 64 exercise contracts/solutions/fixtures, and all 32 diagrams. Verified retained identities/answers through source-continuity tests; SQL execution evidence is recorded separately. No external originality, provider, live application or Supabase authorization clearance.",
+    "independent_review_record": "reports/independent-review-2026-10-30.json",
+    "content_sha256": "9448497d0c5ad79fd55f10aae02c254a289437c80f2ef43f1937a5f707902c2f"
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-12-comparison-operators",
+    "original_note_sha256": "30487f9d61f18bbbb3f2949a9fc2488b683df7f7ace7d69497ca090be1ddcc84",
+    "status": "drafted; not yet included in prepared paired migrations"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Ordinary equality and MySQL NULL-safe equality answer different questions",
+      "description": "The optional-room audit defines both missing values as a match.",
+      "columns": [
+        "Left",
+        "Right",
+        "Ordinary equality",
+        "NULL-safe equality"
+      ],
+      "rows": [
+        [
+          "R1",
+          "R1",
+          "TRUE",
+          "TRUE"
+        ],
+        [
+          "R1",
+          "R2",
+          "FALSE",
+          "FALSE"
+        ],
+        [
+          "NULL",
+          "NULL",
+          "UNKNOWN",
+          "TRUE"
+        ],
+        [
+          "NULL",
+          "R1",
+          "UNKNOWN",
+          "FALSE"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "drafted — verification pending",
+    "server_rendering": "pending",
+    "browser_rendering": "unverified",
+    "independent_review": "pending"
+  },
+  "authoring_status": "drafted — verification pending",
+  "sql_verification": {
+    "scope": "not executed; exact MySQL/provider verification pending",
+    "all_passed": false,
+    "cases": []
+  }
+}

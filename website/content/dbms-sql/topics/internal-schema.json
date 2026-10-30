@@ -1,0 +1,512 @@
+{
+  "source_ref": "chapter-2-dbms-architecture/internal-schema",
+  "slug": "internal-schema",
+  "title": "Internal Schema",
+  "description": "Understand physical database representation through records, pages, files, indexes, and mappings, with careful distinctions between logical compatibility, performance evidence, and engine-specific behavior.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Describing how logical data is represented\n\nThe internal schema concerns the physical representation and access structures of a database. It explains how records are organized, how storage is managed, and how the database reaches data requested through logical operations. In the three-schema architecture, it lies beneath the conceptual schema. Applications ask for facts such as a student's name; the engine translates those requests into work involving physical structures.\n\nThis is an architectural viewpoint, not a requirement that every product expose one file named internal schema. Its description can be distributed across storage-engine definitions, object settings, index definitions, and implementation details. Some physical choices are configurable; others are controlled by the engine. Understanding this distinction avoids promising that an administrator can freely change every detail shown in a textbook diagram.\n\nConsider Student with StudentID, Name, and DOB. The conceptual description states what these attributes mean and which states are valid. The internal description concerns how their values are encoded and located. Two systems can represent equivalent student facts using different file formats, page arrangements, or access structures without changing the meaning of a student identifier.\n\n## Moving from records to pages and files\n\nA logical row is not necessarily a fixed-size block on disk. Values may have different lengths, and the engine may maintain headers, version information, and other metadata. A teaching example using a fixed-width record is useful only when it is labeled as a hypothetical layout. It is not evidence that a real MySQL student row always occupies that many bytes.\n\nStorage engines commonly manage data in pages or blocks, which group information for reading, caching, and writing. Several records can share a page, and larger values can require additional representation. Files or tablespaces organize physical storage at another level. The exact arrangement depends on the engine and its settings, so do not infer a portable physical address from a logical row number.\n\nThe buffer manager can keep useful pages in memory. A logical lookup may therefore find already cached information rather than issue a fresh disk read for every row. Conversely, a query returning few rows may still inspect substantial data. Output size, logical rows examined, and physical I/O describe different things and should not be treated as interchangeable measurements.\n\n## Understanding indexes as access structures\n\nAn index provides an additional organization that can help locate qualifying records. A tree-structured index can support ordered navigation and range access when the query and index definition are suitable. A full scan examines a broader collection of records. Which method is useful depends on the predicate, available structures, estimated selectivity, and other execution costs.\n\nSuppose a directory frequently searches students by a non-key registration reference. An ordinary index on that reference may offer a useful access path without adding a new business rule. This differs from introducing a uniqueness requirement. A unique index can enforce a logical constraint as well as provide physical access, so not every operation containing the word index is purely physical in effect.\n\nIn MySQL InnoDB, the clustered index contains the row data, and secondary index entries contain the row's primary-key value. These engine-specific facts help explain why primary-key choices can influence secondary storage costs. They do not establish that every database engine organizes rows in the same way, or that every query must use a secondary index followed by a row lookup.\n\n## Separating an index from a guaranteed plan\n\nThe existence of an index does not guarantee that the optimizer will choose it. A scan can be cheaper for a small table or a predicate matching much of the data. An index can also be unsuitable for a particular expression or column order. The internal schema supplies possibilities; the query processor chooses a strategy within the product's supported behavior and estimates.\n\nFor an illustrative Student lookup, examine the actual query and plan before concluding that a missing index explains slow execution. If StudentID is already the InnoDB primary key, there is already a clustered access structure on it. A claim that this primary-key column has no index would be inconsistent with that definition. Always inspect the object rather than relying on an example's convenient wording.\n\nA plan explains a strategy, not an automatic performance verdict. Statistics, caching, data distribution, concurrent work, and maintenance overhead affect real behavior. Measure the relevant workload when evaluating a proposed physical change. A faster isolated read can still be a poor trade if writes become much more expensive or the operational work exceeds the available maintenance window.\n\n## Mapping logical operations to physical work\n\nThe conceptual-to-internal mapping connects logical entities and operations to their physical representations. An application can request a student by identifier without computing a page address. The engine may choose a clustered lookup, another available access path, or a scan while preserving the specified logical result under the applicable transaction semantics.\n\nThis mapping supports physical data independence: compatible changes to representation should not force consumers to rewrite their logical interfaces. Moving data to different storage or changing an ordinary access structure can preserve columns, relationships, and query meanings. This is an intended separation of concerns, not a promise that every physical operation is online, instantaneous, or compatible with every engine feature.\n\nFor example, changing a storage engine may affect supported constraints and transaction behavior. Distributing records across servers can require routing and coordination that a single-server product does not automatically supply. Such proposals need more than a label saying internal change. Check whether the promised logical behavior and access endpoint actually remain available before treating the change as transparent.\n\n## Keeping row order out of storage assumptions\n\nPhysical representation can influence the order in which an execution happens to encounter rows. That observation is not a logical ordering contract. A query that needs students ordered by StudentID should request that order explicitly. If several rows share the chosen sort value, add an appropriate tie-breaker when a deterministic sequence is required.\n\nA clustered representation does not remove this requirement. The optimizer can select another path, parallel work may differ between products, and later changes can alter encounter order. A consumer relying on an earlier accidental sequence has coupled itself to behavior it did not request. The correct remedy begins with specifying the result contract rather than insisting that storage never change.\n\n## Treating physical design as continuing work\n\nAn initial internal design reflects the workload and data available at the time. As the database grows, access patterns and distributions can change. Administrators and performance specialists may review indexes, storage capacity, compression, or physical placement. Engine developers determine many implementation choices, while authorized operators manage supported settings. End users normally interact through higher-level interfaces instead of these details.\n\nPhysical tuning has costs. Additional access structures consume space and must be maintained when data changes. Compression can trade storage savings against CPU work. A reorganization may need temporary capacity and operational coordination. Explain these trade-offs without assuming that every mechanism is supported by the selected engine or appropriate for the current workload.\n\nThe internal schema is also not a substitute for backup and recovery guarantees. A storage layout tells us how information is represented, but durability and restoration depend on the engine, configuration, recovery procedures, and tested backups. Reading a table successfully today does not prove it can be restored after a failure. Keep those operational claims tied to separate evidence.\n\n## Reviewing a physical change accurately\n\nStart with the logical behavior that must remain stable: returned columns, value meanings, relationships, ordering requirements, and transaction expectations. Then identify the proposed physical mechanism and its product-specific limitations. Check representative queries and write paths, because an access optimization aimed at one report can impose maintenance costs on unrelated operations sharing the same table.\n\nA useful review distinguishes three conclusions. Logical compatibility concerns whether consumers still receive their promised behavior. Performance evidence concerns the observed workload under stated conditions. Operational readiness concerns how the change can be performed and reversed. The internal-schema viewpoint helps organize that investigation, but none of those conclusions follows merely from drawing physical storage below a conceptual model.\n",
+  "references": [
+    {
+      "title": "MySQL InnoDB clustered and secondary indexes",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/innodb-index-types.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-2-internal-schema",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-2-internal-schema-1",
+          "test_id": "pt-dbms-sql-2-internal-schema",
+          "question_text": "What does the Internal Schema describe in the three-schema architecture?",
+          "options": [
+            "The subset of data a specific application is allowed to see",
+            "The complete organization-wide logical structure of entities and relationships",
+            "The physical storage details: file organization, indexing, block size, and data representation",
+            "The network protocol clients use to connect to the server"
+          ],
+          "correct_index": 2,
+          "explanation": "The internal schema is the lowest, physical level, concerned entirely with how data is stored on disk/memory.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-2-internal-schema-2",
+          "test_id": "pt-dbms-sql-2-internal-schema",
+          "question_text": "Who usually works with internal representation and supported physical tuning details?",
+          "options": [
+            "End users of the application",
+            "The DBMS implementation and authorized administrators or performance specialists",
+            "Every external application equally",
+            "Middleware vendors exclusively"
+          ],
+          "correct_index": 1,
+          "explanation": "Engine internals and authorized physical tuning are distinct from ordinary end-user interfaces.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-2-internal-schema-3",
+          "test_id": "pt-dbms-sql-2-internal-schema",
+          "question_text": "Which of these is an internal-schema-level change?",
+          "options": [
+            "Adding a new column to the conceptual Student table",
+            "Switching Student records from a heap file to a B+-tree-indexed structure",
+            "Creating a new external view for the Accounts Portal",
+            "Adding a foreign key constraint between Student and Department"
+          ],
+          "correct_index": 1,
+          "explanation": "Switching storage/indexing structures is purely a physical, internal-schema change.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-2-internal-schema-4",
+          "test_id": "pt-dbms-sql-2-internal-schema",
+          "question_text": "Why can PostgreSQL and MySQL both implement the exact same conceptual `Student(StudentID, Name, DOB)` schema yet behave very differently in performance tuning?",
+          "options": [
+            "Because their conceptual schemas are actually different",
+            "Because their internal schemas (file format, index types, page layout) can differ even when the conceptual schema is identical",
+            "Because MySQL does not support conceptual schemas",
+            "Because performance is unrelated to the internal schema"
+          ],
+          "correct_index": 1,
+          "explanation": "The conceptual schema only fixes logical structure; internal (physical) implementation is free to vary between systems.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-2-internal-schema-5",
+          "test_id": "pt-dbms-sql-2-internal-schema",
+          "question_text": "A selective lookup on a non-key Student reference is slow, and plan evidence identifies a broad scan with no suitable access index. What kind of issue is being investigated?",
+          "options": [
+            "A conceptual schema design flaw",
+            "A physical access-design issue, even when the logical data model is valid",
+            "A middleware misconfiguration",
+            "A violation of the external schema's row-level restrictions"
+          ],
+          "correct_index": 1,
+          "explanation": "The scenario supplies plan evidence; missing indexes are not a universal explanation of slow queries.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-2-internal-schema-6",
+          "test_id": "pt-dbms-sql-2-internal-schema",
+          "question_text": "A DBA adds a new index to speed up queries on the Student table. What should ideally happen to the conceptual and external schemas?",
+          "options": [
+            "Both must be redesigned to reference the new index",
+            "Neither should need to change, since indexing is purely an internal-schema concern",
+            "Only the external schemas need updating",
+            "The conceptual schema must be dropped and recreated"
+          ],
+          "correct_index": 1,
+          "explanation": "If physical data independence holds, internal-level changes like adding an index stay invisible above the internal schema.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-2-internal-schema-7",
+          "test_id": "pt-dbms-sql-2-internal-schema",
+          "question_text": "A student assumes that once the internal schema is designed at project launch, it never needs to change again. Why is this a mistake?",
+          "options": [
+            "Because internal schemas cannot legally be changed after deployment",
+            "Because DBAs routinely re-tune internal schemas (adding indexes, repartitioning) throughout a system's life without altering the conceptual design",
+            "Because the internal schema is identical to the conceptual schema",
+            "Because only external schemas can be modified after launch"
+          ],
+          "correct_index": 1,
+          "explanation": "Internal schema tuning is an ongoing DBA activity precisely because it can change independently of the stable conceptual design.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-2-internal-schema-8",
+          "test_id": "pt-dbms-sql-2-internal-schema",
+          "question_text": "A supported engine reorganizes files and compresses records while preserving logical behavior. Which level changes, and what is the intended compatibility outcome?",
+          "options": [
+            "Conceptual schema level; the external schemas must be rewritten",
+            "Internal schema level; conceptual and external contracts can remain unchanged",
+            "External schema level; the internal schema must be redesigned",
+            "It spans all three levels equally by necessity"
+          ],
+          "correct_index": 1,
+          "explanation": "The scenario explicitly assumes supported mechanisms and preserved behavior; operational effects still require review.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-2-internal-schema-new-9",
+          "test_id": "pt-dbms-sql-2-internal-schema",
+          "question_text": "What does a page or block commonly provide in physical storage?",
+          "options": [
+            "A unique application user",
+            "A unit grouping information for storage access and buffering",
+            "A mandatory external view",
+            "A business department identifier"
+          ],
+          "correct_index": 1,
+          "explanation": "Pages organize physical storage; exact formats depend on the engine.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-2-internal-schema-new-10",
+          "test_id": "pt-dbms-sql-2-internal-schema",
+          "question_text": "Which addition can change logical validity as well as physical access?",
+          "options": [
+            "A faster disk with equivalent behavior",
+            "A differently located unchanged file",
+            "A uniqueness requirement enforced by an index",
+            "A larger cache alone"
+          ],
+          "correct_index": 2,
+          "explanation": "Uniqueness changes which stored states are allowed.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-2-internal-schema-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-2-internal-schema-application-new-1",
+          "test_id": "pt-dbms-sql-2-internal-schema-application",
+          "question_text": "A query returns one student. Does that prove only one physical disk read occurred?",
+          "options": [
+            "Yes; each row always means one disk read",
+            "Yes; identifiers eliminate all disk work",
+            "No; result size does not determine physical I/O",
+            "Only when the name is non-null"
+          ],
+          "correct_index": 2,
+          "explanation": "Caching and the chosen access path affect I/O independently of result count.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-2-internal-schema-application-new-2",
+          "test_id": "pt-dbms-sql-2-internal-schema-application",
+          "question_text": "An InnoDB Student table declares StudentID as its primary key. Is it accurate to say it has no access index on StudentID?",
+          "options": [
+            "Yes; primary keys never have indexes",
+            "Yes; only names can be indexed",
+            "Only external views can contain keys",
+            "No; the primary key defines the clustered index"
+          ],
+          "correct_index": 3,
+          "explanation": "InnoDB stores row data in its clustered index, normally based on the declared primary key.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-2-internal-schema-application-new-3",
+          "test_id": "pt-dbms-sql-2-internal-schema-application",
+          "question_text": "An ordinary index exists, but the optimizer scans a tiny table. What follows?",
+          "options": [
+            "The index is available but may not be the cheapest path",
+            "The index is necessarily corrupt",
+            "The conceptual schema vanished",
+            "The scan must produce different values"
+          ],
+          "correct_index": 0,
+          "explanation": "Access-path choice depends on estimated costs and conditions.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-2-internal-schema-application-new-4",
+          "test_id": "pt-dbms-sql-2-internal-schema-application",
+          "question_text": "A student claims every row occupies exactly 64 bytes because a teaching diagram does. What is missing?",
+          "options": [
+            "A second diagram title",
+            "Evidence of the actual engine format and attribute representation",
+            "A different external portal",
+            "An extra SQL semicolon"
+          ],
+          "correct_index": 1,
+          "explanation": "A hypothetical fixed layout does not establish a product default.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-2-internal-schema-application-new-5",
+          "test_id": "pt-dbms-sql-2-internal-schema-application",
+          "question_text": "Why can an additional index make a write workload more expensive?",
+          "options": [
+            "It automatically duplicates every database user",
+            "It removes transaction logging",
+            "The access structure must also be maintained",
+            "It forbids updates by definition"
+          ],
+          "correct_index": 2,
+          "explanation": "Index maintenance and storage are part of the physical-design trade-off.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-2-internal-schema-application-new-6",
+          "test_id": "pt-dbms-sql-2-internal-schema-application",
+          "question_text": "A report relies on primary-key encounter order with no ORDER BY. What dependency is unsafe?",
+          "options": [
+            "It explicitly requests deterministic ordering",
+            "It defines a foreign key correctly",
+            "It avoids physical assumptions",
+            "It treats a physical encounter order as a promised logical sequence"
+          ],
+          "correct_index": 3,
+          "explanation": "Consumers needing order should request it rather than infer it from a past plan.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-2-internal-schema-application-new-7",
+          "test_id": "pt-dbms-sql-2-internal-schema-application",
+          "question_text": "An engine change drops a previously enforced relationship rule. Can it be called transparent merely because the table names match?",
+          "options": [
+            "No; the logical guarantees changed",
+            "Yes; only object names matter",
+            "Yes; storage engines cannot affect guarantees",
+            "Only page count determines transparency"
+          ],
+          "correct_index": 0,
+          "explanation": "Compatibility includes constraints and transaction behavior, not just names.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-2-internal-schema-application-new-8",
+          "test_id": "pt-dbms-sql-2-internal-schema-application",
+          "question_text": "A hot lookup performs no new disk I/O because the page is cached. Which distinction does this show?",
+          "options": [
+            "No query was executed",
+            "Logical access and physical reads are different measures",
+            "The student record must be absent",
+            "The external schema was deleted"
+          ],
+          "correct_index": 1,
+          "explanation": "A buffer can satisfy access without a new disk read.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-2-internal-schema-application-new-9",
+          "test_id": "pt-dbms-sql-2-internal-schema-application",
+          "question_text": "A proposal moves records across servers. What must be verified before claiming no application changes?",
+          "options": [
+            "Only the new server names",
+            "Only whether StudentID is numeric",
+            "Supported routing, endpoint behavior, and preserved semantics",
+            "Only the number of users in a screenshot"
+          ],
+          "correct_index": 2,
+          "explanation": "Distributed placement is not automatically transparent in every product.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-2-internal-schema-application-new-10",
+          "test_id": "pt-dbms-sql-2-internal-schema-application",
+          "question_text": "A benchmark improves one read query. Which conclusion still needs evidence?",
+          "options": [
+            "That the benchmark query was measured",
+            "That reads can use access structures",
+            "That logical rows have attributes",
+            "The broader workload and operational change are acceptable"
+          ],
+          "correct_index": 3,
+          "explanation": "An isolated result does not prove write costs, maintenance feasibility, or overall readiness.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [],
+  "coding_not_applicable": "This architectural topic explains physical representation and how to evaluate it. Engine-specific index and plan exercises belong to storage, indexing, and query-optimization topics; SELECT output alone cannot validate physical layout or performance.",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-2-internal-schema-1",
+      "test_id": "pt-dbms-sql-2-internal-schema",
+      "question_text": "What does the Internal Schema describe in the three-schema architecture?",
+      "options": [
+        "The subset of data a specific application is allowed to see",
+        "The complete organization-wide logical structure of entities and relationships",
+        "The physical storage details: file organization, indexing, block size, and data representation",
+        "The network protocol clients use to connect to the server"
+      ],
+      "correct_index": 2,
+      "explanation": "The internal schema is the lowest, physical level, concerned entirely with how data is stored on disk/memory.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-2-internal-schema-2",
+      "test_id": "pt-dbms-sql-2-internal-schema",
+      "question_text": "Who typically interacts directly with the internal schema?",
+      "options": [
+        "End users of the application",
+        "Only the DBMS engine and the DBA",
+        "Every external application equally",
+        "Middleware vendors exclusively"
+      ],
+      "correct_index": 1,
+      "explanation": "The internal schema is invisible to users and applications; only the DBMS and DBA deal with it.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-2-internal-schema-3",
+      "test_id": "pt-dbms-sql-2-internal-schema",
+      "question_text": "Which of these is an internal-schema-level change?",
+      "options": [
+        "Adding a new column to the conceptual Student table",
+        "Switching Student records from a heap file to a B+-tree-indexed structure",
+        "Creating a new external view for the Accounts Portal",
+        "Adding a foreign key constraint between Student and Department"
+      ],
+      "correct_index": 1,
+      "explanation": "Switching storage/indexing structures is purely a physical, internal-schema change.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-2-internal-schema-4",
+      "test_id": "pt-dbms-sql-2-internal-schema",
+      "question_text": "Why can PostgreSQL and MySQL both implement the exact same conceptual `Student(StudentID, Name, DOB)` schema yet behave very differently in performance tuning?",
+      "options": [
+        "Because their conceptual schemas are actually different",
+        "Because their internal schemas (file format, index types, page layout) can differ even when the conceptual schema is identical",
+        "Because MySQL does not support conceptual schemas",
+        "Because performance is unrelated to the internal schema"
+      ],
+      "correct_index": 1,
+      "explanation": "The conceptual schema only fixes logical structure; internal (physical) implementation is free to vary between systems.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-2-internal-schema-5",
+      "test_id": "pt-dbms-sql-2-internal-schema",
+      "question_text": "A query against `Student` is slow because there is no index on `StudentID`, even though the conceptual schema and external views look completely correct. What does this illustrate?",
+      "options": [
+        "A conceptual schema design flaw",
+        "An internal schema problem that is invisible at the logical/external level but affects real performance",
+        "A middleware misconfiguration",
+        "A violation of the external schema's row-level restrictions"
+      ],
+      "correct_index": 1,
+      "explanation": "Missing indexes are an internal-schema issue; the logical design can appear perfectly correct while performance still suffers.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-2-internal-schema-6",
+      "test_id": "pt-dbms-sql-2-internal-schema",
+      "question_text": "A DBA adds a new index to speed up queries on the Student table. What should ideally happen to the conceptual and external schemas?",
+      "options": [
+        "Both must be redesigned to reference the new index",
+        "Neither should need to change, since indexing is purely an internal-schema concern",
+        "Only the external schemas need updating",
+        "The conceptual schema must be dropped and recreated"
+      ],
+      "correct_index": 1,
+      "explanation": "If physical data independence holds, internal-level changes like adding an index stay invisible above the internal schema.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-2-internal-schema-7",
+      "test_id": "pt-dbms-sql-2-internal-schema",
+      "question_text": "A student assumes that once the internal schema is designed at project launch, it never needs to change again. Why is this a mistake?",
+      "options": [
+        "Because internal schemas cannot legally be changed after deployment",
+        "Because DBAs routinely re-tune internal schemas (adding indexes, repartitioning) throughout a system's life without altering the conceptual design",
+        "Because the internal schema is identical to the conceptual schema",
+        "Because only external schemas can be modified after launch"
+      ],
+      "correct_index": 1,
+      "explanation": "Internal schema tuning is an ongoing DBA activity precisely because it can change independently of the stable conceptual design.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-2-internal-schema-8",
+      "test_id": "pt-dbms-sql-2-internal-schema",
+      "question_text": "A system partitions Student data across multiple physical files by DeptID and enables row compression, purely as a storage optimization. Which schema level does this change belong to, and what should NOT be required as a result?",
+      "options": [
+        "Conceptual schema level; the external schemas must be rewritten",
+        "Internal schema level; no change should be required to the conceptual or external schemas",
+        "External schema level; the internal schema must be redesigned",
+        "It spans all three levels equally by necessity"
+      ],
+      "correct_index": 1,
+      "explanation": "Partitioning and compression are physical storage decisions at the internal level; a properly layered architecture keeps this invisible to conceptual and external schemas.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "coordinator",
+    "independent_review": "unavailable; no agent tools",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Definitions and examples checked against questions; no plagiarism certification.",
+    "existing_question_corrections": [
+      "tq-dbms-sql-2-internal-schema-2",
+      "tq-dbms-sql-2-internal-schema-5",
+      "tq-dbms-sql-2-internal-schema-8"
+    ],
+    "canonical_answer_indices_preserved": true
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-2-internal-schema",
+    "original_note_sha256": "458ff35b3a671be620ad5fa43cb468be3919d130c1fdf68ce703f0d833834500",
+    "status": "paired migration prepared; not applied"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "From student meaning to physical access",
+      "description": "The illustration separates logical facts, available representation, and runtime access. It does not promise one page per row or one fixed plan.",
+      "columns": [
+        "Concern",
+        "Example",
+        "Evidence needed"
+      ],
+      "rows": [
+        [
+          "Conceptual contract",
+          "StudentID identifies one student",
+          "Definitions and logical constraints"
+        ],
+        [
+          "Internal representation",
+          "Records, pages, clustered and secondary structures",
+          "Actual engine and object definitions"
+        ],
+        [
+          "Runtime access",
+          "A lookup, range access, or scan",
+          "Plan and workload measurements"
+        ],
+        [
+          "Consumer presentation",
+          "Students ordered by identifier",
+          "Explicit ORDER BY in consuming query"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "coordinator review",
+    "server_rendering": "passed",
+    "browser_rendering": "unverified",
+    "independent_review": "unavailable; no agent tools",
+    "rendering_check": "2026-10-28: actual LessonBlock/TopicDiagrams server rendering; 25 authored-package tests passed. Desktop/mobile browser rendering unverified."
+  }
+}

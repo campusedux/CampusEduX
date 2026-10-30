@@ -1,0 +1,598 @@
+{
+  "source_ref": "chapter-16-joins/self-join",
+  "slug": "self-join",
+  "title": "SELF JOIN",
+  "description": "Use table aliases to retrieve managers, count direct reports and form unique peer pairs while preserving identities, unmatched rows and hierarchy limits.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Give one table two roles\n\nA self join relates rows from a table to other rows in that same table. The stored data does not need to be duplicated. Instead, aliases give each reference a distinct role in the query. An employee and that employee's manager may both live in an employees table; one reference represents the employee being described, and another represents the possible manager.\n\nReview [INNER JOIN](/learning/dbms-sql-tutorial/inner-join), [LEFT JOIN](/learning/dbms-sql-tutorial/left-join) and [foreign key](/learning/dbms-sql-tutorial/foreign-key) concepts before studying this pattern. The join still follows ordinary relational matching rules. Calling it a self join describes the relationship between table references, not an additional SQL keyword or a special rule that prevents duplicates automatically.\n\n## Model identity separately from a display name\n\nSuppose staff has staff_id, name and manager_id. The identifier uniquely names a staff member. manager_id refers to another staff_id or is null when no manager is recorded. Names are labels and can repeat. Joining an employee's manager_id to a manager's name would confuse identity with presentation and could multiply rows when people share a name.\n\n```sql\nSELECT e.staff_id, e.name AS employee_name,\n       m.name AS manager_name\nFROM staff AS e\nLEFT JOIN staff AS m ON m.staff_id = e.manager_id\nORDER BY e.staff_id;\n```\n\nHere e and m are roles over the same underlying relation. The equality compares the employee's reference to the manager's identity. Reversing which identifier is compared can ask for direct reports instead of the manager, while omitting the predicate can create every possible pairing. Read the predicate aloud before assuming its orientation is correct.\n\n## Preserve employees without a manager when required\n\nThe left join preserves every employee row from e. If manager_id is null or has no matching staff row, manager_name is null in the result. An inner join instead keeps only matched employee-manager pairs. Neither is universally preferable: the correct choice depends on whether the report should list all employees or only those with recognized managers.\n\nAn enforced self-referencing foreign key can prevent a nonnull manager_id from pointing to a missing person, subject to the actual schema rules. It does not necessarily prohibit a person from managing themselves or guarantee that the reporting graph is acyclic. Those are additional business invariants. A correct SELECT query should not be mistaken for evidence that every stored hierarchy is valid.\n\n## Distinguish a missing manager from an unknown name\n\nIf a manager row exists but its name is null, the displayed manager name is also null. Therefore a null name alone is not a reliable unmatched-row test. Select or test m.staff_id, which is a nonnull identity in the example, when the difference between no matching manager and a matching manager with missing presentation data matters.\n\nLikewise, using COALESCE to show an empty manager name as a phrase such as unassigned is a display policy. It should not conceal whether the relationship itself is absent or the label is missing. A report can expose manager_id or a separate match flag for operational review without modifying the underlying staff records.\n\n## Count direct reports at the correct grain\n\nTo count reports for every manager candidate, start with each staff member as the preserved role and left join another reference representing possible reports. Count the report identity, not COUNT(*), because an unmatched preserved manager candidate still produces one null-extended output row. That row represents no actual report.\n\n```sql\nSELECT m.staff_id, COUNT(e.staff_id) AS direct_reports\nFROM staff AS m\nLEFT JOIN staff AS e ON e.manager_id = m.staff_id\nGROUP BY m.staff_id\nORDER BY m.staff_id;\n```\n\nThe output grain is one staff identity. A staff member with three reports appears three times in the joined input before aggregation. That is expected, not a duplicate to remove blindly. If the query later joins each report to multiple skills, the new multiplicity can inflate the count and requires its own grain analysis.\n\n## Build peer pairs without mirrored duplicates\n\nA second use case pairs different staff members who share a manager. Match the two manager identifiers, then require the first staff identifier to be smaller than the second. The inequality excludes self-pairs and gives each unordered pair a single orientation. Using not-equal alone excludes self-pairs but keeps both Alice-Ben and Ben-Alice.\n\n```sql\nSELECT a.staff_id AS first_id, b.staff_id AS second_id\nFROM staff AS a\nJOIN staff AS b\n  ON a.manager_id = b.manager_id\n AND a.staff_id < b.staff_id\nORDER BY first_id, second_id;\n```\n\nOrdinary equality does not treat two null manager identifiers as a match. That is often desirable: two people with no recorded manager are not necessarily organizational peers. If a task intentionally groups all unassigned people together, specify that rule and use appropriate null-aware logic instead of accidentally changing the organizational meaning.\n\n## Estimate how pairing grows\n\nIf one manager has four reports, the unordered peer pairs are six. With ten reports there are forty-five. The relationship grows quadratically even though the base group grows linearly. A self join can therefore produce many more output rows than the table contains without any implementation bug. Before exporting all peer pairs, ask whether the actual product needs pairs, a count or merely existence.\n\nAdding DISTINCT after pairing is not a general substitute for a well-defined predicate. It can hide mirrored rows only if the projected representation happens to make them equal, and it may discard legitimate separate people who share labels. Express identity and pair orientation directly so the result remains explainable when names or other presentation fields change.\n\n## Know the boundary of a fixed-depth join\n\nJoining e to m finds one manager level. Adding another alias for the manager's manager finds one more fixed level. This does not traverse an arbitrary-depth hierarchy. A recursive common table expression may be appropriate for ancestry or reporting-chain queries, together with cycle and depth controls matching the task.\n\nCycles also affect interpretation before recursion is introduced. If one employee names another as manager and the second names the first, a direct manager query can still return two syntactically valid rows. The query has answered the stored one-step relationship. A separate integrity rule is needed if the organization forbids such a cycle; do not claim that aliasing or a foreign key alone detects it.\n\n## Keep filters attached to the intended role\n\nA condition on e restricts employees; the same column name qualified with m restricts managers. A manager-name condition in WHERE after a left join can remove employees without a matching manager. To preserve those employees while limiting acceptable manager matches, place the condition in the appropriate ON expression and state how rejected matches should display.\n\nUseful fixtures include a root with no manager, two employees with the same name, several reports under one manager, an isolated person and a self-reference if it is legal in the lab. Check both the row identities and the labels. This catches accidental name joins, reversed predicates, inflated counts and missing roots far earlier than a screenshot of plausible employee names would.\n\n## Support the relationship without promising a plan\n\nAn index on the referenced staff identity supports looking up a manager. An index on manager_id can support finding direct reports. Actual access paths depend on the engine, data distribution and requested projection. A table referenced twice does not imply that the engine physically copies it twice or that a self join must always be slow.\n\nAuthorization also applies to each relationship role. Knowing one staff record should not automatically expose a private manager profile or a complete reporting chain. Keep trusted access policies intact and return only the fields the user is permitted to inspect. The self-join technique supplies relational matching, while organizational visibility remains a separate contract.\n\n## Read the preserved manager exercise carefully\n\nThe retained exercise uses employees with department and salary fields in addition to the reporting reference. Those extra fields do not participate in finding a manager. Joining departments is unnecessary for the requested employee-and-manager labels and can create accidental exclusions when an employee has no department. Choose only the relationships that the output actually requires.\n\nAn employee can have a valid manager even while department_id is null. Preserve that employee in a manager report. Conversely, having a department does not establish a manager. These are independent references with different meanings. The exercise’s hidden fixture includes an employee outside a department so that a solution which unnecessarily inner joins department records cannot appear correct merely because the sample happens to contain assigned departments.\n",
+  "references": [
+    {
+      "title": "MySQL 8.4 reference manual",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/join.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-16-self-join",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-16-self-join-1",
+          "test_id": "pt-dbms-sql-16-self-join",
+          "question_text": "What do aliases do in a self join?",
+          "options": [
+            "Create permanent table copies",
+            "Give each table reference a distinct role",
+            "Enforce acyclic hierarchies",
+            "Remove every duplicate"
+          ],
+          "correct_index": 1,
+          "explanation": "The same stored relation is referenced independently as employee and manager.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-16-self-join-2",
+          "test_id": "pt-dbms-sql-16-self-join",
+          "question_text": "Which manager lookup predicate follows the model?",
+          "options": [
+            "m.name=e.name",
+            "m.staff_id=e.manager_id",
+            "m.manager_id=e.manager_id only",
+            "e.staff_id=m.staff_id only"
+          ],
+          "correct_index": 1,
+          "explanation": "The employee stores a manager reference that must match the manager identity.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-16-self-join-3",
+          "test_id": "pt-dbms-sql-16-self-join",
+          "question_text": "Which join preserves employees with no matched manager?",
+          "options": [
+            "INNER JOIN only",
+            "LEFT JOIN from the employee role",
+            "CROSS JOIN",
+            "A name comparison"
+          ],
+          "correct_index": 1,
+          "explanation": "The employee is the preserved side, so a missing manager does not remove the employee.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-16-self-join-4",
+          "test_id": "pt-dbms-sql-16-self-join",
+          "question_text": "Why not join manager identity by name?",
+          "options": [
+            "Names are always numeric",
+            "Names can repeat and are presentation labels",
+            "Names cannot be projected",
+            "Every name is a foreign key"
+          ],
+          "correct_index": 1,
+          "explanation": "Two people can share a name while representing different identities and relationships.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-16-self-join-5",
+          "test_id": "pt-dbms-sql-16-self-join",
+          "question_text": "Which value reliably identifies an actual matched manager here?",
+          "options": [
+            "A nullable manager name",
+            "The nonnull manager staff_id",
+            "The displayed unassigned phrase",
+            "The row count of the whole company"
+          ],
+          "correct_index": 1,
+          "explanation": "A nullable label may be unknown even when the manager row exists.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-16-self-join-6",
+          "test_id": "pt-dbms-sql-16-self-join",
+          "question_text": "What does COUNT(e.staff_id) count after the report left join?",
+          "options": [
+            "The preserved unmatched placeholder as one report",
+            "Actual matched reports",
+            "Every manager twice",
+            "Only managers with names"
+          ],
+          "correct_index": 1,
+          "explanation": "The nonnull child identity is absent on the unmatched placeholder row.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-16-self-join-7",
+          "test_id": "pt-dbms-sql-16-self-join",
+          "question_text": "Why can COUNT(*) overcount zero-report managers?",
+          "options": [
+            "COUNT ignores all nonnull identities",
+            "The outer join supplies a null-extended row",
+            "The table is read only once",
+            "Every manager manages themselves"
+          ],
+          "correct_index": 1,
+          "explanation": "A left join retains one row for an unmatched preserved identity, which COUNT(*) counts.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-16-self-join-8",
+          "test_id": "pt-dbms-sql-16-self-join",
+          "question_text": "Which condition removes self-pairs and mirrored peer pairs?",
+          "options": [
+            "a.staff_id<>b.staff_id alone",
+            "a.staff_id<b.staff_id",
+            "a.name=b.name",
+            "a.manager_id IS NULL"
+          ],
+          "correct_index": 1,
+          "explanation": "Strict ordering selects one direction per unordered pair and excludes equal identities.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-16-self-join-new-9",
+          "test_id": "pt-dbms-sql-16-self-join",
+          "question_text": "How many unordered pairs come from four distinct reports?",
+          "options": [
+            "6",
+            "4",
+            "8",
+            "16"
+          ],
+          "correct_index": 0,
+          "explanation": "Four choose two is four times three divided by two, giving six.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-16-self-join-new-10",
+          "test_id": "pt-dbms-sql-16-self-join",
+          "question_text": "Do two NULL manager references match with ordinary equality?",
+          "options": [
+            "Yes, NULL means same manager",
+            "No, NULL equality is unknown",
+            "Only with ORDER BY",
+            "Only for primary keys"
+          ],
+          "correct_index": 1,
+          "explanation": "Ordinary equality involving NULL does not establish a true relationship match.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-16-self-join-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-16-self-join-application-new-1",
+          "test_id": "pt-dbms-sql-16-self-join-application",
+          "question_text": "How many hierarchy levels does one manager self join retrieve?",
+          "options": [
+            "Every ancestor automatically",
+            "Exactly ten levels",
+            "One direct level",
+            "Only roots"
+          ],
+          "correct_index": 2,
+          "explanation": "One predicate connects an employee to their immediate manager, not to all ancestors.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-16-self-join-application-new-2",
+          "test_id": "pt-dbms-sql-16-self-join-application",
+          "question_text": "What is needed for arbitrary-depth ancestry?",
+          "options": [
+            "Merely renaming one alias",
+            "A shorter display name",
+            "DISTINCT on names alone",
+            "A suitable recursive traversal with cycle controls"
+          ],
+          "correct_index": 3,
+          "explanation": "Hierarchy depth and potential cycles must be addressed explicitly in recursive traversal.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-16-self-join-application-new-3",
+          "test_id": "pt-dbms-sql-16-self-join-application",
+          "question_text": "Does a self-referencing foreign key necessarily prohibit cycles?",
+          "options": [
+            "No, cycle restrictions are separate invariants",
+            "Yes, every foreign key orders the graph",
+            "Only when names are unique",
+            "Only if the table has no nulls"
+          ],
+          "correct_index": 0,
+          "explanation": "Referential existence does not by itself enforce global graph acyclicity.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-16-self-join-application-new-4",
+          "test_id": "pt-dbms-sql-16-self-join-application",
+          "question_text": "What can a manager condition in WHERE do after a left join?",
+          "options": [
+            "Always preserve every employee",
+            "Remove unmatched employees",
+            "Create missing manager records",
+            "Repair private access rules"
+          ],
+          "correct_index": 1,
+          "explanation": "A WHERE condition requiring manager data rejects the null-extended unmatched row.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-16-self-join-application-new-5",
+          "test_id": "pt-dbms-sql-16-self-join-application",
+          "question_text": "What does not-equal alone do in peer pairing?",
+          "options": [
+            "Keeps only one orientation",
+            "Removes every matching manager",
+            "Excludes self-pairs but keeps mirrored pairs",
+            "Sorts peer names"
+          ],
+          "correct_index": 2,
+          "explanation": "Both A-B and B-A satisfy not-equal, so a strict ordering is needed for unordered pairs.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-16-self-join-application-new-6",
+          "test_id": "pt-dbms-sql-16-self-join-application",
+          "question_text": "What should happen if a report joins to several skills?",
+          "options": [
+            "Assume one row per report remains",
+            "Delete repeated employees",
+            "Count every skill as a new employee",
+            "Recheck multiplicity before counting reports"
+          ],
+          "correct_index": 3,
+          "explanation": "A one-to-many skill join repeats report appearances and can inflate aggregation.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-16-self-join-application-new-7",
+          "test_id": "pt-dbms-sql-16-self-join-application",
+          "question_text": "What does a repeated table reference require in storage?",
+          "options": [
+            "No permanent duplicate of the stored table",
+            "A new physical table for every alias",
+            "A new database schema",
+            "A copied primary key constraint"
+          ],
+          "correct_index": 0,
+          "explanation": "Aliases describe query roles; they do not issue CREATE TABLE or duplicate persistent data.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-16-self-join-application-new-8",
+          "test_id": "pt-dbms-sql-16-self-join-application",
+          "question_text": "What index can help find reports for a manager?",
+          "options": [
+            "Only an index on displayed name",
+            "An index on manager_id",
+            "Only an index on the report caption",
+            "No index can support the relation"
+          ],
+          "correct_index": 1,
+          "explanation": "The child-side manager reference is the search key for a direct-report lookup.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-16-self-join-application-new-9",
+          "test_id": "pt-dbms-sql-16-self-join-application",
+          "question_text": "Why include repeated employee names in a fixture?",
+          "options": [
+            "To force acyclic relationships",
+            "To make every employee a root",
+            "To expose accidental matching by label rather than identity",
+            "To prove data is public"
+          ],
+          "correct_index": 2,
+          "explanation": "Equal labels with distinct identities make a name-based join visibly incorrect.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-16-self-join-application-new-10",
+          "test_id": "pt-dbms-sql-16-self-join-application",
+          "question_text": "Does self joining grant access to private manager details?",
+          "options": [
+            "Yes, relationship access bypasses policies",
+            "Only if the manager has reports",
+            "Only for an inner join",
+            "No, trusted visibility rules still apply"
+          ],
+          "correct_index": 3,
+          "explanation": "Relational matching does not override the application or database authorization boundary.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cx-self-join-manager-labels",
+      "slug": "self-join-manager-labels",
+      "title": "List staff and their direct managers",
+      "difficulty": "Easy",
+      "task": "Return staff_id,employee_name,manager_name for every employee. Preserve staff with no manager. Order by staff_id.",
+      "schema_sql": "CREATE TABLE staff(staff_id INT PRIMARY KEY,name VARCHAR(30) NOT NULL,manager_id INT NULL);",
+      "seed_sql": "INSERT INTO staff VALUES (1,'Riya',NULL),(2,'Noor',1),(3,'Noor',1),(4,'Iman',1),(5,'Dev',2),(6,'Sol',NULL);",
+      "solution_sql": "SELECT e.staff_id,e.name AS employee_name,m.name AS manager_name FROM staff AS e LEFT JOIN staff AS m ON m.staff_id=e.manager_id ORDER BY e.staff_id;",
+      "expected": "staff_id\temployee_name\tmanager_name\n1\tRiya\tNULL\n2\tNoor\tRiya\n3\tNoor\tRiya\n4\tIman\tRiya\n5\tDev\tNoor\n6\tSol\tNULL",
+      "validation_cases": [
+        {
+          "seed_sql": "",
+          "expected": ""
+        }
+      ],
+      "ordering": "Order by the keys explicitly required in the task.",
+      "constraints": [
+        "Use the supplied synthetic tables.",
+        "Return only the requested columns."
+      ],
+      "edge_cases": [
+        "Repeated names identify different staff",
+        "Roots remain visible"
+      ],
+      "hints": [
+        "Use distinct aliases and preserve the employee role with LEFT JOIN."
+      ],
+      "explanation": "Use distinct aliases and preserve the employee role with LEFT JOIN."
+    },
+    {
+      "id": "cp-dbms-sql-employees-and-their-managers",
+      "slug": "employees-and-their-managers",
+      "title": "Employees and Their Managers",
+      "difficulty": "Medium",
+      "task": "Write a self-join query returning `id`, `name` (employee), and `manager` (their manager's name, or NULL if they have none), ordered by employee `id`.\n\n```sql\nCREATE TABLE departments (\n  id INTEGER PRIMARY KEY,\n  name TEXT NOT NULL\n);\nCREATE TABLE employees (\n  id INTEGER PRIMARY KEY,\n  name TEXT NOT NULL,\n  department_id INTEGER,\n  manager_id INTEGER,\n  salary INTEGER NOT NULL\n);\n```\n\n**Sample data**:\n\n```sql\nINSERT INTO departments (id, name) VALUES (1, 'Engineering'), (2, 'Sales'), (3, 'Marketing');\nINSERT INTO employees (id, name, department_id, manager_id, salary) VALUES\n(1, 'Asha', 1, NULL, 90000),\n(2, 'Rohan', 1, 1, 70000),\n(3, 'Neha', 2, 1, 65000),\n(4, 'Vikram', NULL, 1, 50000);\n```\n",
+      "schema_sql": "CREATE TABLE departments (\n  id INTEGER PRIMARY KEY,\n  name TEXT NOT NULL\n);\nCREATE TABLE employees (\n  id INTEGER PRIMARY KEY,\n  name TEXT NOT NULL,\n  department_id INTEGER,\n  manager_id INTEGER,\n  salary INTEGER NOT NULL\n);",
+      "seed_sql": "INSERT INTO departments (id, name) VALUES (1, 'Engineering'), (2, 'Sales'), (3, 'Marketing');\nINSERT INTO employees (id, name, department_id, manager_id, salary) VALUES\n(1, 'Asha', 1, NULL, 90000),\n(2, 'Rohan', 1, 1, 70000),\n(3, 'Neha', 2, 1, 65000),\n(4, 'Vikram', NULL, 1, 50000);",
+      "expected": "id\tname\tmanager\n1\tAsha\tNULL\n2\tRohan\tAsha\n3\tNeha\tAsha\n4\tVikram\tAsha",
+      "ordering": "Ordered by id ascending.",
+      "edge_cases": [
+        "Preserve unmatched identities.",
+        "Retain original hidden fixture."
+      ],
+      "hints": [
+        "Match each employee’s manager reference to the manager identity and preserve employees without managers."
+      ],
+      "solution_sql": "SELECT e.id,e.name,m.name AS manager FROM employees AS e LEFT JOIN employees AS m ON e.manager_id=m.id ORDER BY e.id;",
+      "explanation": "Match each employee’s manager reference to the manager identity and preserve employees without managers.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO departments (id, name) VALUES (10, 'Finance'), (20, 'Legal'), (30, 'HR');\nINSERT INTO employees (id, name, department_id, manager_id, salary) VALUES\n(1, 'Zara', 10, NULL, 95000),\n(2, 'Omar', 10, 1, 60000),\n(3, 'Leo', NULL, 1, 40000);",
+          "expected": "id\tname\tmanager\n1\tZara\tNULL\n2\tOmar\tZara\n3\tLeo\tZara"
+        }
+      ],
+      "existing_problem": true,
+      "check_sql": "",
+      "original_check_sql": "",
+      "original_description_md5": "06006dfc15fa25b000d4a1bae731e490",
+      "original_problem": {
+        "id": "cp-dbms-sql-employees-and-their-managers",
+        "topic_id": null,
+        "title": "Employees and Their Managers",
+        "difficulty": "Medium",
+        "slug": "employees-and-their-managers",
+        "description": "Write a self-join query returning `id`, `name` (employee), and `manager` (their manager's name, or NULL if they have none), ordered by employee `id`.\n\n```sql\nCREATE TABLE departments (\n  id INTEGER PRIMARY KEY,\n  name TEXT NOT NULL\n);\nCREATE TABLE employees (\n  id INTEGER PRIMARY KEY,\n  name TEXT NOT NULL,\n  department_id INTEGER,\n  manager_id INTEGER,\n  salary INTEGER NOT NULL\n);\n```\n\n**Sample data**:\n\n```sql\nINSERT INTO departments (id, name) VALUES (1, 'Engineering'), (2, 'Sales'), (3, 'Marketing');\nINSERT INTO employees (id, name, department_id, manager_id, salary) VALUES\n(1, 'Asha', 1, NULL, 90000),\n(2, 'Rohan', 1, 1, 70000),\n(3, 'Neha', 2, 1, 65000),\n(4, 'Vikram', NULL, 1, 50000);\n```\n",
+        "examples": "[{\"input\": \"\", \"output\": \"id\\tname\\tmanager\\n1\\tAsha\\tNULL\\n2\\tRohan\\tAsha\\n3\\tNeha\\tAsha\\n4\\tVikram\\tAsha\"}]",
+        "test_cases": "[{\"hidden\": true, \"seed_sql\": \"INSERT INTO departments (id, name) VALUES (10, 'Finance'), (20, 'Legal'), (30, 'HR');\\nINSERT INTO employees (id, name, department_id, manager_id, salary) VALUES\\n(1, 'Zara', 10, NULL, 95000),\\n(2, 'Omar', 10, 1, 60000),\\n(3, 'Leo', NULL, 1, 40000);\", \"expected\": \"id\\tname\\tmanager\\n1\\tZara\\tNULL\\n2\\tOmar\\tZara\\n3\\tLeo\\tZara\"}]",
+        "starter_code": null,
+        "editorial": "Join employees to itself with two aliases, one for the employee and one for the manager. Reference: `SELECT e.id, e.name, m.name AS manager FROM employees e LEFT JOIN employees m ON e.manager_id = m.id ORDER BY e.id;`",
+        "supported_languages": null,
+        "sql_schema_sql": "CREATE TABLE departments (\n  id INTEGER PRIMARY KEY,\n  name TEXT NOT NULL\n);\nCREATE TABLE employees (\n  id INTEGER PRIMARY KEY,\n  name TEXT NOT NULL,\n  department_id INTEGER,\n  manager_id INTEGER,\n  salary INTEGER NOT NULL\n);",
+        "sql_seed_sql": "INSERT INTO departments (id, name) VALUES (1, 'Engineering'), (2, 'Sales'), (3, 'Marketing');\nINSERT INTO employees (id, name, department_id, manager_id, salary) VALUES\n(1, 'Asha', 1, NULL, 90000),\n(2, 'Rohan', 1, 1, 70000),\n(3, 'Neha', 2, 1, 65000),\n(4, 'Vikram', NULL, 1, 50000);",
+        "sql_check_sql": "",
+        "learning_topic_id": null,
+        "status": "published",
+        "is_premium": null,
+        "show_on_website": null,
+        "show_on_mobile": null,
+        "sort_order": 1
+      }
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-16-self-join-1",
+      "test_id": "pt-dbms-sql-16-self-join",
+      "question_text": "What is a self join?",
+      "options": [
+        "A join between two completely unrelated tables",
+        "A join of a table to itself, using aliases to distinguish the two roles",
+        "A join that requires no ON condition",
+        "A synonym for CROSS JOIN"
+      ],
+      "correct_index": 1,
+      "explanation": "Self joins relate rows within the same table by treating it as two aliased copies.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-16-self-join-2",
+      "test_id": "pt-dbms-sql-16-self-join",
+      "question_text": "Why is aliasing functionally REQUIRED for a self join, not just stylistic?",
+      "options": [
+        "It isn't required — self joins work fine without aliases",
+        "SQL has no way to distinguish 'the employee row' from 'the manager row' when both come from the same table, without two distinct names",
+        "Aliasing changes the actual data returned",
+        "Self joins are illegal without an alias, by syntax rule unrelated to ambiguity"
+      ],
+      "correct_index": 1,
+      "explanation": "Without two distinct aliases, column references to the same table would be genuinely ambiguous.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-16-self-join-3",
+      "test_id": "pt-dbms-sql-16-self-join",
+      "question_text": "Why is LEFT JOIN (not INNER JOIN) used in the employee-manager self join example?",
+      "options": [
+        "LEFT JOIN is always required for self joins",
+        "So employees with no manager (like Asha) still appear, with manager = NULL, instead of being dropped",
+        "INNER JOIN cannot be used on the same table twice",
+        "LEFT JOIN is faster for self joins specifically"
+      ],
+      "correct_index": 1,
+      "explanation": "An INNER self join would drop any employee whose manager_id is NULL, which LEFT JOIN avoids.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-16-self-join-4",
+      "test_id": "pt-dbms-sql-16-self-join",
+      "question_text": "Can a single self join walk an arbitrary number of levels up a management hierarchy (e.g. manager's manager's manager)?",
+      "options": [
+        "Yes, self joins handle any depth automatically",
+        "No — a self join handles one level at a time; arbitrary-depth traversal needs a recursive CTE (Chapter 32)",
+        "Self joins can only find direct reports, never managers",
+        "This requires a UNION of many self joins, and only that"
+      ],
+      "correct_index": 1,
+      "explanation": "Multi-level hierarchy traversal is exactly what recursive CTEs are designed for, beyond a single self join's reach.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-16-self-join-5",
+      "test_id": "pt-dbms-sql-16-self-join",
+      "question_text": "What ER-modeling concept does the employee-manager self join relate to?",
+      "options": [
+        "Weak entity",
+        "Recursive relationship (6.15)",
+        "Generalization",
+        "Composite attribute"
+      ],
+      "correct_index": 1,
+      "explanation": "A recursive relationship connects an entity set to itself, exactly like manager/employee within the same table.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-16-self-join-6",
+      "test_id": "pt-dbms-sql-16-self-join",
+      "question_text": "In `e1.department_id = e2.department_id AND e1.id <> e2.id`, why is the `<>` condition needed?",
+      "options": [
+        "It isn't needed",
+        "To avoid pairing a row with itself, since otherwise every row would trivially match its own department",
+        "To ensure only managers are matched",
+        "To sort the results"
+      ],
+      "correct_index": 1,
+      "explanation": "Without excluding self-pairs, every employee would match themselves as being 'in the same department as' themselves.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-16-self-join-7",
+      "test_id": "pt-dbms-sql-16-self-join",
+      "question_text": "Can a self join use INNER JOIN instead of LEFT JOIN in some scenarios?",
+      "options": [
+        "No, self joins must always use LEFT JOIN",
+        "Yes — if you specifically only want rows that DO have a matching related row (e.g. only employees who DO have a manager)",
+        "INNER JOIN is invalid syntax for self joins",
+        "Self joins do not support any join type other than LEFT JOIN"
+      ],
+      "correct_index": 1,
+      "explanation": "The choice between INNER and LEFT (or other join types) for a self join depends on whether unmatched rows should be kept, exactly like any other join.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-16-self-join-8",
+      "test_id": "pt-dbms-sql-16-self-join",
+      "question_text": "Is a self join a distinct SQL syntax feature, or just a regular join applied to the same table twice?",
+      "options": [
+        "A completely separate, dedicated syntax construct",
+        "Just a regular join (INNER, LEFT, etc.) where both sides happen to reference the same table via different aliases",
+        "Only supported in specific specialized databases",
+        "A deprecated legacy feature"
+      ],
+      "correct_index": 1,
+      "explanation": "There's no special self-join keyword — it's ordinary JOIN syntax applied with the same table aliased twice.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "/root/worker_2",
+    "independent_review": "passed",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "authored; independent review pending",
+    "canonical_answer_indices_preserved": true,
+    "editorial_record": "Original prose and assessments. Seed snapshots and canonical answer indices retained; external originality clearance pending.",
+    "independent_reviewer": "/root",
+    "independent_review_scope": "Full notes, all20 MCQs/options/reasoning, both exercises and four manually traced fixtures, original table diagram and retained canonical seed exercise. Missing original_description_md5 and original_problem snapshot restored from actual seed; source-continuity rerun pending. Runtime and browser unverified."
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-16-self-join",
+    "original_note_sha256": "a951a53a878754d4a411ab11f15d42b350a6a409833b20bff84b0a881f8dbaff",
+    "status": "drafted; not included in prepared paired migrations"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "One relation supplies employee and manager roles",
+      "description": "Each employee reference is matched to a manager identity, while roots remain unmatched.",
+      "columns": [
+        "Employee ID",
+        "Manager reference",
+        "Matched manager"
+      ],
+      "rows": [
+        [
+          "1",
+          "NULL",
+          "No match"
+        ],
+        [
+          "2",
+          "1",
+          "1"
+        ],
+        [
+          "3",
+          "1",
+          "1"
+        ],
+        [
+          "5",
+          "2",
+          "2"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "technical_review": "coordinator independent manual review passed",
+    "browser_rendering": "unverified",
+    "independent_review": "passed",
+    "server_rendering": "passed",
+    "server_rendering_evidence": "2026-10-29 full Vitest:1310 passed/12 skipped; actual LessonBlock/TopicDiagrams render over230 packages. Browser visual QA remains unverified."
+  },
+  "authoring_status": "drafted; verification pending",
+  "sql_verification": {
+    "scope": "not executed; exact MySQL/provider execution pending",
+    "all_passed": false,
+    "cases": []
+  }
+}

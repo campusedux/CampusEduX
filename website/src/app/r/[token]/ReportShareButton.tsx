@@ -15,12 +15,16 @@ export default function ReportShareButton({ token }: { token: string }) {
 
   async function handleReport() {
     setState("sending");
-    const supabase = createBrowserSupabase();
-    const { data, error } = await supabase.rpc("report_shared_resume", {
-      p_token: token,
-      p_reason: "Reported by a viewer via the share page.",
-    });
-    setState(error || !data ? "error" : "sent");
+    try {
+      const supabase = createBrowserSupabase();
+      const { data, error } = await supabase.rpc("report_shared_resume", {
+        p_token: token,
+        p_reason: "Reported by a viewer via the share page.",
+      });
+      setState(error || !data ? "error" : "sent");
+    } catch {
+      setState("error");
+    }
   }
 
   if (state === "sent") return <p className="text-xs text-ink-faint">Thanks — this link has been reported.</p>;

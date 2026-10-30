@@ -1,0 +1,514 @@
+{
+  "source_ref": "chapter-20-indexes-and-access-paths/index-cardinality",
+  "slug": "index-cardinality",
+  "title": "Cardinality",
+  "description": "Interpret index cardinality as an estimated distinct-key count, distinguish it from selectivity and result size, and reason about skew, composite prefixes and statistics.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Separate three different counting questions\n\nDatabase discussions use cardinality in several contexts. Table cardinality is a row count. Index cardinality commonly describes the number of distinct key values, often as an optimizer estimate. Query-result cardinality is the number of rows a query or plan step produces. These counts can be related, but they are not interchangeable. A table with one million registration rows can have ten status values and a query returning only five rows.\n\nThis topic focuses on index statistics and the reasoning they support. Read [why indexes exist](/learning/dbms-sql-tutorial/why-indexes-exist), [selectivity](/learning/dbms-sql-tutorial/selectivity) and [composite indexes](/learning/dbms-sql-tutorial/composite-index). Always ask which population and which key expression a reported count describes before concluding that an index is useful or a plan estimate is accurate.\n\n## Count distinct values before interpreting an estimate\n\nSuppose one hundred workshop registrations use four status values. The exact distinct status count is four, while the row count is one hundred. If every registration_id is unique and required, that key has one hundred distinct values. A unique required key is therefore very different from a low-distinct-count status column, even though both can have indexes.\n\n```sql\nSELECT COUNT(*) AS row_count,\n       COUNT(DISTINCT status) AS known_status_values,\n       COUNT(status) AS known_status_rows\nFROM registrations;\n```\n\nCOUNT DISTINCT ignores NULL expression values. COUNT status also ignores NULL, while COUNT star counts every row. If unknown statuses matter, count them separately rather than assuming the distinct-known count describes every stored state. The exact value-comparison rules, including collation for text, also determine which labels count as distinct.\n\nAn exact aggregate query can require substantial work on a large table. It is not equivalent to reading a small metadata statistic. Use exact counting where it is appropriate and authorized, then distinguish that evidence from the optimizer's sampled or maintained estimates. A metadata field should not be presented as a precise real-time census without checking its definition.\n\n## Use averages only under stated assumptions\n\nIf one million rows are spread uniformly across one thousand distinct learner identifiers, an equality predicate on one identifier would match about one thousand rows on average. This rough calculation divides row count by distinct-value count. It can help explain why a high distinct-key count often supports selective equality lookups.\n\nUniformity is a strong assumption. One learner may have ten thousand registrations while most learners have only a few. A four-value status column can contain ninety-nine percent active rows and a tiny number of suspended rows. The same index can therefore encounter very different matching populations for different values even though its overall distinct count stays four.\n\nDo not turn a global average into a guarantee for every value. A support lookup for a rare learner and an administrative report for a heavy-activity learner can have different costs. Representative testing should include both common and rare values, plus an absent value, so that skew is visible rather than hidden by a convenient average.\n\n## Distinguish cardinality from selectivity\n\nA distinct-key count describes the diversity of a population. Predicate selectivity describes how much of a population qualifies under a particular condition, though terminology sometimes uses reciprocal conventions. State the convention being used. In this topic, a predicate matching one percent of rows is described as more selective than one matching ninety percent.\n\nA high-cardinality column can still have an unselective range predicate. An indexed date spanning several years may have many distinct values, while a request for nearly all those years matches most rows. Conversely, a low-cardinality status column can have a selective predicate for one rare value. The condition and distribution matter alongside the number of different keys.\n\nA query's result count can also differ from candidate count. A key condition may locate many candidates, then additional filters reject most of them. An estimate of five final rows does not necessarily mean only five index entries or base records will be examined. Review plan steps and residual predicates rather than relying on one headline count.\n\n## Read composite-key statistics by prefix\n\nAn index on campus_id and learner_id has statistics relevant to its leading campus prefix and the combined campus-learner prefix. The combined distinct count can be much larger than the campus-only count. It is not necessarily the product of separate distinct counts, because many theoretical combinations may never occur.\n\nFor example, two campuses may each contain three learner identifiers, but the identifiers can overlap or be scoped locally. The distinct pair count reflects observed pairs. If learner_id is globally unique and each learner belongs to one campus, the relationship differs from a system where a learner can register at several campuses. Business dependencies shape key distributions and optimizer estimation difficulty.\n\n```sql\nSELECT COUNT(*) AS distinct_pairs\nFROM (\n  SELECT DISTINCT campus_id, learner_id\n  FROM registrations\n) AS observed_pairs;\n```\n\nThis derived query counts distinct observed tuples, including the set-style grouping of NULL positions if those columns are nullable. It differs from a multi-expression COUNT DISTINCT form that excludes rows with NULL arguments in MySQL. Choose the exact counting expression that matches the intended NULL policy instead of treating every distinct-count spelling as identical.\n\n## Treat metadata estimates as evidence with limits\n\nMySQL's SHOW INDEX output includes a Cardinality field for index key parts. It is an estimate used in optimization, and the details depend on the engine and its statistics behavior. Read Seq_in_index and Column_name alongside it so the statistic is associated with the correct key prefix. A large number beside a later key part should not be misread as the standalone distinct count of that column.\n\n```sql\nSHOW INDEX FROM registrations;\n```\n\nStatistics can lag changing data or approximate a distribution imperfectly. A recently imported cohort, a large archive operation or a strongly skewed status distribution can make estimates less representative. If estimated and observed row counts diverge, inspect the distribution and statistics context before forcing an access path or changing schema.\n\nANALYZE TABLE can update relevant statistics, but it is an operational database action with resource and engine-specific implications. It is not a harmless read-only diagnostic and is not executed by these examples. In a real application, follow the approved maintenance process and evaluate workload impact before changing statistics or optimizer configuration.\n\n## Understand why estimates affect plan choices\n\nThe optimizer compares estimated costs for possible access and join strategies. Incorrect row-count assumptions can lead it to expect a small lookup where a large population actually qualifies, or to choose a join order that multiplies intermediate work. Cardinality estimates are therefore part of a broader cost model rather than a standalone instruction to use an index.\n\nAdding an index does not automatically solve estimation mistakes. A useful key arrangement, appropriate statistics and a query expressing the intended population all matter. Nor does a low-cardinality column mean an index is categorically useless; ordered retrieval, rare values, composite prefixes and query coverage can provide value. Evaluate the complete caller workload.\n\n## Notice dependencies across predicates\n\nSeparate column statistics may not fully describe a combined condition. If every final-year workshop belongs to one campus, campus and year are correlated. Estimating their conjunction as though the two predicates were independent can misrepresent the matching population. The problem is not that SQL equality changed; it is that the cost model needs information about the real distribution.\n\nJoins add another dependency. A learner identifier can be unique in learners while appearing many times in registrations. Estimating the join requires understanding the matching frequency on the registration side, not merely noticing the primary key on learners. A valid foreign key proves a relationship invariant but does not state how evenly children are distributed among parents.\n\nHistograms and other engine-supported statistics can provide more distribution information for suitable cases, but they have scope and maintenance limits. They are not a reason to assume every multi-column dependency is perfectly modeled. Record which statistics actually exist before attributing an observed plan to an imagined distribution feature.\n\n## Practice a distribution comparison\n\nConstruct a synthetic status population with ninety active rows, nine completed rows and one suspended row. Its distinct-known status count is three. Predict the matching counts for each equality predicate before examining a plan. Then compare with a uniform population having the same row count and same three labels. The distinct count is unchanged, but the per-value populations differ.\n\nFor a second exercise, create registrations where campus and learner are strongly related, then compare exact campus-only, learner-only and observed-pair counts. Explain why multiplying separate counts overestimates possible pairs in that fixture. These are statistics reasoning tasks, not deterministic claims that the engine must choose one specific access method.\n\n## Report what was actually measured\n\nA useful review records the table population, key prefix, exact or estimated nature of each count, value distribution and selected predicate. If execution evidence is available, attach the plan and observed work under the tested engine and workload. Do not call an estimate exact, a local synthetic test production verification or an updated statistic a guaranteed performance fix.\n\nContinue with [aggregate query optimization](/learning/dbms-sql-tutorial/aggregate-query-optimization) and [when not to index](/learning/dbms-sql-tutorial/when-not-to-index). The practical outcome is a better question: how many candidates does this condition actually identify, and how well does the optimizer's model represent that population?",
+  "references": [
+    {
+      "title": "MySQL 8.4 SHOW INDEX statement",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/show-index.html"
+    },
+    {
+      "title": "MySQL 8.4 index statistics estimation",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/innodb-persistent-stats.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-20-index-cardinality",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-20-index-cardinality-1",
+          "test_id": "pt-dbms-sql-20-index-cardinality",
+          "question_text": "What does an index-cardinality statistic describe in this discussion?",
+          "options": [
+            "The total number of rows in the table",
+            "An estimated distinct-key count for the relevant indexed column or composite prefix",
+            "The shape of a relationship (1:1, 1:N, M:N) between two entities",
+            "The estimated row count produced by a join"
+          ],
+          "correct_index": 1,
+          "explanation": "Associate the count with the indexed key prefix and distinguish metadata estimates from exact counts.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-20-index-cardinality-2",
+          "test_id": "pt-dbms-sql-20-index-cardinality",
+          "question_text": "How does table row cardinality differ from index distinct-key cardinality?",
+          "options": [
+            "They are exactly the same concept with different names",
+            "Table cardinality counts rows; index cardinality describes distinct values of the relevant key or prefix",
+            "Index cardinality only applies to primary keys",
+            "Table row count can only describe a clustered primary index"
+          ],
+          "correct_index": 1,
+          "explanation": "These are genuinely different measurements that happen to share the word 'cardinality' — row count vs. distinct-value count.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-20-index-cardinality-3",
+          "test_id": "pt-dbms-sql-20-index-cardinality",
+          "question_text": "Define a distinctness ratio as distinct key count divided by table row count. Which formula computes that explicitly defined ratio?",
+          "options": [
+            "Distinctness ratio = index cardinality / total row count",
+            "Index cardinality = selectivity / total number of rows",
+            "They are unrelated and computed independently",
+            "Selectivity = index cardinality squared"
+          ],
+          "correct_index": 0,
+          "explanation": "This D/N distinctness ratio is not the qualifying-row fraction of a particular predicate. Predicate selectivity also depends on the value distribution and condition.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-20-index-cardinality-4",
+          "test_id": "pt-dbms-sql-20-index-cardinality",
+          "question_text": "A million-row non-NULL boolean column contains both TRUE and FALSE. How many distinct values are observed?",
+          "options": [
+            "1,000,000",
+            "500,000",
+            "2",
+            "0"
+          ],
+          "correct_index": 2,
+          "explanation": "Under the stated fixture both boolean values occur,so the exact distinct count is two. A boolean column need not contain both values in every dataset.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-20-index-cardinality-5",
+          "test_id": "pt-dbms-sql-20-index-cardinality",
+          "question_text": "For roughly uniform equality lookups, why can a high distinct-key count relative to row count be useful?",
+          "options": [
+            "Because high cardinality guarantees fast writes",
+            "It suggests relatively few matches per key on average,which can make a key-directed lookup useful",
+            "Because high cardinality columns can never contain NULLs",
+            "Because it means the column is the primary key automatically"
+          ],
+          "correct_index": 1,
+          "explanation": "This is an average under the stated distribution assumption. Skew,broad ranges and other workload costs can change the conclusion.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-20-index-cardinality-6",
+          "test_id": "pt-dbms-sql-20-index-cardinality",
+          "question_text": "A distinctness ratio is defined as D/N. D remains1000 while N grows from1000 to one billion. What happens to that defined ratio?",
+          "options": [
+            "Selectivity stays 1.0 regardless of table size",
+            "It drops from1 to0.000001",
+            "Selectivity becomes undefined",
+            "Cardinality and selectivity are unrelated so nothing changes about selectivity"
+          ],
+          "correct_index": 1,
+          "explanation": "The D/N ratio decreases as row count grows with fixed distinct count. This does not alone determine a particular predicate's match fraction.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-20-index-cardinality-7",
+          "test_id": "pt-dbms-sql-20-index-cardinality",
+          "question_text": "Why does the query optimizer need to know a column's cardinality?",
+          "options": [
+            "To decide the table's column order in CREATE TABLE",
+            "To estimate how many rows a filter on that column will likely return, informing whether using an index is worthwhile",
+            "To determine the table's clustered index automatically without any configuration",
+            "Cardinality is purely academic and optimizers never use it"
+          ],
+          "correct_index": 1,
+          "explanation": "Distinct-key counts contribute to average equality-match estimates; value frequencies, skew, predicates and other statistics refine the estimate. Cardinality alone does not determine every predicate selectivity.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-20-index-cardinality-8",
+          "test_id": "pt-dbms-sql-20-index-cardinality",
+          "question_text": "Why can stale cardinality statistics cause problems for the query optimizer?",
+          "options": [
+            "Stale statistics have no effect on optimizer decisions",
+            "If cardinality has drifted since statistics were last computed (e.g., via ANALYZE), the optimizer may make poor indexing/scan decisions based on outdated information",
+            "Stale statistics automatically trigger a full table rebuild",
+            "The database refuses to run any queries until statistics are refreshed"
+          ],
+          "correct_index": 1,
+          "explanation": "Cardinality can drift as data changes; if the optimizer's stored statistics aren't refreshed (e.g., via ANALYZE), its cost-based decisions can become inaccurate.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-20-index-cardinality-new-9",
+          "test_id": "pt-dbms-sql-20-index-cardinality",
+          "question_text": "Why can case-sensitive and case-insensitive text comparisons produce different exact distinct-label counts?",
+          "options": [
+            "Index names change every value",
+            "The comparison collation can treat differently cased labels as different or equal",
+            "COUNT always ignores text",
+            "Case changes table row count"
+          ],
+          "correct_index": 1,
+          "explanation": "Distinctness follows the expression's comparison rules,including collation; document them when case differences matter.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-20-index-cardinality-new-10",
+          "test_id": "pt-dbms-sql-20-index-cardinality",
+          "question_text": "One million rows uniformly distributed over1000 IDs imply what average equality-match count?",
+          "options": [
+            "One always",
+            "One million always",
+            "About1000",
+            "Zero"
+          ],
+          "correct_index": 2,
+          "explanation": "The estimate divides rows by distinct IDs under an explicit uniformity assumption.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-20-index-cardinality-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-20-index-cardinality-application-new-1",
+          "test_id": "pt-dbms-sql-20-index-cardinality-application",
+          "question_text": "Can the same distinct count hide very different value distributions?",
+          "options": [
+            "No",
+            "Only for empty tables",
+            "Only when no index exists",
+            "Yes"
+          ],
+          "correct_index": 3,
+          "explanation": "A global diversity count does not describe frequency skew.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-20-index-cardinality-application-new-2",
+          "test_id": "pt-dbms-sql-20-index-cardinality-application",
+          "question_text": "Does a high-cardinality date column guarantee every date-range predicate is selective?",
+          "options": [
+            "No",
+            "Yes",
+            "Only when nullable",
+            "Only for yearly reports"
+          ],
+          "correct_index": 0,
+          "explanation": "A broad range can match most rows despite many distinct dates.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-20-index-cardinality-application-new-3",
+          "test_id": "pt-dbms-sql-20-index-cardinality-application",
+          "question_text": "Can one rare value on a low-cardinality status column be selective?",
+          "options": [
+            "No",
+            "Yes",
+            "Only if every status is unique",
+            "Only without WHERE"
+          ],
+          "correct_index": 1,
+          "explanation": "The matching fraction depends on the selected value distribution.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-20-index-cardinality-application-new-4",
+          "test_id": "pt-dbms-sql-20-index-cardinality-application",
+          "question_text": "What should accompany a reported selectivity number?",
+          "options": [
+            "Only an alias",
+            "Only a page title",
+            "Its convention and qualifying population",
+            "Only the index name"
+          ],
+          "correct_index": 2,
+          "explanation": "Terminology can use different conventions,so state what the fraction means.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-20-index-cardinality-application-new-5",
+          "test_id": "pt-dbms-sql-20-index-cardinality-application",
+          "question_text": "For a composite index, what can a later key-part Cardinality estimate describe?",
+          "options": [
+            "Only the standalone final column always",
+            "The total number of all indexes",
+            "The number of source tables",
+            "Distinct values of the corresponding leading key prefix"
+          ],
+          "correct_index": 3,
+          "explanation": "Read key sequence and column metadata together.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-20-index-cardinality-application-new-6",
+          "test_id": "pt-dbms-sql-20-index-cardinality-application",
+          "question_text": "Is the observed distinct campus-learner pair count necessarily the product of separate counts?",
+          "options": [
+            "No",
+            "Yes,always",
+            "Only when both are integers",
+            "Only with aliases"
+          ],
+          "correct_index": 0,
+          "explanation": "Observed dependencies and missing combinations matter.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-20-index-cardinality-application-new-7",
+          "test_id": "pt-dbms-sql-20-index-cardinality-application",
+          "question_text": "How does COUNT(DISTINCT status) handle NULL status values?",
+          "options": [
+            "It counts each NULL separately",
+            "It excludes them",
+            "It converts them to active",
+            "It returns only NULL"
+          ],
+          "correct_index": 1,
+          "explanation": "Use an explicit missing-value count if unknown status is relevant.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-20-index-cardinality-application-new-8",
+          "test_id": "pt-dbms-sql-20-index-cardinality-application",
+          "question_text": "Is ANALYZE TABLE simply a read-only metadata inspection?",
+          "options": [
+            "Yes,always",
+            "Only if its output is short",
+            "No,it is an operational statistics action",
+            "Only on small tables"
+          ],
+          "correct_index": 2,
+          "explanation": "Statistics maintenance requires the approved operational context.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-20-index-cardinality-application-new-9",
+          "test_id": "pt-dbms-sql-20-index-cardinality-application",
+          "question_text": "Does a small final result estimate prove equally few candidate records are examined?",
+          "options": [
+            "Yes,always",
+            "Only for INNER JOIN",
+            "Only with LIMIT",
+            "No"
+          ],
+          "correct_index": 3,
+          "explanation": "Residual filters can reject many previously accessed candidates.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-20-index-cardinality-application-new-10",
+          "test_id": "pt-dbms-sql-20-index-cardinality-application",
+          "question_text": "Which comparison exposes skew while preserving the same distinct count?",
+          "options": [
+            "Uniform and highly uneven frequency populations using the same labels",
+            "Two different alias names",
+            "Only empty tables",
+            "Two Markdown titles"
+          ],
+          "correct_index": 0,
+          "explanation": "The label count stays fixed while per-value match counts change.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [],
+  "coding_not_applicable": "Index statistics and plan estimates require an authorized synthetic-data measurement lab, not deterministic row-output judging. The notes provide exact-count SQL and two concrete distribution experiments; selecting a fixed plan or timing as an automatic expected result would be misleading.",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-20-index-cardinality-1",
+      "test_id": "pt-dbms-sql-20-index-cardinality",
+      "question_text": "In the context of this topic (20.13), what does 'index cardinality' specifically measure?",
+      "options": [
+        "The total number of rows in the table",
+        "The number of distinct values present in a particular column",
+        "The shape of a relationship (1:1, 1:N, M:N) between two entities",
+        "The estimated row count produced by a join"
+      ],
+      "correct_index": 1,
+      "explanation": "Index cardinality specifically refers to the count of unique/distinct values within one column, used for indexing decisions.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-20-index-cardinality-2",
+      "test_id": "pt-dbms-sql-20-index-cardinality",
+      "question_text": "How does index cardinality (20.13) differ from the relational-model Cardinality covered in Chapter 4?",
+      "options": [
+        "They are exactly the same concept with different names",
+        "Chapter 4's cardinality is the total row count of a relation; index cardinality is the distinct-value count of one column",
+        "Index cardinality only applies to primary keys",
+        "Chapter 4's cardinality only applies to indexed columns"
+      ],
+      "correct_index": 1,
+      "explanation": "These are genuinely different measurements that happen to share the word 'cardinality' — row count vs. distinct-value count.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-20-index-cardinality-3",
+      "test_id": "pt-dbms-sql-20-index-cardinality",
+      "question_text": "What is the mathematical relationship between index cardinality and selectivity?",
+      "options": [
+        "Selectivity = index cardinality / total number of rows",
+        "Index cardinality = selectivity / total number of rows",
+        "They are unrelated and computed independently",
+        "Selectivity = index cardinality squared"
+      ],
+      "correct_index": 0,
+      "explanation": "Selectivity is derived by dividing the distinct-value count (cardinality) by the total row count.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-20-index-cardinality-4",
+      "test_id": "pt-dbms-sql-20-index-cardinality",
+      "question_text": "In the 1,000,000-row students table, what is the approximate index cardinality of the `is_active` boolean column?",
+      "options": [
+        "1,000,000",
+        "500,000",
+        "2",
+        "0"
+      ],
+      "correct_index": 2,
+      "explanation": "A boolean column has only 2 possible distinct values (true/false), regardless of how many rows the table has.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-20-index-cardinality-5",
+      "test_id": "pt-dbms-sql-20-index-cardinality",
+      "question_text": "Why is a high-cardinality column like `email` (relative to table size) generally a good index candidate?",
+      "options": [
+        "Because high cardinality guarantees fast writes",
+        "Because it results in high selectivity, meaning the index narrows the search space down significantly",
+        "Because high cardinality columns can never contain NULLs",
+        "Because it means the column is the primary key automatically"
+      ],
+      "correct_index": 1,
+      "explanation": "High cardinality relative to row count directly produces high selectivity, which is exactly what makes a column a strong index candidate.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-20-index-cardinality-6",
+      "test_id": "pt-dbms-sql-20-index-cardinality",
+      "question_text": "A column has cardinality 1,000. On a 1,000-row table, its selectivity is 1.0. What happens to its selectivity if the table instead has 1,000,000,000 rows but cardinality stays 1,000?",
+      "options": [
+        "Selectivity stays 1.0 regardless of table size",
+        "Selectivity drops dramatically, since selectivity = cardinality / total rows, and the ratio becomes tiny",
+        "Selectivity becomes undefined",
+        "Cardinality and selectivity are unrelated so nothing changes about selectivity"
+      ],
+      "correct_index": 1,
+      "explanation": "Since selectivity is a ratio relative to table size, the same raw cardinality yields wildly different selectivity depending on total row count — this is why cardinality and selectivity must be considered together.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-20-index-cardinality-7",
+      "test_id": "pt-dbms-sql-20-index-cardinality",
+      "question_text": "Why does the query optimizer need to know a column's cardinality?",
+      "options": [
+        "To decide the table's column order in CREATE TABLE",
+        "To estimate how many rows a filter on that column will likely return, informing whether using an index is worthwhile",
+        "To determine the table's clustered index automatically without any configuration",
+        "Cardinality is purely academic and optimizers never use it"
+      ],
+      "correct_index": 1,
+      "explanation": "Cardinality (and the selectivity derived from it) feeds directly into the optimizer's cost estimates for whether an index is worth using for a given query.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-20-index-cardinality-8",
+      "test_id": "pt-dbms-sql-20-index-cardinality",
+      "question_text": "Why can stale cardinality statistics cause problems for the query optimizer?",
+      "options": [
+        "Stale statistics have no effect on optimizer decisions",
+        "If cardinality has drifted since statistics were last computed (e.g., via ANALYZE), the optimizer may make poor indexing/scan decisions based on outdated information",
+        "Stale statistics automatically trigger a full table rebuild",
+        "The database refuses to run any queries until statistics are refreshed"
+      ],
+      "correct_index": 1,
+      "explanation": "Cardinality can drift as data changes; if the optimizer's stored statistics aren't refreshed (e.g., via ANALYZE), its cost-based decisions can become inaccurate.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "/root/worker_1",
+    "independent_review": "passed",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "author semantic review; independent review pending",
+    "canonical_answer_indices_preserved": true,
+    "independent_reviewer": "/root",
+    "independent_review_scope": "Full notes,20 MCQs/options/reasoning,distribution diagram and two statistics exercises reviewed. Distinctness D/N versus predicate match fraction, NULL aggregate counts, prefix estimates, skew and operational statistics updates correctly distinguished. Removed historical chapter distractor and corrected residual explanation that implied cardinality alone determines selectivity. Exact MySQL/provider, browser and release validation remain separate."
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-20-index-cardinality",
+    "original_note_sha256": "160ee8d8782769fe250b8af8ce6d2484ad467aa17d32c30765cb84ad4f4e8fab",
+    "status": "drafted; not included in prepared paired migrations"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Same cardinality, different selectivity",
+      "description": "Both populations contain three distinct status labels but equality predicates match different fractions.",
+      "columns": [
+        "Status",
+        "Skewed population",
+        "Balanced population"
+      ],
+      "rows": [
+        [
+          "Active",
+          "90",
+          "34"
+        ],
+        [
+          "Completed",
+          "9",
+          "33"
+        ],
+        [
+          "Suspended",
+          "1",
+          "33"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "provided",
+    "technical_review": "coordinator independent manual review passed",
+    "server_rendering": "passed",
+    "browser_rendering": "unverified",
+    "independent_review": "passed",
+    "server_rendering_evidence": "2026-10-29 full Vitest:1310 passed/12 skipped; actual LessonBlock/TopicDiagrams render over230 packages. Browser visual QA remains unverified."
+  },
+  "authoring_status": "drafted; verification pending",
+  "sql_verification": {
+    "scope": "not executed; exact MySQL/provider verification pending",
+    "all_passed": false,
+    "cases": []
+  }
+}

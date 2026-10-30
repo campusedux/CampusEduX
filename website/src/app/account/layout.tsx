@@ -16,7 +16,7 @@ export default async function AccountLayout({ children }: { children: React.Reac
     <div className="page-shell">
       {/* grid-cols-1 = minmax(0,1fr): without it the implicit mobile track sizes to the
           tab row's min-content width and widens the whole page past the viewport. */}
-      <div className="grid grid-cols-1 gap-6 md:grid-cols-[230px_minmax(0,1fr)] md:gap-10">
+      <div className="account-layout flex min-w-0 flex-col gap-6 md:grid md:grid-cols-[230px_minmax(0,1fr)] md:gap-10">
         <aside className="min-w-0 md:sticky md:top-24 md:self-start">
           <div className="card mb-4 hidden items-center gap-3 p-4 md:flex">
             <Avatar src={user.avatarUrl} name={user.fullName || user.email} />

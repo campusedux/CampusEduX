@@ -36,8 +36,8 @@ export function ReadingProgress({ targetId }: { targetId: string }) {
   }, [targetId]);
 
   return (
-    <div className="pointer-events-none fixed inset-x-0 top-16 z-40 h-[3px] bg-transparent" aria-hidden>
-      <div ref={bar} className="h-full origin-left scale-x-0 bg-gradient-to-r from-primary via-accent-violet to-accent-pink" />
+    <div className="pointer-events-none fixed inset-x-0 top-[calc(3.5rem+1px)] z-40 h-0.5 bg-line/40 sm:top-[calc(4rem+1px)]" aria-hidden>
+      <div ref={bar} className="h-full origin-left scale-x-0 bg-primary" />
     </div>
   );
 }

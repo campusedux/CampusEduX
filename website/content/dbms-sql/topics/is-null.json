@@ -1,0 +1,597 @@
+{
+  "source_ref": "chapter-12-select-and-filtering/is-null",
+  "slug": "is-null",
+  "title": "IS NULL",
+  "description": "Use SQL IS NULL to find missing values, distinguish NULL from zero and empty text, and choose reliable markers when checking unmatched joins.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Missing information deserves an explicit question\n\n[NULL](/learning/dbms-sql-tutorial/null-values) represents an absent or unknown value in SQL. In a campus inventory table, stock may be NULL because a store has not completed its count. That differs from a confirmed quantity of zero. IS NULL asks directly whether the expression has no known SQL value, allowing a report to find uncounted items without mislabeling them as known shortages.\n\nThe interpretation of absence comes from the data contract. A missing return timestamp might mean equipment has not yet been returned, while a missing serial number might mean the record is incomplete. The same storage marker can support different business meanings. Explain the intended meaning for each column rather than assume that every NULL is an error or that all missing values need the same repair.\n\n## Equality cannot discover NULL\n\nOrdinary equals comparisons involving NULL evaluate to UNKNOWN, including NULL compared with NULL. A WHERE condition requiring stock equals NULL therefore does not return the uncounted rows. It is a valid-looking expression with the wrong semantics for the question. Use IS NULL when the requirement explicitly asks whether the expression is missing.\n\nThe predicate returns a definite truth result for that question: true for NULL and false for a known value. It does not substitute zero, remove the source row or change the column definition. Keep read-time classification separate from mutation. A report finding missing counts has identified records to investigate, not authorized an application to invent inventory measurements for them.\n\n```sql\nSELECT equipment_id, stock\nFROM equipment_stock\nWHERE stock IS NULL\nORDER BY equipment_id;\n```\n\n## Zero and empty text are known values\n\nAn integer zero is a known numeric value and does not satisfy IS NULL. A negative integer is also known, even if the domain considers it invalid. A separate range check is needed to detect that defect. Missingness and domain validity are independent questions, so a cleanup report should not use one predicate as a substitute for both.\n\nIn MySQL, an empty string is known text of length zero rather than NULL. A string containing spaces is also a value. If a form should reject blank labels, validate that requirement explicitly using the intended normalization rules. Converting every blank or zero to NULL can erase meaningful distinctions unless the application has deliberately defined them as absent input.\n\n## Combine missingness with other requirements\n\nIS NULL can be combined with ordinary conditions using AND and OR. An investigation queue might include unknown stock or stock equal to zero. A different queue might include only unknown stock for equipment belonging to one department. Parentheses should make shared restrictions visible when the report combines several alternatives, so missingness does not accidentally bypass a universal scope condition.\n\nFor example, a condition shaped as department matches and stock is zero or stock is NULL can admit unknown-stock equipment from every department under ordinary precedence. Group zero and NULL together if both must remain within one department. This is a logical targeting issue in addition to a missing-value issue, and it deserves a fixture from a different department.\n\n## Nullable expressions are not only stored columns\n\nIS NULL can test an expression's result as well as a base column. A function may return NULL for an absent match or a calculation may propagate missing input. Inspect the expression contract before deciding what a missing result signifies. It may indicate missing source data, an unmatched lookup or a deliberately nullable branch of a CASE expression.\n\nA base column declared NOT NULL cannot ordinarily store NULL through accepted writes, but a query can still expose NULL for that column's position after an outer join fails to find a row. The declared storage constraint and the result expression are different boundaries. An optimizer may simplify some base-column tests without making outer-join missingness meaningless or illegal SQL.\n\n## Outer joins introduce a missing-match marker\n\nA LEFT JOIN preserves each left-side row even when no right-side row matches the ON condition. For an unmatched left row, the right-side output positions are NULL. Testing a right-side identifier that is guaranteed non-NULL on real matched rows can therefore identify the absence of a qualifying match. This is a common anti-join shape.\n\nChoose the marker carefully. A right-side optional note may be NULL even on a real matched row. Testing that note would confuse a match with missing optional information and a complete absence of a match. Use a primary key or another guaranteed-present property whose role in the join establishes that a true match cannot supply NULL.\n\n```sql\nSELECT e.equipment_id\nFROM equipment AS e\nLEFT JOIN inspections AS i ON i.equipment_id = e.equipment_id\nWHERE i.inspection_id IS NULL\nORDER BY e.equipment_id;\n```\n\n## The join predicate defines which absence matters\n\nA report asking for equipment without any inspection differs from a report asking for equipment without a passed inspection. For the latter, the pass condition belongs in the relevant match definition. An item with a failed inspection has an inspection row but no qualifying passed-inspection match. The NULL marker then describes absence of that qualified relationship rather than absence of all inspection history.\n\nPutting a right-side filter in WHERE can unintentionally remove unmatched left rows instead. A condition requiring a passed value there is unknown for the NULL-extended row, so it does not preserve the intended missing-match population. Trace one equipment item with no inspection, one with only a failed inspection and one with a passed inspection to confirm which relationship the query expresses.\n\n## Counting has its own missing-value rules\n\nCOUNT star counts rows, while COUNT of a nullable expression counts its non-NULL values. After filtering a table with stock IS NULL, counting stock yields zero even if several uncounted equipment rows were found. Count rows or a known present identity when the objective is the number of missing measurements. Do not assume every count form measures the same population.\n\nAfter an outer join, counts also depend on the selected expression. A preserved left row with no match still contributes one joined result row, while the right identifier is NULL. If the report is per equipment item, grouping and counting the right identifier can describe zero matches. That result comes from the count expression's missing-value behaviour, not from deleting the preserved row.\n\n## Defaults do not necessarily repair absence\n\nA default can initialize omitted input under the column's rules. It does not normally backfill earlier NULLs merely because a later read asks about missingness. COALESCE can supply a display-time alternative, but that also does not store a measured inventory count. Keep initialized values, stored values and presented values distinct when explaining a record to a student or an operator.\n\nIf a repair workflow fills missing counts, the value should come from an accepted source and the write should preserve authorization and concurrency requirements. An old missing-value report can become stale if another worker completes the count first. A conditional update can test that the value remains NULL before accepting the repair, with the caller handling a nonmatch deliberately.\n\n## Preserve a reason when absence is ambiguous\n\nIf several distinct business states all use NULL, consider how a report will distinguish them before choosing a repair. Not yet measured, not applicable and deliberately withheld may require different follow-up even though the same predicate finds all three. An existing reason or workflow-state field can supply that context. Do not infer the reason from missingness alone or replace every absence with one guessed explanation.\n\n## Build missingness tests around contrast\n\nThe first exercise returns equipment with unknown stock while preserving a zero-stock near miss. The second returns equipment without a passed inspection, using the nonnullable inspection identity as the join marker. A passed inspection with a NULL optional note remains a real match and must not be mistaken for uninspected equipment.\n\nTest empty inputs and multiple inspection rows as well as the obvious missing case. The meaning of each NULL should be traceable to either stored absence or a NULL-extended join result. Explain the selected identities in those terms, retain deterministic ordering and avoid presenting missing information as a known fact. That approach makes IS NULL a precise diagnostic tool rather than a vague substitute for every kind of invalid or absent relationship.\n",
+  "references": [
+    {
+      "title": "MySQL 8.4 NULL testing and comparisons",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/comparison-operators.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-12-is-null",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-12-is-null-1",
+          "test_id": "pt-dbms-sql-12-is-null",
+          "question_text": "Which predicate tests missing stock?",
+          "options": [
+            "stock = NULL",
+            "stock IS NULL",
+            "stock <> NULL",
+            "stock = 0"
+          ],
+          "correct_index": 1,
+          "explanation": "Missingness uses its dedicated predicate.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-12-is-null-2",
+          "test_id": "pt-dbms-sql-12-is-null",
+          "question_text": "Why does stock = NULL not find missing stock in WHERE?",
+          "options": [
+            "It converts NULL to zero",
+            "The ordinary comparison evaluates to UNKNOWN",
+            "It updates stock",
+            "It is only legal for text"
+          ],
+          "correct_index": 1,
+          "explanation": "WHERE requires TRUE.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-12-is-null-3",
+          "test_id": "pt-dbms-sql-12-is-null",
+          "question_text": "Can IS NULL be combined with a zero-stock condition?",
+          "options": [
+            "No, it must appear alone",
+            "Yes, using an explicit logical combination",
+            "Only in SELECT without WHERE",
+            "Only through a stored procedure"
+          ],
+          "correct_index": 1,
+          "explanation": "Zero and missing stock remain separate alternatives.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-12-is-null-4",
+          "test_id": "pt-dbms-sql-12-is-null",
+          "question_text": "How can LEFT JOIN identify no qualifying right-side match?",
+          "options": [
+            "Test any optional right note",
+            "Test a guaranteed-present matched right identifier for NULL",
+            "Require a right status in WHERE without considering unmatched rows",
+            "Test only the left key"
+          ],
+          "correct_index": 1,
+          "explanation": "A reliable marker distinguishes real and NULL-extended rows.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-12-is-null-5",
+          "test_id": "pt-dbms-sql-12-is-null",
+          "question_text": "Does IS NULL replace missing values?",
+          "options": [
+            "Yes, with zero",
+            "No, it tests whether the expression is missing",
+            "Yes, with an empty string",
+            "Only if the column has a default"
+          ],
+          "correct_index": 1,
+          "explanation": "It is a predicate, not a repair operation.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-12-is-null-6",
+          "test_id": "pt-dbms-sql-12-is-null",
+          "question_text": "Which equipment row belongs in an unknown-stock queue?",
+          "options": [
+            "A row whose stock is zero only",
+            "A row whose stock is NULL",
+            "Every negative stock row only",
+            "Every equipment row"
+          ],
+          "correct_index": 1,
+          "explanation": "Unknown and confirmed zero are different facts.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-12-is-null-7",
+          "test_id": "pt-dbms-sql-12-is-null",
+          "question_text": "Is missingness limited to numeric columns?",
+          "options": [
+            "Yes, NULL is an integer",
+            "No, nullable values can have many types",
+            "Only dates support NULL",
+            "Only strings support NULL"
+          ],
+          "correct_index": 1,
+          "explanation": "The question concerns absence, independently of the value domain.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-12-is-null-8",
+          "test_id": "pt-dbms-sql-12-is-null",
+          "question_text": "Can a NOT NULL right-side column appear as NULL after a LEFT JOIN?",
+          "options": [
+            "No, its storage rule forbids all result NULLs",
+            "Yes, in an unmatched NULL-extended result row",
+            "Only when constraints are disabled",
+            "Only if the table is empty forever"
+          ],
+          "correct_index": 1,
+          "explanation": "Result expressions can differ from stored column guarantees.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-12-is-null-new-9",
+          "test_id": "pt-dbms-sql-12-is-null",
+          "question_text": "Does zero satisfy IS NULL?",
+          "options": [
+            "No",
+            "Yes, for integers",
+            "Only if stock is indexed",
+            "Only when sorted first"
+          ],
+          "correct_index": 0,
+          "explanation": "Zero is a known number.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-12-is-null-new-10",
+          "test_id": "pt-dbms-sql-12-is-null",
+          "question_text": "Does an empty MySQL string satisfy IS NULL?",
+          "options": [
+            "Yes, every empty string is NULL",
+            "No",
+            "Only under ORDER BY",
+            "Only in a text column"
+          ],
+          "correct_index": 1,
+          "explanation": "Empty text is distinct from missing text.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-12-is-null-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-12-is-null-application-new-1",
+          "test_id": "pt-dbms-sql-12-is-null-application",
+          "question_text": "Why is an optional inspection note a poor no-match marker?",
+          "options": [
+            "Notes cannot be selected",
+            "It may be NULL on a real inspection row",
+            "Every note is unique",
+            "It always becomes zero"
+          ],
+          "correct_index": 1,
+          "explanation": "Use a property guaranteed present on a true match.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-12-is-null-application-new-2",
+          "test_id": "pt-dbms-sql-12-is-null-application",
+          "question_text": "Where should passed-inspection qualification be placed for a missing-passed-match LEFT JOIN?",
+          "options": [
+            "Only after requiring a matched right row in WHERE",
+            "In an unrelated ORDER BY",
+            "In the definition of the right-side match",
+            "In the left primary key definition"
+          ],
+          "correct_index": 2,
+          "explanation": "The join must define the relationship whose absence is being tested.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-12-is-null-application-new-3",
+          "test_id": "pt-dbms-sql-12-is-null-application",
+          "question_text": "Does an item with only failed inspections lack every inspection?",
+          "options": [
+            "Yes, failed rows do not exist",
+            "Only if the note is NULL",
+            "Always if the item is old",
+            "No, it lacks a passed inspection under that qualified relationship"
+          ],
+          "correct_index": 3,
+          "explanation": "Qualifying absence and total absence are different reports.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-12-is-null-application-new-4",
+          "test_id": "pt-dbms-sql-12-is-null-application",
+          "question_text": "After WHERE stock IS NULL, what does COUNT(stock) return?",
+          "options": [
+            "Zero",
+            "The number of missing-stock rows",
+            "The total quantity",
+            "An error for every nullable column"
+          ],
+          "correct_index": 0,
+          "explanation": "COUNT of the expression ignores its NULL values.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-12-is-null-application-new-5",
+          "test_id": "pt-dbms-sql-12-is-null-application",
+          "question_text": "How should missing-stock rows be counted?",
+          "options": [
+            "Count stock only",
+            "Count the rows or a guaranteed-present identity",
+            "Sum stock only",
+            "Count only non-NULL stock"
+          ],
+          "correct_index": 1,
+          "explanation": "Choose the count expression matching the population.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-12-is-null-application-new-6",
+          "test_id": "pt-dbms-sql-12-is-null-application",
+          "question_text": "Does COALESCE displayed stock store a measurement?",
+          "options": [
+            "Yes, it updates the table",
+            "Only with two arguments",
+            "No, it supplies a result-time alternative",
+            "Only if the default is zero"
+          ],
+          "correct_index": 2,
+          "explanation": "Presentation and mutation are separate.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-12-is-null-application-new-7",
+          "test_id": "pt-dbms-sql-12-is-null-application",
+          "question_text": "Why can a missing-count repair report become stale?",
+          "options": [
+            "NULL prevents all concurrent writes",
+            "IS NULL permanently locks the table",
+            "Defaults erase the report automatically",
+            "Another worker can fill the count after the report read"
+          ],
+          "correct_index": 3,
+          "explanation": "The repair write needs current-state handling.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-12-is-null-application-new-8",
+          "test_id": "pt-dbms-sql-12-is-null-application",
+          "question_text": "Which fixture reveals missing department grouping around zero-or-NULL stock?",
+          "options": [
+            "Unknown stock from another department",
+            "Only the intended department",
+            "Only positive known stock",
+            "No equipment rows"
+          ],
+          "correct_index": 0,
+          "explanation": "A shared scope condition must apply to both alternatives.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-12-is-null-application-new-9",
+          "test_id": "pt-dbms-sql-12-is-null-application",
+          "question_text": "Can IS NULL test a computed expression?",
+          "options": [
+            "No, only physical columns are allowed",
+            "Yes, according to that expression’s result",
+            "Only if the expression is numeric",
+            "Only inside a join"
+          ],
+          "correct_index": 1,
+          "explanation": "Inspect why that expression can produce missing output.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-12-is-null-application-new-10",
+          "test_id": "pt-dbms-sql-12-is-null-application",
+          "question_text": "What should a missing measurement not be presented as?",
+          "options": [
+            "An unknown fact",
+            "A record needing investigation",
+            "A known zero unless the contract deliberately defines that meaning",
+            "A nullable stored value"
+          ],
+          "correct_index": 2,
+          "explanation": "Do not invent measurements through display or cleanup assumptions.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cx-is-null-uncounted-stock",
+      "slug": "is-null-uncounted-stock",
+      "title": "Find equipment with unknown stock",
+      "difficulty": "Easy",
+      "task": "Return equipment_id for stock values that are NULL. Known zero is not unknown. Order by equipment_id.",
+      "schema_sql": "CREATE TABLE equipment_stock(equipment_id INT PRIMARY KEY,stock INT);",
+      "seed_sql": "INSERT INTO equipment_stock VALUES (1,NULL),(2,0),(3,5),(4,NULL);",
+      "expected": "equipment_id\n1\n4",
+      "ordering": "As explicitly ordered in the result query.",
+      "constraints": [
+        "Use only the supplied synthetic tables and requested transition.",
+        "Preserve unrelated rows."
+      ],
+      "edge_cases": [
+        "Known zero is excluded.",
+        "Known invalid negative values are not missing either."
+      ],
+      "hints": [
+        "Test absence rather than compare with NULL.",
+        "Do not merge zero into the missing set."
+      ],
+      "solution_sql": "SELECT equipment_id FROM equipment_stock WHERE stock IS NULL ORDER BY equipment_id;",
+      "explanation": "The dedicated missingness predicate selects only unknown counts and keeps the confirmed zero distinct.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO equipment_stock VALUES (8,0),(9,-1);",
+          "expected": ""
+        },
+        {
+          "seed_sql": "INSERT INTO equipment_stock VALUES (3,NULL);",
+          "expected": "equipment_id\n3"
+        }
+      ]
+    },
+    {
+      "id": "cx-is-null-no-passed-inspection",
+      "slug": "is-null-no-passed-inspection",
+      "title": "Find equipment without a passed inspection",
+      "difficulty": "Medium",
+      "task": "Return equipment_id for equipment with no inspection whose result='passed'. Use LEFT JOIN with the pass condition in ON and the non-NULL inspection_id as the missing-match marker. A passed row with NULL note is still a passed inspection. Order by equipment_id.",
+      "schema_sql": "CREATE TABLE equipment(equipment_id INT PRIMARY KEY); CREATE TABLE inspections(inspection_id INT PRIMARY KEY,equipment_id INT NOT NULL,result VARCHAR(20) NOT NULL,note VARCHAR(30));",
+      "seed_sql": "INSERT INTO equipment VALUES (1),(2),(3),(4); INSERT INTO inspections VALUES (10,1,'passed',NULL),(11,2,'failed','retry'),(12,4,'passed','ok'),(13,4,'passed',NULL);",
+      "expected": "equipment_id\n2\n3",
+      "ordering": "As explicitly ordered in the result query.",
+      "constraints": [
+        "Use only the supplied synthetic tables and requested transition.",
+        "Preserve unrelated rows."
+      ],
+      "edge_cases": [
+        "Only failed inspections do not satisfy the passed relationship.",
+        "Multiple passed inspections must not make any item appear missing."
+      ],
+      "hints": [
+        "Qualify the relationship before testing its absence.",
+        "Do not use optional note as the marker."
+      ],
+      "solution_sql": "SELECT e.equipment_id FROM equipment e LEFT JOIN inspections i ON i.equipment_id=e.equipment_id AND i.result='passed' WHERE i.inspection_id IS NULL ORDER BY e.equipment_id;",
+      "explanation": "The join considers only passed inspections. A missing nonnullable match identifier then means no qualifying inspection, including items with only failed history.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO equipment VALUES (7); INSERT INTO inspections VALUES (1,7,'passed',NULL);",
+          "expected": ""
+        },
+        {
+          "seed_sql": "INSERT INTO equipment VALUES (8),(9); INSERT INTO inspections VALUES (1,8,'failed',NULL);",
+          "expected": "equipment_id\n8\n9"
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-12-is-null-1",
+      "test_id": "pt-dbms-sql-12-is-null",
+      "question_text": "What is the correct way to test whether a column's value is NULL?",
+      "options": [
+        "column = NULL",
+        "column IS NULL",
+        "column == NULL",
+        "column <> NULL"
+      ],
+      "correct_index": 1,
+      "explanation": "IS NULL is specifically designed for this test; ordinary comparison operators cannot express it.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-12-is-null-2",
+      "test_id": "pt-dbms-sql-12-is-null",
+      "question_text": "Why does `stock = NULL` fail to find rows where stock is NULL?",
+      "options": [
+        "It actually works correctly",
+        "Because = always evaluates to UNKNOWN when compared against NULL, never TRUE, regardless of the actual value",
+        "Because NULL is treated as zero by =",
+        "Because = can only compare numbers"
+      ],
+      "correct_index": 1,
+      "explanation": "This is the direct consequence of NULL comparison semantics covered in Chapter 8.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-12-is-null-3",
+      "test_id": "pt-dbms-sql-12-is-null",
+      "question_text": "Can IS NULL be combined with other conditions using AND/OR?",
+      "options": [
+        "No, IS NULL must always be the only condition in WHERE",
+        "Yes — WHERE stock IS NULL OR stock = 0 is a valid, common pattern",
+        "IS NULL can only be combined with NOT",
+        "IS NULL cannot appear in a WHERE clause at all"
+      ],
+      "correct_index": 1,
+      "explanation": "IS NULL behaves like any other boolean condition and combines naturally with AND/OR.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-12-is-null-4",
+      "test_id": "pt-dbms-sql-12-is-null",
+      "question_text": "What is the 'anti-join' pattern that uses IS NULL?",
+      "options": [
+        "INNER JOIN combined with IS NULL",
+        "LEFT JOIN followed by WHERE <right_table>.key IS NULL, to find rows with no match in the other table",
+        "A join that only works on NULL columns",
+        "GROUP BY combined with IS NULL"
+      ],
+      "correct_index": 1,
+      "explanation": "This pattern, used repeatedly across the course, finds unmatched rows via a LEFT JOIN plus an IS NULL filter.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-12-is-null-5",
+      "test_id": "pt-dbms-sql-12-is-null",
+      "question_text": "Is IS NULL an ordinary function applied to the value NULL, or a distinct piece of SQL syntax?",
+      "options": [
+        "An ordinary function, just like UPPER() or LENGTH()",
+        "A distinct syntax construct (the IS NULL / IS NOT NULL operator pair), specifically because ordinary = cannot express this test",
+        "A deprecated legacy feature",
+        "A synonym for the COALESCE function"
+      ],
+      "correct_index": 1,
+      "explanation": "IS NULL exists as dedicated syntax precisely because standard comparison operators are incapable of this test.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-12-is-null-6",
+      "test_id": "pt-dbms-sql-12-is-null",
+      "question_text": "In the running products example, which product(s) have a NULL stock?",
+      "options": [
+        "ProLaptop",
+        "Notebook",
+        "ProPhone",
+        "None of them"
+      ],
+      "correct_index": 1,
+      "explanation": "Notebook's stock is shown as NULL in the running example table.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-12-is-null-7",
+      "test_id": "pt-dbms-sql-12-is-null",
+      "question_text": "Can IS NULL be used on any column type, or only numeric columns?",
+      "options": [
+        "Only numeric columns",
+        "Any column type — NULL is a property independent of the column's data type",
+        "Only text columns",
+        "Only columns declared without NOT NULL"
+      ],
+      "correct_index": 1,
+      "explanation": "NULL-ness is orthogonal to data type; IS NULL applies universally.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-12-is-null-8",
+      "test_id": "pt-dbms-sql-12-is-null",
+      "question_text": "If a column is declared NOT NULL, is there ever a practical reason to still write IS NULL against it in a query?",
+      "options": [
+        "No, it would always be pointless",
+        "It's rarely useful for that specific column, though the same query pattern is essential for other nullable columns or after an outer join introduces NULLs",
+        "IS NULL is illegal syntax on NOT NULL columns",
+        "It would cause a runtime error"
+      ],
+      "correct_index": 1,
+      "explanation": "While redundant on a genuinely NOT NULL column directly, the same construct remains essential elsewhere, including columns from an outer-joined table that can be NULL regardless of the joined table's own constraint.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "coordinator",
+    "independent_review": "passed",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Independent manual review passed; native MySQL fixture evidence recorded separately; provider/browser/Supabase release gates remain separate.",
+    "existing_question_corrections": [
+      "tq-dbms-sql-12-is-null-1",
+      "tq-dbms-sql-12-is-null-2",
+      "tq-dbms-sql-12-is-null-3",
+      "tq-dbms-sql-12-is-null-4",
+      "tq-dbms-sql-12-is-null-5",
+      "tq-dbms-sql-12-is-null-6",
+      "tq-dbms-sql-12-is-null-7",
+      "tq-dbms-sql-12-is-null-8"
+    ],
+    "canonical_answer_indices_preserved": true,
+    "editorial_record": "Original snapshots retained. Questions rewritten for precise dialect and topic coverage while preserving identities and canonical answer positions; technical and independent review pending.",
+    "independent_reviewer": "Codex reviewer, current 2026-10-30 session",
+    "independent_review_scope": "Read full notes, all 640 MCQ stems/options/canonical answers/explanations, 64 exercise contracts/solutions/fixtures, and all 32 diagrams. Verified retained identities/answers through source-continuity tests; SQL execution evidence is recorded separately. No external originality, provider, live application or Supabase authorization clearance.",
+    "independent_review_record": "reports/independent-review-2026-10-30.json",
+    "content_sha256": "1d5cea256f626a80b9801d5f3952ee1816a612af47397435427e220ee220c1c5"
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-12-is-null",
+    "original_note_sha256": "5096a074871775c556ab445829dc97d1e03c883d9745408b3c0c61e6d205bcdd",
+    "status": "drafted; not yet included in prepared paired migrations"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Stored absence and missing relationship are different observations",
+      "description": "A real matched inspection can have a NULL note, so note is not a reliable anti-join marker.",
+      "columns": [
+        "Equipment",
+        "Passed inspection id",
+        "Optional note",
+        "No passed match"
+      ],
+      "rows": [
+        [
+          "1",
+          "10",
+          "NULL",
+          "No"
+        ],
+        [
+          "2",
+          "NULL after qualified join",
+          "NULL",
+          "Yes; only failed history"
+        ],
+        [
+          "3",
+          "NULL after qualified join",
+          "NULL",
+          "Yes; no history"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "drafted — verification pending",
+    "server_rendering": "pending",
+    "browser_rendering": "unverified",
+    "independent_review": "pending"
+  },
+  "authoring_status": "drafted — verification pending",
+  "sql_verification": {
+    "scope": "not executed; exact MySQL/provider verification pending",
+    "all_passed": false,
+    "cases": []
+  }
+}

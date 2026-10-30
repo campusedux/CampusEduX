@@ -1,0 +1,582 @@
+{
+  "source_ref": "chapter-16-joins/natural-join-sql",
+  "slug": "natural-join-sql",
+  "title": "Natural Join",
+  "description": "Understand SQL NATURAL JOIN, shared-name equality, coalesced columns and schema-change hazards, with explicit USING alternatives and controlled MySQL examples.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Let matching column names define a relationship\n\nNATURAL JOIN automatically uses every column name common to its two inputs as an equality join condition. It also presents one coalesced output column for each shared name when selecting the natural join's common columns. The convenience is real, but so is the coupling to input shape: adding a same-named column can change the relationship without changing the query text.\n\nImagine a campus club with members and activity registrations. Both tables have member_id, so a natural join can connect registrations to members. If both also have a column named status, however, the join requires equal status values as well. Member status might mean active membership while registration status means payment confirmation. Equal spelling does not prove equal meaning.\n\n## Start with a deliberately controlled example\n\nUse small inputs whose only shared name is member_id. The members relation contains member_id and member_name; registrations contains member_id and activity_code. A natural join then requires matching member identities. Two registrations for one member produce two joined rows because both relationships satisfy the equality.\n\n```sql\nSELECT member_id, member_name, activity_code\nFROM members\nNATURAL JOIN registrations\nORDER BY member_id, activity_code;\n```\n\nThis example relies on the exact declared columns. It does not mean natural joins infer foreign keys, inspect business documentation, or choose a primary key automatically. The operator examines names. If the intended relationship uses members.id and registrations.member_id, their names differ and the natural join does not invent the missing equality. An explicit predicate is necessary to express that domain relationship.\n\n## Expand the implicit predicate by hand\n\nA useful learning method rewrites the controlled example as an explicit inner join. The relationship becomes members.member_id equals registrations.member_id. The rewritten query makes the key visible to reviewers and is easier to compare with a schema diagram. Its SELECT list must still be chosen explicitly if the caller requires the same output shape as the natural join.\n\n```sql\nSELECT m.member_id, m.member_name, r.activity_code\nFROM members AS m\nJOIN registrations AS r\n  ON r.member_id = m.member_id\nORDER BY m.member_id, r.activity_code;\n```\n\nThe ordinary ON join retains both input key columns in its full joined schema, while the natural form coalesces shared columns. Selecting the requested columns explicitly makes the displayed result comparable. Do not confuse equivalent row pairing with identical SELECT * output: projection rules can differ even when the matching relationship is the same.\n\n## Recognize accidental shared attributes\n\nSuppose members gains status and registrations already contains status. The previous natural query now includes both member_id equality and status equality. A valid member-registration relationship can disappear because 'active' differs from 'paid'. The query still parses and can return plausible rows for another member whose status labels happen to agree. That makes the regression particularly easy to miss.\n\nAdding a timestamp named created_at to both inputs has a similar risk. Those timestamps describe different events and will rarely be equal. Adding a generic name column can impose another unintended comparison. These are ordinary schema evolutions, so a natural join between large application tables can become fragile even when its initial author understood the original shared names perfectly.\n\n## Know what happens when no names are shared\n\nWhen the inputs have no common column names, a natural join has no equality condition to restrict pairs. It behaves as a Cartesian product. Three members and four activity rows can therefore produce twelve combinations, rather than a helpful inferred relationship. That result follows from the absence of shared names, not from the intended association between the entities.\n\nA reviewer should list the common names before approving this syntax. An empty list is a warning that the query is pairing every row. A long list is a warning that unrelated attributes may participate. Neither situation is solved by assuming the engine understands the relationship better than the developer. SQL expresses the condition supplied by the query form; it does not infer the missing business rule from suggestive table names.\n\n## Treat missing values using equality semantics\n\nThe shared-column equalities use ordinary SQL comparison semantics. Two null shared keys do not become a true match merely because both are missing. A row with a null member reference therefore does not join to a null member identity under a natural inner join. The coalesced output-column presentation does not change that comparison rule.\n\nA common misunderstanding is that a natural join means null-safe matching of common values. It does not. If the domain deliberately considers two missing attributes equivalent, that policy requires an explicit condition appropriate to the engine and business meaning. In many relationship schemas a missing key means unknown or absent association, so matching missing keys together would itself be a correctness error.\n\n## Preserve multiplicity instead of assuming uniqueness\n\nNatural joins retain all qualifying pairs. They do not automatically deduplicate members, registrations or the final projection. If two registrations have the same member_id and activity_code, both can contribute rows unless a verified uniqueness constraint prevents that source state. Identical-looking results can represent different registration identities that the selected columns omit.\n\nFor a requirement such as members with at least one registration, an existence query is clearer than a natural join followed by an unexplained DISTINCT. For a requirement such as every member-registration relationship, keep the relationship identity or enough detail to distinguish events. The correct result grain comes from the requirement and constraints, not from whether the join condition was explicit or inferred from names.\n\n## Prefer USING for a deliberate shared-key list\n\nJOIN USING(member_id) names the shared column that should participate while still coalescing that key in the joined output. It is often a useful middle ground when both inputs intentionally use the same key name. Adding another same-named attribute does not silently add it to the USING list. This makes the intended relationship more stable under unrelated column additions.\n\n```sql\nSELECT member_id, member_name, activity_code\nFROM members\nJOIN registrations USING (member_id)\nORDER BY member_id, activity_code;\n```\n\nUSING still requires a genuinely shared column name and compatible meaning. Use ON when key names differ, when multiple predicates are needed, or when the relationship is not ordinary equality. Explicitness is valuable because the reader can inspect the business relationship directly, rather than reconstructing it from the current definitions of both inputs.\n\n## Keep comparison details in the contract\n\nCharacter comparisons can depend on collation, and mixed types may invoke conversion rules. A natural join does not remove those concerns. Two strings that differ in case may compare equal under a case-insensitive collation, while numeric-looking text can raise other interpretation questions. The shared name only chooses the comparison expressions; it does not establish that their types and collations express the intended identity.\n\nFor teaching, use nonnull integer identities and explicitly typed label columns so that the examples isolate naming behavior. For an application query, inspect the actual input definitions and constraints. Avoid declaring a natural join safe merely because two columns have the same visible spelling in a result preview. Stored type, nullability, uniqueness and ownership all affect what those names really represent.\n\n## Limit the scope of this comparison\n\nMySQL also supports natural outer-join forms. Their preservation of unmatched rows introduces additional rules beyond this inner-join example. Do not infer that every natural form discards unmatched members merely because the controlled inner join does. When reviewing an existing query, identify both its natural naming rule and its preservation rule. The word NATURAL chooses shared-name comparisons, while INNER or an outer direction determines how unmatched inputs are treated.\n\n## Test schema evolution as well as sample rows\n\nA useful fixture begins with only member_id shared, then deliberately creates a second controlled schema where status is shared too. Predict which member-registration relationships disappear in the second query. Include several registrations for one member, an unmatched member and a null registration key. These cases expose multiplicity and null behavior independently of the naming regression.\n\nThe accompanying exercises compare controlled natural matching with an explicit USING repair. They use synthetic tables and do not change application schema. Continue with [inner joins](/learning/dbms-sql-tutorial/inner-join) for explicit matching and [join predicates](/learning/dbms-sql-tutorial/join-predicate) for conditions that should survive ordinary column additions. Before using NATURAL JOIN, write down every common name and confirm that each equality is intentional.\n",
+  "references": [
+    {
+      "title": "MySQL 8.4 reference manual",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/join.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-16-natural-join-sql",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-16-natural-join-sql-1",
+          "test_id": "pt-dbms-sql-16-natural-join-sql",
+          "question_text": "How does NATURAL JOIN decide what to match on?",
+          "options": [
+            "You must specify columns explicitly",
+            "Automatically, based on every identically-named column shared by both tables",
+            "It always matches on the primary key only",
+            "It requires a CROSS JOIN first"
+          ],
+          "correct_index": 1,
+          "explanation": "NATURAL JOIN infers its match condition purely from shared column names.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-16-natural-join-sql-2",
+          "test_id": "pt-dbms-sql-16-natural-join-sql",
+          "question_text": "Inputs employees(employee_id, department_id) and departments(id, department_name) have no shared column names. What does their NATURAL JOIN pair?",
+          "options": [
+            "Only declared foreign-key matches",
+            "Every employee with every department",
+            "Only equal first-column values",
+            "No rows, even when both inputs are nonempty"
+          ],
+          "correct_index": 1,
+          "explanation": "There are no common names in these explicit schemas, so no implicit equality restricts the Cartesian pairing.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-16-natural-join-sql-3",
+          "test_id": "pt-dbms-sql-16-natural-join-sql",
+          "question_text": "Why is NATURAL JOIN considered risky if two tables happen to share an unrelated column name?",
+          "options": [
+            "It isn't risky in that case",
+            "NATURAL JOIN would silently require that unrelated column to also match, potentially breaking the intended relationship",
+            "Shared unrelated column names cause a guaranteed syntax error",
+            "NATURAL JOIN ignores all but the first shared column name"
+          ],
+          "correct_index": 1,
+          "explanation": "Every shared name becomes part of the automatic match condition, intended or not.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-16-natural-join-sql-4",
+          "test_id": "pt-dbms-sql-16-natural-join-sql",
+          "question_text": "Why do many real-world style guides prefer explicit JOIN ... ON over NATURAL JOIN?",
+          "options": [
+            "JOIN ... ON is always faster to execute",
+            "Explicit conditions don't silently depend on incidental column-naming choices that could change later",
+            "NATURAL JOIN is not valid SQL syntax",
+            "JOIN ... ON requires fewer keystrokes"
+          ],
+          "correct_index": 1,
+          "explanation": "Robustness to schema evolution is the main argument for explicit join conditions.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-16-natural-join-sql-5",
+          "test_id": "pt-dbms-sql-16-natural-join-sql",
+          "question_text": "Does NATURAL JOIN require writing an ON or USING clause?",
+          "options": [
+            "Yes, always",
+            "No — that's the defining feature of NATURAL JOIN; the match is inferred automatically",
+            "Only USING is required, never ON",
+            "Only for more than two tables"
+          ],
+          "correct_index": 1,
+          "explanation": "The absence of an explicit condition is exactly what makes it a 'natural' join.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-16-natural-join-sql-6",
+          "test_id": "pt-dbms-sql-16-natural-join-sql",
+          "question_text": "How does a natural join differ from renaming an input column?",
+          "options": [
+            "A natural join combines matching rows; a rename changes a name used to describe an input",
+            "Both operations always combine rows",
+            "Renaming alone checks foreign keys",
+            "A natural join only changes a display label"
+          ],
+          "correct_index": 0,
+          "explanation": "Joining and renaming are different operations. A rename can change which names are shared, but does not itself combine the input relations.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-16-natural-join-sql-7",
+          "test_id": "pt-dbms-sql-16-natural-join-sql",
+          "question_text": "What real consequence follows from NATURAL JOIN degenerating into a CROSS JOIN when no shared column names exist?",
+          "options": [
+            "The query simply returns zero rows safely",
+            "A likely unintended, potentially very large row-count explosion, with no error to flag the problem",
+            "SQL automatically raises a warning in this exact case",
+            "The query is automatically converted to an INNER JOIN instead"
+          ],
+          "correct_index": 1,
+          "explanation": "The lack of an error, combined with the Cartesian-Product row-count risk from 16.5, makes this a genuinely dangerous silent failure mode.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-16-natural-join-sql-8",
+          "test_id": "pt-dbms-sql-16-natural-join-sql",
+          "question_text": "Only department_id is shared by employees(department_id, employee_name) and departments(department_id, department_name). Which query matches SELECT department_id,employee_name,department_name FROM employees NATURAL JOIN departments?",
+          "options": [
+            "SELECT e.department_id,e.employee_name,d.department_name FROM employees e CROSS JOIN departments d",
+            "SELECT e.department_id,e.employee_name,d.department_name FROM employees e JOIN departments d ON e.department_id=d.department_id",
+            "SELECT e.department_id,e.employee_name,d.department_name FROM employees e LEFT JOIN departments d ON 1=1",
+            "SELECT e.department_id,e.employee_name,d.department_name FROM employees e JOIN departments d ON e.department_id<>d.department_id"
+          ],
+          "correct_index": 1,
+          "explanation": "The one shared name supplies the equality, and explicit projection preserves the requested output shape rather than comparing different SELECT * schemas.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "cx-q-natural-join-sql-9",
+          "test_id": "pt-dbms-sql-16-natural-join-sql",
+          "question_text": "Which newly shared column can silently alter a natural join?",
+          "options": [
+            "status",
+            "A column present only on the left",
+            "A column present only on the right",
+            "An output alias not in either input"
+          ],
+          "correct_index": 0,
+          "explanation": "Every same-named input column participates.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "cx-q-natural-join-sql-10",
+          "test_id": "pt-dbms-sql-16-natural-join-sql",
+          "question_text": "For the shown natural INNER JOIN, what happens when registrations is empty and members is nonempty?",
+          "options": [
+            "Every member gets a placeholder registration",
+            "The result is empty",
+            "One NULL row is returned",
+            "Every member appears once"
+          ],
+          "correct_index": 1,
+          "explanation": "An inner join requires a qualifying pair, so an empty input produces no pairs.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "cx-test-natural-join-sql-2",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "cx-q-natural-join-sql-11",
+          "test_id": "cx-test-natural-join-sql-2",
+          "question_text": "Does NATURAL JOIN infer foreign keys?",
+          "options": [
+            "Always",
+            "Only for NULL keys",
+            "No",
+            "Only after ORDER BY"
+          ],
+          "correct_index": 2,
+          "explanation": "It relies on names rather than declared relationships.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "cx-q-natural-join-sql-12",
+          "test_id": "cx-test-natural-join-sql-2",
+          "question_text": "Does a natural inner join match NULL to NULL?",
+          "options": [
+            "Always",
+            "Only for integer keys",
+            "Only for text keys",
+            "No under ordinary equality"
+          ],
+          "correct_index": 3,
+          "explanation": "Unknown equality does not form a match.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "cx-q-natural-join-sql-13",
+          "test_id": "cx-test-natural-join-sql-2",
+          "question_text": "What does USING(member_id) make explicit?",
+          "options": [
+            "The shared key chosen for joining",
+            "Every common column automatically",
+            "The output sort order",
+            "A new primary-key constraint"
+          ],
+          "correct_index": 0,
+          "explanation": "An unrelated shared status is excluded from the listed predicate.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "cx-q-natural-join-sql-14",
+          "test_id": "cx-test-natural-join-sql-2",
+          "question_text": "What should be inspected before using NATURAL JOIN?",
+          "options": [
+            "Only the first output row",
+            "The complete shared-name list",
+            "Only the table aliases",
+            "Only row count"
+          ],
+          "correct_index": 1,
+          "explanation": "The list determines every implicit equality.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "cx-q-natural-join-sql-15",
+          "test_id": "cx-test-natural-join-sql-2",
+          "question_text": "Can one member with two registrations yield two rows?",
+          "options": [
+            "No because NATURAL deduplicates",
+            "Only if the names differ",
+            "Yes",
+            "Only when all keys are NULL"
+          ],
+          "correct_index": 2,
+          "explanation": "Every qualifying pair remains.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "cx-q-natural-join-sql-16",
+          "test_id": "cx-test-natural-join-sql-2",
+          "question_text": "Why can SELECT * differ between NATURAL and ON forms?",
+          "options": [
+            "ON always deletes duplicate rows",
+            "Natural joins return no keys",
+            "ON forbids repeated column names",
+            "Natural joins coalesce common-name columns"
+          ],
+          "correct_index": 3,
+          "explanation": "Output shape is separate from row pairing.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "cx-q-natural-join-sql-17",
+          "test_id": "cx-test-natural-join-sql-2",
+          "question_text": "What if members uses id while registrations uses member_id?",
+          "options": [
+            "An explicit relationship predicate is needed",
+            "Natural joins equate them automatically",
+            "The names are treated as aliases",
+            "Only their first digits are compared"
+          ],
+          "correct_index": 0,
+          "explanation": "Different names are not inferred to be related.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "cx-q-natural-join-sql-18",
+          "test_id": "cx-test-natural-join-sql-2",
+          "question_text": "Which shared status values illustrate the naming hazard?",
+          "options": [
+            "Equal member IDs only",
+            "Member active and registration paid",
+            "A left-only biography",
+            "An explicit USING list"
+          ],
+          "correct_index": 1,
+          "explanation": "The same column name can describe different domains.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "cx-q-natural-join-sql-19",
+          "test_id": "cx-test-natural-join-sql-2",
+          "question_text": "Does NATURAL JOIN guarantee unique result rows?",
+          "options": [
+            "Yes always",
+            "Only for strings",
+            "No",
+            "Only without ORDER BY"
+          ],
+          "correct_index": 2,
+          "explanation": "Uniqueness requires a justified source or projection policy.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "cx-q-natural-join-sql-20",
+          "test_id": "cx-test-natural-join-sql-2",
+          "question_text": "Which case best detects schema coupling?",
+          "options": [
+            "Changing an output alias only",
+            "Reordering displayed rows",
+            "Changing a table comment",
+            "Adding an unrelated shared status column"
+          ],
+          "correct_index": 3,
+          "explanation": "The implicit predicate changes with shared input names.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cx-natural-controlled-members",
+      "slug": "natural-controlled-members",
+      "title": "Match a controlled shared member key",
+      "difficulty": "Easy",
+      "task": "Return member_id, member_name, activity_code for matching relationships using NATURAL JOIN, ordered by member_id and activity_code.",
+      "schema_sql": "CREATE TABLE members(member_id INT PRIMARY KEY,member_name VARCHAR(30)); CREATE TABLE registrations(registration_id INT PRIMARY KEY,member_id INT NULL,activity_code VARCHAR(10));",
+      "seed_sql": "INSERT INTO members VALUES (1,'Asha'),(2,'Rohan'),(3,'Neha'); INSERT INTO registrations VALUES (10,1,'ART'),(11,1,'CODE'),(12,2,'ART'),(13,NULL,'MUSIC');",
+      "solution_sql": "SELECT member_id,member_name,activity_code FROM members NATURAL JOIN registrations ORDER BY member_id,activity_code;",
+      "expected": "member_id\tmember_name\tactivity_code\n1\tAsha\tART\n1\tAsha\tCODE\n2\tRohan\tART",
+      "ordering": "As specified by the task and explicit ORDER BY.",
+      "constraints": [
+        "Return member_id, member_name, activity_code for matching relationships using NATURAL JOIN, ordered by member_id and activity_code."
+      ],
+      "edge_cases": [
+        "One member can have multiple registrations.",
+        "NULL references do not match."
+      ],
+      "hints": [
+        "Only member_id is shared by these controlled inputs."
+      ],
+      "explanation": "Only member_id is shared by these controlled inputs.",
+      "validation_cases": [
+        {
+          "name": "unmatched and null keys",
+          "seed_sql": "INSERT INTO members VALUES (1,'A'); INSERT INTO registrations VALUES (1,99,'X'),(2,NULL,'Y');",
+          "expected": ""
+        },
+        {
+          "name": "empty registrations",
+          "seed_sql": "INSERT INTO members VALUES (1,'A');",
+          "expected": ""
+        }
+      ]
+    },
+    {
+      "id": "cx-natural-explicit-status-repair",
+      "slug": "natural-explicit-status-repair",
+      "title": "Keep unrelated status attributes out of a join",
+      "difficulty": "Medium",
+      "task": "Return member_id, member_name, activity_code matching member identity using USING(member_id), even when the two status values differ. Order by member_id,activity_code.",
+      "schema_sql": "CREATE TABLE members(member_id INT PRIMARY KEY,member_name VARCHAR(30),status VARCHAR(20)); CREATE TABLE registrations(registration_id INT PRIMARY KEY,member_id INT NULL,activity_code VARCHAR(10),status VARCHAR(20));",
+      "seed_sql": "INSERT INTO members VALUES (1,'Asha','active'),(2,'Rohan','active'); INSERT INTO registrations VALUES (10,1,'ART','paid'),(11,2,'CODE','active');",
+      "solution_sql": "SELECT member_id,member_name,activity_code FROM members JOIN registrations USING(member_id) ORDER BY member_id,activity_code;",
+      "expected": "member_id\tmember_name\tactivity_code\n1\tAsha\tART\n2\tRohan\tCODE",
+      "ordering": "As specified by the task and explicit ORDER BY.",
+      "constraints": [
+        "Return member_id, member_name, activity_code matching member identity using USING(member_id), even when the two status values differ. Order by member_id,activity_code."
+      ],
+      "edge_cases": [
+        "Different statuses must not remove a valid identity match.",
+        "The explicit list survives unrelated shared names."
+      ],
+      "hints": [
+        "The listed key is the intended relationship; status describes different domain concepts."
+      ],
+      "explanation": "The listed key is the intended relationship; status describes different domain concepts.",
+      "validation_cases": [
+        {
+          "name": "all statuses differ but identities match",
+          "seed_sql": "INSERT INTO members VALUES (1,'A','active'); INSERT INTO registrations VALUES (1,1,'X','paid'),(2,1,'Y','pending');",
+          "expected": "member_id\tmember_name\tactivity_code\n1\tA\tX\n1\tA\tY"
+        },
+        {
+          "name": "empty input",
+          "seed_sql": "",
+          "expected": ""
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-16-natural-join-sql-1",
+      "test_id": "pt-dbms-sql-16-natural-join-sql",
+      "question_text": "How does NATURAL JOIN decide what to match on?",
+      "options": [
+        "You must specify columns explicitly",
+        "Automatically, based on every identically-named column shared by both tables",
+        "It always matches on the primary key only",
+        "It requires a CROSS JOIN first"
+      ],
+      "correct_index": 1,
+      "explanation": "NATURAL JOIN infers its match condition purely from shared column names.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-16-natural-join-sql-2",
+      "test_id": "pt-dbms-sql-16-natural-join-sql",
+      "question_text": "If employees.department_id and departments.id have DIFFERENT names, what happens with a plain NATURAL JOIN between them?",
+      "options": [
+        "It automatically detects the relationship anyway",
+        "With no identically-named shared column, NATURAL JOIN finds nothing to match on and degenerates into a CROSS JOIN",
+        "It raises a clear error explaining the naming mismatch",
+        "It matches on the first column of each table by position"
+      ],
+      "correct_index": 1,
+      "explanation": "NATURAL JOIN relies entirely on matching column NAMES — different names mean nothing to match on.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-16-natural-join-sql-3",
+      "test_id": "pt-dbms-sql-16-natural-join-sql",
+      "question_text": "Why is NATURAL JOIN considered risky if two tables happen to share an unrelated column name?",
+      "options": [
+        "It isn't risky in that case",
+        "NATURAL JOIN would silently require that unrelated column to also match, potentially breaking the intended relationship",
+        "Shared unrelated column names cause a guaranteed syntax error",
+        "NATURAL JOIN ignores all but the first shared column name"
+      ],
+      "correct_index": 1,
+      "explanation": "Every shared name becomes part of the automatic match condition, intended or not.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-16-natural-join-sql-4",
+      "test_id": "pt-dbms-sql-16-natural-join-sql",
+      "question_text": "Why do many real-world style guides prefer explicit JOIN ... ON over NATURAL JOIN?",
+      "options": [
+        "JOIN ... ON is always faster to execute",
+        "Explicit conditions don't silently depend on incidental column-naming choices that could change later",
+        "NATURAL JOIN is not valid SQL syntax",
+        "JOIN ... ON requires fewer keystrokes"
+      ],
+      "correct_index": 1,
+      "explanation": "Robustness to schema evolution is the main argument for explicit join conditions.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-16-natural-join-sql-5",
+      "test_id": "pt-dbms-sql-16-natural-join-sql",
+      "question_text": "Does NATURAL JOIN require writing an ON or USING clause?",
+      "options": [
+        "Yes, always",
+        "No — that's the defining feature of NATURAL JOIN; the match is inferred automatically",
+        "Only USING is required, never ON",
+        "Only for more than two tables"
+      ],
+      "correct_index": 1,
+      "explanation": "The absence of an explicit condition is exactly what makes it a 'natural' join.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-16-natural-join-sql-6",
+      "test_id": "pt-dbms-sql-16-natural-join-sql",
+      "question_text": "Is this chapter's coverage of NATURAL JOIN a different concept from the relational algebra Rename operation covered in Chapter 7?",
+      "options": [
+        "Yes — Natural Join (7.10) is a join concept; Rename (7.3) is an unrelated naming operation",
+        "No, they are the same operation",
+        "Natural Join is a special case of Rename",
+        "Rename is required before NATURAL JOIN can be used at all"
+      ],
+      "correct_index": 0,
+      "explanation": "These are genuinely distinct relational algebra operations — the exact source of the slug collision this course had to resolve when both a Chapter 7 'Rename' topic and this chapter's SQL 'NATURAL JOIN' topic exist alongside each other.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-16-natural-join-sql-7",
+      "test_id": "pt-dbms-sql-16-natural-join-sql",
+      "question_text": "What real consequence follows from NATURAL JOIN degenerating into a CROSS JOIN when no shared column names exist?",
+      "options": [
+        "The query simply returns zero rows safely",
+        "A likely unintended, potentially very large row-count explosion, with no error to flag the problem",
+        "SQL automatically raises a warning in this exact case",
+        "The query is automatically converted to an INNER JOIN instead"
+      ],
+      "correct_index": 1,
+      "explanation": "The lack of an error, combined with the Cartesian-Product row-count risk from 16.5, makes this a genuinely dangerous silent failure mode.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-16-natural-join-sql-8",
+      "test_id": "pt-dbms-sql-16-natural-join-sql",
+      "question_text": "Which of these is equivalent to `SELECT * FROM employees NATURAL JOIN departments` when both share column department_id?",
+      "options": [
+        "SELECT * FROM employees CROSS JOIN departments",
+        "SELECT * FROM employees JOIN departments ON employees.department_id = departments.department_id",
+        "SELECT * FROM employees LEFT JOIN departments ON 1=1",
+        "SELECT * FROM employees, departments"
+      ],
+      "correct_index": 1,
+      "explanation": "NATURAL JOIN is shorthand for exactly this explicit equality join on the shared column.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "worker_3",
+    "independent_review": "passed",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "author review; independent review pending",
+    "canonical_answer_indices_preserved": true,
+    "editorial_record": "Original explanations and assessments; seeded identities and canonical answer positions retained. External originality clearance unavailable.",
+    "independent_reviewer": "/root",
+    "independent_review_scope": "Full notes,20 MCQs/options/reasoning,both exercises with six predicted outputs and diagram reviewed. All-shared-name predicates, no-shared-name Cartesian product, NULL, multiplicity, USING repair and explicit output projection correct. Corrected inherited assumptions about missing shared names, SELECT-star equivalence and irrelevant course-slug history. Portable SQLite subset separate; exact MySQL/provider and browser unverified."
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-16-natural-join-sql",
+    "original_note_sha256": "7cf259ececb51c79be6f461266b27cda32901b21bcb0a6e6d1024ae0e4a7eb6f",
+    "status": "drafted; not included in prepared paired migrations"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "A new shared name changes the implicit predicate",
+      "description": "Identical member IDs are insufficient after both inputs expose status with unrelated meanings.",
+      "columns": [
+        "Shared names",
+        "Effective requirement",
+        "Risk"
+      ],
+      "rows": [
+        [
+          "member_id",
+          "Equal member identity",
+          "Controlled key match"
+        ],
+        [
+          "member_id, status",
+          "Equal identity and status",
+          "Valid relationships can disappear"
+        ],
+        [
+          "None",
+          "Every input pair",
+          "Cartesian multiplication"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "coordinator independent manual review passed",
+    "server_rendering": "passed",
+    "browser_rendering": "unverified",
+    "independent_review": "passed",
+    "server_rendering_evidence": "2026-10-29 full Vitest:1310 passed/12 skipped; actual LessonBlock/TopicDiagrams render over230 packages. Browser visual QA remains unverified."
+  },
+  "authoring_status": "drafted; verification pending",
+  "sql_verification": {
+    "scope": "not executed; exact MySQL/provider execution pending",
+    "all_passed": false,
+    "cases": []
+  }
+}

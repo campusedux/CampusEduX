@@ -1,0 +1,697 @@
+{
+  "source_ref": "chapter-10-sql-constraints/table-constraints",
+  "slug": "table-constraints",
+  "title": "Table Constraints",
+  "description": "Declare complete multi-column keys and row relationships in separate table clauses, mix forms deliberately, and distinguish row-local interval validity from cross-row availability.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Separate clauses can describe complete row rules\n\nA table constraint appears as its own supported clause in a table definition, rather than being embedded in one column's declaration. That location makes a complete key, reference or multi-property condition visible as a unit. For a campus booking, a condition comparing departure with arrival naturally reads as a relationship between two row properties.\n\nTable-level does not mean the rule automatically examines every other row. A CHECK comparing the current row's endpoints is still a row-local condition. Its placement near the end of CREATE TABLE does not turn it into a database-wide scheduling algorithm. Identify both the grammar position and the actual scope of the invariant before explaining what a declaration guarantees.\n\n## Composite keys need one complete column list\n\nPRIMARY KEY(student_id, course_id) declares one composite identity. It permits a student in several courses and a course with several students, while rejecting a repeated complete pair. Two independent UNIQUE declarations on those columns impose different rules. Table-level syntax makes the intended combination explicit rather than relying on an ambiguous series of inline keywords.\n\nThe same reasoning applies to other scoped identities. A room-local start time might be part of a booking key together with room_id. Repeating start time in another room can remain valid. A column list should follow the modeled identity, not merely gather all available attributes because a longer declaration looks more thorough.\n\n## Multi-property checks express row relationships\n\nFor an arrival and departure model, check_out > check_in rejects an equal or earlier departure when the supplied values are present. In the illustrated MySQL target, the supported table-level CHECK form expresses that multi-column rule. Required-value declarations are still needed if both endpoints must be recorded. A comparison that becomes UNKNOWN does not alone reject a missing endpoint.\n\nUse specific boundaries to explain the rule: arrival on September 1 and departure on September 2 is valid; equal dates do not satisfy a strictly later requirement. Reversing the comparison would validate the wrong direction. Keeping a concrete example beside the declaration helps reviewers detect a syntactically legal condition that contradicts the actual domain.\n\n```sql\nCREATE TABLE stays (\n  stay_id INT PRIMARY KEY,\n  check_in DATE NOT NULL,\n  check_out DATE NOT NULL,\n  CONSTRAINT chk_stay_order CHECK (check_out > check_in)\n);\n```\n\n## Table-level form can also reference one property\n\nA table-level CHECK can express a supported single-column condition such as credits >= 0. It does not need several columns merely because it appears separately. Where both inline and table-level forms are supported for the same condition, they can express the same acceptance rule, although metadata, naming and grammar details should still be read from the actual product.\n\nA style guide may prefer separate constraints so reviewers can scan integrity definitions together. Another may keep simple rules near their columns. Those are readability choices within supported grammar, not evidence that one placement inherently enforces better data. Follow the established repository style while keeping the condition and its complete roles unambiguous.\n\n## Presence syntax is version specific\n\nMySQL commonly states NOT NULL in each relevant column definition, even when other rules are listed separately. It is inaccurate to extend that convention into a claim that NOT NULL has no table-level form in any product. PostgreSQL 18 documents a table-constraint form naming a column, among other supported capabilities.\n\nThe examples keep required endpoints and key components explicit in their MySQL column definitions. This avoids mixing product grammars while still teaching that syntax must be tied to an engine and version. A declaration accepted in another database is not a portable replacement merely because both products describe the resulting property as required.\n\n## A composite foreign key references one parent tuple\n\nA table-level FOREIGN KEY clause lists child roles and their corresponding parent roles together. If departments are identified by campus_id and department_id, both belong in the complete reference. Two individually existing values do not prove the paired parent exists. Correct ordering, compatible types and a supported referenced key all matter.\n\nEnforcement also depends on the storage engine and object kind. A temporary-table example is not sufficient proof of native persistent foreign-key actions in MySQL. This topic's exercises focus on supported local keys and checks, while the foreign-key syntax package separately exercises persistent InnoDB relationships on disposable lab objects. Each assessment should claim only the mechanism it actually tests.\n\n## An ALTER addition is a supported definition operation\n\nALTER TABLE ADD CONSTRAINT can introduce an applicable separate rule to an existing definition. That form is structurally a table-constraint addition. It does not imply the same engine can never change an existing column through its own supported MODIFY or ALTER COLUMN grammar. Those are different maintenance operations with different syntax and attribute-preservation concerns.\n\nCurrent rows must satisfy the intended new enforced rule under the actual validation behaviour. A separate clause is not permission to bypass incompatible data or remove rejected rows arbitrarily. State the accepted repair policy before enforcement when legacy state conflicts, and coordinate relevant writers if preparation occurs while the table remains live.\n\n## Several constraint forms can coexist deliberately\n\nA CREATE TABLE can combine inline required values and a single-column primary key with a separate multi-column CHECK. This is often clearer than forcing every definition into one location. The first exercise uses that combination: stay_id identifies the row, each endpoint is required, and the named table-level rule relates the endpoints.\n\nThe resulting table still has one coherent accepted-state contract. A label beside one field and another clause after several definitions are not competing rules simply because they appear in different places. Read the entire definition before deciding whether a missing property, repeated identity or invalid interval should be accepted.\n\n## Row-local interval validity is not nonoverlap\n\nA room window with start_slot 9 and end_slot 11 can be a valid positive-length interval. Another window for the same room from 10 to 12 can also satisfy the same row-local checks even though the two overlap. A primary key on room_id and start_slot rejects identical starts, not every overlapping time range.\n\nPreventing overlap is a different invariant that can need another product-supported design and careful concurrency handling. Do not claim a comparison of one row's endpoints solves it. The medium exercise deliberately includes overlapping windows with different starts so the stated acceptance boundary remains visible rather than misleading students into thinking a local CHECK is a complete reservation system.\n\n## Constraint names should identify actual rules\n\nNames such as chk_stay_order or chk_window_domain help connect the definition with its intended boundary. The name does not make the predicate correct by itself. A rule called nonoverlap would be misleading if its expression only checked end_slot > start_slot. Choose labels that describe what the actual declaration can establish.\n\nCatalog naming and removal syntax vary by rule kind and engine. MySQL's special PRIMARY representation, named checks and foreign-key symbols have different maintenance forms. Read the real target definition instead of assuming every table-level label becomes a universal DROP CONSTRAINT command. Naming and grammar should help maintenance without hiding those product differences.\n\n## Validate keys and row predicates independently\n\nThe introductory stay exercise accepts a valid pair of dates, rejects equal endpoints and rejects missing required arrival. These are separate observations: ordering and presence are not interchangeable. Empty input still requires a table with the complete definition rather than skipping setup because there are no visible rows to copy.\n\nThe room-window task tests a composite key together with a supported time-slot domain. Same starts in different rooms are allowed, repeated complete keys are rejected, and an end beyond the declared range is rejected. Overlap across distinct rows remains allowed by this exercise. That final case is important evidence of the rule's limits, not a missing test to be concealed.\n\n## Keep the teaching contract and execution evidence aligned\n\nA useful structural illustration lists each clause, participating roles and exact guarantee. The notes and correct answers should agree that a composite key protects a combination while a row CHECK protects a local condition. Then the learner can distinguish a complete row definition from a broad business process that needs additional supported mechanisms.\n\nRecorded MariaDB compatibility fixtures verify the supplied temporary-table keys and checks. Exact MySQL/provider grammar, PostgreSQL table-level not-null execution, native persistent references and concurrent nonoverlap enforcement remain separate checks. Prepared content migrations store this material only; no instructional schema change is applied to the application's tables. The topic is explanatory complete without claiming its local clauses enforce every scheduling or deployment invariant.\n",
+  "references": [
+    {
+      "title": "MySQL 8.4 CREATE TABLE",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/create-table.html"
+    },
+    {
+      "title": "MySQL 8.4 CHECK constraints",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/create-table-check-constraints.html"
+    },
+    {
+      "title": "PostgreSQL 18 CREATE TABLE",
+      "url": "https://www.postgresql.org/docs/18/sql-createtable.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-10-table-constraints",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-10-table-constraints-1",
+          "test_id": "pt-dbms-sql-10-table-constraints",
+          "question_text": "What structurally distinguishes a table constraint from a column constraint in CREATE TABLE syntax?",
+          "options": [
+            "A table constraint must always be CHECK",
+            "A table constraint is written as its own separate clause naming its target column(s) explicitly, rather than being attached inline to one column's definition",
+            "A table constraint cannot be named",
+            "A table constraint can only be added via ALTER TABLE, never CREATE TABLE"
+          ],
+          "correct_index": 1,
+          "explanation": "Table constraints appear as standalone clauses within CREATE TABLE, listing the relevant column(s) in parentheses, unlike column constraints which are embedded in a single column's definition.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-10-table-constraints-2",
+          "test_id": "pt-dbms-sql-10-table-constraints",
+          "question_text": "Which NOT NULL syntax statement is accurate for this MySQL target and PostgreSQL 18?",
+          "options": [
+            "CHECK",
+            "UNIQUE",
+            "MySQL uses the supported column property here; PostgreSQL 18 also documents a table-level form",
+            "PRIMARY KEY"
+          ],
+          "correct_index": 2,
+          "explanation": "There is no universal no-table-level rule across current products.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-10-table-constraints-3",
+          "test_id": "pt-dbms-sql-10-table-constraints",
+          "question_text": "Can a supported table-level CHECK refer to one column only?",
+          "options": [
+            "No, table constraints must reference at least two columns",
+            "Yes; a separate clause can express a single-column condition",
+            "Yes, but only in PostgreSQL",
+            "No, this would be rejected as a syntax error"
+          ],
+          "correct_index": 1,
+          "explanation": "Where equivalent forms are supported, the condition can match while grammar and metadata details still differ.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-10-table-constraints-4",
+          "test_id": "pt-dbms-sql-10-table-constraints",
+          "question_text": "Why does a composite PRIMARY KEY on (student_id, course_id) require table-level syntax?",
+          "options": [
+            "Because composite keys are deprecated at column level",
+            "Because it spans two columns and there is no single column definition to attach it to inline",
+            "Because PostgreSQL disallows column-level PRIMARY KEY entirely",
+            "Because composite keys must always be UNIQUE instead"
+          ],
+          "correct_index": 1,
+          "explanation": "Any constraint spanning multiple columns, including a composite primary key, cannot be attached to just one column's inline definition and therefore must use the table-level clause.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-10-table-constraints-5",
+          "test_id": "pt-dbms-sql-10-table-constraints",
+          "question_text": "What form is ALTER TABLE t ADD CONSTRAINT chk_x CHECK(col1>0)?",
+          "options": [
+            "A column constraint, because it only touches one column",
+            "A supported separate table-constraint addition",
+            "Neither; ALTER TABLE constraints are a third distinct category",
+            "It depends on whether the column is NOT NULL"
+          ],
+          "correct_index": 1,
+          "explanation": "This does not claim every engine lacks other ways to modify an existing column definition.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-10-table-constraints-6",
+          "test_id": "pt-dbms-sql-10-table-constraints",
+          "question_text": "Can a single CREATE TABLE statement mix column-level and table-level constraints together?",
+          "options": [
+            "No, a table must use one style exclusively",
+            "Yes, they can be freely mixed in the same statement",
+            "Only if all table-level constraints come first",
+            "Only in Oracle"
+          ],
+          "correct_index": 1,
+          "explanation": "There is no restriction against combining column-level constraints (e.g., NOT NULL inline) with table-level constraints (e.g., a composite PRIMARY KEY clause) in the same CREATE TABLE.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-10-table-constraints-7",
+          "test_id": "pt-dbms-sql-10-table-constraints",
+          "question_text": "Which of the following requires table-level syntax rather than column-level?",
+          "options": [
+            "email VARCHAR(150) UNIQUE",
+            "salary NUMERIC(10,2) CHECK (salary > 0)",
+            "UNIQUE (student_id, course_id)",
+            "hire_date DATE NOT NULL"
+          ],
+          "correct_index": 2,
+          "explanation": "UNIQUE (student_id, course_id) enforces uniqueness across a combination of two columns, which can only be expressed as a table-level clause.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-10-table-constraints-8",
+          "test_id": "pt-dbms-sql-10-table-constraints",
+          "question_text": "Why might a style guide mandate that even single-column CHECK constraints always be written at table level?",
+          "options": [
+            "Because column-level CHECK is not supported by any engine",
+            "To keep constraint management centralized and easy to scan/audit near the bottom of the DDL",
+            "Because table-level constraints execute with better performance",
+            "Because column-level constraints cannot be named"
+          ],
+          "correct_index": 1,
+          "explanation": "Some teams standardize on always grouping constraints as table-level clauses purely for readability and easier auditing, even though it has no functional difference for single-column rules.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-10-table-constraints-new-9",
+          "test_id": "pt-dbms-sql-10-table-constraints",
+          "question_text": "Does table-level CHECK automatically examine every other row?",
+          "options": [
+            "Yes",
+            "No",
+            "Only with a name",
+            "Only on an empty table"
+          ],
+          "correct_index": 1,
+          "explanation": "Grammar position is not cross-row scope.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-10-table-constraints-new-10",
+          "test_id": "pt-dbms-sql-10-table-constraints",
+          "question_text": "Why require both booking endpoints separately?",
+          "options": [
+            "CHECK always implies NOT NULL",
+            "Dates cannot be missing in SQL",
+            "The ordering comparison alone can be UNKNOWN with missing input",
+            "PRIMARY KEY fills every endpoint"
+          ],
+          "correct_index": 2,
+          "explanation": "Presence and ordering are independent.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-10-table-constraints-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-10-table-constraints-application-new-1",
+          "test_id": "pt-dbms-sql-10-table-constraints-application",
+          "question_text": "Which interval satisfies strictly later departure?",
+          "options": [
+            "September 1 to September 1",
+            "September 2 to September 1",
+            "September 1 to September 2",
+            "Any missing departure"
+          ],
+          "correct_index": 2,
+          "explanation": "The comparison direction and boundary matter.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-10-table-constraints-application-new-2",
+          "test_id": "pt-dbms-sql-10-table-constraints-application",
+          "question_text": "Does a room/start primary key prevent every overlap?",
+          "options": [
+            "Yes",
+            "Only for integer slots",
+            "Only with ORDER BY",
+            "No"
+          ],
+          "correct_index": 3,
+          "explanation": "Different starts can still overlap.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-10-table-constraints-application-new-3",
+          "test_id": "pt-dbms-sql-10-table-constraints-application",
+          "question_text": "Why can the same start be valid in two rooms?",
+          "options": [
+            "The complete key includes room_id",
+            "Start values are globally unique",
+            "Every table ignores keys",
+            "Room labels generate ids"
+          ],
+          "correct_index": 0,
+          "explanation": "Scoped identity permits repeated components.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-10-table-constraints-application-new-4",
+          "test_id": "pt-dbms-sql-10-table-constraints-application",
+          "question_text": "Can inline presence and a table-level multi-column check coexist?",
+          "options": [
+            "No",
+            "Yes",
+            "Only on separate tables",
+            "Only if unnamed"
+          ],
+          "correct_index": 1,
+          "explanation": "Supported forms can contribute to one coherent contract.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-10-table-constraints-application-new-5",
+          "test_id": "pt-dbms-sql-10-table-constraints-application",
+          "question_text": "What does a complete composite reference need?",
+          "options": [
+            "Independently existing unrelated components",
+            "Only the largest local id",
+            "The correctly ordered corresponding parent tuple",
+            "Only a table alias"
+          ],
+          "correct_index": 2,
+          "explanation": "The full scoped identity is the target.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-10-table-constraints-application-new-6",
+          "test_id": "pt-dbms-sql-10-table-constraints-application",
+          "question_text": "What can a table-level single-column check express?",
+          "options": [
+            "Only a multi-row aggregate",
+            "Only a foreign key",
+            "No single-property rule",
+            "A supported condition such as credits>=0"
+          ],
+          "correct_index": 3,
+          "explanation": "Separate placement does not require multiple columns.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-10-table-constraints-application-new-7",
+          "test_id": "pt-dbms-sql-10-table-constraints-application",
+          "question_text": "Why name a rule window_domain instead of nonoverlap here?",
+          "options": [
+            "The actual predicate validates one row’s range, not every pair of rows",
+            "Names create cross-row locks",
+            "Nonoverlap is always automatic",
+            "All names are ignored"
+          ],
+          "correct_index": 0,
+          "explanation": "A label should match the real guarantee.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-10-table-constraints-application-new-8",
+          "test_id": "pt-dbms-sql-10-table-constraints-application",
+          "question_text": "Does adding a table-level rule justify deleting incompatible facts silently?",
+          "options": [
+            "Yes",
+            "No",
+            "Only if a migration file exists",
+            "Only if rows are old"
+          ],
+          "correct_index": 1,
+          "explanation": "Repair needs an accepted domain policy.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-10-table-constraints-application-new-9",
+          "test_id": "pt-dbms-sql-10-table-constraints-application",
+          "question_text": "What does empty input still require in a definition task?",
+          "options": [
+            "No SQL at all",
+            "An invented row",
+            "The requested complete table definition",
+            "Only a display alias"
+          ],
+          "correct_index": 2,
+          "explanation": "An empty result does not excuse missing constraints.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-10-table-constraints-application-new-10",
+          "test_id": "pt-dbms-sql-10-table-constraints-application",
+          "question_text": "What stays unverified by these local interval fixtures?",
+          "options": [
+            "The supplied valid interval result",
+            "The duplicate-key rejection",
+            "The tested endpoint check",
+            "Concurrent cross-row nonoverlap and exact provider behaviour"
+          ],
+          "correct_index": 3,
+          "explanation": "Evidence must match the actual invariant and engine.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cx-table-constraint-stay-order",
+      "slug": "table-constraint-stay-order",
+      "title": "Combine required endpoints with a table-level interval rule",
+      "difficulty": "Easy",
+      "task": "Create TEMPORARY stays with stay_id INT PRIMARY KEY,check_in DATE NOT NULL,check_out DATE NOT NULL and CONSTRAINT chk_stay_order CHECK(check_out>check_in). Copy compatible stay_input and return the three columns. Equal endpoints are not permitted.",
+      "schema_sql": "SET SESSION sql_mode='STRICT_ALL_TABLES'; CREATE TABLE stay_input (stay_id INT PRIMARY KEY,check_in DATE NOT NULL,check_out DATE NOT NULL);",
+      "seed_sql": "INSERT INTO stay_input VALUES (2,'2026-09-02','2026-09-04'),(1,'2026-09-01','2026-09-02');",
+      "expected": "stay_id\tcheck_in\tcheck_out\n1\t2026-09-01\t2026-09-02\n2\t2026-09-02\t2026-09-04",
+      "ordering": "Ascending stay_id.",
+      "constraints": [
+        "Required endpoints plus a supported table-level relation.",
+        "Only compatible rows in positive fixtures."
+      ],
+      "edge_cases": [
+        "Equal endpoints fail the strict ordering rule.",
+        "Missing arrival fails presence separately."
+      ],
+      "hints": [
+        "Declare the cross-property CHECK as a separate clause.",
+        "Keep NOT NULL on both endpoint columns."
+      ],
+      "solution_sql": "CREATE TEMPORARY TABLE stays (stay_id INT PRIMARY KEY,check_in DATE NOT NULL,check_out DATE NOT NULL,CONSTRAINT chk_stay_order CHECK(check_out>check_in)); INSERT INTO stays SELECT stay_id,check_in,check_out FROM stay_input; SELECT stay_id,check_in,check_out FROM stays ORDER BY stay_id;",
+      "explanation": "The separate check protects endpoint ordering while column properties protect required presence.",
+      "validation_cases": [
+        {
+          "seed_sql": "",
+          "expected": ""
+        },
+        {
+          "seed_sql": "INSERT INTO stay_input VALUES (8,'2026-12-31','2027-01-01');",
+          "expected": "stay_id\tcheck_in\tcheck_out\n8\t2026-12-31\t2027-01-01"
+        }
+      ],
+      "negative_validation_cases": [
+        {
+          "sql": "INSERT INTO stays VALUES (99,'2026-09-01','2026-09-01');",
+          "error_codes": [
+            3819,
+            4025
+          ]
+        },
+        {
+          "sql": "INSERT INTO stays VALUES (99,NULL,'2026-09-02');",
+          "error_codes": [
+            1048
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cx-table-constraint-room-windows",
+      "slug": "table-constraint-room-windows",
+      "title": "Protect a scoped key and local window domain without claiming nonoverlap",
+      "difficulty": "Medium",
+      "task": "Create TEMPORARY room_windows(room_id INT NOT NULL,start_slot INT NOT NULL,end_slot INT NOT NULL), PRIMARY KEY(room_id,start_slot), and CHECK(start_slot>=0 AND end_slot>start_slot AND end_slot<=24). Copy compatible window_input and return all columns. Overlapping rows with different starts are intentionally allowed; do not invent a cross-row nonoverlap rule.",
+      "schema_sql": "SET SESSION sql_mode='STRICT_ALL_TABLES'; CREATE TABLE window_input (room_id INT NOT NULL,start_slot INT NOT NULL,end_slot INT NOT NULL);",
+      "seed_sql": "INSERT INTO window_input VALUES (1,9,11),(1,10,12),(2,9,10);",
+      "expected": "room_id\tstart_slot\tend_slot\n1\t9\t11\n1\t10\t12\n2\t9\t10",
+      "ordering": "Ascending room_id,start_slot.",
+      "constraints": [
+        "Complete key pairs are distinct in positive fixtures.",
+        "The declared check is row-local and does not prevent overlap."
+      ],
+      "edge_cases": [
+        "Same start in another room is valid.",
+        "End slot 24 is permitted.",
+        "Duplicate full key and out-of-range endpoint are rejected."
+      ],
+      "hints": [
+        "List the key columns together.",
+        "Keep the range expression limited to the stated row-domain contract."
+      ],
+      "solution_sql": "CREATE TEMPORARY TABLE room_windows (room_id INT NOT NULL,start_slot INT NOT NULL,end_slot INT NOT NULL,PRIMARY KEY(room_id,start_slot),CONSTRAINT chk_window_domain CHECK(start_slot>=0 AND end_slot>start_slot AND end_slot<=24)); INSERT INTO room_windows SELECT room_id,start_slot,end_slot FROM window_input; SELECT room_id,start_slot,end_slot FROM room_windows ORDER BY room_id,start_slot;",
+      "explanation": "The composite key and local check enforce their exact invariants while permitting overlap that the task does not prohibit.",
+      "validation_cases": [
+        {
+          "seed_sql": "",
+          "expected": ""
+        },
+        {
+          "seed_sql": "INSERT INTO window_input VALUES (7,0,24),(8,0,1);",
+          "expected": "room_id\tstart_slot\tend_slot\n7\t0\t24\n8\t0\t1"
+        }
+      ],
+      "negative_validation_cases": [
+        {
+          "sql": "INSERT INTO room_windows VALUES (1,9,20);",
+          "error_codes": [
+            1062
+          ]
+        },
+        {
+          "sql": "INSERT INTO room_windows VALUES (99,20,25);",
+          "error_codes": [
+            3819,
+            4025
+          ]
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-10-table-constraints-1",
+      "test_id": "pt-dbms-sql-10-table-constraints",
+      "question_text": "What structurally distinguishes a table constraint from a column constraint in CREATE TABLE syntax?",
+      "options": [
+        "A table constraint must always be CHECK",
+        "A table constraint is written as its own separate clause naming its target column(s) explicitly, rather than being attached inline to one column's definition",
+        "A table constraint cannot be named",
+        "A table constraint can only be added via ALTER TABLE, never CREATE TABLE"
+      ],
+      "correct_index": 1,
+      "explanation": "Table constraints appear as standalone clauses within CREATE TABLE, listing the relevant column(s) in parentheses, unlike column constraints which are embedded in a single column's definition.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-10-table-constraints-2",
+      "test_id": "pt-dbms-sql-10-table-constraints",
+      "question_text": "Which constraint type has NO table-level form at all?",
+      "options": [
+        "CHECK",
+        "UNIQUE",
+        "NOT NULL",
+        "PRIMARY KEY"
+      ],
+      "correct_index": 2,
+      "explanation": "NOT NULL is inherently a per-column property with no meaningful multi-column phrasing, so unlike CHECK, UNIQUE, PRIMARY KEY, and FOREIGN KEY, it has no table-level clause form.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-10-table-constraints-3",
+      "test_id": "pt-dbms-sql-10-table-constraints",
+      "question_text": "Is it valid to write CONSTRAINT chk_salary_positive CHECK (salary > 0) as a table-level clause even though it only references one column?",
+      "options": [
+        "No, table constraints must reference at least two columns",
+        "Yes, it is legal and functionally identical to the column-level equivalent; it's purely a stylistic choice",
+        "Yes, but only in PostgreSQL",
+        "No, this would be rejected as a syntax error"
+      ],
+      "correct_index": 1,
+      "explanation": "A table constraint does not strictly require multiple columns — writing a single-column rule at table level is legal and behaves identically to the column-level version.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-10-table-constraints-4",
+      "test_id": "pt-dbms-sql-10-table-constraints",
+      "question_text": "Why does a composite PRIMARY KEY on (student_id, course_id) require table-level syntax?",
+      "options": [
+        "Because composite keys are deprecated at column level",
+        "Because it spans two columns and there is no single column definition to attach it to inline",
+        "Because PostgreSQL disallows column-level PRIMARY KEY entirely",
+        "Because composite keys must always be UNIQUE instead"
+      ],
+      "correct_index": 1,
+      "explanation": "Any constraint spanning multiple columns, including a composite primary key, cannot be attached to just one column's inline definition and therefore must use the table-level clause.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-10-table-constraints-5",
+      "test_id": "pt-dbms-sql-10-table-constraints",
+      "question_text": "When you run ALTER TABLE t ADD CONSTRAINT chk_x CHECK (col1 > 0);, is this structurally a column constraint or a table constraint addition?",
+      "options": [
+        "A column constraint, because it only touches one column",
+        "A table constraint addition, because there is no way to splice a constraint into an existing column's inline definition retroactively",
+        "Neither; ALTER TABLE constraints are a third distinct category",
+        "It depends on whether the column is NOT NULL"
+      ],
+      "correct_index": 1,
+      "explanation": "Anything added via ALTER TABLE ... ADD CONSTRAINT is structurally a table-level addition, regardless of how many columns it references, since it can't be spliced into an existing inline column definition.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-10-table-constraints-6",
+      "test_id": "pt-dbms-sql-10-table-constraints",
+      "question_text": "Can a single CREATE TABLE statement mix column-level and table-level constraints together?",
+      "options": [
+        "No, a table must use one style exclusively",
+        "Yes, they can be freely mixed in the same statement",
+        "Only if all table-level constraints come first",
+        "Only in Oracle"
+      ],
+      "correct_index": 1,
+      "explanation": "There is no restriction against combining column-level constraints (e.g., NOT NULL inline) with table-level constraints (e.g., a composite PRIMARY KEY clause) in the same CREATE TABLE.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-10-table-constraints-7",
+      "test_id": "pt-dbms-sql-10-table-constraints",
+      "question_text": "Which of the following requires table-level syntax rather than column-level?",
+      "options": [
+        "email VARCHAR(150) UNIQUE",
+        "salary NUMERIC(10,2) CHECK (salary > 0)",
+        "UNIQUE (student_id, course_id)",
+        "hire_date DATE NOT NULL"
+      ],
+      "correct_index": 2,
+      "explanation": "UNIQUE (student_id, course_id) enforces uniqueness across a combination of two columns, which can only be expressed as a table-level clause.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-10-table-constraints-8",
+      "test_id": "pt-dbms-sql-10-table-constraints",
+      "question_text": "Why might a style guide mandate that even single-column CHECK constraints always be written at table level?",
+      "options": [
+        "Because column-level CHECK is not supported by any engine",
+        "To keep constraint management centralized and easy to scan/audit near the bottom of the DDL",
+        "Because table-level constraints execute with better performance",
+        "Because column-level constraints cannot be named"
+      ],
+      "correct_index": 1,
+      "explanation": "Some teams standardize on always grouping constraints as table-level clauses purely for readability and easier auditing, even though it has no functional difference for single-column rules.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "coordinator",
+    "independent_review": "unavailable; no agent tools",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Definitions and examples checked against questions; no plagiarism certification.",
+    "existing_question_corrections": [
+      "tq-dbms-sql-10-table-constraints-2",
+      "tq-dbms-sql-10-table-constraints-3",
+      "tq-dbms-sql-10-table-constraints-5"
+    ],
+    "canonical_answer_indices_preserved": true,
+    "batch_review": {
+      "reviewer": "coordinator",
+      "independent": false,
+      "scope": "This new package: explained definitions and boundaries, retained source question identities/canonical indices, new correct answers and explanations, exercise solutions and recorded fixtures, diagram trace and prepared integration.",
+      "execution_evidence": "Focused MariaDB reference cases and selected actual LessonBlock rendering passed; no browser QA or exact MySQL/provider execution.",
+      "source_preservation": "Original snapshots retained; eight retained exercises across this continuation matched source identity, difficulty, schema, seed and trailing checker.",
+      "limits": "No independent worker available. Output fixtures do not prove arbitrary student submissions used a requested technique. Native PostgreSQL/other-engine concepts remain documented or explicitly mirrored, not verified by MariaDB."
+    }
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-10-table-constraints",
+    "original_note_sha256": "1be4bafbce377830039d15f2fe874540325e9823ffae8ace8dd938f9d2c4e0f9",
+    "status": "paired migration prepared; not applied"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Each separate table clause protects its own precise scope",
+      "description": "A row-local interval condition and a composite key do not imply a cross-row nonoverlap guarantee.",
+      "columns": [
+        "Declaration",
+        "Roles",
+        "Guarantee",
+        "Not established"
+      ],
+      "rows": [
+        [
+          "PRIMARY KEY(room_id,start_slot)",
+          "Room and start together",
+          "Complete-key uniqueness and presence",
+          "No overlap among different starts"
+        ],
+        [
+          "CHECK(end_slot>start_slot)",
+          "Current row endpoints",
+          "Positive interval length",
+          "Global room availability"
+        ],
+        [
+          "CHECK(end_slot<=24)",
+          "Current row end",
+          "Upper bound",
+          "A unique end time"
+        ],
+        [
+          "NOT NULL endpoint properties",
+          "Each required role",
+          "Recorded presence",
+          "Ordering without the separate check"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "coordinator checked separate-clause grammar, PostgreSQL 18 exception and exact row-local versus cross-row boundaries",
+    "server_rendering": "passed",
+    "browser_rendering": "unverified",
+    "independent_review": "unavailable; no agent tools",
+    "server_rendering_evidence": "Selected actual LessonBlock Vitest rendering passed for this batch; no browser QA."
+  },
+  "sql_verification": {
+    "engine": "11.8.6-MariaDB-0+deb13u1 from Debian",
+    "scope": "MariaDB compatibility execution; exact MySQL 8.4/provider execution unverified",
+    "fingerprint": "ffefee439347de0541fa5f795d72a5e32068c99fab1f24ce7f553a4af853c219",
+    "cases": [
+      {
+        "problem": "table-constraint-stay-order",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "table-constraint-stay-order",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "table-constraint-stay-order",
+        "case": 2,
+        "passed": true
+      },
+      {
+        "problem": "table-constraint-stay-order",
+        "negative_case": 0,
+        "error_code": 4025,
+        "passed": true
+      },
+      {
+        "problem": "table-constraint-stay-order",
+        "negative_case": 1,
+        "error_code": 1048,
+        "passed": true
+      },
+      {
+        "problem": "table-constraint-room-windows",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "table-constraint-room-windows",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "table-constraint-room-windows",
+        "case": 2,
+        "passed": true
+      },
+      {
+        "problem": "table-constraint-room-windows",
+        "negative_case": 0,
+        "error_code": 1062,
+        "passed": true
+      },
+      {
+        "problem": "table-constraint-room-windows",
+        "negative_case": 1,
+        "error_code": 4025,
+        "passed": true
+      }
+    ],
+    "all_passed": true
+  }
+}

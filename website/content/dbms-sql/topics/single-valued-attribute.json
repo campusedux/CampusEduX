@@ -1,0 +1,632 @@
+{
+  "source_ref": "chapter-6-er-and-eer-modeling/single-valued-attribute",
+  "slug": "single-valued-attribute",
+  "title": "Single Valued Attribute",
+  "description": "Separate at-most-one multiplicity from required presence, structure and history, and enforce one contact value per explicitly named role without imposing global email uniqueness.",
+  "dialect": "MySQL 8.4",
+  "notes": "## One value belongs to a role at a time\n\nA single-valued attribute permits at most one value for the specified entity occurrence and role at the relevant state. A Student type can have one recorded date of birth or one primary contact email under a documented policy. If the property is optional, an ordinary value can be absent. Single-valued therefore does not by itself mean exactly one mandatory supplied value for every student.\n\nThe role and time boundary matter. A primary contact email can change between states while remaining single-valued in each state. Several historical values do not automatically make the current role multivalued. If the system needs the earlier values and their periods, it must model that history explicitly rather than expecting the current scalar column to reconstruct every previous state.\n\n## Required presence is a separate policy\n\nA required single-valued property needs one accepted value in every valid occurrence under the rule. An optional single-valued property permits none or one. In an SQL mapping, NOT NULL can require the value while a nullable column can represent defined absence. Other constraints can still reject a present but invalid value, so nullability is not the complete domain contract.\n\nFor example, one student's primary_email may be NULL because no contact has been supplied. Another student's recorded empty string is an ordinary string and can require a separate validation decision. A third has a known address. All three rows still have the primary_email column. Missing information does not remove the property from the type or make its multiplicity unlimited.\n\n## Single-valued does not mean simple\n\nA property can contain structured components while still having one complete value. A student with one address composed of street, city, and postal code has a composite single-valued Address. The components describe that one address; they are not three simultaneous addresses. A simple registration code can also be single-valued. Structure and occurrence multiplicity answer different questions.\n\nLikewise, a simple telephone token can be multivalued if several phones belong to one student. Do not infer single-valuedness from the fact that each token is treated as one domain value. A useful attribute definition records both how the value is structured and how many such values can occur in the defined role. One label alone does not settle both dimensions.\n\n## Attribute roles can distinguish different values\n\nA student can have one institutional email and one personal email if the model defines those as distinct roles. Each role can remain single-valued even though the student has two email-related values. Alternatively, one undifferentiated Email property allowing any number of simultaneous addresses is multivalued. State which interpretation the model adopts rather than treating every policy involving two addresses as one mandatory representation.\n\nA role-specific contact relation can store student_id, contact_role, and email. A uniqueness rule on student_id and contact_role limits each student's named role to one recorded contact. Different roles for one student remain possible. Different students can share an email if policy permits it, because single-valuedness per student-role does not establish global uniqueness of the address string.\n\n## Current assignment differs from relationship participation\n\nA student can have one currently assigned programme while participating in many course enrollments. These are different roles and multiplicities. Counting enrollment rows does not prove the programme attribute is multivalued. A query joining students to enrollments can repeat the same programme value once per enrollment without changing the underlying student's current assignment policy.\n\nSimilarly, a report showing two historical programme assignments needs interpretation of effective periods. If the periods overlap and policy permits only one active assignment, the data can violate the temporal rule. A simple scalar current column and a history relation have different contracts. Neither should be described as a complete implementation of temporal nonoverlap unless that invariant is actually enforced and tested.\n\n## Straightforward scalar mappings use columns\n\nA simple single-valued property can commonly map to one column in the entity relation, alongside its identifier. The column stores the current property value. Explicit selected columns show the result contract without exposing unrelated attributes. A projection does not change multiplicity or stored values simply because it displays a property under a convenient alias.\n\n```sql\nSELECT student_id, primary_email\nFROM students\nWHERE primary_email IS NOT NULL\nORDER BY student_id;\n```\n\nThe listing asks for students with a present primary contact. It does not claim every returned string is deliverable or unique across the campus. If two identified students share an address under the accepted policy, both belong in the result. DISTINCT over the address alone would instead report distinct contact strings and lose the requested student occurrence grain.\n\n## A separate relation needs an explicit bound\n\nWhen a role is represented in a child relation, the relation can contain several records for a student unless the relevant key or constraint prevents them. A foreign key to Student establishes a parent reference; it does not automatically impose at most one child per role. The uniqueness condition must match the intended entity-role combination.\n\n```sql\nALTER TABLE contacts\nADD CONSTRAINT one_contact_per_role\nUNIQUE (student_id, contact_role);\n```\n\nThe example assumes both components and the stored email are required for a contact row, while absence of the row can represent an unassigned role. The declaration protects at-most-one multiplicity within that mapping. It does not require every possible role row to exist for every student, and it does not validate parent existence without an appropriate separate relationship constraint.\n\n## Defaults do not establish every business guarantee\n\nA default can fill an omitted scalar value under applicable SQL rules, but it does not prove that the value is the correct one for the entity. A default empty email can conceal missing information, and a default programme can misclassify students. Choose defaults only when the domain supports their meaning. A visually complete grid is not evidence that the property contract has been satisfied.\n\nRequired presence and membership can also depend on a lifecycle stage. An applicant might be allowed no institutional email until admission, while an active student requires one. That is a conditional business rule, not the definition of single-valuedness itself. The trusted operation must enforce the relevant stage policy, and the content should distinguish that requirement from the simpler multiplicity concept.\n\n## Policy changes can require a new mapping\n\nIf the application changes from one undifferentiated contact value to several simultaneous contacts, the data model and callers need a deliberate transition. A separate occurrence relation can represent the collection while preserving student identity. Merely placing comma-separated strings into the old scalar column changes its meaning and complicates independent validation, search, and updates.\n\nIf the policy instead introduces two named roles, preserving one value per role can be appropriate. Review the user-facing labels, import contracts, existing values, optionality, and queries before choosing the representation. There is no universal rule that every second email forces the same schema. The correct decision preserves the required facts and multiplicity rather than following a keyword mechanically.\n\n## Verify what the bound actually protects\n\nFor role-specific contacts, test one student with two different roles, two students sharing one email, and a proposed second row for the same student-role combination. The first two can be valid under the stated policy; the repeated role must be rejected. A test of globally unique email would exercise the wrong requirement and could reject legitimate shared contacts.\n\nAlso test an empty population and absent optional primary values. A listing and an aggregate over that population can have different output cardinalities, even though the underlying property remains single-valued. Keep result grain and property multiplicity separate when interpreting the number of query rows. A join can repeat values without redefining the source attribute's conceptual bound.\n\n## State the complete property contract\n\nA dependable single-valued definition names the entity role, relevant state or time boundary, absence policy, domain, and chosen mapping. It then distinguishes structural composition, derived calculations, global uniqueness, and mandatory participation from the at-most-one bound. These additional properties need their own explicit requirements and evidence.\n\nThe exercises verify scalar presence selection and a role-specific multiplicity constraint on isolated SQL fixtures. They do not establish email ownership, exact provider behaviour, native parent-reference enforcement, or production permissions. With those limits clear, single-valued attributes become a precise way to express one value per defined role rather than an assumption that every property must always be present or globally unique.\n",
+  "references": [],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-6-single-valued-attribute",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-6-single-valued-attribute-1",
+          "test_id": "pt-dbms-sql-6-single-valued-attribute",
+          "question_text": "What defines a single-valued attribute?",
+          "options": [
+            "It cannot be decomposed into sub-parts",
+            "It permits at most one value for the specified entity role at the relevant state; required presence is separate",
+            "It is always computed rather than stored",
+            "It always uniquely identifies the entity"
+          ],
+          "correct_index": 1,
+          "explanation": "An optional single-valued role permits absence. Exactly one requires an additional mandatory-value rule.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-6-single-valued-attribute-2",
+          "test_id": "pt-dbms-sql-6-single-valued-attribute",
+          "question_text": "Which Student attribute is a straightforward single-valued attribute?",
+          "options": [
+            "Phone_Numbers, when a student may register several numbers",
+            "Date_of_Birth",
+            "Skills possessed by the student",
+            "Email_Addresses, when multiple are allowed"
+          ],
+          "correct_index": 1,
+          "explanation": "A student has exactly one date of birth, making it single-valued.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-6-single-valued-attribute-3",
+          "test_id": "pt-dbms-sql-6-single-valued-attribute",
+          "question_text": "If one undifferentiated Email property is explicitly changed to permit several simultaneous values, how does that property’s multiplicity change?",
+          "options": [
+            "Nothing changes; Email stays single-valued regardless",
+            "Email must be re-modeled as multi-valued, since a student can now have more than one simultaneous value",
+            "Email becomes a composite attribute instead",
+            "Email becomes a derived attribute"
+          ],
+          "correct_index": 1,
+          "explanation": "That property becomes multivalued. A different model can define separate personal and institutional roles, each independently single-valued.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-6-single-valued-attribute-4",
+          "test_id": "pt-dbms-sql-6-single-valued-attribute",
+          "question_text": "Is 'single-valued vs. multi-valued' the same classification axis as 'simple vs. composite'?",
+          "options": [
+            "Yes, they are the same distinction under different names",
+            "No — single/multi-valued is about how many occurrences an entity can have; simple/composite is about internal structural decomposability, and the two are independent",
+            "Yes, but only for weak entities",
+            "No, because multi-valued attributes cannot be simple"
+          ],
+          "correct_index": 1,
+          "explanation": "These are two independent axes; e.g., Address can be composite and single-valued, while Phone_Number can be simple and multi-valued.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-6-single-valued-attribute-5",
+          "test_id": "pt-dbms-sql-6-single-valued-attribute",
+          "question_text": "Can a single-valued attribute be NULL for some entity?",
+          "options": [
+            "No, single-valued attributes must always have a value",
+            "Yes — single-valued only limits an entity to at most one value, not that a value must always be present",
+            "Only if it is also derived",
+            "Only for weak entities"
+          ],
+          "correct_index": 1,
+          "explanation": "Single-valued restricts the count to one (or zero if unknown/NULL), not mandatory presence.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-6-single-valued-attribute-6",
+          "test_id": "pt-dbms-sql-6-single-valued-attribute",
+          "question_text": "For a simple single-valued property in a basic entity mapping, which relational representation is common?",
+          "options": [
+            "It requires a separate linking table",
+            "It maps directly to a single column in the entity's table",
+            "It is discarded during mapping",
+            "It becomes a composite key automatically"
+          ],
+          "correct_index": 1,
+          "explanation": "One column can store a simple current value; composite, historical or role-specific mappings require a stated design.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-6-single-valued-attribute-7",
+          "test_id": "pt-dbms-sql-6-single-valued-attribute",
+          "question_text": "When deciding whether a new property is single-valued or multivalued, what should guide the model?",
+          "options": [
+            "Attributes are assumed multi-valued unless proven otherwise",
+            "The explicitly required number of simultaneous values per defined entity role, with optionality considered separately",
+            "Attributes are assumed derived unless stored explicitly",
+            "There is no default; every attribute must be explicitly justified as single or multi-valued from external documentation"
+          ],
+          "correct_index": 1,
+          "explanation": "Do not infer multiplicity from a presumed universal default; verify the business requirement and role definition.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-6-single-valued-attribute-8",
+          "test_id": "pt-dbms-sql-6-single-valued-attribute",
+          "question_text": "Which of the following pairs correctly shows both a simple+single-valued AND a composite+single-valued attribute together?",
+          "options": [
+            "Phone_Number (multi-valued) and Skills (multi-valued)",
+            "Date_of_Birth (simple, single-valued) and Address (composite, single-valued)",
+            "Roll_No (multi-valued) and CGPA (derived)",
+            "Email_Addresses (multi-valued) and Phone_Numbers (multi-valued)"
+          ],
+          "correct_index": 1,
+          "explanation": "Date_of_Birth is simple and single-valued; Address is composite (has sub-parts) yet still single-valued (one address per student).",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-6-single-valued-attribute-new-9",
+          "test_id": "pt-dbms-sql-6-single-valued-attribute",
+          "question_text": "Can an optional single-valued primary contact be absent?",
+          "options": [
+            "No; single-valued means mandatory always",
+            "Yes; at-most-one and required presence are separate",
+            "Only if the type disappears",
+            "Only if every value is unique globally"
+          ],
+          "correct_index": 1,
+          "explanation": "Optionality determines whether none is permitted.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-6-single-valued-attribute-new-10",
+          "test_id": "pt-dbms-sql-6-single-valued-attribute",
+          "question_text": "Can one structured address be single-valued?",
+          "options": [
+            "No; components always mean multiple addresses",
+            "Only if it has no city",
+            "Yes; one complete address can contain several components",
+            "Only if stored as a number"
+          ],
+          "correct_index": 2,
+          "explanation": "Structure and multiplicity are independent.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-6-single-valued-attribute-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-6-single-valued-attribute-application-new-1",
+          "test_id": "pt-dbms-sql-6-single-valued-attribute-application",
+          "question_text": "A current email changes across months. Does that alone prove simultaneous multivaluedness?",
+          "options": [
+            "Yes; every update creates simultaneous values",
+            "Only if NULL is forbidden",
+            "No; historical values and current-state multiplicity differ",
+            "Only if the student name repeats"
+          ],
+          "correct_index": 2,
+          "explanation": "The relevant time boundary must be stated.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-6-single-valued-attribute-application-new-2",
+          "test_id": "pt-dbms-sql-6-single-valued-attribute-application",
+          "question_text": "What does UNIQUE(student_id, contact_role) protect in the stated contact mapping?",
+          "options": [
+            "Globally unique email values",
+            "Exactly every possible role for every student",
+            "Every parent existence rule",
+            "At most one stored contact per student-role pair"
+          ],
+          "correct_index": 3,
+          "explanation": "The compared combination defines the multiplicity bound.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-6-single-valued-attribute-application-new-3",
+          "test_id": "pt-dbms-sql-6-single-valued-attribute-application",
+          "question_text": "Does a foreign key to Student automatically limit one contact per role?",
+          "options": [
+            "No; parent existence and child multiplicity differ",
+            "Yes; every FK is unique in the child",
+            "Only for string roles",
+            "Only if students are active"
+          ],
+          "correct_index": 0,
+          "explanation": "A separate uniqueness rule is needed for that bound.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-6-single-valued-attribute-application-new-4",
+          "test_id": "pt-dbms-sql-6-single-valued-attribute-application",
+          "question_text": "Why can one institutional and one personal email coexist under two single-valued roles?",
+          "options": [
+            "Single-valued always means two values",
+            "The roles are distinct property definitions",
+            "Every email must be global identity",
+            "The values are stored in a display alias"
+          ],
+          "correct_index": 1,
+          "explanation": "Multiplicity is specified per role.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-6-single-valued-attribute-application-new-5",
+          "test_id": "pt-dbms-sql-6-single-valued-attribute-application",
+          "question_text": "Do shared email strings across students necessarily violate single-valuedness?",
+          "options": [
+            "Yes; single-valued means globally unique",
+            "Only if names differ",
+            "No; each student-role can still have one value",
+            "Only if contact_role is missing"
+          ],
+          "correct_index": 2,
+          "explanation": "Per-owner multiplicity differs from cross-owner uniqueness.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-6-single-valued-attribute-application-new-6",
+          "test_id": "pt-dbms-sql-6-single-valued-attribute-application",
+          "question_text": "What should change if one undifferentiated property genuinely permits many simultaneous contacts?",
+          "options": [
+            "Store any comma list without changing meaning",
+            "Remove all student identities",
+            "Treat every contact as a new student",
+            "Its collection mapping and callers need a deliberate transition"
+          ],
+          "correct_index": 3,
+          "explanation": "The representation must preserve independently manageable occurrences.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-6-single-valued-attribute-application-new-7",
+          "test_id": "pt-dbms-sql-6-single-valued-attribute-application",
+          "question_text": "Does a default make a scalar value factually correct?",
+          "options": [
+            "No; the default needs domain justification",
+            "Yes; every omitted value is true",
+            "Only if it is text",
+            "Only if no join is used"
+          ],
+          "correct_index": 0,
+          "explanation": "Supplying a value is different from validating its meaning.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-6-single-valued-attribute-application-new-8",
+          "test_id": "pt-dbms-sql-6-single-valued-attribute-application",
+          "question_text": "What can duplicate output after an enrollment join mean?",
+          "options": [
+            "The source property became multivalued automatically",
+            "Several relationship facts repeat one scalar source property",
+            "Every repeated row is invalid",
+            "The student has no identity"
+          ],
+          "correct_index": 1,
+          "explanation": "Result grain differs from source multiplicity.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-6-single-valued-attribute-application-new-9",
+          "test_id": "pt-dbms-sql-6-single-valued-attribute-application",
+          "question_text": "Which rejected fixture directly tests the role-specific bound?",
+          "options": [
+            "The same email for a different student allowed by policy",
+            "A different role for the same student",
+            "A second row for the same student and role",
+            "An unrelated source alias"
+          ],
+          "correct_index": 2,
+          "explanation": "The collision must target the actual identifying combination.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-6-single-valued-attribute-application-new-10",
+          "test_id": "pt-dbms-sql-6-single-valued-attribute-application",
+          "question_text": "What is needed to claim historical nonoverlap?",
+          "options": [
+            "One current scalar column alone",
+            "Only a label saying history",
+            "Only a primary contact name",
+            "A defined temporal invariant and appropriate enforcement evidence"
+          ],
+          "correct_index": 3,
+          "explanation": "Temporal rules extend beyond the basic multiplicity definition.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cx-single-valued-present",
+      "slug": "single-valued-present",
+      "title": "List present current primary contacts",
+      "difficulty": "Easy",
+      "task": "Return student_id and primary_email for students whose optional scalar contact is not NULL. Shared emails remain separate student occurrences.",
+      "schema_sql": "CREATE TABLE students (student_id INT PRIMARY KEY, primary_email VARCHAR(80) NULL);",
+      "seed_sql": "INSERT INTO students VALUES (1,'shared@example.test'),(2,'shared@example.test'),(3,NULL),(4,'');",
+      "expected": "student_id\tprimary_email\n1\tshared@example.test\n2\tshared@example.test\n4\t",
+      "ordering": "Ascending student_id.",
+      "constraints": [
+        "NULL means absent; the empty string is a recorded value for this presence-only task.",
+        "Email deliverability and ownership are not being validated."
+      ],
+      "edge_cases": [
+        "Two students may share one email under this fixture policy.",
+        "No present contacts gives an empty listing."
+      ],
+      "hints": [
+        "Use the explicit presence predicate.",
+        "Retain student identity rather than a distinct email list."
+      ],
+      "solution_sql": "SELECT student_id, primary_email FROM students WHERE primary_email IS NOT NULL ORDER BY student_id;",
+      "explanation": "The report selects current scalar values while preserving the entity population and its distinct identities.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO students VALUES (1,NULL);",
+          "expected": ""
+        },
+        {
+          "seed_sql": "INSERT INTO students VALUES (7,'a@example.test');",
+          "expected": "student_id\tprimary_email\n7\ta@example.test"
+        }
+      ]
+    },
+    {
+      "id": "cx-single-valued-role",
+      "slug": "single-valued-role",
+      "title": "Enforce one contact per defined student role",
+      "difficulty": "Medium",
+      "task": "Add UNIQUE(student_id, contact_role) named one_contact_per_role to contacts, then return contact_id, student_id, contact_role and email. Permit different roles per student and shared email values across students.",
+      "starter_sql": "-- Add the student-role uniqueness rule and return contacts.",
+      "schema_sql": "CREATE TABLE contacts (contact_id INT PRIMARY KEY, student_id INT NOT NULL, contact_role VARCHAR(30) NOT NULL, email VARCHAR(80) NOT NULL);",
+      "seed_sql": "INSERT INTO contacts VALUES (1,17,'institutional','shared@example.test'),(2,17,'personal','personal@example.test'),(3,24,'institutional','shared@example.test');",
+      "expected": "contact_id\tstudent_id\tcontact_role\temail\n1\t17\tinstitutional\tshared@example.test\n2\t17\tpersonal\tpersonal@example.test\n3\t24\tinstitutional\tshared@example.test",
+      "ordering": "Ascending contact_id.",
+      "constraints": [
+        "Each row represents one assigned contact for one named student role.",
+        "Required parent existence and a mandatory row for every possible role are outside these temporary fixtures."
+      ],
+      "edge_cases": [
+        "The same student can have different roles.",
+        "A different contact_id must not permit a second value for the same student-role pair."
+      ],
+      "hints": [
+        "Constrain the owner-role combination, not the email string globally.",
+        "Keep the existing primary key."
+      ],
+      "solution_sql": "ALTER TABLE contacts ADD CONSTRAINT one_contact_per_role UNIQUE (student_id, contact_role);\nSELECT contact_id, student_id, contact_role, email FROM contacts ORDER BY contact_id;",
+      "explanation": "The separate uniqueness rule expresses at-most-one multiplicity for each role while preserving allowed sharing across other combinations.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO contacts VALUES (9,17,'personal','x@example.test'),(1,24,'personal','x@example.test');",
+          "expected": "contact_id\tstudent_id\tcontact_role\temail\n1\t24\tpersonal\tx@example.test\n9\t17\tpersonal\tx@example.test"
+        },
+        {
+          "seed_sql": "",
+          "expected": ""
+        }
+      ],
+      "negative_validation_cases": [
+        {
+          "sql": "INSERT INTO contacts VALUES (99,17,'institutional','other@example.test');",
+          "error_codes": [
+            1062
+          ]
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-6-single-valued-attribute-1",
+      "test_id": "pt-dbms-sql-6-single-valued-attribute",
+      "question_text": "What defines a single-valued attribute?",
+      "options": [
+        "It cannot be decomposed into sub-parts",
+        "It holds exactly one value for a given entity at a time",
+        "It is always computed rather than stored",
+        "It always uniquely identifies the entity"
+      ],
+      "correct_index": 1,
+      "explanation": "Single-valued means one value per entity instance at any point in time — as opposed to multi-valued.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-6-single-valued-attribute-2",
+      "test_id": "pt-dbms-sql-6-single-valued-attribute",
+      "question_text": "Which Student attribute is a straightforward single-valued attribute?",
+      "options": [
+        "Phone_Numbers, when a student may register several numbers",
+        "Date_of_Birth",
+        "Skills possessed by the student",
+        "Email_Addresses, when multiple are allowed"
+      ],
+      "correct_index": 1,
+      "explanation": "A student has exactly one date of birth, making it single-valued.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-6-single-valued-attribute-3",
+      "test_id": "pt-dbms-sql-6-single-valued-attribute",
+      "question_text": "If the college policy changes to allow each student to register two emails (personal and institutional), what must happen to the Email attribute's classification?",
+      "options": [
+        "Nothing changes; Email stays single-valued regardless",
+        "Email must be re-modeled as multi-valued, since a student can now have more than one simultaneous value",
+        "Email becomes a composite attribute instead",
+        "Email becomes a derived attribute"
+      ],
+      "correct_index": 1,
+      "explanation": "Once more than one simultaneous value is allowed per entity, the attribute is no longer single-valued.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-6-single-valued-attribute-4",
+      "test_id": "pt-dbms-sql-6-single-valued-attribute",
+      "question_text": "Is 'single-valued vs. multi-valued' the same classification axis as 'simple vs. composite'?",
+      "options": [
+        "Yes, they are the same distinction under different names",
+        "No — single/multi-valued is about how many occurrences an entity can have; simple/composite is about internal structural decomposability, and the two are independent",
+        "Yes, but only for weak entities",
+        "No, because multi-valued attributes cannot be simple"
+      ],
+      "correct_index": 1,
+      "explanation": "These are two independent axes; e.g., Address can be composite and single-valued, while Phone_Number can be simple and multi-valued.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-6-single-valued-attribute-5",
+      "test_id": "pt-dbms-sql-6-single-valued-attribute",
+      "question_text": "Can a single-valued attribute be NULL for some entity?",
+      "options": [
+        "No, single-valued attributes must always have a value",
+        "Yes — single-valued only limits an entity to at most one value, not that a value must always be present",
+        "Only if it is also derived",
+        "Only for weak entities"
+      ],
+      "correct_index": 1,
+      "explanation": "Single-valued restricts the count to one (or zero if unknown/NULL), not mandatory presence.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-6-single-valued-attribute-6",
+      "test_id": "pt-dbms-sql-6-single-valued-attribute",
+      "question_text": "How does a single-valued attribute typically map to a relational table?",
+      "options": [
+        "It requires a separate linking table",
+        "It maps directly to a single column in the entity's table",
+        "It is discarded during mapping",
+        "It becomes a composite key automatically"
+      ],
+      "correct_index": 1,
+      "explanation": "Because there is at most one value per entity, a plain column suffices — unlike multi-valued attributes.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-6-single-valued-attribute-7",
+      "test_id": "pt-dbms-sql-6-single-valued-attribute",
+      "question_text": "What is the general default assumption when modeling a new attribute in ER design?",
+      "options": [
+        "Attributes are assumed multi-valued unless proven otherwise",
+        "Attributes are assumed single-valued unless a business rule explicitly requires multiple simultaneous values",
+        "Attributes are assumed derived unless stored explicitly",
+        "There is no default; every attribute must be explicitly justified as single or multi-valued from external documentation"
+      ],
+      "correct_index": 1,
+      "explanation": "Single-valued is the natural default; multi-valued is called out only when genuinely needed.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-6-single-valued-attribute-8",
+      "test_id": "pt-dbms-sql-6-single-valued-attribute",
+      "question_text": "Which of the following pairs correctly shows both a simple+single-valued AND a composite+single-valued attribute together?",
+      "options": [
+        "Phone_Number (multi-valued) and Skills (multi-valued)",
+        "Date_of_Birth (simple, single-valued) and Address (composite, single-valued)",
+        "Roll_No (multi-valued) and CGPA (derived)",
+        "Email_Addresses (multi-valued) and Phone_Numbers (multi-valued)"
+      ],
+      "correct_index": 1,
+      "explanation": "Date_of_Birth is simple and single-valued; Address is composite (has sub-parts) yet still single-valued (one address per student).",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "coordinator",
+    "independent_review": "unavailable; no agent tools",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Definitions and examples checked against questions; no plagiarism certification.",
+    "existing_question_corrections": [
+      "tq-dbms-sql-6-single-valued-attribute-1",
+      "tq-dbms-sql-6-single-valued-attribute-3",
+      "tq-dbms-sql-6-single-valued-attribute-6",
+      "tq-dbms-sql-6-single-valued-attribute-7"
+    ],
+    "canonical_answer_indices_preserved": true
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-6-single-valued-attribute",
+    "original_note_sha256": "51616fbda4844b6b4ddb87dccc714d3e96789908d5e416c0a28bdf72c6a87cb0",
+    "status": "paired migration prepared; not applied"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Single-valuedness is a bound per defined role",
+      "description": "One student can have different named roles. Optional absence does not violate at-most-one multiplicity, and shared values across students need not violate the stated contract.",
+      "columns": [
+        "Entity and role",
+        "Current value",
+        "Interpretation"
+      ],
+      "rows": [
+        [
+          "Student 17 institutional email",
+          "shared@example.test",
+          "One value in this role"
+        ],
+        [
+          "Student 17 personal email",
+          "personal@example.test",
+          "Different role, also one value"
+        ],
+        [
+          "Student 24 institutional email",
+          "shared@example.test",
+          "Allowed shared string under this policy"
+        ],
+        [
+          "Student 30 primary email",
+          "NULL",
+          "Optional absence, not several values"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "coordinator checked at-most-one versus mandatory presence, distinct roles and current versus historical multiplicity",
+    "server_rendering": "passed",
+    "browser_rendering": "unverified",
+    "independent_review": "unavailable; no agent tools",
+    "server_rendering_evidence": "2026-10-29: 101 focused Vitest checks passed; all 92 authored packages rendered through actual LessonBlock."
+  },
+  "sql_verification": {
+    "engine": "11.8.6-MariaDB-0+deb13u1 from Debian",
+    "scope": "MariaDB compatibility execution; exact MySQL 8.4/provider execution unverified",
+    "fingerprint": "034cf88790272bdee2724711ca561beccba8d355b75337b103b3ae53a11fa8f8",
+    "cases": [
+      {
+        "problem": "single-valued-present",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "single-valued-present",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "single-valued-present",
+        "case": 2,
+        "passed": true
+      },
+      {
+        "problem": "single-valued-role",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "single-valued-role",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "single-valued-role",
+        "case": 2,
+        "passed": true
+      },
+      {
+        "problem": "single-valued-role",
+        "negative_case": 0,
+        "error_code": 1062,
+        "passed": true
+      }
+    ],
+    "all_passed": true
+  }
+}

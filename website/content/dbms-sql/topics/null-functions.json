@@ -1,0 +1,587 @@
+{
+  "source_ref": "chapter-14-sql-functions/null-functions",
+  "slug": "null-functions",
+  "title": "NULL Functions",
+  "description": "Choose honest SQL NULL fallbacks, normalize selected markers and compare COALESCE, IFNULL, NULLIF and vendor naming without hiding missing facts.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Give missing values an explicit meaning\n\nNULL represents missing or unknown information rather than an ordinary value such as zero or an empty string. NULL handling functions help a query select a fallback, avoid an invalid denominator or express a deliberate display policy. They cannot discover the true missing fact. Before replacing anything, decide whether the result is a presentation choice, a calculation convention or a correction that requires new evidence.\n\nImagine a repair desk that stores an optional preferred contact label, an optional backup label and an optional estimated waiting time. A missing waiting time does not mean the repair will take zero minutes. The desk may display a helpful label for missing contacts while keeping an unknown wait visibly distinct from a known zero. Different columns can require different policies even within one row.\n\n## Test missingness with a predicate\n\nUse IS NULL to test for missingness and IS NOT NULL to test for presence. Comparing an expression to NULL with the equality operator does not produce the ordinary true result needed by a WHERE filter. SQL's three valued logic includes unknown, and WHERE retains rows only when its predicate is true. A replacement function and a missingness test answer different questions.\n\n```sql\nSELECT ticket_id\nFROM repair_contacts\nWHERE estimated_minutes IS NULL\nORDER BY ticket_id;\n```\n\nThis returns identifiers of tickets with no recorded estimate. It does not change the estimate, claim the repair is immediate or pick a replacement. Keep that distinction in naming: an alias such as displayed_estimate can communicate a presentation convention, whereas reusing the original measurement name can accidentally suggest that a fallback is an observed fact.\n\n## Select an ordered fallback with COALESCE\n\nCOALESCE returns the first non-NULL candidate from its argument list. Candidate order therefore encodes priority. A repair desk can prefer the chosen label, then a backup, then an explicit generic label. A known empty string remains present in MySQL, so it wins unless the query deliberately normalizes it to missing first. Do not assume missing and empty have identical meaning across all dialects.\n\n```sql\nSELECT ticket_id,\n       COALESCE(preferred_label, backup_label, 'Contact pending') AS display_label\nFROM repair_contacts\nORDER BY ticket_id;\n```\n\nSuppose one row has preferred label Front desk and backup Reception. It returns Front desk. A second row with NULL preferred and backup Workshop returns Workshop. A third row with both labels NULL returns Contact pending. A fourth row with an empty preferred label returns empty text under the stated policy. These results demonstrate ordered presence selection rather than choosing the longest or alphabetically first label.\n\n## Use IFNULL when its dialect contract is appropriate\n\nMySQL IFNULL accepts two arguments and returns a replacement when the first is NULL. It is useful for a single fallback, while COALESCE can express several candidates. SQLite also provides IFNULL, but that shared spelling does not make every type, collation or evaluation rule identical. Choose a function according to the actual target engine and the intended result contract.\n\n```sql\nSELECT ticket_id, IFNULL(assigned_room, 'Unassigned') AS room_display\nFROM repair_contacts\nORDER BY ticket_id;\n```\n\nA fallback room label is useful for an interface. It should not be stored as if Unassigned were an actual room identifier. If a join expects a real room key, replacing missing identifiers with arbitrary text can create misleading matches or conversion problems. Preserve the raw key and provide a separate display expression when those uses coexist.\n\n## Turn an exceptional marker into missingness with NULLIF\n\nNULLIF returns NULL when its two expressions compare equal; otherwise it returns the first expression. One useful arithmetic application replaces a zero denominator with NULL so a rate calculation has an explicitly missing result when there is no denominator. Explain that missing rate to the reader rather than treating it as a measured zero. Other denominator policies may require rejecting the row instead.\n\n```sql\nSELECT ticket_id,\n       completed_jobs * 1.0 / NULLIF(attempted_jobs, 0) AS completion_ratio\nFROM repair_totals\nORDER BY ticket_id;\n```\n\nIf completed jobs is two and attempted jobs is four, the result represents one half. If attempted jobs is zero, the ratio is NULL. Multiplying by a decimal literal makes the numeric intent visible in this example, but exact scale and result formatting still depend on types and engine rules. Do not promise identical output text on every SQL implementation.\n\n## Normalize empty text only when the contract permits it\n\nCombining NULLIF with COALESCE can treat a selected marker as absent before choosing the fallback, using the expression comparison and collation rules. A label expression may use NULLIF(preferred_label, '') to skip an empty preferred label. Adding trimming is a further policy decision: a space-only label and an intentionally spaced code are not necessarily the same kind of data. Preserve meaningful text instead of applying normalization reflexively.\n\nThe order of expressions matters. Skipping empty text before fallback is different from replacing the selected result afterward, because a backup label may be available. Write a small truth table containing preferred present, preferred NULL, preferred empty, backup present and both absent. Testing that table exposes policy differences that one pleasant demonstration row would hide.\n\n## Keep aggregation policies explicit\n\nAggregate functions commonly ignore NULL inputs, while COUNT(*) counts rows. Replacing each missing estimate with zero before AVG therefore changes the calculation's population and meaning. A desk with estimates ten and NULL has an average known estimate of ten; a policy treating the missing estimate as zero yields five instead. Neither number should be labeled without explaining what it summarizes.\n\nSimilarly, replacing a NULL aggregate result after aggregation is different from inserting zero into each row before aggregation. An empty input, a group containing only missing measurements and a group containing known zeros deserve separate tests. The query should express the chosen reporting policy, while the prose should explain what information was unavailable.\n\n## Compare vendor names without assuming interchangeability\n\nOracle provides NVL for a two argument replacement and NVL2 to choose between two results based on whether its first expression is present. SQL Server ISNULL is a replacement function, whereas MySQL ISNULL is a one argument missingness test. This naming collision can produce wrong assumptions during migration. Prefer the standard IS NULL predicate when expressing a portable missingness test.\n\nResult types are another portability concern. SQL Server ISNULL generally returns the first expression's type, with documented exceptions for a literal NULL; a longer replacement may be truncated to that type. COALESCE has different type resolution rules. Explicit casts, consistent candidate types and target engine tests are safer than assuming changing the function name preserves the returned value's length, scale or collation.\n\n## Read predicates and indexes together\n\nA filter written around a function of a column can have different access path implications from a direct column predicate. For example, using a replacement solely to make missingness compare like an ordinary value may obscure both intent and index use. Start with the simplest correct predicate and inspect the actual execution plan when performance matters. Do not claim every function call necessarily prevents every index optimization.\n\nKeep fallback literals parameterized when they come from untrusted input, and retain ordinary access controls on the underlying rows. NULL handling does not authorize someone to view a contact or infer whether another user's ticket exists. Formatting and trusted data access remain separate responsibilities in a safe application query.\n\n## Solve two output design exercises\n\nBeginner exercise: return a room display that preserves a known empty string but uses Unassigned for NULL. The solution uses a two argument replacement without NULLIF. Intermediate exercise: choose a nonempty preferred label, then a nonempty backup, then Contact pending. Its exact-empty solution uses a length-zero CASE for each candidate before COALESCE. Equality-based NULLIF can also treat space-only text as equal to empty under some collations, so do not use it to promise exact byte-length semantics. Test NULL, empty, zero-like text and both populated candidates.\n\nKeep the expected output columns stable when testing these policies. Include an explicit ORDER BY for deterministic examples, and inspect both the selected label and the untouched source data so a presentation fallback is not confused with a stored update.\n\nContinue with [COALESCE](/learning/dbms-sql-tutorial/coalesce), [NULLIF](/learning/dbms-sql-tutorial/nullif) and [NULL semantics](/learning/dbms-sql-tutorial/null-semantics). Verify semantic policy first, then result types and ordered output on the target engine. A successful SQLite subset exercise supports that subset alone; it does not certify the complete MySQL or hosted provider contract.",
+  "references": [
+    {
+      "title": "MySQL 8.4 flow control functions",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/flow-control-functions.html"
+    },
+    {
+      "title": "SQL Server ISNULL return types",
+      "url": "https://learn.microsoft.com/en-us/sql/t-sql/functions/isnull-transact-sql"
+    },
+    {
+      "title": "Oracle NVL2",
+      "url": "https://docs.oracle.com/en/database/oracle/oracle-database/26/sqlrf/NVL2.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-14-null-functions",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-14-null-functions-1",
+          "test_id": "pt-dbms-sql-14-null-functions",
+          "question_text": "What does COALESCE(amount, 0) return for a row where amount is NULL?",
+          "options": [
+            "NULL",
+            "0",
+            "An error",
+            "-1"
+          ],
+          "correct_index": 1,
+          "explanation": "COALESCE returns the first non-NULL argument in its list; since amount is NULL, it falls through to the next argument, 0.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-14-null-functions-2",
+          "test_id": "pt-dbms-sql-14-null-functions",
+          "question_text": "Which two dialects commonly provide IFNULL() as a two-argument NULL-replacement shortcut?",
+          "options": [
+            "Oracle and SQL Server",
+            "MySQL and SQLite",
+            "PostgreSQL and Oracle",
+            "SQL Server and PostgreSQL"
+          ],
+          "correct_index": 1,
+          "explanation": "IFNULL(expr, replacement) is a MySQL/SQLite convenience function equivalent to a two-argument COALESCE.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-14-null-functions-3",
+          "test_id": "pt-dbms-sql-14-null-functions",
+          "question_text": "What is Oracle's equivalent of MySQL's IFNULL() function?",
+          "options": [
+            "ISNULL()",
+            "NVL()",
+            "COALESCE2()",
+            "NULLIF()"
+          ],
+          "correct_index": 1,
+          "explanation": "NVL(expr, replacement) is Oracle's two-argument NULL-replacement function, functionally equivalent to IFNULL().",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-14-null-functions-4",
+          "test_id": "pt-dbms-sql-14-null-functions",
+          "question_text": "In SQL Server, what does ISNULL(amount, 0) actually do?",
+          "options": [
+            "Returns TRUE or FALSE depending on whether amount is NULL",
+            "Returns amount if it's non-NULL, otherwise returns 0 — it's a NULL-replacement function, not a NULL test",
+            "Deletes rows where amount is NULL",
+            "Throws an error if amount is NULL"
+          ],
+          "correct_index": 1,
+          "explanation": "Despite its name suggesting a NULL test, SQL Server's ISNULL() is a two-argument NULL-replacement function, just like IFNULL()/NVL().",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-14-null-functions-5",
+          "test_id": "pt-dbms-sql-14-null-functions",
+          "question_text": "What is the correct way to test whether a column's value is NULL in a WHERE clause, across all SQL dialects?",
+          "options": [
+            "WHERE amount = NULL",
+            "WHERE ISNULL(amount)",
+            "WHERE amount IS NULL",
+            "WHERE amount == NULL"
+          ],
+          "correct_index": 2,
+          "explanation": "IS NULL (with a space) is the universal operator for testing NULL; = NULL never works because NULL = NULL evaluates to NULL, not TRUE.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-14-null-functions-6",
+          "test_id": "pt-dbms-sql-14-null-functions",
+          "question_text": "Why does the condition amount = NULL never match any rows, even ones where amount actually is NULL?",
+          "options": [
+            "Because = is reserved and cannot be used with NULL under any circumstances",
+            "Because NULL = NULL evaluates to NULL (not TRUE) under SQL's three-valued logic, so the WHERE clause never treats it as a match",
+            "Because NULL is automatically converted to the string 'NULL' before comparison",
+            "Because amount = NULL is a syntax error, not a logical issue"
+          ],
+          "correct_index": 1,
+          "explanation": "Ordinary equality with NULL evaluates to UNKNOWN, including NULL=NULL, so it does not pass WHERE. IS NULL tests missingness; MySQL’s null-safe <=> is a distinct comparison operator.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-14-null-functions-7",
+          "test_id": "pt-dbms-sql-14-null-functions",
+          "question_text": "What does Oracle's NVL2(expr, value_if_not_null, value_if_null) do differently from two-argument NVL()?",
+          "options": [
+            "It behaves identically to NVL() with no differences",
+            "It branches to one of two different replacement values depending on whether expr is NULL, rather than just substituting one fallback",
+            "It only works with numeric expressions",
+            "It tests for NULL and returns a boolean"
+          ],
+          "correct_index": 1,
+          "explanation": "NVL2 takes three arguments and returns value_if_not_null when expr is non-NULL, or value_if_null when it is NULL — a genuine two-way branch, unlike NVL's single fallback value.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-14-null-functions-8",
+          "test_id": "pt-dbms-sql-14-null-functions",
+          "question_text": "Why might COALESCE be preferred over SQL Server's ISNULL() for portable, safe code involving string replacements?",
+          "options": [
+            "COALESCE cannot be used with string types",
+            "SQLServer ISNULL usually uses the first argument’s type and length, with documented literal-NULL exceptions; COALESCE has its own combined type-precedence rules",
+            "ISNULL() only accepts numeric arguments",
+            "COALESCE always returns NULL when used with strings"
+          ],
+          "correct_index": 1,
+          "explanation": "For an ordinary typed first expression, SQL Server ISNULL can narrow a longer replacement to that expression’s type/length. A literal NULL first argument has documented inference exceptions. COALESCE is more portable syntax but still requires deliberate compatible types.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-14-null-functions-new-9",
+          "test_id": "pt-dbms-sql-14-null-functions",
+          "question_text": "For MySQL COALESCE on an empty preferred string and a backup, which candidate is present?",
+          "options": [
+            "The empty preferred string",
+            "Only the backup",
+            "Neither candidate",
+            "A synthetic NULL"
+          ],
+          "correct_index": 0,
+          "explanation": "Empty text is not NULL under the stated MySQL policy.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-14-null-functions-new-10",
+          "test_id": "pt-dbms-sql-14-null-functions",
+          "question_text": "Why keep the raw room key beside a display fallback?",
+          "options": [
+            "Keys must always be strings",
+            "The fallback label is not necessarily a real identifier",
+            "NULL forbids aliases",
+            "Displays authorize access"
+          ],
+          "correct_index": 1,
+          "explanation": "Presentation labels should not fabricate referential facts.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-14-null-functions-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-14-null-functions-application-new-1",
+          "test_id": "pt-dbms-sql-14-null-functions-application",
+          "question_text": "What does NULLIF(attempted_jobs, 0) express?",
+          "options": [
+            "Zero becomes one",
+            "Every denominator becomes zero",
+            "A zero denominator becomes missing",
+            "The numerator is deleted"
+          ],
+          "correct_index": 2,
+          "explanation": "The ratio can remain undefined rather than inventing a measurement.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-14-null-functions-application-new-2",
+          "test_id": "pt-dbms-sql-14-null-functions-application",
+          "question_text": "Two estimates are 10 and NULL. What does averaging only known estimates yield?",
+          "options": [
+            "5",
+            "0",
+            "20",
+            "10"
+          ],
+          "correct_index": 3,
+          "explanation": "The missing measurement is not included as zero.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-14-null-functions-application-new-3",
+          "test_id": "pt-dbms-sql-14-null-functions-application",
+          "question_text": "What policy does AVG after replacing each missing estimate with zero add?",
+          "options": [
+            "Missing values contribute as zero observations",
+            "It preserves the known-only average",
+            "It removes every row",
+            "It counts only NULL rows"
+          ],
+          "correct_index": 0,
+          "explanation": "Per-row replacement changes the aggregate population.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-14-null-functions-application-new-4",
+          "test_id": "pt-dbms-sql-14-null-functions-application",
+          "question_text": "Which expression skips empty preferred text before choosing a fallback?",
+          "options": [
+            "COALESCE(preferred_label, backup_label)",
+            "COALESCE(NULLIF(preferred_label, ''), backup_label)",
+            "preferred_label = NULL",
+            "IS NULL(preferred_label, backup_label)"
+          ],
+          "correct_index": 1,
+          "explanation": "Normalization must precede ordered fallback.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-14-null-functions-application-new-5",
+          "test_id": "pt-dbms-sql-14-null-functions-application",
+          "question_text": "What does MySQL ISNULL(expr) return?",
+          "options": [
+            "A two-argument fallback",
+            "An Oracle NVL2 result",
+            "A missingness test result",
+            "A stored row repair"
+          ],
+          "correct_index": 2,
+          "explanation": "The same function name has different vendor meanings.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-14-null-functions-application-new-6",
+          "test_id": "pt-dbms-sql-14-null-functions-application",
+          "question_text": "What risk exists for a long replacement in SQL Server ISNULL?",
+          "options": [
+            "It always becomes a table",
+            "It always returns JSON",
+            "It automatically widens to unlimited text",
+            "Conversion to the first expression type can truncate it"
+          ],
+          "correct_index": 3,
+          "explanation": "Inspect the documented return type and length.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-14-null-functions-application-new-7",
+          "test_id": "pt-dbms-sql-14-null-functions-application",
+          "question_text": "Does COALESCE discover the true missing waiting time?",
+          "options": [
+            "No, it selects a stated fallback",
+            "Yes, from the table name",
+            "Only with three arguments",
+            "Only after ORDER BY"
+          ],
+          "correct_index": 0,
+          "explanation": "A display convention is not an observed measurement.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-14-null-functions-application-new-8",
+          "test_id": "pt-dbms-sql-14-null-functions-application",
+          "question_text": "Why test a group containing known zeros separately from all NULLs?",
+          "options": [
+            "All zeros are NULL",
+            "The groups represent different information",
+            "Both always have no rows",
+            "COUNT cannot distinguish anything"
+          ],
+          "correct_index": 1,
+          "explanation": "Known zero is a value, not missingness.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-14-null-functions-application-new-9",
+          "test_id": "pt-dbms-sql-14-null-functions-application",
+          "question_text": "Does wrapping a column in a function guarantee that every index is unusable?",
+          "options": [
+            "Yes, in every engine",
+            "Only for small tables",
+            "No, inspect the actual optimizer and expression",
+            "Only if the alias is short"
+          ],
+          "correct_index": 2,
+          "explanation": "Optimization capabilities and access paths vary.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-14-null-functions-application-new-10",
+          "test_id": "pt-dbms-sql-14-null-functions-application",
+          "question_text": "What does a successful SQLite exercise establish?",
+          "options": [
+            "All MySQL provider behavior",
+            "Oracle type conversion",
+            "SQL Server truncation behavior",
+            "The tested subset on that engine"
+          ],
+          "correct_index": 3,
+          "explanation": "Keep engine evidence scopes distinct.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cx-null-functions-room-display",
+      "slug": "null-functions-room-display",
+      "title": "Display missing rooms without changing empty labels",
+      "difficulty": "Easy",
+      "task": "Return ticket_id, room_display using assigned_room when present and 'Unassigned' when NULL. Preserve empty text. Order by ticket_id.",
+      "schema_sql": "CREATE TABLE room_labels(ticket_id INT PRIMARY KEY,assigned_room VARCHAR(40));",
+      "seed_sql": "INSERT INTO room_labels VALUES (1,'A2'),(2,NULL),(3,'');",
+      "expected": "ticket_id\troom_display\n1\tA2\n2\tUnassigned\n3\t",
+      "ordering": "Order by ticket_id.",
+      "edge_cases": [
+        "NULL and empty text differ.",
+        "Known room labels remain unchanged."
+      ],
+      "hints": [
+        "Use a two-argument fallback."
+      ],
+      "solution_sql": "SELECT ticket_id,IFNULL(assigned_room,'Unassigned') AS room_display FROM room_labels ORDER BY ticket_id;",
+      "explanation": "IFNULL replaces only NULL while preserving known empty text.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO room_labels VALUES (5,NULL),(6,'0');",
+          "expected": "ticket_id\troom_display\n5\tUnassigned\n6\t0"
+        },
+        {
+          "seed_sql": "",
+          "expected": ""
+        }
+      ]
+    },
+    {
+      "id": "cx-null-functions-nonempty-priority",
+      "slug": "null-functions-nonempty-priority",
+      "title": "Choose nonempty contact labels in priority order",
+      "difficulty": "Medium",
+      "task": "Return ticket_id, display_label choosing a nonempty preferred_label, then a nonempty backup_label, then 'Contact pending'. Empty means exactly empty text; do not trim spaces. Order by ticket_id.",
+      "schema_sql": "CREATE TABLE label_candidates(ticket_id INT PRIMARY KEY,preferred_label VARCHAR(40),backup_label VARCHAR(40));",
+      "seed_sql": "INSERT INTO label_candidates VALUES (1,'Main','Other'),(2,'','Office'),(3,NULL,''),(4,' ',NULL);",
+      "expected": "ticket_id\tdisplay_label\n1\tMain\n2\tOffice\n3\tContact pending\n4\t ",
+      "ordering": "Order by ticket_id.",
+      "edge_cases": [
+        "Space text remains present.",
+        "Both absent or empty use final fallback."
+      ],
+      "hints": [
+        "Use a length-zero CASE for exact empty-text normalization; equality-based NULLIF follows collation rules."
+      ],
+      "solution_sql": "SELECT ticket_id,COALESCE(CASE WHEN LENGTH(preferred_label)=0 THEN NULL ELSE preferred_label END,CASE WHEN LENGTH(backup_label)=0 THEN NULL ELSE backup_label END,'Contact pending') AS display_label FROM label_candidates ORDER BY ticket_id;",
+      "explanation": "Length zero recognizes exactly empty text without collation equality treating space-only text as empty; COALESCE then applies the priority policy.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO label_candidates VALUES (7,'',NULL),(8,NULL,'Backup');",
+          "expected": "ticket_id\tdisplay_label\n7\tContact pending\n8\tBackup"
+        },
+        {
+          "seed_sql": "",
+          "expected": ""
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": null,
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-14-null-functions-1",
+      "test_id": "pt-dbms-sql-14-null-functions",
+      "question_text": "What does COALESCE(amount, 0) return for a row where amount is NULL?",
+      "options": [
+        "NULL",
+        "0",
+        "An error",
+        "-1"
+      ],
+      "correct_index": 1,
+      "explanation": "COALESCE returns the first non-NULL argument in its list; since amount is NULL, it falls through to the next argument, 0.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-14-null-functions-2",
+      "test_id": "pt-dbms-sql-14-null-functions",
+      "question_text": "Which two dialects commonly provide IFNULL() as a two-argument NULL-replacement shortcut?",
+      "options": [
+        "Oracle and SQL Server",
+        "MySQL and SQLite",
+        "PostgreSQL and Oracle",
+        "SQL Server and PostgreSQL"
+      ],
+      "correct_index": 1,
+      "explanation": "IFNULL(expr, replacement) is a MySQL/SQLite convenience function equivalent to a two-argument COALESCE.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-14-null-functions-3",
+      "test_id": "pt-dbms-sql-14-null-functions",
+      "question_text": "What is Oracle's equivalent of MySQL's IFNULL() function?",
+      "options": [
+        "ISNULL()",
+        "NVL()",
+        "COALESCE2()",
+        "NULLIF()"
+      ],
+      "correct_index": 1,
+      "explanation": "NVL(expr, replacement) is Oracle's two-argument NULL-replacement function, functionally equivalent to IFNULL().",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-14-null-functions-4",
+      "test_id": "pt-dbms-sql-14-null-functions",
+      "question_text": "In SQL Server, what does ISNULL(amount, 0) actually do?",
+      "options": [
+        "Returns TRUE or FALSE depending on whether amount is NULL",
+        "Returns amount if it's non-NULL, otherwise returns 0 — it's a NULL-replacement function, not a NULL test",
+        "Deletes rows where amount is NULL",
+        "Throws an error if amount is NULL"
+      ],
+      "correct_index": 1,
+      "explanation": "Despite its name suggesting a NULL test, SQL Server's ISNULL() is a two-argument NULL-replacement function, just like IFNULL()/NVL().",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-14-null-functions-5",
+      "test_id": "pt-dbms-sql-14-null-functions",
+      "question_text": "What is the correct way to test whether a column's value is NULL in a WHERE clause, across all SQL dialects?",
+      "options": [
+        "WHERE amount = NULL",
+        "WHERE ISNULL(amount)",
+        "WHERE amount IS NULL",
+        "WHERE amount == NULL"
+      ],
+      "correct_index": 2,
+      "explanation": "IS NULL (with a space) is the universal operator for testing NULL; = NULL never works because NULL = NULL evaluates to NULL, not TRUE.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-14-null-functions-6",
+      "test_id": "pt-dbms-sql-14-null-functions",
+      "question_text": "Why does the condition amount = NULL never match any rows, even ones where amount actually is NULL?",
+      "options": [
+        "Because = is reserved and cannot be used with NULL under any circumstances",
+        "Because NULL = NULL evaluates to NULL (not TRUE) under SQL's three-valued logic, so the WHERE clause never treats it as a match",
+        "Because NULL is automatically converted to the string 'NULL' before comparison",
+        "Because amount = NULL is a syntax error, not a logical issue"
+      ],
+      "correct_index": 1,
+      "explanation": "Under three-valued logic, any comparison involving NULL (including NULL = NULL) evaluates to NULL, which WHERE treats as 'not a match' — hence the need for the dedicated IS NULL operator.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-14-null-functions-7",
+      "test_id": "pt-dbms-sql-14-null-functions",
+      "question_text": "What does Oracle's NVL2(expr, value_if_not_null, value_if_null) do differently from two-argument NVL()?",
+      "options": [
+        "It behaves identically to NVL() with no differences",
+        "It branches to one of two different replacement values depending on whether expr is NULL, rather than just substituting one fallback",
+        "It only works with numeric expressions",
+        "It tests for NULL and returns a boolean"
+      ],
+      "correct_index": 1,
+      "explanation": "NVL2 takes three arguments and returns value_if_not_null when expr is non-NULL, or value_if_null when it is NULL — a genuine two-way branch, unlike NVL's single fallback value.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-14-null-functions-8",
+      "test_id": "pt-dbms-sql-14-null-functions",
+      "question_text": "Why might COALESCE be preferred over SQL Server's ISNULL() for portable, safe code involving string replacements?",
+      "options": [
+        "COALESCE cannot be used with string types",
+        "ISNULL() infers its result type from only the first argument, which can silently truncate a longer replacement string, while COALESCE applies standard type-precedence across all arguments",
+        "ISNULL() only accepts numeric arguments",
+        "COALESCE always returns NULL when used with strings"
+      ],
+      "correct_index": 1,
+      "explanation": "SQL Server's ISNULL() bases its output type on the first argument alone, risking silent truncation of a longer second argument, whereas COALESCE follows standard SQL type-precedence rules across every argument — making it safer and more portable.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "/root/content_b",
+    "independent_review": "passed",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "canonical_answer_indices_preserved": true,
+    "independent_reviewer": "/root/review_d_and_programs",
+    "independent_review_scope": "Full notes,20MCQs with every option,canonical answer position and explanation,original diagrams,and all exercise contracts/fixtures or solved conceptual labs. Original identities/indices checked against public seed cache where applicable. Reported substantive findings corrected by coordinator and filtered recheck accepted;identified learner-facing spacing polished. Manual technical/editorial reasoning only;engine,provider,browser,external originality and AdSense evidence separate."
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-14-null-functions",
+    "original_note_sha256": "07f2eeff40d0075bfbd5530132e9563d860fb5c729c3be6ec48ec531cc9999ff",
+    "status": "drafted; not included in prepared paired migrations"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Presence policies produce different label choices",
+      "description": "Skipping empty text is an extra normalization rule; COALESCE by itself only skips NULL.",
+      "columns": [
+        "Preferred",
+        "Backup",
+        "Presence-only result",
+        "Skip-empty result"
+      ],
+      "rows": [
+        [
+          "Main",
+          "Office",
+          "Main",
+          "Main"
+        ],
+        [
+          "Empty text",
+          "Office",
+          "Empty text",
+          "Office"
+        ],
+        [
+          "NULL",
+          "Office",
+          "Office",
+          "Office"
+        ],
+        [
+          "NULL",
+          "Empty text",
+          "Empty text",
+          "Contact pending"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "provided",
+    "technical_review": "Independent manual diagram/content consistency review passed;actual static/browser rendering tracked separately.",
+    "server_rendering": "unverified",
+    "browser_rendering": "unverified",
+    "independent_review": "passed"
+  },
+  "authoring_status": "drafted; verification pending",
+  "sql_verification": {
+    "scope": "not executed; exact MySQL/provider verification pending",
+    "all_passed": false,
+    "cases": []
+  }
+}

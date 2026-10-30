@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { X, ZoomIn, ZoomOut, Loader2 } from "lucide-react";
+import { useDialog } from "@/lib/useDialog";
 import { Badge } from "@/components/ui";
 import { ResumeDocumentView, SHEET_WIDTH_PX, SHEET_MIN_HEIGHT_PX } from "./ResumeDocumentView";
 import type { ResolvedTemplate } from "@/lib/resumeBuilder/templateSpecs";
@@ -33,17 +34,7 @@ export function TemplatePreviewModal({
   const [zoomMult, setZoomMult] = useState(1);
   const [pages, setPages] = useState(1);
 
-  useEffect(() => {
-    if (!template) return;
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
-    document.addEventListener("keydown", onKey);
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.removeEventListener("keydown", onKey);
-      document.body.style.overflow = prev;
-    };
-  }, [template, onClose]);
+  const dialogRef = useDialog(Boolean(template && model), onClose);
 
   useLayoutEffect(() => {
     if (!template) return;
@@ -66,7 +57,7 @@ export function TemplatePreviewModal({
   const scale = fitScale * zoomMult;
 
   return (
-    <div className="fixed inset-0 z-[120] flex flex-col bg-scrim/70" role="dialog" aria-modal="true" aria-label={`${template.label} template preview`}>
+    <div ref={dialogRef} tabIndex={-1} className="fixed inset-0 z-[120] flex flex-col bg-scrim/70" role="dialog" aria-modal="true" aria-label={`${template.label} template preview`}>
       {/* Top bar */}
       <div className="flex items-center justify-between gap-3 border-b border-white/10 bg-card px-5 py-4">
         <div className="flex min-w-0 items-center gap-3">

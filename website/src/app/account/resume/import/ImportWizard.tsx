@@ -113,27 +113,34 @@ export default function ImportWizard() {
   }
 
   async function handleImport() {
+    if (importing) return;
     if (!review) return;
     setImporting(true);
     setImportError(null);
-    const result = await createResumeFromImportAction({
-      fullName: review.fullName,
-      jobTitle: review.jobTitle,
-      email: review.email,
-      phone: review.phone,
-      location: review.location,
-      linkedin: review.linkedin,
-      website: review.website,
-      education: review.education,
-      technicalSkills: review.skillsText.split(",").map((s) => s.trim()).filter(Boolean),
-      sections: review.sections,
-    });
-    setImporting(false);
-    if ("error" in result) {
-      setImportError(result.error);
-      return;
+    try {
+      const result = await createResumeFromImportAction({
+        fullName: review.fullName,
+        jobTitle: review.jobTitle,
+        email: review.email,
+        phone: review.phone,
+        location: review.location,
+        linkedin: review.linkedin,
+        website: review.website,
+        education: review.education,
+        technicalSkills: review.skillsText.split(",").map((s) => s.trim()).filter(Boolean),
+        sections: review.sections,
+      });
+      setImporting(false);
+      if ("error" in result) {
+        setImportError(result.error);
+        return;
+      }
+      router.push(`/account/resume/${result.resumeId}/edit`);
+    } catch (err) {
+      setImportError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
+    } finally {
+      setImporting(false);
     }
-    router.push(`/account/resume/${result.resumeId}/edit`);
   }
 
   if (!review) {

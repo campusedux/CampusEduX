@@ -1,0 +1,637 @@
+{
+  "source_ref": "chapter-3-data-models/object-oriented-model",
+  "slug": "object-oriented-model",
+  "title": "Object-Oriented Model",
+  "description": "Explore persistent object identity, state, references, shared ownership, inheritance, and schema evolution, separating model-level ideas from product-specific query and transaction guarantees.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Treating persistent objects as modeled entities\n\nThe object-oriented data model organizes information through objects with identity, state, and behavior. Instead of treating an application object only as a temporary value assembled from table rows, an object database can preserve objects and their relationships through supported persistence mechanisms. The attraction is a closer match between some application structures and their stored representation.\n\nThis is a model family, not a promise that every object-oriented language object can be stored unchanged in every database. Products define persistent types, identity rules, queries, transactions, and supported references differently. Understanding the concept requires separating those product contracts from familiar programming-language vocabulary. A method on an object is not automatically an independently authorized database operation.\n\nConsider a drawing application used for campus design. A Drawing object refers to Shape objects, including Circle and Rectangle subtypes. Shapes have identifiers and geometric state, and the application can request operations such as computing an area. This example motivates object structure without asserting that a database must store executable machine code beside every object occurrence.\n\n## Distinguishing identity from equal values\n\nAn object identifier, often called an OID, gives a persistent object an identity independent of its current attribute values. Two circles can have identical coordinates and radius while remaining distinct objects. Conversely, changing a circle's radius need not turn it into a different persistent object. Equality of state and equality of identity answer different questions.\n\nFor example, Shape 501 and Shape 502 can both be labeled Sensor Circle. They remain separate identities even if every displayed field matches. An operation intended for 501 must not update 502 merely because a query groups objects by their labels. A retained identity is essential when references elsewhere in the drawing still point to a particular occurrence.\n\nThe exact identity mechanism depends on the product. Some systems expose managed identifiers through a language persistence API; others have different object-reference facilities. Do not assume every OID is a physical memory address or disk offset. Persistence across process lifetimes requires an identity contract that remains meaningful beyond one temporary runtime allocation.\n\n## Representing state and behavior\n\nState consists of the stored facts associated with an object. For a Circle, those can include center coordinates and radius in stated units. Behavior describes operations associated with the type, such as a method deriving area from that state. A correct design specifies valid state and operation semantics rather than assuming encapsulation alone guarantees integrity.\n\nA radius might have to be positive, and a coordinate system needs a defined origin and measurement unit. A method that calculates area from invalid or differently scaled input can produce a plausible but wrong result. The database and application need appropriate trusted checks for updates, even when object methods are a convenient interface.\n\nNot every behavior should be persisted as mutable data or exposed to every caller. Some methods can perform external work, depend on configuration, or require privileges. The object model does not erase those boundaries. Trace which state is authoritative and which operations the actual persistence mechanism permits under the relevant identity and transaction rules.\n\n## Following references between objects\n\nA Drawing can refer to a collection of Shape identities. Two drawings can refer to the same shared shape where the domain allows it. Sharing one identity differs from storing two independent copies with equal state. An edit to a genuinely shared object can be visible through both references, whereas editing a copy changes only that copy.\n\nFor instance, Drawing 100 and Drawing 200 both reference Shape 501. The model needs to explain whether 501 is a reusable shared component or whether each drawing should own an independent copy. The answer affects editing, deletion, versioning, and access. A programming-language reference alone does not establish the intended business ownership.\n\nReferences can form complex graphs, potentially including cycles. A traversal that recursively follows every reference needs a termination and visited-identity policy. The existence of native references does not make every graph walk cheap or acyclic. Actual loading, caching, and query behavior determine how much work a request performs.\n\n## Using subtype relationships carefully\n\nInheritance allows a subtype to share structure or behavior with a broader type under supported rules. Circle and Rectangle can be Shape subtypes while retaining different required state. A query for shapes might include subtype occurrences, but the exact polymorphic query behavior must be checked in the chosen implementation rather than treated as universal syntax.\n\nThe common type must still have meaningful semantics. A display label can be common, while circle radius and rectangle width are subtype-specific. Treating every optional subtype field as interchangeable can hide invalid combinations, such as a circle missing its radius. The persistence contract needs an explicit account of valid instances.\n\nInheritance is also distinct from containment. A Drawing containing a Shape does not make Drawing a subtype of Shape. Likewise, two objects sharing a reference are not necessarily in a parent-child type hierarchy. Clear diagrams should label whether a connection means a reference, ownership, or subtype relationship instead of using one unlabeled arrow for all three.\n\n## Evaluating the object mapping trade-off\n\nPersisting supported objects can reduce some translation between an application model and stored data. Complex CAD/CAM structures are a common motivating domain because nested components and shared references can matter to the application. This does not mean every object database eliminates all mapping work, or that every relational representation is unsuitable for the same problem.\n\nSerialization rules, unsupported fields, identity resolution, query APIs, and version changes can still require deliberate mapping. An application class may contain transient UI state that should not become authoritative persistent data. Persisting every reachable value without review can store unnecessary information or couple durable records to implementation details that change frequently.\n\nAd hoc reporting and interoperability also need evaluation. Object database products offer varied query capabilities, and the absence of one universally adopted interface comparable to SQL is not the same as having no query language at all. Compare the actual needed queries and integrations rather than assuming object persistence either solves every access problem or makes reporting impossible.\n\n## Planning evolution and lifecycle\n\nChanging a persistent class can affect stored objects created by earlier software versions. A new required attribute, renamed field, or changed subtype relationship needs a compatible evolution policy. A class compiling successfully does not prove old persistent objects can be loaded and interpreted correctly. Stored identity and references must remain valid through the intended transition.\n\nDeletion also requires ownership semantics. Removing one drawing should not necessarily delete a shared shape still used by another drawing. Conversely, an unreferenced private component may need a cleanup rule. Distinguish a domain policy from runtime garbage collection; a database does not automatically know whether an object is still required for history or another external reference.\n\nTransactions, concurrency, and authorization remain product and implementation responsibilities. Two sessions editing the same object need a conflict policy, and a caller's ability to hold an identifier does not prove permission to modify the object. Encapsulation in application code is not a substitute for enforcing the actual trusted boundary.\n\n## Practising identity through a relational mirror\n\nThe exercises use MySQL tables containing object identities and drawing-reference facts. This is a teaching mirror, not a native object database implementation. A listing can preserve two distinct objects with equal labels, and a grouped relationship query can count how many drawings reference each object without duplicating the object itself.\n\nThese tasks make identity and sharing observable with the course's established SQL judge. They do not test native object loading, method dispatch, or polymorphic persistence. Those behaviors remain unverified until executed through an appropriate product's supported API. Keeping the scope explicit prevents a successful relational query from being mistaken for another engine's persistence evidence.\n\nAn accurate object-oriented model begins with identity, state meaning, reference semantics, and valid operations. Use inheritance and shared references where the domain supports them, and inspect lifecycle and evolution assumptions carefully. The model is useful when it preserves the application's required facts with understandable contracts, not because object terminology automatically guarantees storage transparency, security, or perfect compatibility.\n",
+  "references": [
+    {
+      "title": "ObjectDB persistence-capable classes",
+      "url": "https://www.objectdb.com/database/jdo/manual/chapter3"
+    },
+    {
+      "title": "ObjectDB schema evolution",
+      "url": "https://www.objectdb.com/java/jpa/entity/schema"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-3-object-oriented-model",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-3-object-oriented-model-1",
+          "test_id": "pt-dbms-sql-3-object-oriented-model",
+          "question_text": "In the object-oriented data model, what bundles together in a single object?",
+          "options": [
+            "Only attributes (state)",
+            "Only methods (behavior)",
+            "Both state (attributes) and behavior (methods)",
+            "Only foreign keys"
+          ],
+          "correct_index": 2,
+          "explanation": "The defining feature of the OO model is that an object bundles state and behavior together, mirroring object-oriented programming languages.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-3-object-oriented-model-2",
+          "test_id": "pt-dbms-sql-3-object-oriented-model",
+          "question_text": "What is the useful distinction supplied by persistent object identity?",
+          "options": [
+            "A value derived from an object's attributes, like a relational primary key",
+            "Identity can remain distinct from the current attribute values or physical address",
+            "A foreign key referencing another table",
+            "A hash of the object's class name"
+          ],
+          "correct_index": 1,
+          "explanation": "OID representation and management depend on the actual product.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-3-object-oriented-model-3",
+          "test_id": "pt-dbms-sql-3-object-oriented-model",
+          "question_text": "Which of these is a real-world domain where object-oriented databases saw practical adoption?",
+          "options": [
+            "Simple two-column lookup tables",
+            "CAD/CAM systems with deeply nested complex objects",
+            "Basic key-value session caching",
+            "Flat CSV file storage"
+          ],
+          "correct_index": 1,
+          "explanation": "CAD/CAM, telecom configuration, and multimedia repositories are classic domains where OO databases' native support for complex, nested objects proved useful.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-3-object-oriented-model-4",
+          "test_id": "pt-dbms-sql-3-object-oriented-model",
+          "question_text": "What mapping benefit can supported object persistence provide?",
+          "options": [
+            "Better support for SQL reporting",
+            "It can reduce translation for suitable application structures, while persistence and evolution contracts still need review",
+            "Simpler horizontal scaling across clusters",
+            "Stronger support for ad-hoc declarative queries"
+          ],
+          "correct_index": 1,
+          "explanation": "No model universally eliminates all mapping or unsupported-state concerns.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-3-object-oriented-model-5",
+          "test_id": "pt-dbms-sql-3-object-oriented-model",
+          "question_text": "What query-related consideration can affect adoption of an object database?",
+          "options": [
+            "They cannot represent inheritance",
+            "Its actual query and interoperability capabilities may differ from the widely shared SQL ecosystem",
+            "They cannot store any attribute data",
+            "They require no schema at all, making them insecure"
+          ],
+          "correct_index": 1,
+          "explanation": "This is not a claim that object database products have no query facilities.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-3-object-oriented-model-6",
+          "test_id": "pt-dbms-sql-3-object-oriented-model",
+          "question_text": "What can a Drawing reference to Shape identities represent?",
+          "options": [
+            "Via a separate junction table with foreign keys",
+            "Relationships to persistent objects, including sharing where the domain allows it",
+            "Only through a document embedded as JSON",
+            "Through a column-family wide row"
+          ],
+          "correct_index": 1,
+          "explanation": "Actual loading and storage work still depend on the implementation.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-3-object-oriented-model-7",
+          "test_id": "pt-dbms-sql-3-object-oriented-model",
+          "question_text": "How does the object-oriented model differ in emphasis from object-relational extensions?",
+          "options": [
+            "They are the same model with different names",
+            "It centers persistent objects and identity, while object-relational designs retain a relational foundation with extensions",
+            "The Object-Relational model cannot support inheritance",
+            "The OO model always requires a schema-free document store"
+          ],
+          "correct_index": 1,
+          "explanation": "Logical model emphasis is not a claim about every physical storage structure.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-3-object-oriented-model-8",
+          "test_id": "pt-dbms-sql-3-object-oriented-model",
+          "question_text": "When can a Shape query include Circle and Rectangle occurrences?",
+          "options": [
+            "Because SQL UNION is used behind the scenes",
+            "When the selected implementation and query support that polymorphic subtype behavior",
+            "Because Circle and Rectangle are stored in the same table with a type column",
+            "Because OO databases ignore class hierarchies"
+          ],
+          "correct_index": 1,
+          "explanation": "Check actual query semantics rather than assuming a universal engine rule.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-3-object-oriented-model-new-9",
+          "test_id": "pt-dbms-sql-3-object-oriented-model",
+          "question_text": "Can two objects with equal displayed attributes remain distinct identities?",
+          "options": [
+            "No; equal labels always merge objects",
+            "Yes",
+            "Only if they use different fonts",
+            "Only if neither is persistent"
+          ],
+          "correct_index": 1,
+          "explanation": "Value equality and identity equality answer different questions.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-3-object-oriented-model-new-10",
+          "test_id": "pt-dbms-sql-3-object-oriented-model",
+          "question_text": "Does a Drawing containing a Shape make Drawing a Shape subtype?",
+          "options": [
+            "Yes; all references define inheritance",
+            "Only when the drawing has one shape",
+            "No; containment and inheritance are different relationships",
+            "Only if the identifier is numeric"
+          ],
+          "correct_index": 2,
+          "explanation": "A reference does not imply an is-a type relationship.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-3-object-oriented-model-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-3-object-oriented-model-application-new-1",
+          "test_id": "pt-dbms-sql-3-object-oriented-model-application",
+          "question_text": "Drawings 100 and 200 both reference Shape 501. What should ownership review establish?",
+          "options": [
+            "That both drawings must be deleted",
+            "That the shape has two unrelated identities",
+            "Whether 501 is intentionally shared or should be copied",
+            "That all references are physical file offsets"
+          ],
+          "correct_index": 2,
+          "explanation": "Sharing semantics affect editing and lifecycle.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-3-object-oriented-model-application-new-2",
+          "test_id": "pt-dbms-sql-3-object-oriented-model-application",
+          "question_text": "Shape 501 changes radius while retaining its OID. What can remain stable?",
+          "options": [
+            "Every attribute value",
+            "Every cached area result automatically",
+            "The number of database pages",
+            "Its identity and references to that identity"
+          ],
+          "correct_index": 3,
+          "explanation": "Identity can survive valid state changes.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-3-object-oriented-model-application-new-3",
+          "test_id": "pt-dbms-sql-3-object-oriented-model-application",
+          "question_text": "A traversal encounters a cycle of object references. What policy is needed?",
+          "options": [
+            "Termination and visited-identity handling",
+            "Assume native references are always acyclic",
+            "Delete every repeated label",
+            "Treat the cycle as a new root automatically"
+          ],
+          "correct_index": 0,
+          "explanation": "Reference graphs need explicit traversal logic.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-3-object-oriented-model-application-new-4",
+          "test_id": "pt-dbms-sql-3-object-oriented-model-application",
+          "question_text": "A new required field is added to a persistent class. What must be checked?",
+          "options": [
+            "Only that the new source compiles",
+            "Compatibility with existing stored objects",
+            "Only the field name length",
+            "Only the color of the class diagram"
+          ],
+          "correct_index": 1,
+          "explanation": "Stored-state evolution is a separate contract from compilation.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-3-object-oriented-model-application-new-5",
+          "test_id": "pt-dbms-sql-3-object-oriented-model-application",
+          "question_text": "Deleting one drawing would delete a shape still referenced by another. What is unresolved?",
+          "options": [
+            "Only type capitalization",
+            "Only the area formula spelling",
+            "Shared ownership and deletion policy",
+            "Only whether references exist"
+          ],
+          "correct_index": 2,
+          "explanation": "Lifecycle must account for the remaining valid references.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-3-object-oriented-model-application-new-6",
+          "test_id": "pt-dbms-sql-3-object-oriented-model-application",
+          "question_text": "A method computes area from a radius expressed in the wrong unit. Does encapsulation alone make it correct?",
+          "options": [
+            "Yes; methods guarantee valid measurements",
+            "Only if the method is public",
+            "Only if the object has an OID",
+            "No; state units and method semantics must agree"
+          ],
+          "correct_index": 3,
+          "explanation": "An object interface does not replace data meaning.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-3-object-oriented-model-application-new-7",
+          "test_id": "pt-dbms-sql-3-object-oriented-model-application",
+          "question_text": "An object holds a caller-provided identifier. Does that prove write permission?",
+          "options": [
+            "No; trusted authorization still needs enforcement",
+            "Yes; all OIDs are capabilities by definition",
+            "Only if the object is a Circle",
+            "Only if the label is unique"
+          ],
+          "correct_index": 0,
+          "explanation": "Identity knowledge is not automatically authority.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-3-object-oriented-model-application-new-8",
+          "test_id": "pt-dbms-sql-3-object-oriented-model-application",
+          "question_text": "A SQL mirror counts drawing references correctly. What remains unverified?",
+          "options": [
+            "The observed SQL fixture result",
+            "Native object persistence, loading, and dispatch",
+            "That synthetic identities were represented",
+            "That the query used its recorded engine"
+          ],
+          "correct_index": 1,
+          "explanation": "The teaching representation is not another product's implementation.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-3-object-oriented-model-application-new-9",
+          "test_id": "pt-dbms-sql-3-object-oriented-model-application",
+          "question_text": "A UI object contains temporary selection state. Should every reachable field be persisted automatically?",
+          "options": [
+            "Yes; every runtime field is a database fact",
+            "Only if the UI is small",
+            "No; durable authoritative state needs deliberate selection",
+            "Only if references are absent"
+          ],
+          "correct_index": 2,
+          "explanation": "Transient application details can be inappropriate persistent data.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-3-object-oriented-model-application-new-10",
+          "test_id": "pt-dbms-sql-3-object-oriented-model-application",
+          "question_text": "Two sessions edit one persistent object. What does the model label alone fail to specify?",
+          "options": [
+            "That the object has some state",
+            "That an identifier may exist",
+            "That references can be represented",
+            "The concurrency conflict and transaction policy"
+          ],
+          "correct_index": 3,
+          "explanation": "Operational guarantees depend on actual implementation.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "dsa-dbms-sql-oo-identity-mirror",
+      "slug": "oo-identity-mirror",
+      "title": "Keep distinct identities with equal object labels",
+      "difficulty": "Easy",
+      "task": "In this relational object-identity mirror, return oid and label for objects whose type_name is Circle, ordered by oid. Preserve distinct identities even when labels match. This does not implement a native object database.",
+      "schema_sql": "CREATE TABLE objects (oid INT PRIMARY KEY, type_name VARCHAR(20) NOT NULL, label VARCHAR(40) NOT NULL);",
+      "seed_sql": "INSERT INTO objects VALUES (502,'Circle','Sensor Circle'),(501,'Circle','Sensor Circle'),(503,'Rectangle','Panel');",
+      "expected": "oid\tlabel\n501\tSensor Circle\n502\tSensor Circle",
+      "ordering": "oid ascending",
+      "constraints": [
+        "OID values uniquely identify objects",
+        "Labels are not keys",
+        "Type names use consistent fixture spelling"
+      ],
+      "edge_cases": [
+        "Equal state labels do not merge identities",
+        "Other types are excluded",
+        "No matching objects returns no rows"
+      ],
+      "hints": [
+        "Select the identity",
+        "Filter the explicit type label"
+      ],
+      "solution_sql": "SELECT oid,label FROM objects WHERE type_name='Circle' ORDER BY oid;",
+      "explanation": "The SQL mirror retains both object identities instead of treating equal labels as one object.",
+      "validation_cases": [
+        {
+          "seed_sql": "",
+          "expected": ""
+        },
+        {
+          "seed_sql": "INSERT INTO objects VALUES (1,'Rectangle','Sensor Circle');",
+          "expected": ""
+        }
+      ]
+    },
+    {
+      "id": "dsa-dbms-sql-oo-shared-reference",
+      "slug": "oo-shared-reference",
+      "title": "Count drawings sharing each object identity",
+      "difficulty": "Medium",
+      "task": "Return oid, label, drawing_count for every object in the SQL mirror, including unreferenced objects. Count drawing_refs rows linked by object identity, and order by oid. The pair drawing_id, oid is unique. Do not infer a native deletion or ownership policy.",
+      "schema_sql": "CREATE TABLE objects (oid INT PRIMARY KEY, type_name VARCHAR(20) NOT NULL, label VARCHAR(40) NOT NULL);\nCREATE TABLE drawing_refs (drawing_id INT NOT NULL, oid INT NOT NULL, PRIMARY KEY(drawing_id,oid));",
+      "seed_sql": "INSERT INTO objects VALUES (501,'Circle','Sensor'),(502,'Circle','Sensor'),(503,'Rectangle','Panel'); INSERT INTO drawing_refs VALUES (100,501),(200,501),(100,502);",
+      "expected": "oid\tlabel\tdrawing_count\n501\tSensor\t2\n502\tSensor\t1\n503\tPanel\t0",
+      "ordering": "oid ascending",
+      "constraints": [
+        "Reference fixture identities exist",
+        "One reference per drawing/object pair",
+        "Object labels may repeat"
+      ],
+      "edge_cases": [
+        "One object can be shared by two drawings",
+        "Unreferenced objects retain zero count",
+        "Different objects with equal labels remain separate"
+      ],
+      "hints": [
+        "Preserve all objects with a left join",
+        "Group by object identity and count matched drawing references"
+      ],
+      "solution_sql": "SELECT o.oid,o.label,COUNT(r.drawing_id) AS drawing_count FROM objects o LEFT JOIN drawing_refs r ON r.oid=o.oid GROUP BY o.oid,o.label ORDER BY o.oid;",
+      "explanation": "Counting references at object grain exposes sharing without copying or merging object identity. The query does not test native persistence APIs.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO objects VALUES (1,'Circle','A');",
+          "expected": "oid\tlabel\tdrawing_count\n1\tA\t0"
+        },
+        {
+          "seed_sql": "INSERT INTO objects VALUES (1,'Circle','A'); INSERT INTO drawing_refs VALUES (7,1),(8,1);",
+          "expected": "oid\tlabel\tdrawing_count\n1\tA\t2"
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-3-object-oriented-model-1",
+      "test_id": "pt-dbms-sql-3-object-oriented-model",
+      "question_text": "In the object-oriented data model, what bundles together in a single object?",
+      "options": [
+        "Only attributes (state)",
+        "Only methods (behavior)",
+        "Both state (attributes) and behavior (methods)",
+        "Only foreign keys"
+      ],
+      "correct_index": 2,
+      "explanation": "The defining feature of the OO model is that an object bundles state and behavior together, mirroring object-oriented programming languages.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-3-object-oriented-model-2",
+      "test_id": "pt-dbms-sql-3-object-oriented-model",
+      "question_text": "What is an Object Identifier (OID)?",
+      "options": [
+        "A value derived from an object's attributes, like a relational primary key",
+        "A system-generated identity independent of the object's attribute values",
+        "A foreign key referencing another table",
+        "A hash of the object's class name"
+      ],
+      "correct_index": 1,
+      "explanation": "Unlike a relational primary key (derived from data), an OID is assigned by the system and remains stable even if all attribute values change.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-3-object-oriented-model-3",
+      "test_id": "pt-dbms-sql-3-object-oriented-model",
+      "question_text": "Which of these is a real-world domain where object-oriented databases saw practical adoption?",
+      "options": [
+        "Simple two-column lookup tables",
+        "CAD/CAM systems with deeply nested complex objects",
+        "Basic key-value session caching",
+        "Flat CSV file storage"
+      ],
+      "correct_index": 1,
+      "explanation": "CAD/CAM, telecom configuration, and multimedia repositories are classic domains where OO databases' native support for complex, nested objects proved useful.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-3-object-oriented-model-4",
+      "test_id": "pt-dbms-sql-3-object-oriented-model",
+      "question_text": "What major advantage does the object-oriented model claim over the relational model?",
+      "options": [
+        "Better support for SQL reporting",
+        "Elimination of the impedance mismatch, since application objects are persisted directly without translation",
+        "Simpler horizontal scaling across clusters",
+        "Stronger support for ad-hoc declarative queries"
+      ],
+      "correct_index": 1,
+      "explanation": "Because objects are stored directly as objects (with methods and inheritance intact), there is no translation layer between in-memory application objects and stored data.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-3-object-oriented-model-5",
+      "test_id": "pt-dbms-sql-3-object-oriented-model",
+      "question_text": "What has historically limited mainstream adoption of object-oriented databases?",
+      "options": [
+        "They cannot represent inheritance",
+        "Lack of a universally adopted declarative query language comparable to SQL, weakening ad-hoc querying and reporting",
+        "They cannot store any attribute data",
+        "They require no schema at all, making them insecure"
+      ],
+      "correct_index": 1,
+      "explanation": "Unlike SQL, no OO query language (e.g., ODMG's OQL) achieved comparable industry-wide adoption, which hurt tooling, reporting, and general practicality.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-3-object-oriented-model-6",
+      "test_id": "pt-dbms-sql-3-object-oriented-model",
+      "question_text": "In an object-oriented database, how would a Drawing object typically reference a collection of Shape objects it contains?",
+      "options": [
+        "Via a separate junction table with foreign keys",
+        "Via direct object references (OIDs) to the Shape objects, with no join required",
+        "Only through a document embedded as JSON",
+        "Through a column-family wide row"
+      ],
+      "correct_index": 1,
+      "explanation": "OO databases store direct object-to-object references via OIDs, allowing navigation without performing relational joins.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-3-object-oriented-model-7",
+      "test_id": "pt-dbms-sql-3-object-oriented-model",
+      "question_text": "How does the Object-Oriented model fundamentally differ from the Object-Relational model?",
+      "options": [
+        "They are the same model with different names",
+        "The OO model has no underlying table structure at all (objects are the fundamental unit), while the Object-Relational model is still table/SQL-based but extended with OO features",
+        "The Object-Relational model cannot support inheritance",
+        "The OO model always requires a schema-free document store"
+      ],
+      "correct_index": 1,
+      "explanation": "The OO model is a from-scratch paradigm built around objects, whereas the Object-Relational model remains fundamentally relational (tables, SQL) with added OO extensions like user-defined types.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-3-object-oriented-model-8",
+      "test_id": "pt-dbms-sql-3-object-oriented-model",
+      "question_text": "Why can querying 'all Shapes' in an OO database naturally return both Circle and Rectangle objects?",
+      "options": [
+        "Because SQL UNION is used behind the scenes",
+        "Because inheritance is a native database feature, so subclasses are polymorphically included when querying the superclass",
+        "Because Circle and Rectangle are stored in the same table with a type column",
+        "Because OO databases ignore class hierarchies"
+      ],
+      "correct_index": 1,
+      "explanation": "Since class inheritance is a first-class feature of the OO model, querying a superclass polymorphically includes instances of its subclasses.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "coordinator",
+    "independent_review": "unavailable; no agent tools",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Definitions and examples checked against questions; no plagiarism certification.",
+    "existing_question_corrections": [
+      "tq-dbms-sql-3-object-oriented-model-2",
+      "tq-dbms-sql-3-object-oriented-model-4",
+      "tq-dbms-sql-3-object-oriented-model-5",
+      "tq-dbms-sql-3-object-oriented-model-6",
+      "tq-dbms-sql-3-object-oriented-model-7",
+      "tq-dbms-sql-3-object-oriented-model-8"
+    ],
+    "canonical_answer_indices_preserved": true
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-3-object-oriented-model",
+    "original_note_sha256": "84ca97f6b63912dc5de47eeb3f55a1a43552d2723378401e75bf54bfbbe9d54b",
+    "status": "paired migration prepared; not applied"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Subtype identity and shared references in a drawing model",
+      "description": "Type relationships and object references are distinct. Drawings 100 and 200 share Shape 501; Shape 502 can have equal labels without being the same identity.",
+      "columns": [
+        "Element",
+        "Relationship kind",
+        "Meaning"
+      ],
+      "rows": [
+        [
+          "Circle → Shape",
+          "Subtype",
+          "Circle is a kind of Shape"
+        ],
+        [
+          "Rectangle → Shape",
+          "Subtype",
+          "Rectangle is a kind of Shape"
+        ],
+        [
+          "Drawing 100 → Shape 501",
+          "Object reference",
+          "Contains or uses identity 501"
+        ],
+        [
+          "Drawing 200 → Shape 501",
+          "Shared reference",
+          "Another drawing refers to the same identity"
+        ],
+        [
+          "Shape 501 versus Shape 502",
+          "Distinct identity",
+          "Equal labels do not merge the objects"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "coordinator review",
+    "server_rendering": "passed",
+    "browser_rendering": "unverified",
+    "independent_review": "unavailable; no agent tools",
+    "rendering_check": "2026-10-29: actual LessonBlock/TopicDiagrams rendering; 49 authored-package checks passed. Browser rendering unverified."
+  },
+  "sql_verification": {
+    "engine": "11.8.6-MariaDB-0+deb13u1 from Debian",
+    "scope": "MariaDB compatibility execution; exact MySQL 8.4/provider execution unverified",
+    "fingerprint": "cbbb75f5ce644fa8d935d457b5f513f7e03066680b0504fe289a43bb7852a5e9",
+    "cases": [
+      {
+        "problem": "oo-identity-mirror",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "oo-identity-mirror",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "oo-identity-mirror",
+        "case": 2,
+        "passed": true
+      },
+      {
+        "problem": "oo-shared-reference",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "oo-shared-reference",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "oo-shared-reference",
+        "case": 2,
+        "passed": true
+      }
+    ],
+    "all_passed": true
+  }
+}

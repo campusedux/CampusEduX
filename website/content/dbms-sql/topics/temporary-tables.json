@@ -1,0 +1,640 @@
+{
+  "source_ref": "chapter-9-ddl-and-schema-design/temporary-tables",
+  "slug": "temporary-tables",
+  "title": "Temporary Tables",
+  "description": "Use connection-scoped working tables for inspectable stages, keep pooling and transaction lifetimes explicit, and avoid inferring persistent integrity or recovery from temporary lab state.",
+  "dialect": "MySQL 8.4",
+  "notes": "## A temporary table is scoped working state\n\nA temporary table provides a real table interface for intermediate data with a lifetime and visibility defined by its engine and declaration. In the illustrated MySQL setting, a temporary table belongs to the creating session and is removed when that session ends. It is useful for a staged campus report whose intermediate population should not become a permanent application dataset.\n\nTemporary does not mean imaginary. The table has columns, accepted rows and applicable constraints, and its statements still consume resources. It can help make a complex calculation inspectable, but it does not automatically make the calculation faster or eliminate the need to reason about the input population. Scope is its defining characteristic, rather than a promise of negligible operational cost.\n\n## Choose an intermediate result with a clear grain\n\nSuppose a report summarizes supplied study hours by department. An intermediate table department_hours can hold one row per department with a computed total. Its heading and key explain the report's grain. If the source contains several occurrences for a department, the aggregation should combine those values according to the stated question rather than copy an arbitrary row.\n\nAlternatively, a temporary selected_students table can preserve one row per active student before later calculations. These are different intermediate contracts. A useful staged design names both the population and identity at each stage. Materializing the wrong grain does not become correct merely because the working table is easy to inspect.\n\n## Creation and loading can be separate steps\n\nAn explicit CREATE TEMPORARY TABLE defines the accepted target shape before an INSERT SELECT loads rows. That separation is valuable when the task requires a primary key or a particular required-value rule. Query-derived table creation can be convenient too, but it does not automatically clone every source constraint and index.\n\nFor the first exercise, the target contains department_id and total_hours, with one row per department represented in the source. Empty source input therefore produces an empty report, rather than inventing every department in the institution. If the contract wanted departments with no source hours as zero, it would need an explicit full department universe and a preserving calculation.\n\n```sql\nCREATE TEMPORARY TABLE department_hours (\n  department_id INT PRIMARY KEY,\n  total_hours BIGINT NOT NULL\n);\n```\n\n## Session scope is not request scope\n\nA web request is an application concept, while a database session is a physical connection context. A pool can send successive statements from one logical workflow to different connections unless the provider's supported transaction or connection contract pins them appropriately. A temporary table created on one connection may therefore be absent from the connection used for a later statement.\n\nThe opposite problem can also occur: a pooled connection may outlive the request that created working state. Reusing that connection can leave a stale temporary definition or row population until it is explicitly cleared or the session actually ends. Define creation, use and cleanup within the supported connection scope rather than assuming an HTTP request boundary automatically controls database-session lifetime.\n\n## Product-specific temporary forms differ\n\nPostgreSQL supports temporary-table behaviours such as ON COMMIT DROP for its relevant declaration forms. That option removes the table at the end of the creating transaction under its rules. MySQL does not provide the same ON COMMIT contract for the illustrated temporary tables. A transaction boundary should not be assumed to remove every product's temporary definitions automatically.\n\nSQL Server uses local and global temporary-table naming forms with distinct visibility and lifetime rules. The global form's removal conditions involve the creating session and active references under its product settings; it is inaccurate to summarize them as every session must disconnect. These comparisons are conceptual boundaries, not claims that the local MySQL-style fixtures executed another product's temporary-table implementation.\n\n## A transaction can affect rows differently from definitions\n\nTemporary-table definition changes and temporary row changes do not always share the same transactional behaviour. In MySQL, special rules around temporary creation and removal do not make their definitions fully rollbackable. Row operations on a transactional temporary engine can have their own rollback semantics. Distinguish what happens to the object from what happens to rows written during a transaction.\n\nThis matters when a lab says create, write, roll back. Students should identify which part is under test and where creation occurs. The exercises here define the working stages explicitly and inspect final rows without making an unsupported general rollback claim. They do not establish a production multi-step recovery guarantee merely because their objects are short-lived.\n\n## Temporary storage can still create real cost\n\nA materialized stage writes and reads intermediate state, and supported indexes may add maintenance cost. That can be worthwhile when the stage is reused or helps the optimizer with a difficult workload, but it can also add work to a query that was already efficient. Table size and engine behaviour determine whether the temporary design is useful.\n\nResource pressure can include memory, temporary storage and concurrency contention. SQL Server tempdb has its own workload considerations, while MySQL and PostgreSQL manage their temporary resources differently. Do not label every temporary table as memory-only or claim that short lifetime guarantees cheap execution. Measure the actual report rather than assume the word temporary is a performance optimization.\n\n## Integrity support is narrower than a persistent-table analogy\n\nA temporary table can enforce supported primary-key and required-value constraints, but foreign-key support and interactions with permanent tables can be restricted. In particular, a MySQL temporary-table fixture should not be used to claim native persistent referential actions passed. Those actions require an appropriate persistent-object test under the intended engine and settings.\n\nThe report exercises use simple local keys and required numeric inputs. They do not bypass a failed foreign key or disable integrity enforcement to make a stage run. Where an input proposal names no selected student, the defined join semantics determine whether it contributes to the report; that query result is not proof that an authoritative source accepted or rejected the proposal at insertion time.\n\n## Explicit stage names improve reviewability\n\nNames such as selected_students and student_credit_totals communicate different roles. The first defines who is a candidate, and the second summarizes accepted matching facts for those candidates. This is clearer than treating several temporary tables as anonymous caches whose grain and freshness no one can state. A working stage should have one documented meaning within its workflow.\n\nQuery aliases still help distinguish references, but they do not extend the lifetime of a temporary table or create a persistent namespace. Product-specific limits on repeated temporary-table references also matter. A query that happens to work on MariaDB is not proof that exact MySQL permits every self-reference or reopening pattern. The exercises avoid unnecessary repeated references within a statement.\n\n## Preserve candidates when zero is meaningful\n\nThe second exercise begins with active students as an explicit candidate universe. It then attaches enrollment credits through a preserving join so a selected student with no enrollment remains visible with zero total. Starting only from enrollments would lose that student. This population decision matters independently of whether the intermediate result is temporary or permanent.\n\nAn inactive student with enrollment rows should not enter the active report. Several enrollment occurrences should contribute their supplied credits, while repeated display names should not merge student identities. Each of those cases tests a distinct part of the staged contract. A temporary table makes the steps inspectable; the correctness comes from the defined selection, join and aggregation.\n\n## Transient state is not an archival contract\n\nOrdinary durable backup and recovery workflows should not be assumed to preserve a session's temporary working state as application history. A person can explicitly export a temporary result, but that creates another artifact with its own lifecycle. Temporary storage is not a substitute for a durable accepted record or an audit event that the application must retain.\n\nIf an intermediate result must survive reconnects or be shared reliably across requests, a different design may be needed. That decision requires access, freshness and cleanup policies. Do not quietly turn a temporary reporting stage into an authoritative permanent table merely to avoid a pooling problem. Choose the storage lifetime from the required behaviour and supported environment.\n\n## Verify stage contracts and scope honestly\n\nThe introductory exercise checks department aggregation with empty input and several occurrences per department. The second checks selected identities, zero-credit candidates, inactive rows and multiple enrollment facts. Their outputs have explicit deterministic order, while their temporary definitions remain connection-local. These cases establish the requested transformations rather than general production resource efficiency.\n\nRecorded MariaDB compatibility execution covers those statements and synthetic fixtures. Cross-session pooling behaviour, SQL Server global lifetime, PostgreSQL ON COMMIT execution, native persistent references and exact MySQL/provider support remain separate checks. A complete explanation names these limits so students can use temporary tables deliberately without mistaking scoped working state for universal persistence, authorization or performance guarantees.\n",
+  "references": [
+    {
+      "title": "MySQL 8.4 CREATE TEMPORARY TABLE",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/create-temporary-table.html"
+    },
+    {
+      "title": "PostgreSQL 18 CREATE TABLE",
+      "url": "https://www.postgresql.org/docs/18/sql-createtable.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-9-temporary-tables",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-9-temporary-tables-1",
+          "test_id": "pt-dbms-sql-9-temporary-tables",
+          "question_text": "What scope defines the illustrated MySQL temporary table?",
+          "options": [
+            "It cannot contain any data",
+            "Its creating session controls visibility and lifetime",
+            "It must always be empty",
+            "It can only contain one column"
+          ],
+          "correct_index": 1,
+          "explanation": "Do not infer that every product has the same transaction-end policy.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-9-temporary-tables-2",
+          "test_id": "pt-dbms-sql-9-temporary-tables",
+          "question_text": "Why must SQL Server local and global temporary-table lifetimes be read from product rules?",
+          "options": [
+            "They are identical in every respect",
+            "They have different visibility and removal conditions involving the creating session and relevant active references",
+            "##temp is local; #temp is global",
+            "#temp tables persist forever like normal tables"
+          ],
+          "correct_index": 1,
+          "explanation": "Global lifetime is not simply every connected session must disconnect.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-9-temporary-tables-3",
+          "test_id": "pt-dbms-sql-9-temporary-tables",
+          "question_text": "What does PostgreSQL's ON COMMIT DROP option do for a temporary table?",
+          "options": [
+            "Prevents the table from ever being dropped",
+            "Automatically drops the table at the end of the transaction that created it",
+            "Drops the table only when the database server restarts",
+            "Converts the temp table into a permanent table"
+          ],
+          "correct_index": 1,
+          "explanation": "ON COMMIT DROP scopes the temp table's lifetime to just the current transaction rather than the whole session.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-9-temporary-tables-4",
+          "test_id": "pt-dbms-sql-9-temporary-tables",
+          "question_text": "Why can heavy use of temporary tables become a serious performance concern specifically on SQL Server?",
+          "options": [
+            "Temporary tables are always stored in RAM with no limits",
+            "Because they are stored in tempdb, and contention there under heavy concurrent use is a well-known bottleneck",
+            "SQL Server does not support temporary tables at all",
+            "Temporary tables automatically lock the entire database"
+          ],
+          "correct_index": 1,
+          "explanation": "tempdb contention from heavy temp-table use is a recognized SQL Server operational issue.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-9-temporary-tables-5",
+          "test_id": "pt-dbms-sql-9-temporary-tables",
+          "question_text": "Why might an application see a 'table not found' error for a temp table it just created, in an environment using connection pooling?",
+          "options": [
+            "Temp tables are never supported with connection pooling",
+            "A subsequent operation may run on a different physical pooled connection that never created and cannot see that session-scoped temp table",
+            "The temp table was automatically renamed",
+            "The database ran out of storage"
+          ],
+          "correct_index": 1,
+          "explanation": "Session-scoped temp tables aren't visible across different physical connections, which pooling can silently switch between.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-9-temporary-tables-6",
+          "test_id": "pt-dbms-sql-9-temporary-tables",
+          "question_text": "Should ordinary durable recovery be assumed to restore a session’s temporary working state?",
+          "options": [
+            "Yes, always, just like permanent tables",
+            "No; transient state is not a durable application-record contract",
+            "Only if explicitly requested at creation time",
+            "Only global temp tables are backed up"
+          ],
+          "correct_index": 1,
+          "explanation": "Explicit export is possible but creates a different artifact and lifecycle.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-9-temporary-tables-7",
+          "test_id": "pt-dbms-sql-9-temporary-tables",
+          "question_text": "What can staged temporary tables improve without guaranteeing better performance?",
+          "options": [
+            "It always makes the query run faster with zero trade-offs",
+            "Inspection of intermediate contracts, with possible additional materialization cost",
+            "It eliminates the need for any indexes",
+            "It automatically parallelizes the whole report"
+          ],
+          "correct_index": 1,
+          "explanation": "Measure actual resource and optimizer effects rather than assuming a speedup.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-9-temporary-tables-8",
+          "test_id": "pt-dbms-sql-9-temporary-tables",
+          "question_text": "What is a common constraint-related limitation involving temporary tables in several engines?",
+          "options": [
+            "Temporary tables can never have a primary key",
+            "Some engines restrict or disallow foreign keys between temporary tables and permanent tables",
+            "Temporary tables must always have exactly one column",
+            "Temporary tables cannot store numeric data"
+          ],
+          "correct_index": 1,
+          "explanation": "Cross-referencing constraints between temp and permanent tables are limited or disallowed in a number of engines.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-9-temporary-tables-new-9",
+          "test_id": "pt-dbms-sql-9-temporary-tables",
+          "question_text": "Does a logical web request necessarily use one database session?",
+          "options": [
+            "Yes, on every provider",
+            "No",
+            "Only if it has headings",
+            "Only when SQL is short"
+          ],
+          "correct_index": 1,
+          "explanation": "Connection pooling needs an explicit supported scope.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-9-temporary-tables-new-10",
+          "test_id": "pt-dbms-sql-9-temporary-tables",
+          "question_text": "What can happen if a pooled physical connection outlives a request?",
+          "options": [
+            "All tables automatically become permanent",
+            "Every constraint disappears",
+            "Its temporary state can remain until cleanup or session end",
+            "The request gains admin rights"
+          ],
+          "correct_index": 2,
+          "explanation": "Request lifetime and connection lifetime differ.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-9-temporary-tables-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-9-temporary-tables-application-new-1",
+          "test_id": "pt-dbms-sql-9-temporary-tables-application",
+          "question_text": "Does empty hours input imply rows for every institution department?",
+          "options": [
+            "Yes, automatically",
+            "Only with GROUP BY",
+            "No, unless a full department universe is supplied",
+            "Only with a key"
+          ],
+          "correct_index": 2,
+          "explanation": "The source defines the stated report population.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-9-temporary-tables-application-new-2",
+          "test_id": "pt-dbms-sql-9-temporary-tables-application",
+          "question_text": "Why explicitly define an intermediate primary key?",
+          "options": [
+            "To guarantee all foreign keys work",
+            "To avoid all storage cost",
+            "To prove every provider supports it",
+            "To state and enforce the intended stage identity"
+          ],
+          "correct_index": 3,
+          "explanation": "Target constraints should match the grain.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-9-temporary-tables-application-new-3",
+          "test_id": "pt-dbms-sql-9-temporary-tables-application",
+          "question_text": "What preserves an active student with no enrollments?",
+          "options": [
+            "A candidate-driven preserving join with the defined zero policy",
+            "Starting only from enrollments",
+            "DISTINCT name alone",
+            "An uncorrelated count"
+          ],
+          "correct_index": 0,
+          "explanation": "Absence semantics require the full candidate universe.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-9-temporary-tables-application-new-4",
+          "test_id": "pt-dbms-sql-9-temporary-tables-application",
+          "question_text": "Does temporary mean memory-only and always cheap?",
+          "options": [
+            "Yes",
+            "No",
+            "Only for text",
+            "Only with a short name"
+          ],
+          "correct_index": 1,
+          "explanation": "Materialized state can consume real resources.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-9-temporary-tables-application-new-5",
+          "test_id": "pt-dbms-sql-9-temporary-tables-application",
+          "question_text": "Does MySQL temporary execution verify PostgreSQL ON COMMIT DROP?",
+          "options": [
+            "Yes",
+            "Only with two stages",
+            "No",
+            "Only if no rows exist"
+          ],
+          "correct_index": 2,
+          "explanation": "The features belong to different engine contracts.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-9-temporary-tables-application-new-6",
+          "test_id": "pt-dbms-sql-9-temporary-tables-application",
+          "question_text": "What is one reason to avoid repeated temporary references in an unverified target query?",
+          "options": [
+            "Aliases are universally forbidden",
+            "Temporary tables have no columns",
+            "All joins are impossible",
+            "Exact MySQL can have reopening restrictions that a compatible engine differs on"
+          ],
+          "correct_index": 3,
+          "explanation": "Compatibility observations do not erase product-specific restrictions.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-9-temporary-tables-application-new-7",
+          "test_id": "pt-dbms-sql-9-temporary-tables-application",
+          "question_text": "Can a table name document a useful stage role?",
+          "options": [
+            "Yes, alongside its heading and grain",
+            "No, names have no review value",
+            "Only if it creates privileges",
+            "Only if it is permanent"
+          ],
+          "correct_index": 0,
+          "explanation": "The name helps readers understand the defined intermediate contract.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-9-temporary-tables-application-new-8",
+          "test_id": "pt-dbms-sql-9-temporary-tables-application",
+          "question_text": "Does a zero total prove no external study occurred?",
+          "options": [
+            "Yes",
+            "No; it reflects the supplied accepted report facts",
+            "Only for active students",
+            "Only if sorted"
+          ],
+          "correct_index": 1,
+          "explanation": "A database report is limited by its defined inputs.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-9-temporary-tables-application-new-9",
+          "test_id": "pt-dbms-sql-9-temporary-tables-application",
+          "question_text": "Why keep student_id when names repeat?",
+          "options": [
+            "To allocate temporary storage automatically",
+            "To remove every duplicate",
+            "To retain distinct candidate identities",
+            "To define session lifetime"
+          ],
+          "correct_index": 2,
+          "explanation": "Descriptions need not be unique.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-9-temporary-tables-application-new-10",
+          "test_id": "pt-dbms-sql-9-temporary-tables-application",
+          "question_text": "What do the recorded cases establish?",
+          "options": [
+            "Production pooling guarantees",
+            "Universal backup behaviour",
+            "Every native foreign-key action",
+            "The stated synthetic stage transformations on the recorded engine"
+          ],
+          "correct_index": 3,
+          "explanation": "Scope claims must follow actual execution.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cx-temporary-department-hours",
+      "slug": "temporary-department-hours",
+      "title": "Materialize one aggregate row per represented department",
+      "difficulty": "Easy",
+      "task": "Create TEMPORARY department_hours(department_id INT PRIMARY KEY,total_hours BIGINT NOT NULL). Insert one grouped sum per department represented in hours_input. Return department_id,total_hours. Do not invent departments absent from the input.",
+      "schema_sql": "CREATE TABLE hours_input (department_id INT NOT NULL,hours INT NOT NULL);",
+      "seed_sql": "INSERT INTO hours_input VALUES (2,4),(1,2),(1,3);",
+      "expected": "department_id\ttotal_hours\n1\t5\n2\t4",
+      "ordering": "Ascending department_id.",
+      "constraints": [
+        "One stage row per represented department.",
+        "Inputs are supplied additive hour occurrences."
+      ],
+      "edge_cases": [
+        "Empty input produces no aggregate rows.",
+        "Repeated department occurrences are combined."
+      ],
+      "hints": [
+        "Define the target heading first.",
+        "Use GROUP BY department_id for the copy."
+      ],
+      "solution_sql": "CREATE TEMPORARY TABLE department_hours (department_id INT PRIMARY KEY,total_hours BIGINT NOT NULL); INSERT INTO department_hours SELECT department_id,SUM(hours) FROM hours_input GROUP BY department_id; SELECT department_id,total_hours FROM department_hours ORDER BY department_id;",
+      "explanation": "The materialized stage makes the department grain explicit before the ordered report reads it.",
+      "validation_cases": [
+        {
+          "seed_sql": "",
+          "expected": ""
+        },
+        {
+          "seed_sql": "INSERT INTO hours_input VALUES (8,0),(8,5),(7,2);",
+          "expected": "department_id\ttotal_hours\n7\t2\n8\t5"
+        }
+      ]
+    },
+    {
+      "id": "cx-temporary-staged-active-credits",
+      "slug": "temporary-staged-active-credits",
+      "title": "Preserve active candidates through two reporting stages",
+      "difficulty": "Medium",
+      "task": "Create TEMPORARY selected_students with student_id and name for active=1 student_input rows. Create TEMPORARY student_credit_totals with student_id and total_credits from a preserving join of selected_students to enrollment_input. Every selected student appears once, with zero when no matching enrollment exists. Return student_id,name,total_credits by joining the two stages.",
+      "schema_sql": "CREATE TABLE student_input (student_id INT PRIMARY KEY,name VARCHAR(40) NOT NULL,active INT NOT NULL); CREATE TABLE enrollment_input (student_id INT NOT NULL,credits INT NOT NULL);",
+      "seed_sql": "INSERT INTO student_input VALUES (1,'Asha',1),(2,'Asha',1),(3,'Ben',0); INSERT INTO enrollment_input VALUES (1,3),(1,4),(3,9);",
+      "expected": "student_id\tname\ttotal_credits\n1\tAsha\t7\n2\tAsha\t0",
+      "ordering": "Ascending student_id.",
+      "constraints": [
+        "All stages execute within the same database session.",
+        "Preserve distinct student identities and the supplied credit occurrences."
+      ],
+      "edge_cases": [
+        "Selected students without enrollments remain with zero.",
+        "Inactive students do not enter the stage.",
+        "Empty input returns no invented candidate."
+      ],
+      "hints": [
+        "Select active candidates before aggregating their matching credits.",
+        "Use LEFT JOIN and COALESCE at the aggregate boundary."
+      ],
+      "solution_sql": "CREATE TEMPORARY TABLE selected_students (student_id INT PRIMARY KEY,name VARCHAR(40) NOT NULL); INSERT INTO selected_students SELECT student_id,name FROM student_input WHERE active=1; CREATE TEMPORARY TABLE student_credit_totals (student_id INT PRIMARY KEY,total_credits BIGINT NOT NULL); INSERT INTO student_credit_totals SELECT s.student_id,COALESCE(SUM(e.credits),0) FROM selected_students s LEFT JOIN enrollment_input e ON e.student_id=s.student_id GROUP BY s.student_id; SELECT s.student_id,s.name,t.total_credits FROM selected_students s JOIN student_credit_totals t ON t.student_id=s.student_id ORDER BY s.student_id;",
+      "explanation": "One stage defines candidate identity; the next attaches the correctly scoped aggregate without losing zero-match candidates.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO student_input VALUES (7,'Mira',1); INSERT INTO enrollment_input VALUES (99,8);",
+          "expected": "student_id\tname\ttotal_credits\n7\tMira\t0"
+        },
+        {
+          "seed_sql": "",
+          "expected": ""
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-9-temporary-tables-1",
+      "test_id": "pt-dbms-sql-9-temporary-tables",
+      "question_text": "What defines a temporary table's key characteristic compared to a regular table?",
+      "options": [
+        "It cannot contain any data",
+        "Its lifetime/visibility is scoped to a session or transaction, and it is automatically dropped when that scope ends",
+        "It must always be empty",
+        "It can only contain one column"
+      ],
+      "correct_index": 1,
+      "explanation": "Temporary tables exist only for the duration of a session or transaction and are auto-dropped afterward.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-9-temporary-tables-2",
+      "test_id": "pt-dbms-sql-9-temporary-tables",
+      "question_text": "In SQL Server, what is the difference between #temp and ##temp tables?",
+      "options": [
+        "They are identical in every respect",
+        "#temp is local to the creating session; ##temp is global, visible to all sessions until all referencing sessions disconnect",
+        "##temp is local; #temp is global",
+        "#temp tables persist forever like normal tables"
+      ],
+      "correct_index": 1,
+      "explanation": "The single-# prefix denotes a session-local temp table, while double-# denotes a global temp table visible across sessions.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-9-temporary-tables-3",
+      "test_id": "pt-dbms-sql-9-temporary-tables",
+      "question_text": "What does PostgreSQL's ON COMMIT DROP option do for a temporary table?",
+      "options": [
+        "Prevents the table from ever being dropped",
+        "Automatically drops the table at the end of the transaction that created it",
+        "Drops the table only when the database server restarts",
+        "Converts the temp table into a permanent table"
+      ],
+      "correct_index": 1,
+      "explanation": "ON COMMIT DROP scopes the temp table's lifetime to just the current transaction rather than the whole session.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-9-temporary-tables-4",
+      "test_id": "pt-dbms-sql-9-temporary-tables",
+      "question_text": "Why can heavy use of temporary tables become a serious performance concern specifically on SQL Server?",
+      "options": [
+        "Temporary tables are always stored in RAM with no limits",
+        "Because they are stored in tempdb, and contention there under heavy concurrent use is a well-known bottleneck",
+        "SQL Server does not support temporary tables at all",
+        "Temporary tables automatically lock the entire database"
+      ],
+      "correct_index": 1,
+      "explanation": "tempdb contention from heavy temp-table use is a recognized SQL Server operational issue.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-9-temporary-tables-5",
+      "test_id": "pt-dbms-sql-9-temporary-tables",
+      "question_text": "Why might an application see a 'table not found' error for a temp table it just created, in an environment using connection pooling?",
+      "options": [
+        "Temp tables are never supported with connection pooling",
+        "A subsequent operation may run on a different physical pooled connection that never created and cannot see that session-scoped temp table",
+        "The temp table was automatically renamed",
+        "The database ran out of storage"
+      ],
+      "correct_index": 1,
+      "explanation": "Session-scoped temp tables aren't visible across different physical connections, which pooling can silently switch between.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-9-temporary-tables-6",
+      "test_id": "pt-dbms-sql-9-temporary-tables",
+      "question_text": "Are temporary tables included in a database's standard backup and restore process?",
+      "options": [
+        "Yes, always, just like permanent tables",
+        "No — they are excluded by design since they are inherently transient",
+        "Only if explicitly requested at creation time",
+        "Only global temp tables are backed up"
+      ],
+      "correct_index": 1,
+      "explanation": "Temporary tables are transient by nature and are not part of standard backup/restore workflows.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-9-temporary-tables-7",
+      "test_id": "pt-dbms-sql-9-temporary-tables",
+      "question_text": "What is a practical benefit of breaking a complex report query into several staged temporary tables instead of one deeply nested query?",
+      "options": [
+        "It always makes the query run faster with zero trade-offs",
+        "Each step becomes easier to inspect and debug independently, at the cost of extra I/O for the intermediate materializations",
+        "It eliminates the need for any indexes",
+        "It automatically parallelizes the whole report"
+      ],
+      "correct_index": 1,
+      "explanation": "Staged temp tables trade some I/O overhead for much greater readability and debuggability of each intermediate step.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-9-temporary-tables-8",
+      "test_id": "pt-dbms-sql-9-temporary-tables",
+      "question_text": "What is a common constraint-related limitation involving temporary tables in several engines?",
+      "options": [
+        "Temporary tables can never have a primary key",
+        "Some engines restrict or disallow foreign keys between temporary tables and permanent tables",
+        "Temporary tables must always have exactly one column",
+        "Temporary tables cannot store numeric data"
+      ],
+      "correct_index": 1,
+      "explanation": "Cross-referencing constraints between temp and permanent tables are limited or disallowed in a number of engines.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "coordinator",
+    "independent_review": "unavailable; no agent tools",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Definitions and examples checked against questions; no plagiarism certification.",
+    "existing_question_corrections": [
+      "tq-dbms-sql-9-temporary-tables-1",
+      "tq-dbms-sql-9-temporary-tables-2",
+      "tq-dbms-sql-9-temporary-tables-6",
+      "tq-dbms-sql-9-temporary-tables-7"
+    ],
+    "canonical_answer_indices_preserved": true,
+    "batch_review": {
+      "reviewer": "coordinator",
+      "independent": false,
+      "scope": "This new package: explained definitions and boundaries, retained source question identities/canonical indices, new correct answers and explanations, exercise solutions and recorded fixtures, diagram trace and prepared integration.",
+      "execution_evidence": "Focused MariaDB reference cases and selected actual LessonBlock rendering passed; no browser QA or exact MySQL/provider execution.",
+      "source_preservation": "Original snapshots retained; eight retained exercises across this continuation matched source identity, difficulty, schema, seed and trailing checker.",
+      "limits": "No independent worker available. Output fixtures do not prove arbitrary student submissions used a requested technique. Native PostgreSQL/other-engine concepts remain documented or explicitly mirrored, not verified by MariaDB."
+    }
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-9-temporary-tables",
+    "original_note_sha256": "4a04b3c24a05317708e36ebbf0220ec01ecc5cd4cda7518682b55001c95183dd",
+    "status": "paired migration prepared; not applied"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Temporary stages retain a defined grain within one supported session",
+      "description": "The staged report selects identities before a preserving aggregate, while the application must keep the required connection scope.",
+      "columns": [
+        "Stage",
+        "Population",
+        "Grain",
+        "Lifetime requirement"
+      ],
+      "rows": [
+        [
+          "student_input",
+          "Supplied students",
+          "One row per student_id",
+          "Fixture input"
+        ],
+        [
+          "selected_students",
+          "active = 1 candidates",
+          "One row per selected student_id",
+          "Same creating session"
+        ],
+        [
+          "student_credit_totals",
+          "Every selected candidate",
+          "One total per student_id, zero allowed",
+          "Same reporting session"
+        ],
+        [
+          "Final report",
+          "Selected identities plus totals",
+          "One row per selected identity",
+          "Before temporary scope ends"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "coordinator checked session/request distinction, zero-match preservation, aggregate grain and product-specific lifetime boundaries",
+    "server_rendering": "passed",
+    "browser_rendering": "unverified",
+    "independent_review": "unavailable; no agent tools",
+    "server_rendering_evidence": "Selected actual LessonBlock Vitest rendering passed for this batch; no browser QA."
+  },
+  "sql_verification": {
+    "engine": "11.8.6-MariaDB-0+deb13u1 from Debian",
+    "scope": "MariaDB compatibility execution; exact MySQL 8.4/provider execution unverified",
+    "fingerprint": "2020b0bc0ccc2cceee24a3539bef09122a37965b1a991ab51dd610180df88a36",
+    "cases": [
+      {
+        "problem": "temporary-department-hours",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "temporary-department-hours",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "temporary-department-hours",
+        "case": 2,
+        "passed": true
+      },
+      {
+        "problem": "temporary-staged-active-credits",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "temporary-staged-active-credits",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "temporary-staged-active-credits",
+        "case": 2,
+        "passed": true
+      }
+    ],
+    "all_passed": true
+  }
+}

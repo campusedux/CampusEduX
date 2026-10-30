@@ -1,0 +1,512 @@
+{
+  "source_ref": "chapter-22-transactions/autocommit",
+  "slug": "autocommit",
+  "title": "Autocommit",
+  "description": "Trace MySQL autocommit, explicit transaction groups, mode changes, pooled session cleanup and uncertain outcomes using stock-transfer failure histories.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Locate the database transaction boundary\n\nAutocommit is a session behavior governing when statements outside an explicit transaction are committed. With MySQL autocommit enabled, a successful standalone statement normally completes its own transaction. Two adjacent UPDATE statements in the same file or application function therefore need not succeed or fail as a group. The database sees transaction boundaries, not the developer's indentation or the name of a request handler.\n\nSuppose a workshop moves two cameras from depot one to depot two. One statement subtracts two from the source and another adds two to the destination. Under separate autocommitted statements, a failure between them can leave only the subtraction committed. Both statements may be individually atomic while the larger movement lacks the required all-or-nothing boundary. This distinction is the reason explicit transactions remain useful even when autocommit is convenient.\n\n## Inspect the actual session setting\n\n```sql\nSELECT @@session.autocommit;\n```\n\nA value of one indicates the session's autocommit mode is enabled. Inspect the connection that will execute the operation, because another connection's setting does not describe this one. Client libraries, frameworks and connection-pool reset behavior can alter session state or establish transactions on the application's behalf. MySQL's server default is not a substitute for understanding the driver's documented behavior.\n\nDo not conclude that autocommit being enabled proves no transaction is currently open. START TRANSACTION can begin an explicit transaction while the session variable remains enabled. The setting governs normal statement boundaries outside that explicit block. Transaction-state diagnostics and driver APIs can provide additional evidence when a workflow must identify an active transaction rather than merely the configured default.\n\n## Group related transactional writes explicitly\n\n```sql\nSTART TRANSACTION;\nUPDATE camera_stock SET quantity=quantity-2 WHERE depot_id=1 AND quantity>=2;\n-- The trusted workflow checks that the required source effect occurred.\nUPDATE camera_stock SET quantity=quantity+2 WHERE depot_id=2;\n-- The trusted workflow checks destination existence and request validity.\nCOMMIT;\n```\n\nThe two participating InnoDB updates now share a transaction, assuming no intervening implicit-commit operation or other boundary changes it. On the success path, a confirmed COMMIT completes the intended group. On a detected failure, the application should roll back rather than reach the illustrated success branch. SQL comments describe required application decisions; they do not implement those checks themselves.\n\nAutocommit does not replace business validation. A source update matching no row can be a successful SQL statement, and a missing destination is not automatically an exception. Verify affected-row meaning and every required invariant before commit. The correct boundary prevents partial transaction commit; the correct logic decides whether the complete operation deserves to commit at all.\n\n## Understand session-level autocommit disabling\n\nSET autocommit=0 changes the session's normal transaction handling. Work then remains pending until explicitly committed or rolled back, subject to statement-specific boundary rules. Following COMMIT or ROLLBACK, subsequent transactional work can begin another transaction while the disabled mode persists. Turning the mode off does not mean one transaction lasts forever regardless of explicit completion.\n\nA SELECT accessing transactional data can participate in a transaction and retain a snapshot under the applicable isolation behavior even if the application issues no update. The absence of visible writes is not proof that there are no transaction resources to resolve. Long-lived read transactions can affect version retention and other operational work. Keep read-only request cleanup deliberate, especially with pooled connections.\n\n## Avoid changing the mode in the middle of unresolved work\n\nIn MySQL, changing autocommit from zero to one commits an open transaction. It is therefore unsafe to treat that setting change as harmless cleanup after a failed business operation. An intended rollback must be handled before a mode reset that could commit pending effects. Repeating SET autocommit=1 when it is already one has different implications from the zero-to-one transition, so document the starting state.\n\nSimilarly, issuing START TRANSACTION when a transaction is already active does not create a nested transaction. MySQL transaction-control statements can introduce implicit boundaries. A framework's nested-transaction API may instead use savepoints or bookkeeping, which has a different contract. Inspect the actual driver implementation before combining manual SQL transaction control with an ORM-managed transaction helper.\n\n## Keep implicit commits visible\n\nMany MySQL DDL statements cause implicit commits and cannot be bundled with ordinary data writes under a simple assumption that ROLLBACK undoes everything. A CREATE TABLE in the middle of a transfer script can change the transaction boundary. Temporary-table operations have additional exceptions and rollback limitations, so do not infer their behavior from the word temporary alone.\n\nThis lesson's stock-transfer model uses transactional row updates on InnoDB. Nontransactional table changes are outside equivalent rollback protection. External email, file writes and remote requests are not automatically included either. When an application operation spans these resources, describe the separate durability and delivery boundaries instead of promising that autocommit settings coordinate them all.\n\n## Treat errors according to their documented scope\n\nAn error may roll back one statement, an entire transaction or leave an unusable connection. Earlier successful statements can remain pending after a later statement failure. The application must decide whether continuing is valid or whether the intended unit of work must be rolled back. Catching an exception without resolving the transaction can later commit an incomplete operation accidentally.\n\nA lost commit response is particularly important. The server might have committed even though the client received a network error. Retrying the movement blindly can move cameras twice. A stable request identity and an authorized reconciliation path can distinguish an already completed request from a new one. Autocommit enabled or disabled does not eliminate unknown outcomes at the network boundary.\n\n## Return pooled connections in a known condition\n\nA connection pool reuses database sessions. Leaving autocommit disabled, an open transaction or changed isolation state can affect a later borrower. Driver-specific reset procedures may help, but their behavior should be verified rather than assumed. Release a connection only after the transaction outcome and expected session state are resolved, or discard it if cleanup cannot be confirmed.\n\nA failed request should not hand another request an open transaction containing pending writes. Conversely, a cleanup helper must not commit pending work merely to restore a convenient default. Structure the application's success, failure and cancellation paths so ownership of commit and rollback is clear. Avoid two layers independently trying to control the same transaction unless their contract explicitly coordinates that behavior.\n\n## Trace two concrete histories\n\nFor a beginner exercise, start source quantity five and destination quantity eight. Under autocommit, subtract two, then simulate an application failure before the destination statement. The committed source is three and destination eight. A later ROLLBACK cannot undo the already completed source statement. Explain why one successful statement transaction differs from a successful business movement.\n\nFor an intermediate exercise, repeat the same sequence inside START TRANSACTION and issue ROLLBACK after the simulated failure. Both participating quantities remain five and eight. Then repeat and commit only after both effects and required checks succeed, yielding three and ten. Include the missing-destination branch and state what the application must check before selecting the success path.\n\nAs a boundary challenge, disable autocommit, change the source and then turn autocommit back on. Predict the implicit completion rather than assuming a rollback. This is a disposable-lab exercise, not a command sequence to run against production inventory. A useful answer includes the session's initial state and every explicit or implicit boundary.\n\nFor each history, mark every point at which the server has confirmed completion. Keep attempted cleanup separate from confirmed cleanup in the written answer. That small annotation makes it easier to identify which earlier effects a later rollback can still reverse.\n\n## Match verification to the claim\n\nA single query returning expected stock cannot demonstrate connection-pool cleanup, concurrent execution or unknown-outcome reconciliation. Those behaviors require driver and integration tests with controlled failures. Keep educational arithmetic traces separate from evidence that a particular provider or framework implements the expected transaction flow.\n\nContinue with [transaction boundaries](/learning/dbms-sql-tutorial/transaction-boundaries), [COMMIT](/learning/dbms-sql-tutorial/commit), [ROLLBACK](/learning/dbms-sql-tutorial/rollback) and [savepoints](/learning/dbms-sql-tutorial/savepoint). Before diagnosing any partial write, identify the actual session, storage engine, statement sequence and boundary that made each effect permanent.",
+  "references": [
+    {
+      "title": "MySQL autocommit, commit and rollback",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/innodb-autocommit-commit-rollback.html"
+    },
+    {
+      "title": "MySQL implicit commit statements",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/implicit-commit.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-22-autocommit",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-22-autocommit-1",
+          "test_id": "pt-dbms-sql-22-autocommit",
+          "question_text": "With MySQL autocommit enabled and no explicit transaction active, what happens to a successful standalone transactional DML statement?",
+          "options": [
+            "Groups all statements in a session into one transaction",
+            "It completes its own transaction without requiring a separate COMMIT statement.",
+            "Disables all COMMIT statements",
+            "Prevents any transaction from ever failing"
+          ],
+          "correct_index": 1,
+          "explanation": "This scope excludes an active explicit transaction and statement-specific implicit-commit behavior.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-22-autocommit-2",
+          "test_id": "pt-dbms-sql-22-autocommit",
+          "question_text": "Two related InnoDB UPDATE statements run as standalone autocommitted statements outside an explicit transaction. A crash occurs between them. What partial effect can remain?",
+          "options": [
+            "Both updates are automatically rolled back together",
+            "The first statement's change is permanently committed with no corresponding second change — exactly the partial-transfer problem",
+            "Neither statement ever executes",
+            "The crash is impossible under autocommit"
+          ],
+          "correct_index": 1,
+          "explanation": "This is exactly why relying on autocommit alone for related multi-statement operations is dangerous.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-22-autocommit-3",
+          "test_id": "pt-dbms-sql-22-autocommit",
+          "question_text": "How can you override autocommit for a group of related statements?",
+          "options": [
+            "It cannot be overridden",
+            "By issuing an explicit START TRANSACTION, which suspends autocommit for that transaction's duration",
+            "By running the statements twice",
+            "By using SELECT instead of UPDATE"
+          ],
+          "correct_index": 1,
+          "explanation": "Explicit transaction boundaries take precedence over the session's autocommit default.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-22-autocommit-4",
+          "test_id": "pt-dbms-sql-22-autocommit",
+          "question_text": "Is autocommit's default behavior (ON vs OFF) guaranteed to be the same across all client libraries/ORMs?",
+          "options": [
+            "Yes, it's a universal SQL-language guarantee",
+            "No — some client libraries/ORMs turn it off by default and require an explicit commit() call; behavior is driver/library-specific",
+            "Autocommit doesn't exist outside of raw SQL clients",
+            "ORMs never support autocommit at all"
+          ],
+          "correct_index": 1,
+          "explanation": "Autocommit defaults vary by environment — this is an important practical caveat, not a spec guarantee.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-22-autocommit-5",
+          "test_id": "pt-dbms-sql-22-autocommit",
+          "question_text": "With autocommit disabled, what must the application account for after a SELECT accesses InnoDB transactional data?",
+          "options": [
+            "SELECT statements are unaffected by autocommit settings",
+            "It can participate in an open transaction whose lifetime must be explicitly resolved.",
+            "SELECT statements are disabled",
+            "The session immediately crashes"
+          ],
+          "correct_index": 1,
+          "explanation": "A read of transactional table data differs from SELECT1; snapshots and transaction resources can remain until completion.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-22-autocommit-6",
+          "test_id": "pt-dbms-sql-22-autocommit",
+          "question_text": "Why does autocommit being ON by default make explicit transaction boundaries important?",
+          "options": [
+            "It doesn't — boundaries are irrelevant under autocommit",
+            "Because any related statements that must succeed/fail together need an explicit START TRANSACTION, or autocommit commits each one independently",
+            "Autocommit makes boundaries unnecessary in all cases",
+            "Boundaries only matter when autocommit is off"
+          ],
+          "correct_index": 1,
+          "explanation": "This directly connects autocommit back to the transaction-boundaries topic (22.2).",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-22-autocommit-7",
+          "test_id": "pt-dbms-sql-22-autocommit",
+          "question_text": "For each successful standalone transactional DML statement outside an explicit transaction, does MySQL autocommit ON require a separate COMMIT?",
+          "options": [
+            "Yes, always required",
+            "No; that successful standalone statement completes its own transaction.",
+            "Only for UPDATE statements, not SELECT",
+            "COMMIT is disabled entirely under autocommit"
+          ],
+          "correct_index": 1,
+          "explanation": "An explicit transaction changes the grouping boundary despite the configured autocommit mode.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-22-autocommit-8",
+          "test_id": "pt-dbms-sql-22-autocommit",
+          "question_text": "What is the practical risk of forgetting that a session has autocommit turned OFF?",
+          "options": [
+            "No risk at all",
+            "Leaving long-running, implicitly-open transactions unclosed, which can hold resources/locks",
+            "Statements will fail to execute",
+            "The database will refuse all future connections"
+          ],
+          "correct_index": 1,
+          "explanation": "An open transaction that's never committed or rolled back can hold locks and resources indefinitely.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-22-autocommit-c-new-1",
+          "test_id": "pt-dbms-sql-22-autocommit",
+          "question_text": "Can @@session.autocommit equal1 during an explicit transaction?",
+          "options": [
+            "Yes",
+            "No, impossible",
+            "Only for empty tables",
+            "Only for temporary views"
+          ],
+          "correct_index": 0,
+          "explanation": "START TRANSACTION can establish a transaction while the configured mode remains enabled.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-22-autocommit-c-new-2",
+          "test_id": "pt-dbms-sql-22-autocommit",
+          "question_text": "What does changing MySQL autocommit from 0 to1 do to an open transaction?",
+          "options": [
+            "Always rolls it back",
+            "Commits it",
+            "Creates a savepoint",
+            "Moves it to another connection"
+          ],
+          "correct_index": 1,
+          "explanation": "The transition is a transaction boundary and must not be used as careless failure cleanup.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-22-autocommit-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-22-autocommit-c-new-3",
+          "test_id": "pt-dbms-sql-22-autocommit-application",
+          "question_text": "Two updates autocommit separately. Can a later ROLLBACK undo the first committed update?",
+          "options": [
+            "Yes, always",
+            "Only if aliases match",
+            "No",
+            "Only for integer values"
+          ],
+          "correct_index": 2,
+          "explanation": "Rollback applies to pending participating work, not already completed transactions.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-22-autocommit-c-new-4",
+          "test_id": "pt-dbms-sql-22-autocommit-application",
+          "question_text": "Does START TRANSACTION inside an active MySQL transaction create a nested transaction?",
+          "options": [
+            "Yes, unlimited nesting",
+            "Only for SELECT",
+            "Only for stock data",
+            "No"
+          ],
+          "correct_index": 3,
+          "explanation": "Manual transaction boundaries differ from framework savepoint abstractions.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-22-autocommit-c-new-5",
+          "test_id": "pt-dbms-sql-22-autocommit-application",
+          "question_text": "What must a transfer check besides SQL success?",
+          "options": [
+            "Required row effects and business invariants",
+            "Only the statement line count",
+            "Only a table caption",
+            "Only the connection name"
+          ],
+          "correct_index": 0,
+          "explanation": "Zero-row updates can fail the intended operation without raising an SQL error.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-22-autocommit-c-new-6",
+          "test_id": "pt-dbms-sql-22-autocommit-application",
+          "question_text": "Why inspect the borrowed pooled session?",
+          "options": [
+            "Every connection has identical runtime state",
+            "A prior borrower or reset policy can affect its state",
+            "Autocommit is a global query result only",
+            "Pools prohibit transactions"
+          ],
+          "correct_index": 1,
+          "explanation": "Session settings and unresolved transactions belong to actual connections.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-22-autocommit-c-new-7",
+          "test_id": "pt-dbms-sql-22-autocommit-application",
+          "question_text": "Can a read-only transaction still retain resources?",
+          "options": [
+            "No, SELECT never has a transaction",
+            "Only if data is deleted",
+            "Yes, including snapshot-related resources depending on isolation",
+            "Only with autocommit one"
+          ],
+          "correct_index": 2,
+          "explanation": "Read transaction lifetime matters even without writes.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-22-autocommit-c-new-8",
+          "test_id": "pt-dbms-sql-22-autocommit-application",
+          "question_text": "What should happen after uncertain rollback cleanup?",
+          "options": [
+            "Commit it silently",
+            "Return it with pending writes",
+            "Disable all constraints",
+            "Discard an unusable connection rather than reuse unresolved work"
+          ],
+          "correct_index": 3,
+          "explanation": "A subsequent borrower must not inherit unresolved transaction effects.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-22-autocommit-c-new-9",
+          "test_id": "pt-dbms-sql-22-autocommit-application",
+          "question_text": "Does autocommit coordinate an external email with SQL rollback?",
+          "options": [
+            "No",
+            "Yes, automatically",
+            "Only for short messages",
+            "Only with a SELECT first"
+          ],
+          "correct_index": 0,
+          "explanation": "External resources require their own delivery and failure design.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-22-autocommit-c-new-10",
+          "test_id": "pt-dbms-sql-22-autocommit-application",
+          "question_text": "What can a lost COMMIT response mean?",
+          "options": [
+            "The transaction certainly failed",
+            "The outcome may be unknown to the client",
+            "The transaction certainly never started",
+            "The server automatically duplicates the request"
+          ],
+          "correct_index": 1,
+          "explanation": "The server can commit before the network response is lost.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-22-autocommit-c-new-11",
+          "test_id": "pt-dbms-sql-22-autocommit-application",
+          "question_text": "Which evidence supports the current connection mode?",
+          "options": [
+            "Another session setting alone",
+            "The application function name",
+            "A check on that session plus driver behavior inspection",
+            "A migration filename"
+          ],
+          "correct_index": 2,
+          "explanation": "The relevant behavior is connection-specific.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-22-autocommit-c-new-12",
+          "test_id": "pt-dbms-sql-22-autocommit-application",
+          "question_text": "What is the safest ownership model for transaction completion?",
+          "options": [
+            "Every helper independently commits",
+            "UI navigation chooses the database outcome",
+            "A random retry decides",
+            "One clearly coordinated layer chooses commit or rollback"
+          ],
+          "correct_index": 3,
+          "explanation": "Uncoordinated transaction control creates accidental boundaries and cleanup errors.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [],
+  "coding_not_applicable": "Autocommit is a session and transaction-lifetime contract. Result-only judging cannot establish pool reset, commit uncertainty or failure cleanup; the prose includes two complete stock histories and a mode-transition challenge for controlled labs.",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-22-autocommit-1",
+      "test_id": "pt-dbms-sql-22-autocommit",
+      "question_text": "What does autocommit mode do?",
+      "options": [
+        "Groups all statements in a session into one transaction",
+        "Automatically wraps and commits every individual statement in its own implicit transaction",
+        "Disables all COMMIT statements",
+        "Prevents any transaction from ever failing"
+      ],
+      "correct_index": 1,
+      "explanation": "Autocommit treats each statement as its own separately-committed unit.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-22-autocommit-2",
+      "test_id": "pt-dbms-sql-22-autocommit",
+      "question_text": "Under autocommit, if a crash happens between two related UPDATE statements, what is the result?",
+      "options": [
+        "Both updates are automatically rolled back together",
+        "The first statement's change is permanently committed with no corresponding second change — exactly the partial-transfer problem",
+        "Neither statement ever executes",
+        "The crash is impossible under autocommit"
+      ],
+      "correct_index": 1,
+      "explanation": "This is exactly why relying on autocommit alone for related multi-statement operations is dangerous.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-22-autocommit-3",
+      "test_id": "pt-dbms-sql-22-autocommit",
+      "question_text": "How can you override autocommit for a group of related statements?",
+      "options": [
+        "It cannot be overridden",
+        "By issuing an explicit START TRANSACTION, which suspends autocommit for that transaction's duration",
+        "By running the statements twice",
+        "By using SELECT instead of UPDATE"
+      ],
+      "correct_index": 1,
+      "explanation": "Explicit transaction boundaries take precedence over the session's autocommit default.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-22-autocommit-4",
+      "test_id": "pt-dbms-sql-22-autocommit",
+      "question_text": "Is autocommit's default behavior (ON vs OFF) guaranteed to be the same across all client libraries/ORMs?",
+      "options": [
+        "Yes, it's a universal SQL-language guarantee",
+        "No — some client libraries/ORMs turn it off by default and require an explicit commit() call; behavior is driver/library-specific",
+        "Autocommit doesn't exist outside of raw SQL clients",
+        "ORMs never support autocommit at all"
+      ],
+      "correct_index": 1,
+      "explanation": "Autocommit defaults vary by environment — this is an important practical caveat, not a spec guarantee.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-22-autocommit-5",
+      "test_id": "pt-dbms-sql-22-autocommit",
+      "question_text": "If autocommit is turned off entirely at the session level, what happens with a single SELECT statement?",
+      "options": [
+        "SELECT statements are unaffected by autocommit settings",
+        "It still runs inside an implicitly-open transaction that must eventually be explicitly committed or rolled back",
+        "SELECT statements are disabled",
+        "The session immediately crashes"
+      ],
+      "correct_index": 1,
+      "explanation": "With autocommit off, every statement including SELECT opens an implicit transaction needing explicit closure.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-22-autocommit-6",
+      "test_id": "pt-dbms-sql-22-autocommit",
+      "question_text": "Why does autocommit being ON by default make explicit transaction boundaries important?",
+      "options": [
+        "It doesn't — boundaries are irrelevant under autocommit",
+        "Because any related statements that must succeed/fail together need an explicit START TRANSACTION, or autocommit commits each one independently",
+        "Autocommit makes boundaries unnecessary in all cases",
+        "Boundaries only matter when autocommit is off"
+      ],
+      "correct_index": 1,
+      "explanation": "This directly connects autocommit back to the transaction-boundaries topic (22.2).",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-22-autocommit-7",
+      "test_id": "pt-dbms-sql-22-autocommit",
+      "question_text": "Does an explicit COMMIT need to be written for each statement when autocommit is ON?",
+      "options": [
+        "Yes, always required",
+        "No — autocommit ON means each statement is automatically committed without an explicit COMMIT",
+        "Only for UPDATE statements, not SELECT",
+        "COMMIT is disabled entirely under autocommit"
+      ],
+      "correct_index": 1,
+      "explanation": "The whole point of autocommit is that no explicit COMMIT statement is needed per-statement.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-22-autocommit-8",
+      "test_id": "pt-dbms-sql-22-autocommit",
+      "question_text": "What is the practical risk of forgetting that a session has autocommit turned OFF?",
+      "options": [
+        "No risk at all",
+        "Leaving long-running, implicitly-open transactions unclosed, which can hold resources/locks",
+        "Statements will fail to execute",
+        "The database will refuse all future connections"
+      ],
+      "correct_index": 1,
+      "explanation": "An open transaction that's never committed or rolled back can hold locks and resources indefinitely.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "/root/content_c",
+    "independent_review": "passed",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Independent manual content review passed within independent_review_scope; engine/browser/release gates separate.",
+    "canonical_answer_indices_preserved": true,
+    "editorial_record": "Original explanations, examples and scenarios; external originality clearance and AdSense review unperformed.",
+    "independent_reviewer": "/root",
+    "independent_review_scope": "Full notes,20MCQs/options/explanations,diagram and worked boundaries. Standalone DML versus explicit transactions,session mode,0-to1 implicit commit,DDL,pool cleanup and uncertain outcomes sound after scoping inherited MCQs. Manual editorial/fixture reasoning only; SQL engine,browser,originality and AdSense verification separate."
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-22-autocommit",
+    "original_note_sha256": "87bab7f0ed8ae00ddea0a53a87e4ed8672883a91ba0cb16a084ccce86ae94769",
+    "status": "drafted; not included in prepared paired migrations"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "The same arithmetic has different boundaries",
+      "description": "Standalone committed statements cannot later be rolled back as one grouped business operation.",
+      "columns": [
+        "History",
+        "Failure point",
+        "Participating stock outcome"
+      ],
+      "rows": [
+        [
+          "Autocommit updates",
+          "After source commit",
+          "Source changed; destination unchanged"
+        ],
+        [
+          "Explicit transaction",
+          "Rollback before commit",
+          "Both original values restored"
+        ],
+        [
+          "Explicit transaction",
+          "Confirmed complete commit",
+          "Both intended effects committed"
+        ],
+        [
+          "Commit response lost",
+          "Network interruption",
+          "Client must reconcile unknown outcome"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "technical_review": "author self-review",
+    "server_rendering": "unverified",
+    "browser_rendering": "unverified"
+  },
+  "authoring_status": "drafted; verification pending"
+}

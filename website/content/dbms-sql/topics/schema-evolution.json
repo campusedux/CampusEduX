@@ -1,0 +1,645 @@
+{
+  "source_ref": "chapter-9-ddl-and-schema-design/schema-evolution",
+  "slug": "schema-evolution",
+  "title": "Schema Evolution",
+  "description": "Evolve definitions and stored facts across compatible application versions, make backfill and conflict policies explicit, and separate ordered migration history from proven production safety.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Evolution preserves a usable contract over time\n\nSchema evolution manages changes to database structure and related stored facts as an application develops. A campus service may replace a vague label field with a clearer display_name property while several application versions are still running. The goal is not merely to make one ALTER statement succeed. The data and every supported consumer need a compatible path from the old contract to the intended new one.\n\nChanges can be additive, restrictive or destructive. Adding an optional field usually has a different compatibility profile from dropping a field or narrowing its accepted domain. Classify the actual behaviour that changes, identify who reads and writes it, and define the intended final state. A migration file is an implementation artifact, not a substitute for that contract.\n\n## Ordered history records intent and application state\n\nA migration system records a sequence of changes and which ones an environment has applied. That ordering helps dependent changes run against the expected prerequisites. For example, a backfill using display_name cannot run before the column exists. Consistent history also helps reviewers understand how a current definition was reached rather than inspect only its final appearance.\n\nTools can track ordering and checksums, but they cannot infer every data policy or consumer dependency. A correctly numbered script can still target the wrong object, overwrite a meaningful value or break an older client. Treat recorded history as necessary operational evidence within its scope, not automatic proof that the proposed behaviour is correct or compatible.\n\n## Expansion creates room for compatible transition\n\nAn expand-and-contract strategy can introduce a new representation while retaining the old interface for supported callers. For the simple exercise, the expansion adds nullable display_name without removing label. Existing rows can then be backfilled from the accepted legacy value under a stated rule. Old readers still find the old column while new readers have a defined transition path.\n\nThis is a pattern, not a mandate to add parallel properties forever. It needs a clear completion condition and a way to prevent the two representations drifting indefinitely. The eventual contraction should happen only when relevant callers no longer depend on the old interface and the retained data contract is verified. A fixed waiting period alone does not establish that condition.\n\n## Writers need an explicit consistency policy\n\nIf old and new properties coexist, concurrent writes need a rule about their relationship. A dual-write strategy can maintain both representations, but only if all applicable write paths participate and their updates have appropriate atomicity. Two unrelated network writes can leave inconsistent state if one fails. Another design can use a compatible server interface to maintain the invariant at one trusted boundary.\n\nDo not assume that adding a new column automatically causes every old mobile version or scheduled job to populate it. Inventory the relevant writers and define which version is allowed to change which field during the transition. A backfill should coordinate with that policy rather than overwrite values produced by a newer writer while trying to catch up with older rows.\n\n## Backfill existing facts without inventing them\n\nA backfill translates accepted old state into the intended new representation. For display_name copied from label, that mapping is simple and explicitly requested. Other changes may need normalization, parsing or business decisions. An unknown value should not become a fabricated known fact merely because the final column will eventually be required.\n\nThe introductory exercise copies the supplied label into the newly added field and reports both properties. It does not claim that all historical names were verified externally or that the migration solved identity matching. The visible postcondition is narrower: the requested new representation exists and contains the accepted mapped value for every supplied row.\n\n```sql\nALTER TABLE labels ADD COLUMN display_name VARCHAR(40) NULL;\nUPDATE labels SET display_name = label\nWHERE display_name IS NULL;\n```\n\n## Preserve newer values when conflict is possible\n\nOnce the new column can already contain data, an unconditional assignment from the legacy column may overwrite a meaningful newer value. A safer task-specific backfill can fill only missing new values and surface disagreements for review. That is not a universal conflict-resolution algorithm; it is an explicit policy for a transition where silent overwrite is unacceptable.\n\nThe medium exercise begins with both properties present. A row whose new value is absent gets the accepted legacy value. A row with a different existing new value keeps it and is reported as a conflict. The query does not decide which spelling is historically authoritative. It exposes the discrepancy so a separate domain decision can resolve it deliberately.\n\n## Required constraints come after compatible data policy\n\nA final NOT NULL or uniqueness requirement makes a claim over accepted state and future writes. Before enforcement, verify that existing rows satisfy the rule and that active writers will continue satisfying it. A successful scan followed by an uncontrolled old writer can reintroduce invalid state before a later step. Data validation and writer coordination need to describe the same transition.\n\nAdding a constraint can also require engine-specific validation work and locks. PostgreSQL supports staged validation for applicable constraints, while MySQL has its own alteration and enforcement rules. Do not promise that a staged conceptual plan removes every scan or block. The actual execution strategy must be verified for the product, definition, current data and workload.\n\n## Rolling application versions create an overlap period\n\nA one-step rename or drop can break an older application version that still references the old property. A new version may be deployed gradually, and background workers can have a different upgrade schedule. The overlap period is why an additive interface can be useful: both supported versions can continue to function under a defined contract while migration proceeds.\n\nCompatibility can sometimes be maintained through a server-side adapter or another deliberate interface rather than direct dual columns. Choose the established architecture's authoritative boundary instead of inventing parallel mechanisms by habit. The important requirement is that supported clients observe consistent behaviour, not that every project implements exactly the same diagram or sequence of deployment slogans.\n\n## Definition and data drift have several causes\n\nEnvironment drift occurs when actual definitions or related migration state diverge from the expected history. Missing scripts, manual edits, different configuration and partially completed operations can contribute. Comparing only the list of filenames is insufficient when someone changed a column manually after the recorded migration was applied. The actual schema and relevant data invariants also matter.\n\nIF NOT EXISTS can hide a difference by treating an occupied name as success without reconciling its definition. A robust preparation process inspects the required preconditions and fails clearly when an unexpected state needs review. Do not turn every mismatch into an automatic destructive rebuild. Existing data and consumers can have legitimate ownership that the new script must preserve.\n\n## Transactional DDL is useful within its supported limits\n\nPostgreSQL can roll back many table-definition changes together within a transaction, but not every administrative command belongs inside such a block. MySQL operations can have implicit-commit boundaries that leave a multi-step workflow partly completed if a later step fails. Transaction guarantees should name the actual statements and engine rather than assert all DDL is uniformly atomic or nontransactional.\n\nA recovery plan must also account for application writes and data transformations. Reversing a column rename does not necessarily undo facts written under a new meaning, and recreating a dropped column does not restore its old values. Define whether recovery means reverting structure, restoring data, maintaining a compatible forward fix, or coordinating several of those steps.\n\n## Test the transition states that consumers can encounter\n\nUseful tests include the old shape before expansion, the expanded shape with missing new values, populated consistent pairs and conflicting existing values. Empty input still requires a valid expanded definition. Repeating the missing-only backfill should not overwrite a new value just because the script runs again. Each case targets a different transition contract rather than merely adding more copies of the happy path.\n\nProduction execution also needs representative data volume and concurrency evidence where those affect the change. The small lab does not establish acceptable lock duration or a complete rolling-deployment process. It verifies deterministic data mapping and conflict preservation on supplied synthetic rows, which are meaningful checks but narrower than operational readiness for every workload.\n\n## Keep preparation and application distinct\n\nThe content rebuild prepares explanatory packages and paired content migrations without applying them. That distinction reflects the same evolution discipline: a generated artifact is reviewable intent, while actual application changes database state and needs its own authorization and evidence. Do not describe prepared SQL as a live feature or claim a deployment occurred because local validation passed.\n\nA complete schema-evolution explanation identifies the starting contract, compatible expansion, write policy, backfill, validation, consumer transition and eventual contraction. It also states unresolved conflicts and execution limits. Recorded MariaDB fixtures verify the two teaching transformations only; exact MySQL/provider execution, application migration application and production rollback remain separately tracked gaps rather than silently assumed successes.\n",
+  "references": [
+    {
+      "title": "MySQL 8.4 ALTER TABLE",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/alter-table.html"
+    },
+    {
+      "title": "PostgreSQL 18 ALTER TABLE",
+      "url": "https://www.postgresql.org/docs/18/sql-altertable.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-9-schema-evolution",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-9-schema-evolution-1",
+          "test_id": "pt-dbms-sql-9-schema-evolution",
+          "question_text": "What is schema evolution primarily concerned with?",
+          "options": [
+            "A single SQL statement for renaming tables",
+            "Managing structural changes to a database over time while keeping data intact and the system available",
+            "Encrypting database backups",
+            "Optimizing query execution plans"
+          ],
+          "correct_index": 1,
+          "explanation": "Schema evolution is a discipline of managing ongoing structural change safely, not a single command.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-9-schema-evolution-2",
+          "test_id": "pt-dbms-sql-9-schema-evolution",
+          "question_text": "What do tools like Flyway and Liquibase provide for schema evolution?",
+          "options": [
+            "Automatic query optimization",
+            "Tracking of schema changes as an ordered, versioned sequence of scripts applied consistently across environments",
+            "A replacement for SQL entirely",
+            "Automatic data visualization"
+          ],
+          "correct_index": 1,
+          "explanation": "Migration tools track and apply versioned schema change scripts in order, ensuring consistency across environments.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-9-schema-evolution-3",
+          "test_id": "pt-dbms-sql-9-schema-evolution",
+          "question_text": "What must an expand-and-contract transition coordinate?",
+          "options": [
+            "Drop old column, then add new column, then backfill",
+            "Compatible expansion, relevant writers, controlled backfill, validated reads and eventual retirement of the old interface",
+            "Rename the column directly in one atomic step while the app is live",
+            "Backfill first, then create the table"
+          ],
+          "correct_index": 1,
+          "explanation": "Dual-write is one possible implementation, not a universal complete consistency solution.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-9-schema-evolution-4",
+          "test_id": "pt-dbms-sql-9-schema-evolution",
+          "question_text": "Why can an immediate live column rename break clients?",
+          "options": [
+            "It is never risky",
+            "Supported older callers may still refer to the old name during the overlap period",
+            "SQL does not support column renames",
+            "It always corrupts the entire database"
+          ],
+          "correct_index": 1,
+          "explanation": "A compatible adapter can sometimes help, but the transition needs evidence.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-9-schema-evolution-5",
+          "test_id": "pt-dbms-sql-9-schema-evolution",
+          "question_text": "Why must transactional-DDL claims identify the actual statements?",
+          "options": [
+            "It has no practical benefit",
+            "Engines have different commit boundaries and some administrative commands fall outside ordinary transaction blocks",
+            "MySQL migrations are always safer as a result",
+            "PostgreSQL cannot run more than one DDL statement per migration"
+          ],
+          "correct_index": 1,
+          "explanation": "PostgreSQL support for many table changes does not include every command.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-9-schema-evolution-6",
+          "test_id": "pt-dbms-sql-9-schema-evolution",
+          "question_text": "Why does a naive one-shot ALTER TABLE on a huge production table threaten schema evolution efforts?",
+          "options": [
+            "ALTER TABLE never affects production traffic",
+            "It can hold a long lock that blocks reads/writes, potentially taking the application down during the change",
+            "It always deletes all the table's data",
+            "It automatically rolls back after 1 second"
+          ],
+          "correct_index": 1,
+          "explanation": "Large-table ALTER TABLE locking (covered in Topic 9.4) is a direct operational risk to schema evolution.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-9-schema-evolution-7",
+          "test_id": "pt-dbms-sql-9-schema-evolution",
+          "question_text": "What problem does 'environment drift' refer to in the context of schema migrations?",
+          "options": [
+            "Physical hardware degrading over time",
+            "Migrations not being applied consistently and in order across dev/staging/prod, causing schemas to silently diverge",
+            "Network latency between database replicas",
+            "A database engine's storage engine changing automatically"
+          ],
+          "correct_index": 1,
+          "explanation": "Inconsistent migration application across environments causes schema divergence and related deployment bugs.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-9-schema-evolution-8",
+          "test_id": "pt-dbms-sql-9-schema-evolution",
+          "question_text": "What does a migration recovery plan need to address?",
+          "options": [
+            "Skip testing to save time",
+            "The actual structural, data and consumer state, with a tested recovery or compatible forward strategy",
+            "Always disable all constraints permanently",
+            "Run it directly on production first to save a step"
+          ],
+          "correct_index": 1,
+          "explanation": "A nominal down script does not necessarily recover destroyed or semantically changed facts.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-9-schema-evolution-new-9",
+          "test_id": "pt-dbms-sql-9-schema-evolution",
+          "question_text": "Does a migration filename prove actual schema agreement?",
+          "options": [
+            "Yes",
+            "No",
+            "Only if numbered",
+            "Only if it mentions ALTER"
+          ],
+          "correct_index": 1,
+          "explanation": "Manual edits or partial operations can create drift.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-9-schema-evolution-new-10",
+          "test_id": "pt-dbms-sql-9-schema-evolution",
+          "question_text": "Why fill only missing new values in the stated conflict-preserving task?",
+          "options": [
+            "To erase every conflict",
+            "To remove the old field automatically",
+            "To avoid silently overwriting an existing newer representation",
+            "To skip all rows"
+          ],
+          "correct_index": 2,
+          "explanation": "Conflicts remain observable for a separate policy decision.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-9-schema-evolution-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-9-schema-evolution-application-new-1",
+          "test_id": "pt-dbms-sql-9-schema-evolution-application",
+          "question_text": "Does adding a column update every old writer automatically?",
+          "options": [
+            "Yes",
+            "Only when nullable",
+            "No",
+            "Only with a short name"
+          ],
+          "correct_index": 2,
+          "explanation": "Writers need a compatible transition contract.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-9-schema-evolution-application-new-2",
+          "test_id": "pt-dbms-sql-9-schema-evolution-application",
+          "question_text": "What does the simple label backfill establish?",
+          "options": [
+            "Externally verified identity",
+            "Production downtime guarantees",
+            "All migration permissions",
+            "The requested mapping from accepted legacy labels to the new field"
+          ],
+          "correct_index": 3,
+          "explanation": "The transformation has a specific data scope.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-9-schema-evolution-application-new-3",
+          "test_id": "pt-dbms-sql-9-schema-evolution-application",
+          "question_text": "Why can two independent dual writes be unsafe?",
+          "options": [
+            "One can succeed while the other fails",
+            "They always share one transaction automatically",
+            "They force uniqueness",
+            "They remove all NULL values"
+          ],
+          "correct_index": 0,
+          "explanation": "Atomicity must be deliberately provided at the trusted boundary.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-9-schema-evolution-application-new-4",
+          "test_id": "pt-dbms-sql-9-schema-evolution-application",
+          "question_text": "When is contraction appropriate?",
+          "options": [
+            "Immediately after a fixed arbitrary wait",
+            "When required data and supported consumers no longer depend on the old interface",
+            "Before any backfill",
+            "Whenever a filename exists"
+          ],
+          "correct_index": 1,
+          "explanation": "Retirement needs evidence of the intended final contract.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-9-schema-evolution-application-new-5",
+          "test_id": "pt-dbms-sql-9-schema-evolution-application",
+          "question_text": "What should a reported conflicting pair do in the medium exercise?",
+          "options": [
+            "Overwrite it silently",
+            "Delete the row",
+            "Preserve the existing new value and expose the disagreement",
+            "Choose alphabetically"
+          ],
+          "correct_index": 2,
+          "explanation": "The exercise deliberately avoids inventing an authority rule.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-9-schema-evolution-application-new-6",
+          "test_id": "pt-dbms-sql-9-schema-evolution-application",
+          "question_text": "Does IF NOT EXISTS repair a mismatched existing definition?",
+          "options": [
+            "Yes",
+            "Only with an index",
+            "Only in a migration file",
+            "No"
+          ],
+          "correct_index": 3,
+          "explanation": "Name existence is not schema reconciliation.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-9-schema-evolution-application-new-7",
+          "test_id": "pt-dbms-sql-9-schema-evolution-application",
+          "question_text": "Why coordinate constraint enforcement with current writers?",
+          "options": [
+            "New writes can invalidate a previously scanned state",
+            "Constraints apply only to notes",
+            "All writers automatically stop",
+            "Validation changes every client"
+          ],
+          "correct_index": 0,
+          "explanation": "Transition invariants must remain true under ongoing writes.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-9-schema-evolution-application-new-8",
+          "test_id": "pt-dbms-sql-9-schema-evolution-application",
+          "question_text": "Does a reverse structural command restore every changed fact?",
+          "options": [
+            "Yes",
+            "No",
+            "Only with a transaction keyword",
+            "Only with a nullable column"
+          ],
+          "correct_index": 1,
+          "explanation": "Recovery can require data and consumer-state handling.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-9-schema-evolution-application-new-9",
+          "test_id": "pt-dbms-sql-9-schema-evolution-application",
+          "question_text": "Which case checks repeatable missing-only backfill behaviour?",
+          "options": [
+            "Only one empty table",
+            "Only a new filename",
+            "An already populated different new value that remains unchanged",
+            "Only a diagram"
+          ],
+          "correct_index": 2,
+          "explanation": "The overwrite boundary is observable.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-9-schema-evolution-application-new-10",
+          "test_id": "pt-dbms-sql-9-schema-evolution-application",
+          "question_text": "What does prepared migration status mean here?",
+          "options": [
+            "Production is updated",
+            "All providers were tested",
+            "Rollback was executed",
+            "SQL artifacts exist for review, but have not changed application database state"
+          ],
+          "correct_index": 3,
+          "explanation": "Preparation and application are separate actions.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cx-evolution-expand-labels",
+      "slug": "evolution-expand-labels",
+      "title": "Expand a definition and backfill its accepted legacy labels",
+      "difficulty": "Easy",
+      "task": "Add display_name VARCHAR(40) NULL to labels, preserving label. Backfill missing display_name from label. Return item_id,label,display_name. This is an isolated expansion/backfill step; do not drop the legacy field or claim a production cutover.",
+      "schema_sql": "CREATE TABLE labels (item_id INT PRIMARY KEY,label VARCHAR(40) NOT NULL);",
+      "seed_sql": "INSERT INTO labels VALUES (2,'Arts'),(1,'Science');",
+      "expected": "item_id\tlabel\tdisplay_name\n1\tScience\tScience\n2\tArts\tArts",
+      "ordering": "Ascending item_id.",
+      "constraints": [
+        "Preserve original identity and legacy values.",
+        "The new representation is copied under the explicit exercise policy."
+      ],
+      "edge_cases": [
+        "Empty input still receives the new definition.",
+        "Repeated labels belong to distinct ids."
+      ],
+      "hints": [
+        "Expand before writing the new field.",
+        "Use a missing-only assignment."
+      ],
+      "solution_sql": "ALTER TABLE labels ADD COLUMN display_name VARCHAR(40) NULL; UPDATE labels SET display_name=label WHERE display_name IS NULL; SELECT item_id,label,display_name FROM labels ORDER BY item_id;",
+      "explanation": "The expanded shape preserves the old interface and populates the accepted new representation without contraction.",
+      "validation_cases": [
+        {
+          "seed_sql": "",
+          "expected": ""
+        },
+        {
+          "seed_sql": "INSERT INTO labels VALUES (8,'Same'),(7,'Same');",
+          "expected": "item_id\tlabel\tdisplay_name\n7\tSame\tSame\n8\tSame\tSame"
+        }
+      ]
+    },
+    {
+      "id": "cx-evolution-conflict-preserving",
+      "slug": "evolution-conflict-preserving",
+      "title": "Backfill missing names while surfacing existing disagreements",
+      "difficulty": "Medium",
+      "task": "The expanded contacts table already has legacy_name and nullable display_name. Fill only missing display_name from legacy_name. Preserve nonmissing display_name even when different. Return contact_id,legacy_name,display_name and migration_state: aligned when equal, conflict otherwise. Use the supplied canonical case-sensitive-distinct fixture labels; do not choose an authoritative spelling for conflicts.",
+      "schema_sql": "CREATE TABLE contacts (contact_id INT PRIMARY KEY,legacy_name VARCHAR(40) NOT NULL,display_name VARCHAR(40) NULL);",
+      "seed_sql": "INSERT INTO contacts VALUES (1,'Asha',NULL),(2,'Ben','Ben'),(3,'Chen','Updated');",
+      "expected": "contact_id\tlegacy_name\tdisplay_name\tmigration_state\n1\tAsha\tAsha\taligned\n2\tBen\tBen\taligned\n3\tChen\tUpdated\tconflict",
+      "ordering": "Ascending contact_id.",
+      "constraints": [
+        "Existing new values are never overwritten by this backfill.",
+        "The exercise reports conflicts rather than resolving them arbitrarily."
+      ],
+      "edge_cases": [
+        "Rerunning missing-only assignment preserves a different populated value.",
+        "Empty input remains empty."
+      ],
+      "hints": [
+        "Restrict UPDATE with IS NULL.",
+        "Use CASE to expose agreement after the backfill."
+      ],
+      "solution_sql": "UPDATE contacts SET display_name=legacy_name WHERE display_name IS NULL; SELECT contact_id,legacy_name,display_name,CASE WHEN display_name=legacy_name THEN 'aligned' ELSE 'conflict' END AS migration_state FROM contacts ORDER BY contact_id;",
+      "explanation": "The backfill preserves newer nonmissing state and makes unresolved differences visible rather than hiding them through overwrite.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO contacts VALUES (7,'Old','New'),(8,'Mira',NULL);",
+          "expected": "contact_id\tlegacy_name\tdisplay_name\tmigration_state\n7\tOld\tNew\tconflict\n8\tMira\tMira\taligned"
+        },
+        {
+          "seed_sql": "",
+          "expected": ""
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-9-schema-evolution-1",
+      "test_id": "pt-dbms-sql-9-schema-evolution",
+      "question_text": "What is schema evolution primarily concerned with?",
+      "options": [
+        "A single SQL statement for renaming tables",
+        "Managing structural changes to a database over time while keeping data intact and the system available",
+        "Encrypting database backups",
+        "Optimizing query execution plans"
+      ],
+      "correct_index": 1,
+      "explanation": "Schema evolution is a discipline of managing ongoing structural change safely, not a single command.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-9-schema-evolution-2",
+      "test_id": "pt-dbms-sql-9-schema-evolution",
+      "question_text": "What do tools like Flyway and Liquibase provide for schema evolution?",
+      "options": [
+        "Automatic query optimization",
+        "Tracking of schema changes as an ordered, versioned sequence of scripts applied consistently across environments",
+        "A replacement for SQL entirely",
+        "Automatic data visualization"
+      ],
+      "correct_index": 1,
+      "explanation": "Migration tools track and apply versioned schema change scripts in order, ensuring consistency across environments.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-9-schema-evolution-3",
+      "test_id": "pt-dbms-sql-9-schema-evolution",
+      "question_text": "In the expand-contract pattern for renaming a live column, what is the correct high-level order of steps?",
+      "options": [
+        "Drop old column, then add new column, then backfill",
+        "Add new column, dual-write to both, backfill, switch reads to new column, then drop old column",
+        "Rename the column directly in one atomic step while the app is live",
+        "Backfill first, then create the table"
+      ],
+      "correct_index": 1,
+      "explanation": "Expand-contract adds new structure first, transitions gradually, and removes old structure only once safe.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-9-schema-evolution-4",
+      "test_id": "pt-dbms-sql-9-schema-evolution",
+      "question_text": "Why is directly renaming a column in one step risky for a live, actively-deployed application?",
+      "options": [
+        "It is never risky",
+        "The application code change must deploy at the exact same instant as the schema change, which rolling deployments can't guarantee, causing brief breakage",
+        "SQL does not support column renames",
+        "It always corrupts the entire database"
+      ],
+      "correct_index": 1,
+      "explanation": "During a rolling deploy some instances will briefly run mismatched code/schema versions if the change isn't done gradually.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-9-schema-evolution-5",
+      "test_id": "pt-dbms-sql-9-schema-evolution",
+      "question_text": "How does PostgreSQL's support for transactional DDL benefit multi-step migrations, compared to MySQL?",
+      "options": [
+        "It has no practical benefit",
+        "A failed multi-statement migration can be rolled back as a single unit in Postgres, whereas MySQL's implicit per-statement commits can leave a partially-applied state",
+        "MySQL migrations are always safer as a result",
+        "PostgreSQL cannot run more than one DDL statement per migration"
+      ],
+      "correct_index": 1,
+      "explanation": "Transactional DDL lets Postgres cleanly roll back a whole failed migration, unlike MySQL's auto-committing DDL.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-9-schema-evolution-6",
+      "test_id": "pt-dbms-sql-9-schema-evolution",
+      "question_text": "Why does a naive one-shot ALTER TABLE on a huge production table threaten schema evolution efforts?",
+      "options": [
+        "ALTER TABLE never affects production traffic",
+        "It can hold a long lock that blocks reads/writes, potentially taking the application down during the change",
+        "It always deletes all the table's data",
+        "It automatically rolls back after 1 second"
+      ],
+      "correct_index": 1,
+      "explanation": "Large-table ALTER TABLE locking (covered in Topic 9.4) is a direct operational risk to schema evolution.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-9-schema-evolution-7",
+      "test_id": "pt-dbms-sql-9-schema-evolution",
+      "question_text": "What problem does 'environment drift' refer to in the context of schema migrations?",
+      "options": [
+        "Physical hardware degrading over time",
+        "Migrations not being applied consistently and in order across dev/staging/prod, causing schemas to silently diverge",
+        "Network latency between database replicas",
+        "A database engine's storage engine changing automatically"
+      ],
+      "correct_index": 1,
+      "explanation": "Inconsistent migration application across environments causes schema divergence and related deployment bugs.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-9-schema-evolution-8",
+      "test_id": "pt-dbms-sql-9-schema-evolution",
+      "question_text": "What best practice is recommended before running a schema migration against production?",
+      "options": [
+        "Skip testing to save time",
+        "Test the migration against a realistic data volume/shape and have a rollback/down-migration plan",
+        "Always disable all constraints permanently",
+        "Run it directly on production first to save a step"
+      ],
+      "correct_index": 1,
+      "explanation": "Testing at realistic scale and preparing a rollback plan reduces the risk of a migration causing an incident.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "coordinator",
+    "independent_review": "unavailable; no agent tools",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Definitions and examples checked against questions; no plagiarism certification.",
+    "existing_question_corrections": [
+      "tq-dbms-sql-9-schema-evolution-3",
+      "tq-dbms-sql-9-schema-evolution-4",
+      "tq-dbms-sql-9-schema-evolution-5",
+      "tq-dbms-sql-9-schema-evolution-8"
+    ],
+    "canonical_answer_indices_preserved": true,
+    "batch_review": {
+      "reviewer": "coordinator",
+      "independent": false,
+      "scope": "This new package: explained definitions and boundaries, retained source question identities/canonical indices, new correct answers and explanations, exercise solutions and recorded fixtures, diagram trace and prepared integration.",
+      "execution_evidence": "Focused MariaDB reference cases and selected actual LessonBlock rendering passed; no browser QA or exact MySQL/provider execution.",
+      "source_preservation": "Original snapshots retained; eight retained exercises across this continuation matched source identity, difficulty, schema, seed and trailing checker.",
+      "limits": "No independent worker available. Output fixtures do not prove arbitrary student submissions used a requested technique. Native PostgreSQL/other-engine concepts remain documented or explicitly mirrored, not verified by MariaDB."
+    }
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-9-schema-evolution",
+    "original_note_sha256": "1fdd18c4c72dd2215520284906a95e39bbcb3c259ea0acad203d879eadf17a29",
+    "status": "paired migration prepared; not applied"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Expansion, backfill and contraction have different completion conditions",
+      "description": "The exercise completes data preparation, while consumer transition and final retirement remain separate operational decisions.",
+      "columns": [
+        "Transition",
+        "Old interface",
+        "New interface",
+        "Required evidence"
+      ],
+      "rows": [
+        [
+          "Expand",
+          "Retained",
+          "Added under compatible rules",
+          "Definition available without breaking old readers"
+        ],
+        [
+          "Coordinate writers",
+          "Supported",
+          "Kept consistent by policy",
+          "Every relevant write path follows contract"
+        ],
+        [
+          "Backfill and validate",
+          "Retained",
+          "Accepted values populated",
+          "Missing and conflict cases handled explicitly"
+        ],
+        [
+          "Switch supported reads",
+          "Compatible during overlap",
+          "Used by intended callers",
+          "Consumer compatibility verified"
+        ],
+        [
+          "Contract",
+          "Retired only when allowed",
+          "Authoritative final contract",
+          "Old dependency and recovery decisions reviewed"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "coordinator checked transition roles, missing-only backfill, conflict preservation and distinction between teaching fixture and deployed migration",
+    "server_rendering": "passed",
+    "browser_rendering": "unverified",
+    "independent_review": "unavailable; no agent tools",
+    "server_rendering_evidence": "Selected actual LessonBlock Vitest rendering passed for this batch; no browser QA."
+  },
+  "sql_verification": {
+    "engine": "11.8.6-MariaDB-0+deb13u1 from Debian",
+    "scope": "MariaDB compatibility execution; exact MySQL 8.4/provider execution unverified",
+    "fingerprint": "803afbb3aff1f23040e60fb18ebc603dd841fe90770bff54338fdd3d5017ef3d",
+    "cases": [
+      {
+        "problem": "evolution-expand-labels",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "evolution-expand-labels",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "evolution-expand-labels",
+        "case": 2,
+        "passed": true
+      },
+      {
+        "problem": "evolution-conflict-preserving",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "evolution-conflict-preserving",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "evolution-conflict-preserving",
+        "case": 2,
+        "passed": true
+      }
+    ],
+    "all_passed": true
+  }
+}

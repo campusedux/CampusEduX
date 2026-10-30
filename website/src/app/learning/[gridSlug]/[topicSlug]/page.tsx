@@ -28,6 +28,7 @@ import { TopicPractice } from "./_components/TopicPractice";
 import { TopicDiscovery } from "./_components/TopicDiscovery";
 import { RelatedLessons } from "./_components/RelatedLessons";
 import { RecordLessonVisit } from "./RecordLessonVisit";
+import { databaseGroupName, DBMS_SQL_SLUG } from "@/lib/databaseTutorial";
 
 export const revalidate = 86400;
 export const dynamicParams = true;
@@ -63,7 +64,7 @@ function describeLesson(page: LearningTopicPage, tree: LearningTree | null): str
     shortDescriptionDuplicates: shortDescriptionDuplicates(tree, topic.short_description),
     language: seoSubject ? null : courseLanguage(grid.slug, grid.name, topic.title),
     courseName: grid.name,
-    sectionName: section.name,
+    sectionName: databaseGroupName(grid.slug, section.name),
     blocks: page.locked ? [] : page.contents,
     isPremium: topic.is_premium,
   });
@@ -115,7 +116,10 @@ export default async function TopicPage({
   if (!tree) notFound();
   // The course exists but this lesson doesn't (renamed / removed by an admin,
   // or an old "Continue learning" link): land on the course, not a 404.
-  if (!page) redirect(`/learning/${tree.grid.slug}`);
+  if (!page) {
+    if (tree.grid.slug === DBMS_SQL_SLUG) notFound();
+    redirect(`/learning/${tree.grid.slug}`);
+  }
   if (!page.locked && page.contents.length === 0) notFound();
   const { topic, section, grid, locked, contents, prev, next } = page;
   // Internal-linking glossary for this page — built once from the already-
@@ -135,7 +139,7 @@ export default async function TopicPage({
     gridName: grid.name,
     topicSlug: topic.slug,
     topicTitle: topic.title,
-    sectionName: section.name,
+    sectionName: databaseGroupName(grid.slug, section.name),
   };
   const completeCard = (
     <LessonComplete
@@ -167,7 +171,7 @@ export default async function TopicPage({
           path: lessonPath,
           courseName: grid.name,
           coursePath: `/learning/${grid.slug}`,
-          sectionName: section.name,
+          sectionName: databaseGroupName(grid.slug, section.name),
           dateModified: topic.updated_at,
           imagePath: `${lessonPath}/opengraph-image`,
           isPremium: topic.is_premium,
@@ -182,7 +186,7 @@ export default async function TopicPage({
       >
         <RecordLessonVisit {...lessonRef} />
         <Breadcrumb
-          className="mb-5"
+          className="mb-4 hidden lg:flex"
           items={[
             { label: "Learning", href: "/learning" },
             { label: grid.name, href: `/learning/${grid.slug}` },
@@ -190,96 +194,104 @@ export default async function TopicPage({
           ]}
         />
 
-        <article id="lesson-article" className="max-w-[46rem]">
+        <article id="lesson-article" className="min-w-0 max-w-[46rem]">
           <header>
-            <p className="eyebrow">
-              {section.name}
-              {here ? (
+            <p className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-xs leading-5">
+              <span className="font-semibold text-primary">{databaseGroupName(grid.slug, section.name)}</span>
+              {here && grid.slug !== DBMS_SQL_SLUG ? (
                 <span className="font-medium normal-case tracking-normal text-ink-faint">
                   {" "}
-                  · Lesson {here.lesson.number} of {outline.total}
+                  Lesson {here.lesson.number} of {outline.total}
                 </span>
               ) : null}
             </p>
-            <h1 className="mt-3 font-display text-[1.9rem] font-bold leading-[1.15] tracking-tight text-ink sm:text-[2.4rem]">
+            <h1 className="mt-2 font-display text-2xl font-bold leading-tight tracking-tight text-ink sm:text-[2rem] lg:text-[2.4rem]">
               {topic.title}
             </h1>
-            {topic.short_description ? <p className="lede mt-3">{topic.short_description}</p> : null}
-            <div className="mt-5 flex flex-wrap items-center gap-2.5">
+            {topic.short_description ? <p className="mt-2 text-sm leading-6 text-ink-muted sm:text-base">{topic.short_description}</p> : null}
+            <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2 text-xs text-ink-muted">
               {minutes ? (
-                <span className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-surface px-3 text-[0.8rem] font-medium text-ink-muted">
+                <span className="inline-flex items-center gap-1.5">
                   <Clock className="h-4 w-4" aria-hidden /> {minutes} min read
                 </span>
               ) : null}
               {topic.is_premium ? (
-                <span className="inline-flex h-9 items-center gap-1 rounded-xl bg-warning/15 px-3 text-[0.8rem] font-semibold text-amber-800 dark:text-amber-300">
+                <span className="inline-flex items-center gap-1 rounded-md bg-warning/15 px-2 py-1 font-semibold text-amber-800 dark:text-amber-300">
                   <Lock className="h-3.5 w-3.5" aria-hidden /> Premium
                 </span>
               ) : null}
-              <LearningBookmarkButton topicId={topic.id} slugPath={`/learning/${grid.slug}/${topic.slug}`} />
+            </div>
+            <div role="group" aria-label="Lesson actions" className="lesson-actions mt-3 grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-start">
+              <div className="min-w-0">
+                <LearningBookmarkButton topicId={topic.id} slugPath={`/learning/${grid.slug}/${topic.slug}`} />
+              </div>
               {!locked && (
-                <LessonComplete
-                  variant="compact"
-                  lesson={lessonRef}
-                  sectionSlugs={sectionSlugs}
-                  courseSlugs={outline.order}
-                  next={next ? { slug: next.slug, title: next.title, sectionName: nextSection } : null}
-                />
+                <div className="min-w-0">
+                  <LessonComplete
+                    variant="compact"
+                    lesson={lessonRef}
+                    sectionSlugs={sectionSlugs}
+                    courseSlugs={outline.order}
+                    next={next ? { slug: next.slug, title: next.title, sectionName: nextSection } : null}
+                  />
+                </div>
               )}
             </div>
           </header>
 
-          <hr className="my-8 border-line" />
+          <hr className="my-5 border-line sm:my-6" />
 
-          {locked ? (
-            /* Server render (anon client) always locks a premium topic — the body
-               is never in the initial HTML. This island re-checks with the
-               visitor's real session and renders the content (and the
-               "Mark as complete" card) for a premium member / admin. */
-            <PremiumTopicContent
-              gridSlug={grid.slug}
-              topicSlug={topic.slug}
-              loginNext={`/learning/${grid.slug}/${topic.slug}`}
-              unlockedFooter={completeCard}
-            />
-          ) : contents.length === 0 ? (
-            <EmptyState title="No content yet" subtitle="This topic's content is on its way — check back soon." />
-          ) : (
-            <>
-              <div className="max-w-none text-[16.5px]">
-                {contents.map((block) => (
-                  <section key={block.id} className="mb-10">
-                    <LessonBlock block={block} topicLinks={topicLinkIndex} linkState={topicLinkState} />
-                    {(safeHref(block.file_url) || safeHref(block.video_url)) && (
-                      <div className="mt-4 flex flex-wrap gap-3">
-                        {safeHref(block.file_url) ? (
-                          <a
-                            href={safeHref(block.file_url) ?? undefined}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="btn-ghost h-10 text-sm"
-                          >
-                            <Download className="h-4 w-4" aria-hidden /> Attachment
-                          </a>
-                        ) : null}
-                        {safeHref(block.video_url) ? (
-                          <a
-                            href={safeHref(block.video_url) ?? undefined}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="btn-ghost h-10 text-sm"
-                          >
-                            <Video className="h-4 w-4" aria-hidden /> Watch video
-                          </a>
-                        ) : null}
-                      </div>
-                    )}
-                  </section>
-                ))}
-              </div>
-              {completeCard}
-            </>
-          )}
+          <div className="lesson-content">
+            {locked ? (
+              /* Server render (anon client) always locks a premium topic — the body
+                 is never in the initial HTML. This island re-checks with the
+                 visitor's real session and renders the content (and the
+                 "Mark as complete" card) for a premium member / admin. */
+              <PremiumTopicContent
+                gridSlug={grid.slug}
+                topicSlug={topic.slug}
+                loginNext={`/learning/${grid.slug}/${topic.slug}`}
+                unlockedFooter={completeCard}
+              />
+            ) : contents.length === 0 ? (
+              <EmptyState title="No content yet" subtitle="This topic's content is on its way — check back soon." />
+            ) : (
+              <>
+                <div className="max-w-none">
+                  {contents.map((block) => (
+                    <section key={block.id} className="mb-8">
+                      <LessonBlock block={block} topicLinks={topicLinkIndex} linkState={topicLinkState} />
+                      {(safeHref(block.file_url) || safeHref(block.video_url)) && (
+                        <div className="mt-4 flex flex-wrap gap-3">
+                          {safeHref(block.file_url) ? (
+                            <a
+                              href={safeHref(block.file_url) ?? undefined}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="btn-ghost h-10 text-sm"
+                            >
+                              <Download className="h-4 w-4" aria-hidden /> Attachment
+                            </a>
+                          ) : null}
+                          {safeHref(block.video_url) ? (
+                            <a
+                              href={safeHref(block.video_url) ?? undefined}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="btn-ghost h-10 text-sm"
+                            >
+                              <Video className="h-4 w-4" aria-hidden /> Watch video
+                            </a>
+                          ) : null}
+                        </div>
+                      )}
+                    </section>
+                  ))}
+                </div>
+                {completeCard}
+              </>
+            )}
+          </div>
         </article>
 
         <div className="max-w-[46rem]">
@@ -289,11 +301,11 @@ export default async function TopicPage({
           {/* 3–5 same-course related lessons (keyword + section match), from the already-fetched tree */}
           <RelatedLessons tree={tree} topicSlug={topic.slug} exclude={[prev?.slug, next?.slug]} />
 
-          <nav className="mt-10 grid gap-3 border-t border-line pt-6 sm:grid-cols-2" aria-label="Lesson navigation">
+          <nav className="mt-8 grid grid-cols-2 gap-3 border-t border-line pt-5" aria-label="Lesson navigation">
             {prev ? (
               <Link
                 href={`/learning/${grid.slug}/${prev.slug}`}
-                className="card card-hover group flex flex-col p-4 text-left"
+                className="card card-hover group flex min-w-0 flex-col p-3 text-left sm:p-4"
               >
                 <span className="flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-ink-faint">
                   <ArrowLeft className="h-3.5 w-3.5" aria-hidden /> Previous
@@ -301,12 +313,12 @@ export default async function TopicPage({
                 <span className="mt-1 text-sm font-semibold text-ink group-hover:text-primary">{prev.title}</span>
               </Link>
             ) : (
-              <span className="hidden sm:block" />
+              <span />
             )}
             {next ? (
               <Link
                 href={`/learning/${grid.slug}/${next.slug}`}
-                className="card card-hover group flex flex-col items-end p-4 text-right"
+                className="card card-hover group flex min-w-0 flex-col items-end p-3 text-right sm:p-4"
               >
                 <span className="flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-ink-faint">
                   Next <ArrowRight className="h-3.5 w-3.5" aria-hidden />

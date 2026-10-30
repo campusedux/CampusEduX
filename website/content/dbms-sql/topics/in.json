@@ -1,0 +1,612 @@
+{
+  "source_ref": "chapter-12-select-and-filtering/in",
+  "slug": "in",
+  "title": "IN",
+  "description": "Use SQL IN for list and subquery membership, handle NULL in NOT IN, build bound parameter lists, and compare exclusion with NOT EXISTS.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Membership names an allowed set\n\nIN asks whether a value matches a member of a supplied list or a query result. A campus store may offer an equipment report for the Camera and Microphone categories. The requirement is membership in two named categories, not membership in a lexical range between their labels. IN communicates that explicit set without repeating the tested column for each alternative.\n\nA literal list is useful when the allowed values are genuinely small and fixed in the query's contract. A maintained table is more suitable when membership changes through an administrative workflow. The SQL should reflect the authoritative owner of that set. Copying a large mutable list into several clients creates opportunities for disagreement even when each individual IN expression is valid.\n\n## Equality alternatives explain the basic result\n\nFor a known value and a list of ordinary known comparable values, IN behaves like equality comparisons joined with OR. A category matching Camera qualifies; a category matching Microphone qualifies; another category does not. A value matching both repeated list entries is still one source row. Membership is a condition, not a mechanism for making another copy of the row per match.\n\nA list containing one value is valid, although ordinary equality may express that simple condition more directly. Do not claim that the single-member list is inherently slower in every plan. The important question is whether the expression accurately communicates the intended set and whether the application constructs and binds it correctly for the actual client library.\n\n```sql\nSELECT equipment_id, category\nFROM equipment\nWHERE category IN ('Camera', 'Microphone')\nORDER BY equipment_id;\n```\n\n## Membership does not determine presentation order\n\nThe order of values inside the list does not define result order. A list saying Microphone before Camera does not promise that microphones appear first. Add an explicit ORDER BY when presentation requires a stable sequence. If the business requirement wants a custom category ordering, represent that ordering deliberately instead of rely on the spelling sequence inside IN.\n\nRepeated source rows remain repeated unless another query operation changes their multiplicity. Two different equipment identities in Camera both qualify. IN does not automatically deduplicate the selected result or select a representative item from each category. A report asking which categories exist needs a different projection and possibly DISTINCT; a report listing equipment should preserve the requested item identities.\n\n## A query can supply the set\n\nA single-column subquery can provide membership values. For example, select equipment whose department_id appears in an approved_departments table. The outer row is tested against the inner query's values; it is not multiplied by duplicate inner matches. The subquery does not require DISTINCT merely to make membership logically correct, although actual execution strategies are the optimizer's responsibility.\n\nChoose the correct relationship. A maintained approved-department identity should be compared with the equipment's department identity, not a display label that can change or repeat. If membership is scoped by campus, include the full scope in the design. Comparing only a department code can accidentally admit equipment from a different campus where the same local code has another meaning.\n\n## A matching value can settle an uncertain list\n\n[NULL](/learning/dbms-sql-tutorial/null-values) introduces an unknown equality comparison. For a known tested value, if any non-NULL member matches, IN is TRUE even when another list member is NULL. For example, three in a list containing three and NULL is true. One known matching alternative is sufficient, just as TRUE OR UNKNOWN is true in three-valued logic.\n\nIf no known member matches and a NULL remains as a possible comparison, the result is UNKNOWN rather than FALSE. Four in a list containing three and NULL therefore does not qualify in WHERE. The missing member does not mean every value is accepted, and it is not silently ignored. This distinction becomes especially important when the membership condition is negated.\n\n## NULL membership is not a missing-value test\n\nPlacing NULL in the list does not make NULL input match through ordinary equality. A NULL tested value compared with ordinary list members yields unknown comparisons. If a report should include missing department identities alongside particular known identities, add an explicit IS NULL alternative. That makes the intended meaning visible rather than depend on an incorrect equality assumption.\n\nA null-safe matching requirement can instead be expressed through an appropriate explicit comparison or EXISTS condition. State whether two absent values are meant to count as the same membership state. Often an unknown department should not be admitted at all. The correct choice comes from the report or access policy, not from the convenience of one operator.\n\n## NOT IN requires a deliberate NULL policy\n\nNOT IN negates the membership result. A known match becomes FALSE, a known nonmatch against an entirely known list becomes TRUE, and UNKNOWN stays UNKNOWN. Consequently, a nullable exclusion subquery can suppress every candidate that would otherwise be a known nonmatch, because each such candidate remains uncertain about the missing exclusion value.\n\nA candidate that matches a known exclusion is already false under NOT IN; it does not need to become unknown for the overall report to be unexpectedly empty. Describe this precisely rather than claim that a single NULL makes every row's predicate unknown. Matching and nonmatching candidates can have different truth values while neither group survives the negated WHERE condition.\n\n## Express absence with a correlated existence test\n\nWhen the requirement is to find equipment with no matching restriction row, NOT EXISTS can express the relationship directly. The inner query looks for a restriction with the candidate's protected identity. If no such row exists, the candidate qualifies. An unrelated restriction row with a NULL identity does not match through ordinary equality and therefore does not contaminate every candidate's result.\n\nThe outer NULL policy still needs definition. A candidate with a NULL identity may have no equality match and thus pass NOT EXISTS. If unknown identities must be excluded, add an outer IS NOT NULL condition. Changing NOT IN to NOT EXISTS is not a universal semantic-preserving text substitution; compare their intended missing-value policies and test both sides of the relationship.\n\n## Dynamic lists need supported construction\n\nAn application often receives several selected category identifiers. Use the database client's supported array or placeholder expansion mechanism rather than interpolate raw values into SQL text. A single bound string containing comma-separated values does not automatically become several SQL list elements. It is ordinarily one value unless the client API explicitly transforms that representation.\n\nDecide how an empty selected list behaves before building SQL. It might mean no matches, all permitted categories or invalid input, depending on the feature. MySQL does not accept an empty literal IN list as a general representation of that decision. Build the appropriate supported condition at the trusted boundary, and never interpret an absent selection as broader access unless the contract allows it.\n\n## Types and lookup size affect implementation choices\n\nKeep list members compatible with the tested value's domain. Comparing text equipment codes with numeric list values can trigger conversion and merge identities that the application treats as distinct. Text comparisons also follow [collation](/learning/dbms-sql-tutorial/data-types). Bind the correct types and retain representative case, leading-zero and NULL fixtures if those differences matter to the contract.\n\nFor large evolving sets, a lookup table or subquery can make ownership and maintenance clearer than a very long literal list. A join may also be suitable, but repeated lookup matches can multiply outer rows unless uniqueness or the query shape prevents it. Choose the form that expresses membership or relationship multiplicity accurately, then inspect actual plans if performance warrants tuning.\n\n## Separate membership from authority\n\nA client-provided category list is user input, not an authorization grant. The trusted data boundary must first limit the caller to permitted rows. The membership predicate then expresses a requested subset within that authority. A caller adding a private department identifier to an IN list must not gain access simply because the normal interface would never display that option.\n\nThe first exercise lists equipment from two named categories and preserves all matching identities. The second finds nonrestricted known identities despite NULL entries in the restrictions table. Its fixtures include matches, nonmatches and an unknown candidate so the absence policy is explicit. Trace each candidate against the lookup rows and explain the result before considering indexing or alternative query syntax.\n",
+  "references": [
+    {
+      "title": "MySQL 8.4 IN and comparison rules",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/comparison-operators.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-12-in",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-12-in-1",
+          "test_id": "pt-dbms-sql-12-in",
+          "question_text": "What does IN express?",
+          "options": [
+            "A numeric interval automatically",
+            "Membership in supplied comparison values",
+            "A substring search",
+            "A result sort order"
+          ],
+          "correct_index": 1,
+          "explanation": "The set may be literal or query supplied.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-12-in-2",
+          "test_id": "pt-dbms-sql-12-in",
+          "question_text": "Which known-value condition matches category IN(Camera,Microphone) with properly quoted literals?",
+          "options": [
+            "Both equalities joined with AND",
+            "category equals Camera OR category equals Microphone",
+            "A lexical BETWEEN range",
+            "A single combined comma-separated category"
+          ],
+          "correct_index": 1,
+          "explanation": "Membership alternatives share the same tested value.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-12-in-3",
+          "test_id": "pt-dbms-sql-12-in",
+          "question_text": "Can a single-column subquery supply IN membership?",
+          "options": [
+            "Only if it includes DISTINCT",
+            "Yes",
+            "Only if it returns exactly one row",
+            "No, lists must always be literal"
+          ],
+          "correct_index": 1,
+          "explanation": "The inner result provides comparison values.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-12-in-4",
+          "test_id": "pt-dbms-sql-12-in",
+          "question_text": "Known value 4 is tested against IN(3,NULL). What is the result?",
+          "options": [
+            "TRUE",
+            "UNKNOWN",
+            "FALSE",
+            "A syntax error"
+          ],
+          "correct_index": 1,
+          "explanation": "No known match exists, and the missing member leaves uncertainty.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-12-in-5",
+          "test_id": "pt-dbms-sql-12-in",
+          "question_text": "Is IN with one member invalid?",
+          "options": [
+            "Yes, two members are mandatory",
+            "No, although equality may be more direct",
+            "Only for text values",
+            "Only if the value is zero"
+          ],
+          "correct_index": 1,
+          "explanation": "Its meaning is not an automatic performance defect.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-12-in-6",
+          "test_id": "pt-dbms-sql-12-in",
+          "question_text": "What can make a large changing membership set easier to maintain?",
+          "options": [
+            "Copying it into every UI component",
+            "An authoritative lookup table or subquery",
+            "A separate query per candidate",
+            "Removing all keys"
+          ],
+          "correct_index": 1,
+          "explanation": "A maintained data source gives the set an owner.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-12-in-7",
+          "test_id": "pt-dbms-sql-12-in",
+          "question_text": "Why can NOT IN against a nullable exclusion set produce no rows?",
+          "options": [
+            "NULL always turns every predicate true",
+            "Known matches are false and remaining nonmatches may be unknown",
+            "NOT IN ignores NULLs without effect",
+            "NOT IN automatically removes the subquery"
+          ],
+          "correct_index": 1,
+          "explanation": "Both FALSE and UNKNOWN are excluded by WHERE.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-12-in-8",
+          "test_id": "pt-dbms-sql-12-in",
+          "question_text": "Can numeric identifiers use IN?",
+          "options": [
+            "No, IN is text-only",
+            "Yes, with appropriate comparable values",
+            "Only if converted to dates",
+            "Only inside a JOIN"
+          ],
+          "correct_index": 1,
+          "explanation": "Membership is not limited to strings.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-12-in-new-9",
+          "test_id": "pt-dbms-sql-12-in",
+          "question_text": "What is 3 IN(3,NULL)?",
+          "options": [
+            "TRUE",
+            "UNKNOWN",
+            "FALSE",
+            "A duplicate-row error"
+          ],
+          "correct_index": 0,
+          "explanation": "A known matching alternative settles membership.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-12-in-new-10",
+          "test_id": "pt-dbms-sql-12-in",
+          "question_text": "Does NULL IN(3,NULL) become TRUE because NULL is listed?",
+          "options": [
+            "Yes, NULL always equals NULL",
+            "No, ordinary NULL comparisons remain unknown",
+            "Only if sorted first",
+            "Only with one primary key"
+          ],
+          "correct_index": 1,
+          "explanation": "Use IS NULL for deliberate missing-value inclusion.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-12-in-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-12-in-application-new-1",
+          "test_id": "pt-dbms-sql-12-in-application",
+          "question_text": "Does list order control output row order?",
+          "options": [
+            "Yes, the first list member always appears first",
+            "No, use ORDER BY",
+            "Only for integer lists",
+            "Only if the list is bound"
+          ],
+          "correct_index": 1,
+          "explanation": "Membership and presentation are independent.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-12-in-application-new-2",
+          "test_id": "pt-dbms-sql-12-in-application",
+          "question_text": "Do duplicate inner values multiply rows under IN membership?",
+          "options": [
+            "Yes, always",
+            "Only for NULL members",
+            "No, membership is a predicate on each outer row",
+            "Only when the list has more than ten values"
+          ],
+          "correct_index": 2,
+          "explanation": "A join can have different multiplicity.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-12-in-application-new-3",
+          "test_id": "pt-dbms-sql-12-in-application",
+          "question_text": "Does a bound string Camera,Microphone automatically become two IN members?",
+          "options": [
+            "Yes, every SQL driver splits commas",
+            "Only if spaces are absent",
+            "Only when wrapped in quotes",
+            "No, unless a supported client API explicitly expands it"
+          ],
+          "correct_index": 3,
+          "explanation": "Use the actual placeholder or array mechanism.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-12-in-application-new-4",
+          "test_id": "pt-dbms-sql-12-in-application",
+          "question_text": "What must an application define for an empty selection?",
+          "options": [
+            "Its explicit no-match, all-permitted or invalid-input policy",
+            "That IN() is always valid MySQL",
+            "That missing input grants unrestricted access",
+            "That NULL means all rows"
+          ],
+          "correct_index": 0,
+          "explanation": "Do not let construction accidents decide the contract.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-12-in-application-new-5",
+          "test_id": "pt-dbms-sql-12-in-application",
+          "question_text": "What can NOT EXISTS express directly?",
+          "options": [
+            "Guaranteed non-NULL outer identity",
+            "Absence of a matching related row",
+            "A sorted lookup list",
+            "A replacement for every access rule"
+          ],
+          "correct_index": 1,
+          "explanation": "The correlated match defines the relationship.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-12-in-application-new-6",
+          "test_id": "pt-dbms-sql-12-in-application",
+          "question_text": "Why may an outer IS NOT NULL be needed with NOT EXISTS?",
+          "options": [
+            "NOT EXISTS removes all NULLs automatically",
+            "It makes every lookup unique",
+            "An unknown outer identity may otherwise have no matching equality row and qualify",
+            "It forces the query to commit"
+          ],
+          "correct_index": 2,
+          "explanation": "Outer missingness is a separate policy.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-12-in-application-new-7",
+          "test_id": "pt-dbms-sql-12-in-application",
+          "question_text": "Why compare protected department identities instead of display names?",
+          "options": [
+            "Names are always unique",
+            "IN never accepts integers",
+            "Only labels can be indexed",
+            "Labels can repeat or change"
+          ],
+          "correct_index": 3,
+          "explanation": "The compared domain should reflect authoritative identity.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-12-in-application-new-8",
+          "test_id": "pt-dbms-sql-12-in-application",
+          "question_text": "What is a possible semantic difference when rewriting membership as a join?",
+          "options": [
+            "Duplicate lookup matches can multiply outer rows",
+            "A join always removes duplicates",
+            "A join cannot use keys",
+            "Every join automatically ignores NULL policies"
+          ],
+          "correct_index": 0,
+          "explanation": "Preserve result grain when selecting an alternative form.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-12-in-application-new-9",
+          "test_id": "pt-dbms-sql-12-in-application",
+          "question_text": "Can user-supplied membership values authorize access?",
+          "options": [
+            "Yes, if the list is parameterized",
+            "No, trusted access enforcement still applies",
+            "Yes, if the UI usually hides private values",
+            "Only for long lists"
+          ],
+          "correct_index": 1,
+          "explanation": "A requested subset is not an authorization grant.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-12-in-application-new-10",
+          "test_id": "pt-dbms-sql-12-in-application",
+          "question_text": "Which fixture exposes NOT IN NULL contamination?",
+          "options": [
+            "Only known matching candidates",
+            "An empty outer table",
+            "A known nonmatching candidate and a NULL lookup member",
+            "Only one nonnullable literal"
+          ],
+          "correct_index": 2,
+          "explanation": "The candidate should remain eligible under the explicit absence policy.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cp-dbms-sql-electronics-or-books",
+      "slug": "electronics-or-books",
+      "title": "Electronics or Books",
+      "difficulty": "Easy",
+      "task": "Return id,name,category for all products in Electronics or Books, ordered by id. Do not add price or stock restrictions. Preserve every source row.",
+      "schema_sql": "CREATE TABLE products (\n  id INTEGER PRIMARY KEY,\n  name TEXT NOT NULL,\n  category TEXT NOT NULL,\n  price INTEGER NOT NULL,\n  stock INTEGER\n);",
+      "seed_sql": "INSERT INTO products (id, name, category, price, stock) VALUES\n(1, 'ProLaptop', 'Electronics', 85000, 12),\n(2, 'Notebook', 'Stationery', 40, NULL),\n(3, 'Python Basics', 'Books', 350, 5),\n(4, 'ProPhone', 'Electronics', 45000, 0),\n(5, 'Novel', 'Books', 220, NULL),\n(6, 'Desk Lamp', 'Home', 900, 8);",
+      "expected": "id\tname\tcategory\n1\tProLaptop\tElectronics\n3\tPython Basics\tBooks\n4\tProPhone\tElectronics\n5\tNovel\tBooks",
+      "ordering": "As explicitly ordered in the result query.",
+      "constraints": [
+        "Use only the supplied synthetic tables and requested transition.",
+        "Preserve unrelated rows."
+      ],
+      "edge_cases": [
+        "A matching product with zero stock still qualifies.",
+        "No permitted category yields an empty result."
+      ],
+      "hints": [
+        "Use the two literal categories inside IN.",
+        "Return and order the retained columns."
+      ],
+      "solution_sql": "SELECT id,name,category FROM products WHERE category IN ('Electronics','Books') ORDER BY id;",
+      "explanation": "The two allowed categories are alternatives; every matching product identity survives. Price and stock are outside this retained requirement.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO products (id, name, category, price, stock) VALUES\n(1, 'ProTablet', 'Electronics', 32000, 4),\n(2, 'Pencil Set', 'Stationery', 60, NULL),\n(3, 'SQL Guide', 'Books', 500, 10),\n(4, 'ProSpeaker', 'Electronics', 6000, 0);",
+          "expected": "id\tname\tcategory\n1\tProTablet\tElectronics\n3\tSQL Guide\tBooks\n4\tProSpeaker\tElectronics"
+        },
+        {
+          "seed_sql": "INSERT INTO products VALUES (1,'Book','Books',0,NULL),(2,'Lamp','Home',500,5);",
+          "expected": "id\tname\tcategory\n1\tBook\tBooks"
+        },
+        {
+          "seed_sql": "INSERT INTO products VALUES (1,'Lamp','Home',10,1);",
+          "expected": ""
+        }
+      ],
+      "existing_problem": true,
+      "original_description_md5": "04a8c1006d1c215cbb8674c1f8a1c558",
+      "original_check_sql": "",
+      "check_sql": ""
+    },
+    {
+      "id": "cx-in-null-safe-exclusion-policy",
+      "slug": "in-null-safe-exclusion-policy",
+      "title": "Find known candidates without a restriction match",
+      "difficulty": "Medium",
+      "task": "Return candidate_id for non-NULL candidate identities with no equal restricted_id in restrictions. NULL restricted_id means an unusable lookup row and must not exclude unrelated candidates. candidate_row is only a source key. Order by candidate_id. Use a correlated NOT EXISTS absence test.",
+      "schema_sql": "CREATE TABLE candidates(candidate_row INT PRIMARY KEY,candidate_id INT UNIQUE); CREATE TABLE restrictions(restriction_row INT PRIMARY KEY,restricted_id INT);",
+      "seed_sql": "INSERT INTO candidates VALUES (1,10),(2,20),(3,NULL),(4,30); INSERT INTO restrictions VALUES (1,20),(2,NULL);",
+      "expected": "candidate_id\n10\n30",
+      "ordering": "As explicitly ordered in the result query.",
+      "constraints": [
+        "Use only the supplied synthetic tables and requested transition.",
+        "Preserve unrelated rows."
+      ],
+      "edge_cases": [
+        "A NULL lookup value must not suppress every known candidate.",
+        "Unknown candidates are intentionally excluded."
+      ],
+      "hints": [
+        "Specify the outer missing-identity policy separately.",
+        "Look for an equal restriction identity, not mere lookup-table presence."
+      ],
+      "solution_sql": "SELECT c.candidate_id FROM candidates c WHERE c.candidate_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM restrictions r WHERE r.restricted_id=c.candidate_id) ORDER BY c.candidate_id;",
+      "explanation": "The outer known-identity condition excludes unknown candidates. The correlated absence test ignores unrelated NULL restrictions while excluding actual equal identities.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO candidates VALUES (1,10),(2,NULL); INSERT INTO restrictions VALUES (1,NULL);",
+          "expected": "candidate_id\n10"
+        },
+        {
+          "seed_sql": "INSERT INTO candidates VALUES (1,20); INSERT INTO restrictions VALUES (1,20),(2,NULL);",
+          "expected": ""
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-12-in-1",
+      "test_id": "pt-dbms-sql-12-in",
+      "question_text": "What does IN test for?",
+      "options": [
+        "Whether a value falls within a numeric range",
+        "Whether a value matches ANY item in a given list (or subquery)",
+        "Whether a string contains a substring",
+        "Whether a column is NULL"
+      ],
+      "correct_index": 1,
+      "explanation": "IN checks membership in a set of values.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-12-in-2",
+      "test_id": "pt-dbms-sql-12-in",
+      "question_text": "Which is equivalent to `category IN ('Electronics', 'Books')`?",
+      "options": [
+        "category = 'Electronics' AND category = 'Books'",
+        "category = 'Electronics' OR category = 'Books'",
+        "category BETWEEN 'Electronics' AND 'Books'",
+        "category LIKE 'Electronics,Books'"
+      ],
+      "correct_index": 1,
+      "explanation": "IN is shorthand for chained OR-equality checks against the same column.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-12-in-3",
+      "test_id": "pt-dbms-sql-12-in",
+      "question_text": "Can IN take a subquery instead of a literal list?",
+      "options": [
+        "No, only literal values are allowed",
+        "Yes — WHERE category IN (SELECT ...) is a common and valid pattern bridging to subqueries",
+        "Only SELECT DISTINCT subqueries are allowed inside IN",
+        "Subqueries inside IN require a special SQL extension"
+      ],
+      "correct_index": 1,
+      "explanation": "IN accepting a subquery is one of the fundamental ways subqueries integrate into filtering.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-12-in-4",
+      "test_id": "pt-dbms-sql-12-in",
+      "question_text": "What happens if a NULL is present in an IN list and the tested value doesn't match any non-NULL item?",
+      "options": [
+        "The IN expression evaluates to a clean FALSE",
+        "The IN expression evaluates to UNKNOWN rather than FALSE, due to the NULL's presence",
+        "The NULL is silently ignored with no effect",
+        "This causes a SQL syntax error"
+      ],
+      "correct_index": 1,
+      "explanation": "A NULL anywhere in the list can turn a would-be FALSE result into UNKNOWN — a classic gotcha, especially significant for NOT IN.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-12-in-5",
+      "test_id": "pt-dbms-sql-12-in",
+      "question_text": "Why is `column IN (single_value)` considered unnecessarily indirect?",
+      "options": [
+        "It is actually invalid syntax",
+        "A plain column = single_value expresses the exact same condition more directly",
+        "IN cannot accept a single value, only two or more",
+        "This form is always slower to execute"
+      ],
+      "correct_index": 1,
+      "explanation": "For exactly one value, ordinary equality is the more direct and idiomatic choice.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-12-in-6",
+      "test_id": "pt-dbms-sql-12-in",
+      "question_text": "For a genuinely large lookup set, what alternative to a long literal IN list is often more maintainable?",
+      "options": [
+        "There is no alternative; IN must always be used",
+        "A JOIN against a real table (or a subquery) holding those values",
+        "Repeating the query once per value",
+        "Switching to a NoSQL database"
+      ],
+      "correct_index": 1,
+      "explanation": "A real table plus JOIN scales better and is easier to maintain than a very long hardcoded list.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-12-in-7",
+      "test_id": "pt-dbms-sql-12-in",
+      "question_text": "Why is the NULL-in-IN-list gotcha especially dangerous for NOT IN specifically?",
+      "options": [
+        "It isn't more dangerous for NOT IN than for IN",
+        "A single NULL in the subquery/list can make the entire NOT IN condition evaluate to UNKNOWN for every row, silently returning zero results",
+        "NOT IN automatically ignores any NULLs in the list",
+        "NOT IN cannot be used with subqueries at all"
+      ],
+      "correct_index": 1,
+      "explanation": "This exact scenario was highlighted as a real-world footgun back in Chapter 7's NULL Semantics discussion of NOT IN.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-12-in-8",
+      "test_id": "pt-dbms-sql-12-in",
+      "question_text": "Is IN limited to string values, or can it be used with numbers too?",
+      "options": [
+        "Only strings are supported",
+        "IN works with any comparable data type, including numbers and dates",
+        "Only numbers are supported",
+        "IN requires mixed types in the same list"
+      ],
+      "correct_index": 1,
+      "explanation": "IN is type-agnostic — it works with whatever type the compared column holds.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "coordinator",
+    "independent_review": "passed",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Independent manual review passed; native MySQL fixture evidence recorded separately; provider/browser/Supabase release gates remain separate.",
+    "existing_question_corrections": [
+      "tq-dbms-sql-12-in-1",
+      "tq-dbms-sql-12-in-2",
+      "tq-dbms-sql-12-in-3",
+      "tq-dbms-sql-12-in-4",
+      "tq-dbms-sql-12-in-5",
+      "tq-dbms-sql-12-in-6",
+      "tq-dbms-sql-12-in-7",
+      "tq-dbms-sql-12-in-8"
+    ],
+    "canonical_answer_indices_preserved": true,
+    "editorial_record": "Original snapshots retained. Questions rewritten for precise dialect and topic coverage while preserving identities and canonical answer positions; technical and independent review pending.",
+    "retained_exercise_contract": "Original id,slug,title,difficulty,schema,seed and trailing checker preserved; original hidden fixture retained with additional boundaries.",
+    "independent_reviewer": "Codex reviewer, current 2026-10-30 session",
+    "independent_review_scope": "Read full notes, all 640 MCQ stems/options/canonical answers/explanations, 64 exercise contracts/solutions/fixtures, and all 32 diagrams. Verified retained identities/answers through source-continuity tests; SQL execution evidence is recorded separately. No external originality, provider, live application or Supabase authorization clearance.",
+    "independent_review_record": "reports/independent-review-2026-10-30.json",
+    "content_sha256": "0766457d6c4e951ac54805cfe5d7941ea16bf12469d62600d7edb06461979ce3"
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-12-in",
+    "original_note_sha256": "35d41c8e09c12da8e0a5ce69ac706c7a7874234934a11d06a5889e89a131618d",
+    "status": "drafted; not yet included in prepared paired migrations"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "A nullable membership list changes nonmatch certainty",
+      "description": "WHERE keeps only TRUE, and NOT preserves UNKNOWN rather than turning it into acceptance.",
+      "columns": [
+        "Tested value",
+        "List",
+        "IN result",
+        "NOT IN result"
+      ],
+      "rows": [
+        [
+          "3",
+          "3, NULL",
+          "TRUE",
+          "FALSE"
+        ],
+        [
+          "4",
+          "3, NULL",
+          "UNKNOWN",
+          "UNKNOWN"
+        ],
+        [
+          "4",
+          "3, 5",
+          "FALSE",
+          "TRUE"
+        ],
+        [
+          "NULL",
+          "3, NULL",
+          "UNKNOWN",
+          "UNKNOWN"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "drafted — verification pending",
+    "server_rendering": "pending",
+    "browser_rendering": "unverified",
+    "independent_review": "pending"
+  },
+  "authoring_status": "drafted — verification pending",
+  "sql_verification": {
+    "scope": "not executed; exact MySQL/provider verification pending",
+    "all_passed": false,
+    "cases": []
+  }
+}

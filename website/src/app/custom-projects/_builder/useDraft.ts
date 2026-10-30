@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { toast } from "@/components/ui/Toast";
 import { createBrowserSupabase } from "@/lib/supabase/browser";
 import { type BuilderDraft, emptyDraft, normalizeDraft } from "@/lib/customProjects";
 
@@ -16,6 +17,10 @@ export function useDraft() {
   const [userId, setUserId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const dirtyRef = useRef(false);
+  const latestDraft = useRef(draft);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const writes = useRef<Promise<void>>(Promise.resolve());
+  const [loadError, setLoadError] = useState<Error | null>(null);
 
   // initial load
   useEffect(() => {
@@ -31,26 +36,40 @@ export function useDraft() {
         return;
       }
       setUserId(user.id);
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("custom_project_drafts")
         .select("payload")
         .eq("user_id", user.id)
         .maybeSingle();
       if (cancelled) return;
-      if (data?.payload) setDraft(normalizeDraft(data.payload));
+      if (error) throw new Error(error.message);
+      if (data?.payload) {
+        latestDraft.current = normalizeDraft(data.payload);
+        setDraft(latestDraft.current);
+      }
       setLoaded(true);
-    })();
+    })().catch((err) => {
+      if (!cancelled) setLoadError(err instanceof Error ? err : new Error("Something went wrong. Please try again."));
+    });
     return () => {
       cancelled = true;
     };
   }, []);
 
   const persist = useCallback(
-    async (payload: BuilderDraft, uid: string) => {
-      setSaving(true);
-      const supabase = createBrowserSupabase();
-      await supabase.from("custom_project_drafts").upsert({ user_id: uid, payload }, { onConflict: "user_id" });
-      setSaving(false);
+    (payload: BuilderDraft, uid: string) => {
+      const write = writes.current.catch(() => {}).then(async () => {
+        setSaving(true);
+        try {
+          const { error } = await createBrowserSupabase().from("custom_project_drafts")
+            .upsert({ user_id: uid, payload }, { onConflict: "user_id" });
+          if (error) throw new Error(error.message);
+        } finally {
+          setSaving(false);
+        }
+      });
+      writes.current = write;
+      return write;
     },
     [],
   );
@@ -58,35 +77,46 @@ export function useDraft() {
   // debounced autosave
   useEffect(() => {
     if (!loaded || !userId || !dirtyRef.current) return;
-    const t = setTimeout(() => {
-      persist(draft, userId);
+    timer.current = setTimeout(() => {
+      timer.current = null;
+      persist(latestDraft.current, userId).catch((err) => {
+        toast({ title: "Could not save", description: err instanceof Error ? err.message : undefined, tone: "error" });
+      });
     }, 700);
-    return () => clearTimeout(t);
+    return () => { if (timer.current) clearTimeout(timer.current); };
   }, [draft, loaded, userId, persist]);
 
   const patch = useCallback((p: Partial<BuilderDraft>) => {
     dirtyRef.current = true;
-    setDraft((d) => ({ ...d, ...p }));
+    latestDraft.current = { ...latestDraft.current, ...p };
+    setDraft(latestDraft.current);
   }, []);
 
   const update = useCallback((fn: (d: BuilderDraft) => BuilderDraft) => {
     dirtyRef.current = true;
-    setDraft((d) => fn(d));
+    latestDraft.current = fn(latestDraft.current);
+    setDraft(latestDraft.current);
   }, []);
 
   /** Flush any pending change immediately — call before navigating to the next step. */
   const saveNow = useCallback(async () => {
     if (!userId) return;
-    await persist(draft, userId);
-  }, [userId, draft, persist]);
+    if (timer.current) clearTimeout(timer.current);
+    await persist(latestDraft.current, userId);
+  }, [userId, persist]);
 
   const clearDraft = useCallback(async () => {
     if (!userId) return;
-    const supabase = createBrowserSupabase();
-    await supabase.from("custom_project_drafts").delete().eq("user_id", userId);
-    setDraft(emptyDraft());
+    if (timer.current) clearTimeout(timer.current);
+    await writes.current.catch(() => {});
+    const { error } = await createBrowserSupabase().from("custom_project_drafts").delete().eq("user_id", userId);
+    if (error) throw new Error(error.message);
     dirtyRef.current = false;
+    latestDraft.current = emptyDraft();
+    setDraft(latestDraft.current);
   }, [userId]);
+
+  if (loadError) throw loadError;
 
   return { draft, patch, update, saveNow, clearDraft, loaded, userId, saving };
 }

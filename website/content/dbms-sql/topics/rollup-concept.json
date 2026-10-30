@@ -1,0 +1,571 @@
+{
+  "source_ref": "chapter-15-group-by-and-aggregation/rollup-concept",
+  "slug": "rollup-concept",
+  "title": "ROLLUP Concept",
+  "description": "Build hierarchical SQL totals with MySQL WITH ROLLUP, grouping flags, NULL-safe labels, level filters and protection against subtotal double counting.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Add hierarchical totals without losing their meaning\n\nROLLUP requests a hierarchy of aggregate grouping sets in one query. For dimensions region and product in that order, the hierarchy contains detailed region-product groups, regional subtotals and one grand total. It does not also produce product-only totals across regions. The order of dimensions therefore defines a reporting hierarchy rather than merely rearranging the spelling of the same ordinary grouping key.\n\nImagine a supplier whose orders are classified by sales region and equipment product. A manager wants each region's product revenue, the region's subtotal and the company-wide total together. A rollup can express these related measures compactly. The challenge is to distinguish a generated subtotal marker from a genuinely missing dimension value, and to prevent consumers from adding the same underlying revenue several times.\n\n## Use the MySQL syntax for the hierarchy\n\n```sql\nCREATE TABLE orders(order_id INT PRIMARY KEY,region VARCHAR(12),product VARCHAR(20),amount DECIMAL(10,2));\nINSERT INTO orders VALUES\n(1,'East','Camera',90),(2,'East','Tripod',220),\n(3,'North','Camera',80),(4,'North','Tripod',120),\n(5,'West','Camera',250),(6,'West','Tripod',300);\nSELECT region,product,SUM(amount) AS total_amount,\n       GROUPING(region) AS region_total_flag,\n       GROUPING(product) AS product_total_flag\nFROM orders GROUP BY region,product WITH ROLLUP;\n```\n\nThis fixture has six detailed combinations, three regional subtotal groups and one grand-total group, making ten output rows. East's subtotal is three hundred ten, North's is two hundred and West's is five hundred fifty. The grand total is one thousand sixty. These counts follow from the represented combinations, not from a universal promise that every two-column rollup returns ten rows.\n\nThis lesson uses MySQL WITH ROLLUP after the grouping expressions. Current MySQL8.4 documentation also describes a ROLLUP grouping-construct alternative; verify the exact deployed release. PostgreSQL, SQL Server and Oracle have their own documented grouping syntax. Do not copy syntax between engines without checking the target. The conceptual expansion into region-product, region and empty grouping sets helps compare meaning while keeping executable dialect syntax separate.\n\n## Follow the prefix sequence\n\nFor region, product and sales_channel, the hierarchy contains those three dimensions, then region-product, then region, then the empty grouping set. At each step it drops a suffix from the chosen ordering. A product-sales_channel grouping without region is not one of those prefixes and is not automatically included.\n\nChanging the order to product, region yields product subtotals instead of region subtotals. Both orders retain detailed combinations and the grand total, but the middle reporting level differs. Choose the order from the business hierarchy. If every combination of dimensions is required, the conceptual operation is a cube rather than a simple rollup, and MySQL may need a different explicit query formulation.\n\n## Distinguish generated NULL from stored NULL\n\nRollup represents omitted grouping dimensions using null markers in the output. Source data can also contain a genuine NULL region or product. Seeing NULL in the displayed cell therefore does not tell the reader whether it means unknown product or all products for a subtotal.\n\nGROUPING(expression) identifies whether that expression was aggregated away in the rollup row. For a real unknown product inside a detailed group, GROUPING(product) is zero. For a regional subtotal that omits product, it is one. Include these flags in an intermediate result or use them to create clear labels. COALESCE(product, 'Total') alone conflates missing source data with generated totals.\n\n## Design labels without destroying dimension identity\n\nA CASE expression can display All products when GROUPING(product) equals one and Unknown product when the grouping flag is zero but product itself is null. Apply the same distinction to region. Keep raw dimension keys and flags available to software consumers when they need stable identities; a display label like Total can also be a legitimate source value.\n\nThe grand-total row has both dimensions aggregated away. A regional subtotal aggregates product away while retaining a region grouping value, which can itself be a real null source group. Test the flags rather than a simplistic rule that region IS NULL always means grand total. This is especially important when rendering expandable reports or exporting rows to another analytical tool.\n\n## Filter source rows and generated groups deliberately\n\nWHERE limits the order population before any detail or subtotal measure is formed. HAVING can filter aggregate result rows, including subtotal and grand-total rows. In the fixture, HAVING SUM(amount)>200 removes North's regional subtotal because two hundred is not strictly greater than two hundred. It also filters individual detail groups according to their own aggregate values.\n\nIf the requirement is to keep all detail rows for regions whose subtotal exceeds a threshold, that is a different query. Filtering every rollup row by its own sum does not express group-level inclusion of all descendants. Compute the qualifying region population separately and join or filter the source accordingly, or use a clearly staged query. Specify whether the threshold applies to the source population, each displayed row or a selected hierarchy level.\n\n## Do not sum a mixed-level report as if it were detail\n\nThe grand total already includes every source order once. Regional subtotals include them again, and detail groups include them again at the finer level. Adding total_amount across the entire displayed rollup output therefore double counts or triple counts the same revenue. This is not an error in SUM; it is a misuse of a result containing several grains.\n\nTeach report consumers to select the intended level using grouping flags. To recover the company total, read the grand-total row or independently aggregate the source facts. To compare regions, use the regional subtotal rows only. Export metadata should identify row level so a spreadsheet user does not innocently add all rows and publish an inflated figure.\n\n## Keep ordering as an explicit presentation contract\n\nThe hierarchical concept does not remove the need to request final output order. MySQL supports ordering rollup results under documented rules, and a derived query can expose flags for a clear outer ORDER BY. Sort on raw dimensions and grouping flags where necessary, then format labels. Do not rely solely on the location of NULL in a default sort to distinguish hierarchy levels.\n\nFor example, placing the grand total last can sort first by its grand-total flag and then by regional identity and product-level flag. Real NULL regions need an explicit display policy as well. Define the desired order for unknown members instead of assuming that every engine and collation orders them identically. The result's semantic level and its visual position are related design choices, not interchangeable facts.\n\n## Solve a regional hierarchy exercise\n\nFirst exercise: produce regional subtotals and a grand total from the fixture, exposing GROUPING(region) as the level flag and ordering detail regions before the grand total. The regional values are three hundred ten, two hundred and five hundred fifty; the grand value is one thousand sixty. Add another East order worth ten and update both East and the grand total by ten.\n\nSecond exercise: roll up region and product, then retain only regional subtotal rows, excluding the grand total. The solution selects GROUPING(product)=1 and GROUPING(region)=0 in the aggregate filtering condition. Add a genuinely null product row and verify that its detailed group has GROUPING(product)=0, so it is not mistaken for the regional subtotal.\n\n## Keep hierarchical scope visible in comparisons\n\nTwo regions can have the same subtotal without being the same group. Retain region identity even when displayed measures match, and do not use DISTINCT on formatted measure labels to reduce the report. Likewise, a detail total can equal its region subtotal when only one product is represented. Equal numeric values do not make those two report levels interchangeable.\n\n## Challenge empty and overlapping populations\n\nAn empty input has no detailed groups but the grand-total grouping can still supply its aggregate result, with COUNT and SUM following their different empty-input semantics. Predict the actual measure rather than inventing a zero sum without a specified COALESCE policy. Include source nulls and repeated equal amounts in tests; the repeated orders remain separate facts even if their prices match.\n\nContinue with [GROUP BY](/learning/dbms-sql-tutorial/group-by), [grouping sets](/learning/dbms-sql-tutorial/grouping-sets-concept), [cube concepts](/learning/dbms-sql-tutorial/cube-concept) and [conditional aggregation](/learning/dbms-sql-tutorial/conditional-aggregation). A correct rollup report identifies the hierarchy, source population, grouping flags, measure definitions and level-specific interpretation before it chooses attractive subtotal labels.",
+  "references": [
+    {
+      "title": "MySQL GROUP BY modifiers",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/group-by-modifiers.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-15-rollup-concept",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-15-rollup-concept-1",
+          "test_id": "pt-dbms-sql-15-rollup-concept",
+          "question_text": "What grouping sets does `ROLLUP(region, product)` expand to?",
+          "options": [
+            "GROUPING SETS ((region), (product), ())",
+            "GROUPING SETS ((region, product), (region), ())",
+            "GROUPING SETS ((region, product), (product), ())",
+            "GROUPING SETS ((region, product))"
+          ],
+          "correct_index": 1,
+          "explanation": "ROLLUP peels off columns from the right, one at a time: full detail (region, product), then (region) alone, then the empty grand-total set — never a product-only set.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-15-rollup-concept-2",
+          "test_id": "pt-dbms-sql-15-rollup-concept",
+          "question_text": "For the stated six region-product combinations across three regions, how many rollup rows result?",
+          "options": [
+            "6",
+            "7",
+            "10",
+            "12"
+          ],
+          "correct_index": 2,
+          "explanation": "6 detail rows (per region/product) + 3 region subtotal rows + 1 grand total row = 10.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-15-rollup-concept-3",
+          "test_id": "pt-dbms-sql-15-rollup-concept",
+          "question_text": "What is the East region's subtotal row's total_amount in `GROUP BY ROLLUP(region, product)`?",
+          "options": [
+            "160",
+            "150",
+            "310",
+            "1060"
+          ],
+          "correct_index": 2,
+          "explanation": "The current East fixture has Camera90 and Tripod220, so its subtotal is90+220=310.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-15-rollup-concept-4",
+          "test_id": "pt-dbms-sql-15-rollup-concept",
+          "question_text": "Does `GROUP BY ROLLUP(region, product)` produce a row summarizing totals by product alone, ignoring region (e.g., region=NULL, product='Widget')?",
+          "options": [
+            "Yes, always",
+            "No — ROLLUP only produces subtotals by dropping columns from the right (region-only, then grand total), never a product-only subtotal",
+            "Only if CUBE is also specified",
+            "Only in MySQL"
+          ],
+          "correct_index": 1,
+          "explanation": "ROLLUP's hierarchy strictly rolls up right-to-left; a product-only breakdown requires CUBE or an explicit GROUPING SETS entry.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-15-rollup-concept-5",
+          "test_id": "pt-dbms-sql-15-rollup-concept",
+          "question_text": "Why does column order matter for ROLLUP but not for plain GROUP BY?",
+          "options": [
+            "It doesn't actually matter for either",
+            "ROLLUP's column order defines which columns get 'peeled off' first for subtotals, so ROLLUP(region, product) and ROLLUP(product, region) produce different subtotal rows; plain GROUP BY just groups by the same combination regardless of listed order",
+            "GROUP BY column order changes which rows are grouped together",
+            "ROLLUP requires columns in reverse alphabetical order"
+          ],
+          "correct_index": 1,
+          "explanation": "ROLLUP(a, b) rolls up subtotals as (a, b) -> (a) -> (); reversing to ROLLUP(b, a) instead produces (b, a) -> (b) -> (), a materially different subtotal hierarchy — unlike plain GROUP BY, where grouping is set-based and order-independent.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-15-rollup-concept-6",
+          "test_id": "pt-dbms-sql-15-rollup-concept",
+          "question_text": "Which databases support the standard `GROUP BY ROLLUP(region, product)` function syntax?",
+          "options": [
+            "Only MySQL",
+            "PostgreSQL, SQL Server, and Oracle",
+            "No mainstream database supports ROLLUP",
+            "Only SQLite"
+          ],
+          "correct_index": 1,
+          "explanation": "PostgreSQL, SQLServer and Oracle support the shown ROLLUP form. Current MySQL8.4 documentation also describes ROLLUP(...) alongside the established trailing WITH ROLLUP form; verify the deployed release rather than claim exclusivity.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-15-rollup-concept-7",
+          "test_id": "pt-dbms-sql-15-rollup-concept",
+          "question_text": "Which MySQL syntax expresses the same region-product rollup hierarchy used in this lesson?",
+          "options": [
+            "GROUP BY region, product WITH ROLLUP",
+            "GROUP BY ROLLUP region, product",
+            "GROUP BY GROUPING SETS(region, product)",
+            "MySQL has no equivalent at all"
+          ],
+          "correct_index": 0,
+          "explanation": "GROUP BY region, product WITH ROLLUP is the MySQL form used here. Current MySQL8.4 documentation also describes a ROLLUP grouping syntax alternative; do not infer exclusive syntax support from this example.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-15-rollup-concept-8",
+          "test_id": "pt-dbms-sql-15-rollup-concept",
+          "question_text": "If `HAVING SUM(amount) > 200` is applied to `GROUP BY ROLLUP(region, product)`, what happens to the North region's subtotal row (total_amount = 200)?",
+          "options": [
+            "It is kept because 200 is close to 200",
+            "It is dropped, since 200 is not strictly greater than 200",
+            "HAVING cannot be combined with ROLLUP",
+            "It is automatically replaced with the grand total"
+          ],
+          "correct_index": 1,
+          "explanation": "HAVING filters every output row from the rollup, including subtotal rows; North's subtotal of exactly 200 fails the strict > 200 condition and is excluded.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-15-rollup-concept-c-new-1",
+          "test_id": "pt-dbms-sql-15-rollup-concept",
+          "question_text": "What grouping levels does region, product WITH ROLLUP request?",
+          "options": [
+            "Region-product, region, grand total",
+            "Product only and no grand total",
+            "Every arbitrary dimension combination",
+            "Only detail rows"
+          ],
+          "correct_index": 0,
+          "explanation": "Rollup follows ordered prefixes, dropping suffix dimensions.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-15-rollup-concept-c-new-2",
+          "test_id": "pt-dbms-sql-15-rollup-concept",
+          "question_text": "Why are there ten rows in the stated six-combination fixture?",
+          "options": [
+            "Every rollup has ten rows",
+            "Six details plus three regional subtotals plus one grand total",
+            "There are ten source orders",
+            "NULL removes four rows"
+          ],
+          "correct_index": 1,
+          "explanation": "The count follows represented combinations and hierarchy levels.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-15-rollup-concept-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-15-rollup-concept-c-new-3",
+          "test_id": "pt-dbms-sql-15-rollup-concept-application",
+          "question_text": "What distinguishes a real NULL product group from a generated product subtotal marker?",
+          "options": [
+            "Only product IS NULL",
+            "The label Total",
+            "GROUPING(product)",
+            "The query filename"
+          ],
+          "correct_index": 2,
+          "explanation": "The flag identifies whether the dimension was aggregated away.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-15-rollup-concept-c-new-4",
+          "test_id": "pt-dbms-sql-15-rollup-concept-application",
+          "question_text": "What is the fixture grand total?",
+          "options": [
+            "310",
+            "550",
+            "2120",
+            "1060"
+          ],
+          "correct_index": 3,
+          "explanation": "The three region totals310, 200 and550 sum to1060.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-15-rollup-concept-c-new-5",
+          "test_id": "pt-dbms-sql-15-rollup-concept-application",
+          "question_text": "Does region, product rollup include product-only subtotals?",
+          "options": [
+            "No",
+            "Yes, all cube levels are implied",
+            "Only for Camera",
+            "Only if ORDER BY is omitted"
+          ],
+          "correct_index": 0,
+          "explanation": "Product-only is not a prefix of the declared hierarchy.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-15-rollup-concept-c-new-6",
+          "test_id": "pt-dbms-sql-15-rollup-concept-application",
+          "question_text": "What changes when dimensions become product, region?",
+          "options": [
+            "The source rows are deleted",
+            "The intermediate subtotal level becomes product",
+            "The grand total doubles",
+            "Only column labels change"
+          ],
+          "correct_index": 1,
+          "explanation": "Dimension order defines the prefix hierarchy.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-15-rollup-concept-c-new-7",
+          "test_id": "pt-dbms-sql-15-rollup-concept-application",
+          "question_text": "Why is COALESCE(product, 'Total') insufficient to classify rows?",
+          "options": [
+            "COALESCE cannot handle text",
+            "It always changes revenue",
+            "It merges real missing products with generated subtotal markers",
+            "It removes all details"
+          ],
+          "correct_index": 2,
+          "explanation": "Use grouping flags before choosing display labels.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-15-rollup-concept-c-new-8",
+          "test_id": "pt-dbms-sql-15-rollup-concept-application",
+          "question_text": "What does HAVING SUM(amount)>200 do to North subtotal200?",
+          "options": [
+            "Keeps it because equality passes",
+            "Converts it toNULL",
+            "Adds it to East",
+            "Removes it"
+          ],
+          "correct_index": 3,
+          "explanation": "Strict greater-than excludes the boundary value.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-15-rollup-concept-c-new-9",
+          "test_id": "pt-dbms-sql-15-rollup-concept-application",
+          "question_text": "Can you add all rollup output measures to recover source revenue once?",
+          "options": [
+            "No, the output mixes overlapping levels",
+            "Yes, always",
+            "Only when sorted",
+            "Only with two dimensions"
+          ],
+          "correct_index": 0,
+          "explanation": "The same source facts contribute at several report grains.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-15-rollup-concept-c-new-10",
+          "test_id": "pt-dbms-sql-15-rollup-concept-application",
+          "question_text": "Which flags identify regional subtotals excluding grand total?",
+          "options": [
+            "Both flags0",
+            "GROUPING(product)=1 and GROUPING(region)=0",
+            "Both flags1",
+            "Only region IS NULL"
+          ],
+          "correct_index": 1,
+          "explanation": "Product is omitted while region remains part of the grouping.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-15-rollup-concept-c-new-11",
+          "test_id": "pt-dbms-sql-15-rollup-concept-application",
+          "question_text": "Which clause limits source orders before all rollup levels form?",
+          "options": [
+            "ORDER BY",
+            "A final display label",
+            "WHERE",
+            "LIMIT only"
+          ],
+          "correct_index": 2,
+          "explanation": "Every level is derived from the qualified source population.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-15-rollup-concept-c-new-12",
+          "test_id": "pt-dbms-sql-15-rollup-concept-application",
+          "question_text": "What should a rollup export expose for safe downstream use?",
+          "options": [
+            "Only an ambiguous Total label",
+            "Only one repeated color",
+            "No measure definitions",
+            "Row level or grouping flags"
+          ],
+          "correct_index": 3,
+          "explanation": "Consumers need to distinguish overlapping grains before aggregating again.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cx-c-regional-rollup",
+      "slug": "c-regional-rollup",
+      "title": "Expose regional and grand totals",
+      "difficulty": "Easy",
+      "task": "Return region, total_amount, is_grand using a region rollup. Order by is_grand then region, so grand total follows regions.",
+      "schema_sql": "CREATE TABLE orders(order_id INT PRIMARY KEY,region VARCHAR(12),product VARCHAR(20),amount INT);",
+      "seed_sql": "INSERT INTO orders VALUES(1,'East','Camera',90),(2,'East','Tripod',220),(3,'North','Camera',80),(4,'North','Tripod',120),(5,'West','Camera',250),(6,'West','Tripod',300);",
+      "solution_sql": "SELECT region,SUM(amount) AS total_amount,GROUPING(region) AS is_grand FROM orders GROUP BY region WITH ROLLUP ORDER BY is_grand,region;",
+      "expected": "region\ttotal_amount\tis_grand\nEast\t310\t0\nNorth\t200\t0\nWest\t550\t0\nNULL\t1060\t1",
+      "ordering": "Order exactly as requested by the task; row order is otherwise unspecified.",
+      "edge_cases": [
+        "Empty tables.",
+        "NULL values where the schema permits them.",
+        "Repeated matching values when keys permit them."
+      ],
+      "hints": [
+        "GROUPING distinguishes an unknown region from the generated grand-total marker."
+      ],
+      "explanation": "GROUPING distinguishes an unknown region from the generated grand-total marker.",
+      "validation_cases": [
+        {
+          "name": "one region",
+          "seed_sql": "INSERT INTO orders VALUES(1,'East','Camera',10);",
+          "expected": "region\ttotal_amount\tis_grand\nEast\t10\t0\nNULL\t10\t1"
+        },
+        {
+          "name": "unknown region",
+          "seed_sql": "INSERT INTO orders VALUES(1,NULL,'Camera',5);",
+          "expected": "region\ttotal_amount\tis_grand\nNULL\t5\t0\nNULL\t5\t1"
+        }
+      ]
+    },
+    {
+      "id": "cx-c-only-regional-subtotals",
+      "slug": "c-only-regional-subtotals",
+      "title": "Keep the intended rollup level",
+      "difficulty": "Medium",
+      "task": "Roll up region and product, then return region, regional_total for regional subtotal rows only, ordered by region. Exclude grand total and detail groups.",
+      "schema_sql": "CREATE TABLE orders(order_id INT PRIMARY KEY,region VARCHAR(12),product VARCHAR(20),amount INT);",
+      "seed_sql": "INSERT INTO orders VALUES(1,'East','Camera',90),(2,'East','Tripod',220),(3,'North','Camera',80),(4,'North','Tripod',120),(5,'West','Camera',250),(6,'West','Tripod',300);",
+      "solution_sql": "SELECT region,SUM(amount) AS regional_total FROM orders GROUP BY region,product WITH ROLLUP HAVING GROUPING(product)=1 AND GROUPING(region)=0 ORDER BY region;",
+      "expected": "region\tregional_total\nEast\t310\nNorth\t200\nWest\t550",
+      "ordering": "Order exactly as requested by the task; row order is otherwise unspecified.",
+      "edge_cases": [
+        "Empty tables.",
+        "NULL values where the schema permits them.",
+        "Repeated matching values when keys permit them."
+      ],
+      "hints": [
+        "Select the hierarchy level with grouping flags rather than confusing stored NULL with subtotal NULL."
+      ],
+      "explanation": "Select the hierarchy level with grouping flags rather than confusing stored NULL with subtotal NULL.",
+      "validation_cases": [
+        {
+          "name": "unknown product",
+          "seed_sql": "INSERT INTO orders VALUES(1,'East',NULL,5),(2,'East','Camera',7);",
+          "expected": "region\tregional_total\nEast\t12"
+        },
+        {
+          "name": "empty",
+          "seed_sql": "-- no orders",
+          "expected": ""
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": null,
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-15-rollup-concept-1",
+      "test_id": "pt-dbms-sql-15-rollup-concept",
+      "question_text": "What grouping sets does `ROLLUP(region, product)` expand to?",
+      "options": [
+        "GROUPING SETS ((region), (product), ())",
+        "GROUPING SETS ((region, product), (region), ())",
+        "GROUPING SETS ((region, product), (product), ())",
+        "GROUPING SETS ((region, product))"
+      ],
+      "correct_index": 1,
+      "explanation": "ROLLUP peels off columns from the right, one at a time: full detail (region, product), then (region) alone, then the empty grand-total set — never a product-only set.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-15-rollup-concept-2",
+      "test_id": "pt-dbms-sql-15-rollup-concept",
+      "question_text": "How many total rows does `GROUP BY ROLLUP(region, product)` return over the orders table?",
+      "options": [
+        "6",
+        "7",
+        "10",
+        "12"
+      ],
+      "correct_index": 2,
+      "explanation": "6 detail rows (per region/product) + 3 region subtotal rows + 1 grand total row = 10.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-15-rollup-concept-3",
+      "test_id": "pt-dbms-sql-15-rollup-concept",
+      "question_text": "What is the East region's subtotal row's total_amount in `GROUP BY ROLLUP(region, product)`?",
+      "options": [
+        "160",
+        "150",
+        "310",
+        "1060"
+      ],
+      "correct_index": 2,
+      "explanation": "East's subtotal sums its Widget (160) and Gadget (150) totals: 160 + 150 = 310.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-15-rollup-concept-4",
+      "test_id": "pt-dbms-sql-15-rollup-concept",
+      "question_text": "Does `GROUP BY ROLLUP(region, product)` produce a row summarizing totals by product alone, ignoring region (e.g., region=NULL, product='Widget')?",
+      "options": [
+        "Yes, always",
+        "No — ROLLUP only produces subtotals by dropping columns from the right (region-only, then grand total), never a product-only subtotal",
+        "Only if CUBE is also specified",
+        "Only in MySQL"
+      ],
+      "correct_index": 1,
+      "explanation": "ROLLUP's hierarchy strictly rolls up right-to-left; a product-only breakdown requires CUBE or an explicit GROUPING SETS entry.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-15-rollup-concept-5",
+      "test_id": "pt-dbms-sql-15-rollup-concept",
+      "question_text": "Why does column order matter for ROLLUP but not for plain GROUP BY?",
+      "options": [
+        "It doesn't actually matter for either",
+        "ROLLUP's column order defines which columns get 'peeled off' first for subtotals, so ROLLUP(region, product) and ROLLUP(product, region) produce different subtotal rows; plain GROUP BY just groups by the same combination regardless of listed order",
+        "GROUP BY column order changes which rows are grouped together",
+        "ROLLUP requires columns in reverse alphabetical order"
+      ],
+      "correct_index": 1,
+      "explanation": "ROLLUP(a, b) rolls up subtotals as (a,b) -> (a) -> (); reversing to ROLLUP(b, a) instead produces (b,a) -> (b) -> (), a materially different subtotal hierarchy — unlike plain GROUP BY, where grouping is set-based and order-independent.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-15-rollup-concept-6",
+      "test_id": "pt-dbms-sql-15-rollup-concept",
+      "question_text": "Which databases support the standard `GROUP BY ROLLUP(region, product)` function syntax?",
+      "options": [
+        "Only MySQL",
+        "PostgreSQL, SQL Server, and Oracle",
+        "No mainstream database supports ROLLUP",
+        "Only SQLite"
+      ],
+      "correct_index": 1,
+      "explanation": "PostgreSQL, SQL Server, and Oracle all support the standard ROLLUP(...) function syntax; MySQL instead uses the trailing WITH ROLLUP modifier.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-15-rollup-concept-7",
+      "test_id": "pt-dbms-sql-15-rollup-concept",
+      "question_text": "What is MySQL's equivalent syntax for the same rollup behavior, since it lacks ROLLUP(...) as a function?",
+      "options": [
+        "GROUP BY region, product WITH ROLLUP",
+        "GROUP BY ROLLUP region, product",
+        "GROUP BY GROUPING SETS(region, product)",
+        "MySQL has no equivalent at all"
+      ],
+      "correct_index": 0,
+      "explanation": "MySQL supports the trailing modifier form, GROUP BY region, product WITH ROLLUP, rather than the ROLLUP(...) function syntax used elsewhere.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-15-rollup-concept-8",
+      "test_id": "pt-dbms-sql-15-rollup-concept",
+      "question_text": "If `HAVING SUM(amount) > 200` is applied to `GROUP BY ROLLUP(region, product)`, what happens to the North region's subtotal row (total_amount = 200)?",
+      "options": [
+        "It is kept because 200 is close to 200",
+        "It is dropped, since 200 is not strictly greater than 200",
+        "HAVING cannot be combined with ROLLUP",
+        "It is automatically replaced with the grand total"
+      ],
+      "correct_index": 1,
+      "explanation": "HAVING filters every output row from the rollup, including subtotal rows; North's subtotal of exactly 200 fails the strict > 200 condition and is excluded.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "/root/content_c",
+    "independent_review": "passed",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Independent manual content review passed within independent_review_scope; engine/browser/release gates separate.",
+    "canonical_answer_indices_preserved": true,
+    "editorial_record": "Original explanations, examples and scenarios; external originality clearance and AdSense review unperformed.",
+    "independent_reviewer": "/root/review_e_and_gaps",
+    "independent_review_scope": "Full notes,20MCQs with every option,canonical answer position and explanation,original diagrams,and all exercise contracts/fixtures or solved conceptual labs. Original identities/indices checked against public seed cache where applicable. Reported substantive findings corrected by coordinator and filtered recheck accepted;identified learner-facing spacing polished. Manual technical/editorial reasoning only;engine,provider,browser,external originality and AdSense evidence separate."
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-15-rollup-concept",
+    "original_note_sha256": "99bd77f058ce0af5b71a86820139f98303d60939b9f9b98a3b9eaf829a414a92",
+    "status": "drafted; not included in prepared paired migrations"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Ten rows represent three overlapping grains",
+      "description": "Six detail combinations feed three regional totals and one company total; they must not all be added again.",
+      "columns": [
+        "Level",
+        "Represented rows",
+        "Example"
+      ],
+      "rows": [
+        [
+          "Region-product",
+          "6",
+          "East Camera90"
+        ],
+        [
+          "Region subtotal",
+          "3",
+          "East310"
+        ],
+        [
+          "Grand total",
+          "1",
+          "All regions1060"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "technical_review": "Independent manual diagram/content consistency review passed;actual static/browser rendering tracked separately.",
+    "server_rendering": "unverified",
+    "browser_rendering": "unverified",
+    "independent_review": "passed"
+  },
+  "authoring_status": "drafted; verification pending"
+}

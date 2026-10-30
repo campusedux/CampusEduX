@@ -13,18 +13,25 @@ export default function ContactForm() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (status === "sending") return;
     setStatus("sending");
     setError(null);
-    const result = await submitContactMessageAction({ name, email, message });
-    if ("error" in result) {
-      setStatus("idle");
-      setError(result.error);
-      return;
+    try {
+      const result = await submitContactMessageAction({ name, email, message });
+      if ("error" in result) {
+        setStatus("idle");
+        setError(result.error);
+        return;
+      }
+      setStatus("sent");
+      setName("");
+      setEmail("");
+      setMessage("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
+    } finally {
+      setStatus((current) => current === "sending" ? "idle" : current);
     }
-    setStatus("sent");
-    setName("");
-    setEmail("");
-    setMessage("");
   }
 
   if (status === "sent") {

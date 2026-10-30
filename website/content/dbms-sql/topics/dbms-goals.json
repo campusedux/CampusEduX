@@ -1,0 +1,470 @@
+{
+  "source_ref": "chapter-1-database-foundations/dbms-goals",
+  "slug": "dbms-goals",
+  "title": "DBMS Goals",
+  "description": "Connect DBMS goals to course registration: data independence, integrity, concurrency, security, controlled redundancy, performance, recovery, and explicit trade-offs.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Turning database goals into questions about a real system\n\nA DBMS does more than store records. It helps applications share data while preserving declared rules, restricting access, using resources efficiently, and recovering from failures. These goals are related, but they are not interchangeable. A system can answer a query quickly and still return an incorrect business result. It can enforce a foreign key and still expose information to an unauthorized reader. Evaluate each responsibility rather than treating a working connection as evidence that everything is correct.\n\nConsider a college course-registration service. Students select offerings, staff adjust capacity, and teachers view their class lists. The service must avoid duplicate registrations, prevent more enrollments than available seats, restrict private information, and survive failures. The goals of a DBMS become easier to understand when you connect each goal to one of these concrete requirements and identify what the application must supply alongside the database's facilities.\n\n## Keeping data definitions from unnecessarily binding applications\n\nData independence means reducing the extent to which changes at one level force changes at another. Physical data independence concerns storage and access details. Adding an index or reorganizing stored pages should not require every application to rewrite its logical queries. Applications describe the requested values, while the DBMS chooses suitable access operations. This separation allows the storage implementation to evolve without making every caller depend on file locations or index traversal steps.\n\nLogical data independence concerns changes to logical definitions. A stable view or application interface can sometimes shield callers from a reorganization of underlying tables. It does not mean every conceivable schema change is automatically invisible. Removing a required column or changing its meaning can still break a caller. Interfaces must be designed and maintained deliberately, and compatibility must be checked against the actual queries and expectations of their consumers.\n\nAn application using SELECT * depends on the current set of source columns. Adding a column can therefore change its result shape even though the application did not edit the query. This is primarily a logical contract problem, not a physical-storage change. Explicit columns and suitable interfaces can reduce that coupling. Adding an index is a different example: it should usually change the access strategy rather than the requested logical result.\n\n## Preserving integrity through declared rules\n\nData integrity means that stored data satisfies the rules the system has declared. A primary key identifies records, a foreign key protects a relationship, and a check constraint can restrict an allowed range. For example, a marks column can be constrained to values between zero and one hundred. These mechanisms let multiple applications share enforcement instead of relying on every form and background task to repeat the same validation perfectly.\n\nIntegrity rules are only as complete as the model. A range check can reject an impossible mark of 140, but it cannot determine that the valid mark 84 belongs to the correct student. Some rules also involve relationships between several operations or changing business circumstances. Identify which rules can be enforced by constraints, which need transaction logic, and which require an authoritative external fact or a person's judgment.\n\nGood validation handles both accepted and rejected cases. Check that a valid registration can be stored, but also that duplicate registrations and invalid references are refused. A system that accepts the intended example has not yet demonstrated that it rejects harmful alternatives. Thinking about denied cases is especially important when several applications or background processes can write to the same database.\n\n## Coordinating concurrent access\n\nConcurrent access means that several operations overlap in time. Without appropriate coordination, each student requesting the last seat might read the same available count and both proceed as though the seat were reserved. The goal is not to prevent all overlap. It is to allow useful parallel work while making the combined outcome consistent with the rules the application intends to preserve.\n\nThe application and DBMS share responsibility here. A transaction that atomically checks and updates the relevant capacity can rely on suitable locking or conflict detection. A design that reads a value, waits, and later writes an unrelated decision may still be unsafe. Simply saying that a database supports transactions, locking, or multiple versions does not establish that a particular registration algorithm is correct.\n\nMultiversion concurrency control can let readers work with suitable snapshots while other transactions update records. That does not automatically prevent every application-level anomaly. The transaction boundaries, isolation level, statements, and conflict handling still matter. When a transaction is rejected because of a conflict, the application needs an appropriate retry or failure response rather than treating every database error as an unexpected programming defect.\n\n## Protecting access without treating hidden controls as security\n\nSecurity includes controlling which identities can read or change which data. A student may need access to their own registration history without receiving permission to modify another student's marks. Hiding an edit button can improve the interface, but it does not enforce a database permission. Requests from scripts, another application, or a modified client must still encounter an appropriate trusted access check.\n\nUse the least privilege needed for each role and operation. Read access, update access, and administrative access are different capabilities. A convenient development account with broad permissions is not evidence that ordinary users have appropriate access. Test permitted and denied actors at the enforcement boundary, and avoid assuming that a query returning rows establishes that every row was authorized for its caller.\n\n## Managing redundancy and useful performance\n\nRedundancy is the representation of the same underlying fact in multiple places. Uncontrolled copies can disagree and make updates difficult. Normalization helps organize relationships to reduce particular kinds of redundancy and anomalies. However, a DBMS does not aim to eliminate every repeated representation. Indexes, replicas, and carefully maintained summaries can deliberately store additional information to make certain operations faster or more available.\n\nThe useful distinction is controlled versus uncontrolled redundancy. If a summary repeats an enrollment count, the system needs a reliable way to keep it aligned with actual enrollments or to communicate its permitted staleness. A copy without ownership, maintenance rules, or consistency expectations creates a different risk from a deliberately maintained access structure. Explain those responsibilities whenever proposing a performance-oriented duplicate.\n\nEfficiency must also be evaluated for the actual workload. A normalized design can require joins, while a summary can make a particular report cheaper but make updates more expensive. Neither observation proves that normalization is bad or duplication is always helpful. Consider query patterns, write frequency, data volume, and the cost of keeping representations correct. Use measured evidence before claiming a specific performance improvement.\n\n## Recovering what the system has promised to preserve\n\nRecovery aims to restore a valid state after failures such as a stopped server, interrupted write, or lost storage. Transaction logs and database recovery mechanisms address some failures; suitable backups and restoration procedures address others. A useful recovery plan distinguishes between returning the service to operation and recovering the required data. Those are related outcomes, but one does not automatically imply the other.\n\nDurability concerns whether acknowledged committed changes survive the relevant failures. Its practical strength depends on database settings, storage behavior, and the failure being considered. A configuration that acknowledges work before the required durable write can improve throughput while risking recently acknowledged changes after a crash. Do not infer a deployment's durability guarantees from a product's general feature list or from the mere presence of COMMIT in application code.\n\n## Making trade-offs explicit\n\nDatabase goals can pull in different directions. Stronger coordination can add waiting, additional indexes can make reads cheaper while adding write work, and stricter durability can affect latency. These are reasons to define requirements and measure outcomes, not excuses to disable integrity or authorization. Describe the required guarantee, the mechanism chosen to provide it, and the failure or denied case that would reveal a broken assumption.\n\nFor the registration service, that means specifying valid relationships, a safe reservation transaction, role-appropriate access, suitable performance targets, and a tested recovery process. The DBMS supplies powerful mechanisms, but the application must use them correctly. A strong answer about DBMS goals connects each goal to a concrete requirement and a way to verify it, while acknowledging which responsibilities remain outside the database engine.",
+  "references": [
+    {
+      "title": "MySQL InnoDB transaction model",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/innodb-transaction-model.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-1-dbms-goals",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-1-dbms-goals-1",
+          "test_id": "pt-dbms-sql-1-dbms-goals",
+          "question_text": "Which of the following is listed as a core goal of a DBMS in the notes?",
+          "options": [
+            "Concurrent access control",
+            "Maximizing uncontrolled redundancy",
+            "Eliminating the need for any query language",
+            "Preventing all users from ever seeing the same data"
+          ],
+          "correct_index": 0,
+          "explanation": "The notes list concurrent access control as one of the core DBMS goals, alongside data independence, integrity, security, efficiency, and recovery.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-1-dbms-goals-2",
+          "test_id": "pt-dbms-sql-1-dbms-goals",
+          "question_text": "What does 'physical data independence' mean according to the notes?",
+          "options": [
+            "Changing the storage layout, such as adding an index, should not require rewriting application queries",
+            "The database must be stored on physically separate hard drives",
+            "Applications must never store any data physically",
+            "Every table must be stored in its own separate file"
+          ],
+          "correct_index": 0,
+          "explanation": "The notes define physical data independence as the ability to change physical storage (like adding an index) without needing to rewrite application queries.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-1-dbms-goals-3",
+          "test_id": "pt-dbms-sql-1-dbms-goals",
+          "question_text": "Which constraint type is given as an example of enforcing the 'data integrity' goal?",
+          "options": [
+            "CHECK (marks BETWEEN 0 AND 100)",
+            "SELECT * FROM students",
+            "GRANT SELECT TO analyst",
+            "CREATE INDEX ON students(marks)"
+          ],
+          "correct_index": 0,
+          "explanation": "The notes cite CHECK constraints (along with PRIMARY KEY and FOREIGN KEY) as mechanisms that automatically enforce data integrity.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-1-dbms-goals-4",
+          "test_id": "pt-dbms-sql-1-dbms-goals",
+          "question_text": "Which DBMS capability supports a transaction that atomically checks and updates the last available seat?",
+          "options": [
+            "Concurrency control with suitable locking or conflict detection",
+            "Data independence",
+            "Controlled redundancy",
+            "The GRANT/REVOKE security system"
+          ],
+          "correct_index": 0,
+          "explanation": "The application must use a correct transaction and capacity update; the DBMS then supplies the required coordination. MVCC alone is not proof that the algorithm is safe.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-1-dbms-goals-5",
+          "test_id": "pt-dbms-sql-1-dbms-goals",
+          "question_text": "Why does the DBMS aim for 'controlled' redundancy instead of eliminating redundancy entirely?",
+          "options": [
+            "A small amount of deliberate, tracked redundancy can improve read performance, as long as it doesn't cause inconsistency",
+            "Redundancy is always harmful and the goal is to reach exactly zero",
+            "Redundancy has nothing to do with performance",
+            "Controlled redundancy refers only to backup copies of the entire database"
+          ],
+          "correct_index": 0,
+          "explanation": "The notes explain that some redundancy, like a cached total_marks column, can be kept deliberately for performance as long as it is controlled rather than accidental.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-1-dbms-goals-6",
+          "test_id": "pt-dbms-sql-1-dbms-goals",
+          "question_text": "According to the pitfalls section, how can minimizing redundancy conflict with another DBMS goal?",
+          "options": [
+            "Fully normalizing to minimize redundancy can require more joins, which can hurt query efficiency",
+            "Minimizing redundancy always improves every other goal with no trade-offs",
+            "It has no relationship to any other DBMS goal",
+            "It only affects the security goal, not efficiency"
+          ],
+          "correct_index": 0,
+          "explanation": "The notes explicitly state that minimizing redundancy through normalization can increase the number of joins needed, conflicting with the efficient query processing goal.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-1-dbms-goals-7",
+          "test_id": "pt-dbms-sql-1-dbms-goals",
+          "question_text": "A developer writes 'SELECT *' in a report query, and the report breaks after an unrelated new column is added to the table. Which DBMS goal does this scenario undermine, and why?",
+          "options": [
+            "Logical data independence is weakened because SELECT * ties the report to the current logical column set",
+            "Security and authorization, because SELECT * exposes passwords",
+            "Crash recovery, because SELECT * disables the transaction log",
+            "Concurrency control, because SELECT * locks the entire table permanently"
+          ],
+          "correct_index": 0,
+          "explanation": "Adding a column changes the logical result shape of SELECT *. An index or page-layout change is a different, physical concern.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-1-dbms-goals-8",
+          "test_id": "pt-dbms-sql-1-dbms-goals",
+          "question_text": "A DBA configures the database to use asynchronous commit for higher write throughput. What does the notes' pitfall about crash recovery imply about this configuration?",
+          "options": [
+            "Recovery guarantees only hold as strongly as the durability settings actually configured, so asynchronous commit trades some durability for speed",
+            "Crash recovery is completely unaffected by any commit or durability settings",
+            "Asynchronous commit makes crash recovery impossible under any circumstances",
+            "This setting only affects the security and authorization goal"
+          ],
+          "correct_index": 0,
+          "explanation": "The notes warn that some settings, such as asynchronous commit, trade durability for speed, so recovery guarantees are only as strong as the actual configuration.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "question_text": "Which result is needed to demonstrate a declared integrity rule beyond one successful example?",
+          "options": [
+            "Every user must become an administrator",
+            "All indexes must be removed",
+            "Every operation must run sequentially forever",
+            "A relevant invalid case must also be rejected"
+          ],
+          "correct_index": 3,
+          "explanation": "A permitted example establishes acceptance only. Rejection tests show whether the rule also prevents invalid states.",
+          "marks": 1,
+          "id": "tq-dbx2-dbms-goals-1-9",
+          "test_id": "pt-dbms-sql-1-dbms-goals",
+          "sort_order": 8
+        },
+        {
+          "question_text": "Why is hiding an edit button insufficient to protect marks?",
+          "options": [
+            "Hidden buttons always modify the database directly",
+            "The trusted boundary must reject unauthorized requests from any client",
+            "Authorization depends only on font color",
+            "A hidden control grants a database privilege"
+          ],
+          "correct_index": 1,
+          "explanation": "A caller can bypass the interface. Authorization belongs at the server or database boundary handling the request.",
+          "marks": 1,
+          "id": "tq-dbx2-dbms-goals-1-10",
+          "test_id": "pt-dbms-sql-1-dbms-goals",
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbx2-dbms-goals-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "question_text": "Adding an index lets a query use a faster access path without changing its requested columns. Which goal does this illustrate?",
+          "options": [
+            "Automatic invention of business rules",
+            "Elimination of every stored copy",
+            "A change to the meaning of a student record",
+            "Physical data independence"
+          ],
+          "correct_index": 3,
+          "explanation": "The storage/access implementation changed while the logical query remained compatible.",
+          "marks": 1,
+          "id": "tq-dbx2-dbms-goals-2-1",
+          "test_id": "pt-dbx2-dbms-goals-application",
+          "sort_order": 0
+        },
+        {
+          "question_text": "A report using SELECT * breaks when a column is added. Which coupling caused the problem?",
+          "options": [
+            "Dependence on the exact disk block address",
+            "Dependence on an index traversal instruction",
+            "Dependence on the machine's power cable",
+            "Dependence on the current logical output shape"
+          ],
+          "correct_index": 3,
+          "explanation": "The report tied its result contract to the table's full column set, which is a logical-definition dependency.",
+          "marks": 1,
+          "id": "tq-dbx2-dbms-goals-2-2",
+          "test_id": "pt-dbx2-dbms-goals-application",
+          "sort_order": 1
+        },
+        {
+          "question_text": "Two students both read one remaining seat before either writes. What should be reviewed first?",
+          "options": [
+            "The reservation transaction and its atomic capacity check/update",
+            "Only the welcome-message wording",
+            "Whether marks use a larger integer type",
+            "Whether the page has more illustrations"
+          ],
+          "correct_index": 0,
+          "explanation": "Reading availability and later making a separate decision can race. The reservation algorithm must coordinate the relevant changes.",
+          "marks": 1,
+          "id": "tq-dbx2-dbms-goals-2-3",
+          "test_id": "pt-dbx2-dbms-goals-application",
+          "sort_order": 2
+        },
+        {
+          "question_text": "Does enabling multiversion concurrency control prove every registration algorithm is safe?",
+          "options": [
+            "Yes; all application anomalies become impossible",
+            "Yes; constraints and error handling become unnecessary",
+            "No; isolation, statements, boundaries, and conflict handling still matter",
+            "No; multiversion control cannot ever support readers"
+          ],
+          "correct_index": 2,
+          "explanation": "Multiple versions support concurrency, but do not automatically enforce every cross-operation business invariant.",
+          "marks": 1,
+          "id": "tq-dbx2-dbms-goals-2-4",
+          "test_id": "pt-dbx2-dbms-goals-application",
+          "sort_order": 3
+        },
+        {
+          "question_text": "A report summary duplicates enrollment counts. What makes this controlled redundancy?",
+          "options": [
+            "An undocumented background copy nobody owns",
+            "A claim that duplicate data can never disagree",
+            "Defined ownership, maintenance rules, and an understood freshness contract",
+            "No way to compare the summary with source records"
+          ],
+          "correct_index": 2,
+          "explanation": "Deliberate duplicate representations need rules that keep them useful and aligned with their source or permitted staleness.",
+          "marks": 1,
+          "id": "tq-dbx2-dbms-goals-2-5",
+          "test_id": "pt-dbx2-dbms-goals-application",
+          "sort_order": 4
+        },
+        {
+          "question_text": "An additional index speeds up a report but slows frequent inserts. What should decide whether to keep it?",
+          "options": [
+            "Measured read/write workload costs and required performance",
+            "The assumption that every index is free",
+            "Only the length of the index name",
+            "A rule forbidding all access structures"
+          ],
+          "correct_index": 0,
+          "explanation": "An index can save read work while adding maintenance work. Evaluate the actual workload and requirements.",
+          "marks": 1,
+          "id": "tq-dbx2-dbms-goals-2-6",
+          "test_id": "pt-dbx2-dbms-goals-application",
+          "sort_order": 5
+        },
+        {
+          "question_text": "A database accepts mark 84 for the wrong student. Does a successful range check establish factual accuracy?",
+          "options": [
+            "Yes; a range check verifies all real-world facts",
+            "No; the value can satisfy the range while describing the wrong person",
+            "Yes; numbers inside the range are always true",
+            "No; range checks cannot reject 140"
+          ],
+          "correct_index": 1,
+          "explanation": "A constraint enforces its declared condition, not facts that were never represented in that condition.",
+          "marks": 1,
+          "id": "tq-dbx2-dbms-goals-2-7",
+          "test_id": "pt-dbx2-dbms-goals-application",
+          "sort_order": 6
+        },
+        {
+          "question_text": "A system acknowledges a commit before the required durable write. What crash risk must be considered?",
+          "options": [
+            "Some recently acknowledged changes may not survive",
+            "Every earlier backup is necessarily deleted",
+            "All reads become unauthorized automatically",
+            "The product must invent missing data"
+          ],
+          "correct_index": 0,
+          "explanation": "Recovery can only preserve changes supported by the configured persistence guarantees and actual storage behavior.",
+          "marks": 1,
+          "id": "tq-dbx2-dbms-goals-2-8",
+          "test_id": "pt-dbx2-dbms-goals-application",
+          "sort_order": 7
+        },
+        {
+          "question_text": "A student can read their own registrations. What further authorization check is useful?",
+          "options": [
+            "Confirming every account has administrative access",
+            "Confirming they cannot read or change another student's restricted records",
+            "Removing identity checks to improve convenience",
+            "Assuming read access implies permission to change marks"
+          ],
+          "correct_index": 1,
+          "explanation": "Least privilege distinguishes users, records, and operations. Denied-actor tests are necessary evidence.",
+          "marks": 1,
+          "id": "tq-dbx2-dbms-goals-2-9",
+          "test_id": "pt-dbx2-dbms-goals-application",
+          "sort_order": 8
+        },
+        {
+          "question_text": "Which statement best evaluates a DBMS deployment?",
+          "options": [
+            "A successful login proves all recovery procedures",
+            "Check each required guarantee and its failure cases, rather than only whether a connection works",
+            "A quick query proves every returned row was authorized",
+            "One valid insert proves all invalid values are rejected"
+          ],
+          "correct_index": 1,
+          "explanation": "Connectivity, performance, authorization, integrity and recovery are separate claims requiring appropriate evidence.",
+          "marks": 1,
+          "id": "tq-dbx2-dbms-goals-2-10",
+          "test_id": "pt-dbx2-dbms-goals-application",
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [],
+  "coding_not_applicable": "Evaluates system goals and trade-offs; implementation exercises are covered by constraints, SQL, transactions, and concurrency topics.",
+  "review": {
+    "reviewer": "coordinator",
+    "independent_review": "unavailable; no agent tools",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "definitions, worked examples and question coverage checked; no external plagiarism certification",
+    "existing_question_corrections": [
+      "tq-dbms-sql-1-dbms-goals-4",
+      "tq-dbms-sql-1-dbms-goals-7"
+    ],
+    "canonical_answer_indices_preserved": true,
+    "answer_position_policy": "Original eight canonical indices retained for saved attempts; new questions use shuffled positions; the website shuffles displayed positions separately for each inline attempt."
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-1-dbms-goals",
+    "original_note_sha256": "c8ecae6495dfb22ce5a8b7ed08db35e1994d072707537e03c75763b1017d4d19",
+    "status": "paired migration prepared; not applied"
+  },
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-1-dbms-goals-1",
+      "test_id": "pt-dbms-sql-1-dbms-goals",
+      "question_text": "Which of the following is listed as a core goal of a DBMS in the notes?",
+      "options": [
+        "Concurrent access control",
+        "Maximizing uncontrolled redundancy",
+        "Eliminating the need for any query language",
+        "Preventing all users from ever seeing the same data"
+      ],
+      "correct_index": 0,
+      "explanation": "The notes list concurrent access control as one of the core DBMS goals, alongside data independence, integrity, security, efficiency, and recovery.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-1-dbms-goals-2",
+      "test_id": "pt-dbms-sql-1-dbms-goals",
+      "question_text": "What does 'physical data independence' mean according to the notes?",
+      "options": [
+        "Changing the storage layout, such as adding an index, should not require rewriting application queries",
+        "The database must be stored on physically separate hard drives",
+        "Applications must never store any data physically",
+        "Every table must be stored in its own separate file"
+      ],
+      "correct_index": 0,
+      "explanation": "The notes define physical data independence as the ability to change physical storage (like adding an index) without needing to rewrite application queries.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-1-dbms-goals-3",
+      "test_id": "pt-dbms-sql-1-dbms-goals",
+      "question_text": "Which constraint type is given as an example of enforcing the 'data integrity' goal?",
+      "options": [
+        "CHECK (marks BETWEEN 0 AND 100)",
+        "SELECT * FROM students",
+        "GRANT SELECT TO analyst",
+        "CREATE INDEX ON students(marks)"
+      ],
+      "correct_index": 0,
+      "explanation": "The notes cite CHECK constraints (along with PRIMARY KEY and FOREIGN KEY) as mechanisms that automatically enforce data integrity.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-1-dbms-goals-4",
+      "test_id": "pt-dbms-sql-1-dbms-goals",
+      "question_text": "In the course-registration example, what DBMS mechanism prevents two students from both successfully taking the last available seat?",
+      "options": [
+        "Concurrency control via locking or MVCC",
+        "Data independence",
+        "Controlled redundancy",
+        "The GRANT/REVOKE security system"
+      ],
+      "correct_index": 0,
+      "explanation": "The notes attribute this protection to concurrent access control mechanisms such as locking or multi-version concurrency control (MVCC).",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-1-dbms-goals-5",
+      "test_id": "pt-dbms-sql-1-dbms-goals",
+      "question_text": "Why does the DBMS aim for 'controlled' redundancy instead of eliminating redundancy entirely?",
+      "options": [
+        "A small amount of deliberate, tracked redundancy can improve read performance, as long as it doesn't cause inconsistency",
+        "Redundancy is always harmful and the goal is to reach exactly zero",
+        "Redundancy has nothing to do with performance",
+        "Controlled redundancy refers only to backup copies of the entire database"
+      ],
+      "correct_index": 0,
+      "explanation": "The notes explain that some redundancy, like a cached total_marks column, can be kept deliberately for performance as long as it is controlled rather than accidental.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-1-dbms-goals-6",
+      "test_id": "pt-dbms-sql-1-dbms-goals",
+      "question_text": "According to the pitfalls section, how can minimizing redundancy conflict with another DBMS goal?",
+      "options": [
+        "Fully normalizing to minimize redundancy can require more joins, which can hurt query efficiency",
+        "Minimizing redundancy always improves every other goal with no trade-offs",
+        "It has no relationship to any other DBMS goal",
+        "It only affects the security goal, not efficiency"
+      ],
+      "correct_index": 0,
+      "explanation": "The notes explicitly state that minimizing redundancy through normalization can increase the number of joins needed, conflicting with the efficient query processing goal.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-1-dbms-goals-7",
+      "test_id": "pt-dbms-sql-1-dbms-goals",
+      "question_text": "A developer writes 'SELECT *' in a report query, and the report breaks after an unrelated new column is added to the table. Which DBMS goal does this scenario undermine, and why?",
+      "options": [
+        "Logical/physical data independence, because SELECT * makes the query fragile to schema changes it should have been insulated from",
+        "Security and authorization, because SELECT * exposes passwords",
+        "Crash recovery, because SELECT * disables the transaction log",
+        "Concurrency control, because SELECT * locks the entire table permanently"
+      ],
+      "correct_index": 0,
+      "explanation": "The notes give this exact example as a pitfall: SELECT * is fragile to schema changes, undermining the intended benefit of data independence.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-1-dbms-goals-8",
+      "test_id": "pt-dbms-sql-1-dbms-goals",
+      "question_text": "A DBA configures the database to use asynchronous commit for higher write throughput. What does the notes' pitfall about crash recovery imply about this configuration?",
+      "options": [
+        "Recovery guarantees only hold as strongly as the durability settings actually configured, so asynchronous commit trades some durability for speed",
+        "Crash recovery is completely unaffected by any commit or durability settings",
+        "Asynchronous commit makes crash recovery impossible under any circumstances",
+        "This setting only affects the security and authorization goal"
+      ],
+      "correct_index": 0,
+      "explanation": "The notes warn that some settings, such as asynchronous commit, trade durability for speed, so recovery guarantees are only as strong as the actual configuration.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ]
+}

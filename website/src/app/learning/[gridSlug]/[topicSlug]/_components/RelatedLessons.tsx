@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ArrowRight, BookOpenText } from "lucide-react";
 import type { LearningTree } from "@/lib/learning.types";
 import { selectRelatedLessons } from "@/lib/learningDiscovery";
+import { databaseGroupName, DBMS_SQL_SLUG } from "@/lib/databaseTutorial";
 
 /**
  * "Related lessons" on a Learning lesson page — 3–5 same-course lessons that
@@ -29,7 +30,7 @@ export function RelatedLessons({
   return (
     <section className="mt-10 border-t border-line pt-8" aria-labelledby="related-lessons-title">
       <h2 id="related-lessons-title" className="flex items-center gap-2 text-lg font-bold text-ink">
-        <BookOpenText className="h-5 w-5 text-primary" aria-hidden /> Related lessons
+        <BookOpenText className="h-5 w-5 text-primary" aria-hidden /> {tree?.grid.slug === DBMS_SQL_SLUG ? "Related topics" : "Related lessons"}
       </h2>
       <ul className="mt-3 grid gap-3 sm:grid-cols-2">
         {lessons.map((l) => (
@@ -40,7 +41,7 @@ export function RelatedLessons({
             >
               <span className="min-w-0">
                 <span className="block font-semibold text-ink group-hover:text-primary">{l.title}</span>
-                <span className="mt-0.5 block text-xs text-ink-faint">{l.sectionName}</span>
+                <span className="mt-0.5 block text-xs text-ink-faint">{databaseGroupName(l.gridSlug, l.sectionName)}</span>
               </span>
               <ArrowRight className="mt-1 h-4 w-4 flex-shrink-0 text-ink-faint group-hover:text-primary" aria-hidden />
             </Link>

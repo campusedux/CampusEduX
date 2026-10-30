@@ -1,0 +1,512 @@
+{
+  "slug": "non-clustered-index",
+  "source_ref": "chapter-20-indexes-and-access-paths/non-clustered-index",
+  "title": "Non Clustered Index",
+  "description": "Understand InnoDB secondary lookups, primary-key locators, composite prefixes, covering queries, and the measured tradeoffs of extra indexes.",
+  "dialect": "MySQL 8.4; engine-specific behavior labeled",
+  "references": [
+    {
+      "title": "MySQL clustered and secondary indexes",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/innodb-index-types.html"
+    },
+    {
+      "title": "MySQL multiple-column indexes",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/multiple-column-indexes.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-20-non-clustered-index",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-20-non-clustered-index-1",
+          "test_id": "pt-dbms-sql-20-non-clustered-index",
+          "question_text": "What does a non-clustered index's leaf entry actually contain?",
+          "options": [
+            "The complete row data for every column",
+            "The indexed value plus a pointer/reference back to the actual row stored elsewhere",
+            "Nothing; it is an empty placeholder",
+            "A duplicate of the clustered index"
+          ],
+          "correct_index": 1,
+          "explanation": "Unlike a clustered index, a non-clustered index's leaves hold the indexed value and a pointer back to where the full row actually lives.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-20-non-clustered-index-2",
+          "test_id": "pt-dbms-sql-20-non-clustered-index",
+          "question_text": "How many non-clustered indexes can a single table have?",
+          "options": [
+            "At most one, same as a clustered index",
+            "Zero only",
+            "Many — there is no 'one per table' restriction like there is for clustered indexes",
+            "Exactly the same number as columns in the table, no more no less"
+          ],
+          "correct_index": 2,
+          "explanation": "Because non-clustered indexes are separate structures that don't dictate physical row order, a table can have many of them.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-20-non-clustered-index-3",
+          "test_id": "pt-dbms-sql-20-non-clustered-index",
+          "question_text": "Why does looking up a row via a non-clustered index typically require an extra step compared to a clustered index?",
+          "options": [
+            "It doesn't; both are equally direct",
+            "Because the non-clustered index only gives a pointer, requiring a second lookup to fetch the actual row from wherever it's stored",
+            "Because non-clustered indexes are always unsorted",
+            "Because non-clustered indexes cannot use B+ Trees"
+          ],
+          "correct_index": 1,
+          "explanation": "The non-clustered index search yields a pointer, and a second 'bookmark lookup' step is needed to retrieve the actual row.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-20-non-clustered-index-4",
+          "test_id": "pt-dbms-sql-20-non-clustered-index",
+          "question_text": "What is this extra step (finding the pointer, then fetching the actual row) commonly called?",
+          "options": [
+            "A hash collision",
+            "A bookmark lookup (or key lookup)",
+            "A table scan",
+            "A page split"
+          ],
+          "correct_index": 1,
+          "explanation": "This two-step access pattern is commonly referred to as a bookmark or key lookup.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-20-non-clustered-index-5",
+          "test_id": "pt-dbms-sql-20-non-clustered-index",
+          "question_text": "If `students` is clustered on `id` and has a non-clustered index on `department`, what does the non-clustered index's pointer typically reference?",
+          "options": [
+            "Nothing; it stores full rows directly",
+            "The clustered key value (e.g., the id), used to then find the full row via the clustered index",
+            "A random row in the table",
+            "Another non-clustered index"
+          ],
+          "correct_index": 1,
+          "explanation": "On a clustered table, non-clustered index entries typically point via the clustered key, which is then used to locate the actual row.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-20-non-clustered-index-6",
+          "test_id": "pt-dbms-sql-20-non-clustered-index",
+          "question_text": "Why might a table have non-clustered indexes on department, gpa, AND email simultaneously?",
+          "options": [
+            "Because only one index total is allowed per table",
+            "Because each non-clustered index optimizes a different query pattern without affecting the single physical row order",
+            "Because non-clustered indexes replace the need for a table entirely",
+            "Because SQL requires every column to be indexed"
+          ],
+          "correct_index": 1,
+          "explanation": "Multiple non-clustered indexes let different queries each get fast lookups on their respective filter columns, all independent of physical storage order.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-20-non-clustered-index-7",
+          "test_id": "pt-dbms-sql-20-non-clustered-index",
+          "question_text": "What is a real cost of adding many non-clustered indexes to a table?",
+          "options": [
+            "The table can no longer be read from",
+            "Inserts, deletes and updates to relevant indexed keys or stored locators can add maintenance work and write overhead",
+            "Non-clustered indexes make the clustered index disappear",
+            "Reads become slower with more non-clustered indexes"
+          ],
+          "correct_index": 1,
+          "explanation": "Inserts, deletes and changes to indexed keys or stored row locators can require secondary-index maintenance. Updating an unrelated nonindexed column need not rewrite every secondary entry.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-20-non-clustered-index-8",
+          "test_id": "pt-dbms-sql-20-non-clustered-index",
+          "question_text": "How can the extra 'bookmark lookup' hop of a non-clustered index be avoided for a specific query?",
+          "options": [
+            "It cannot ever be avoided",
+            "By using a covering index that includes all columns the query needs, directly in the index itself",
+            "By deleting the clustered index",
+            "By converting the non-clustered index into a hash index"
+          ],
+          "correct_index": 1,
+          "explanation": "A covering index can avoid a clustered lookup for missing row values. InnoDB can still require clustered access forMVCCvisibility under some conditions, so do not promise it never consults the clustered record.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "cx-non-clustered-index-fundamentals-9",
+          "test_id": "pt-dbms-sql-20-non-clustered-index",
+          "question_text": "What does an InnoDB secondary index entry use to locate the full row?",
+          "options": [
+            "The clustered key",
+            "A universal raw memory address",
+            "The table name only",
+            "The SELECT alias"
+          ],
+          "correct_index": 0,
+          "explanation": "Secondary entries include the clustered key values.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "cx-non-clustered-index-fundamentals-10",
+          "test_id": "pt-dbms-sql-20-non-clustered-index",
+          "question_text": "What normally organizes InnoDB clustered rows when a primary key is declared?",
+          "options": [
+            "Every secondary index simultaneously",
+            "The primary key",
+            "The longest text column",
+            "The latest query predicate"
+          ],
+          "correct_index": 1,
+          "explanation": "The declared primary key normally selects the clustered organization.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "cx-non-clustered-index-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "cx-non-clustered-index-application-1",
+          "test_id": "cx-non-clustered-index-application",
+          "question_text": "Why does a wide primary key affect secondary index space?",
+          "options": [
+            "It deletes index pages",
+            "Its values are carried in secondary entries",
+            "Secondary indexes store no keys",
+            "It converts indexes into views"
+          ],
+          "correct_index": 1,
+          "explanation": "The locator itself contributes storage overhead.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "cx-non-clustered-index-application-2",
+          "test_id": "cx-non-clustered-index-application",
+          "question_text": "Which query naturally matches INDEX(member_id, due_date)?",
+          "options": [
+            "Only fee equality with no other predicate",
+            "Only an unrelated name suffix",
+            "Member equality plus a due date range",
+            "Every possible query equally"
+          ],
+          "correct_index": 2,
+          "explanation": "The leading member value narrows the date-ordered segment.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "cx-non-clustered-index-application-3",
+          "test_id": "cx-non-clustered-index-application",
+          "question_text": "What makes an index covering for a query?",
+          "options": [
+            "It includes every table column always",
+            "Its name contains cover",
+            "It is always unique",
+            "It contains the values required by that query"
+          ],
+          "correct_index": 3,
+          "explanation": "Coverage depends on the requested columns and predicates.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "cx-non-clustered-index-application-4",
+          "test_id": "cx-non-clustered-index-application",
+          "question_text": "Does a nonunique member index collapse multiple loans for that member?",
+          "options": [
+            "No",
+            "Yes, it stores only one loan",
+            "Only if fees repeat",
+            "Only after SELECT *"
+          ],
+          "correct_index": 0,
+          "explanation": "An access path preserves logical rows and their multiplicity.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "cx-non-clustered-index-application-5",
+          "test_id": "cx-non-clustered-index-application",
+          "question_text": "Why might a scan be chosen despite an available index on a tiny table?",
+          "options": [
+            "The index necessarily failed to build",
+            "Its estimated total cost can be lower",
+            "Indexes are never used for integers",
+            "Scans change the answer"
+          ],
+          "correct_index": 1,
+          "explanation": "Access path choice is cost based.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "cx-non-clustered-index-application-6",
+          "test_id": "cx-non-clustered-index-application",
+          "question_text": "What is a cost of adding fee to a covering index?",
+          "options": [
+            "All queries become incorrect",
+            "The base fee column disappears",
+            "More storage and index maintenance work",
+            "Primary keys stop working"
+          ],
+          "correct_index": 2,
+          "explanation": "Coverage benefits must justify wider entries and write overhead.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "cx-non-clustered-index-application-7",
+          "test_id": "cx-non-clustered-index-application",
+          "question_text": "Does an index change how equality with NULL evaluates?",
+          "options": [
+            "Yes, NULL becomes zero",
+            "Yes, NULL matches every value",
+            "Only for secondary indexes",
+            "No"
+          ],
+          "correct_index": 3,
+          "explanation": "Comparison semantics are independent of the access path.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "cx-non-clustered-index-application-8",
+          "test_id": "cx-non-clustered-index-application",
+          "question_text": "What is separate from nonunique index navigation?",
+          "options": [
+            "A uniqueness integrity constraint",
+            "The table alias",
+            "The result header",
+            "The SQL comment"
+          ],
+          "correct_index": 0,
+          "explanation": "Uniqueness changes permitted data rather than only access paths.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "cx-non-clustered-index-application-9",
+          "test_id": "cx-non-clustered-index-application",
+          "question_text": "Which verification supports a claimed performance improvement?",
+          "options": [
+            "The presence of CREATE INDEX text alone",
+            "Representative measured workload with correctness checks",
+            "A shorter index name",
+            "A successful SELECT on three rows"
+          ],
+          "correct_index": 1,
+          "explanation": "Plans and measurements substantiate performance claims.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "cx-non-clustered-index-application-10",
+          "test_id": "cx-non-clustered-index-application",
+          "question_text": "What is needed before applying a production index change here?",
+          "options": [
+            "Only a screenshot of SQL",
+            "A renamed view",
+            "Approved migration and operational review",
+            "An arbitrary FORCE INDEX hint"
+          ],
+          "correct_index": 2,
+          "explanation": "Schema and operational changes follow repository approval rules.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-20-non-clustered-index-1",
+      "test_id": "pt-dbms-sql-20-non-clustered-index",
+      "question_text": "What does a non-clustered index's leaf entry actually contain?",
+      "options": [
+        "The complete row data for every column",
+        "The indexed value plus a pointer/reference back to the actual row stored elsewhere",
+        "Nothing; it is an empty placeholder",
+        "A duplicate of the clustered index"
+      ],
+      "correct_index": 1,
+      "explanation": "Unlike a clustered index, a non-clustered index's leaves hold the indexed value and a pointer back to where the full row actually lives.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-20-non-clustered-index-2",
+      "test_id": "pt-dbms-sql-20-non-clustered-index",
+      "question_text": "How many non-clustered indexes can a single table have?",
+      "options": [
+        "At most one, same as a clustered index",
+        "Zero only",
+        "Many — there is no 'one per table' restriction like there is for clustered indexes",
+        "Exactly the same number as columns in the table, no more no less"
+      ],
+      "correct_index": 2,
+      "explanation": "Because non-clustered indexes are separate structures that don't dictate physical row order, a table can have many of them.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-20-non-clustered-index-3",
+      "test_id": "pt-dbms-sql-20-non-clustered-index",
+      "question_text": "Why does looking up a row via a non-clustered index typically require an extra step compared to a clustered index?",
+      "options": [
+        "It doesn't; both are equally direct",
+        "Because the non-clustered index only gives a pointer, requiring a second lookup to fetch the actual row from wherever it's stored",
+        "Because non-clustered indexes are always unsorted",
+        "Because non-clustered indexes cannot use B+ Trees"
+      ],
+      "correct_index": 1,
+      "explanation": "The non-clustered index search yields a pointer, and a second 'bookmark lookup' step is needed to retrieve the actual row.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-20-non-clustered-index-4",
+      "test_id": "pt-dbms-sql-20-non-clustered-index",
+      "question_text": "What is this extra step (finding the pointer, then fetching the actual row) commonly called?",
+      "options": [
+        "A hash collision",
+        "A bookmark lookup (or key lookup)",
+        "A table scan",
+        "A page split"
+      ],
+      "correct_index": 1,
+      "explanation": "This two-step access pattern is commonly referred to as a bookmark or key lookup.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-20-non-clustered-index-5",
+      "test_id": "pt-dbms-sql-20-non-clustered-index",
+      "question_text": "If `students` is clustered on `id` and has a non-clustered index on `department`, what does the non-clustered index's pointer typically reference?",
+      "options": [
+        "Nothing; it stores full rows directly",
+        "The clustered key value (e.g., the id), used to then find the full row via the clustered index",
+        "A random row in the table",
+        "Another non-clustered index"
+      ],
+      "correct_index": 1,
+      "explanation": "On a clustered table, non-clustered index entries typically point via the clustered key, which is then used to locate the actual row.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-20-non-clustered-index-6",
+      "test_id": "pt-dbms-sql-20-non-clustered-index",
+      "question_text": "Why might a table have non-clustered indexes on department, gpa, AND email simultaneously?",
+      "options": [
+        "Because only one index total is allowed per table",
+        "Because each non-clustered index optimizes a different query pattern without affecting the single physical row order",
+        "Because non-clustered indexes replace the need for a table entirely",
+        "Because SQL requires every column to be indexed"
+      ],
+      "correct_index": 1,
+      "explanation": "Multiple non-clustered indexes let different queries each get fast lookups on their respective filter columns, all independent of physical storage order.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-20-non-clustered-index-7",
+      "test_id": "pt-dbms-sql-20-non-clustered-index",
+      "question_text": "What is a real cost of adding many non-clustered indexes to a table?",
+      "options": [
+        "The table can no longer be read from",
+        "Every INSERT/UPDATE/DELETE must update every additional non-clustered index, increasing write overhead",
+        "Non-clustered indexes make the clustered index disappear",
+        "Reads become slower with more non-clustered indexes"
+      ],
+      "correct_index": 1,
+      "explanation": "Each non-clustered index is a separate structure that must be maintained on every write, compounding write overhead as more are added.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-20-non-clustered-index-8",
+      "test_id": "pt-dbms-sql-20-non-clustered-index",
+      "question_text": "How can the extra 'bookmark lookup' hop of a non-clustered index be avoided for a specific query?",
+      "options": [
+        "It cannot ever be avoided",
+        "By using a covering index that includes all columns the query needs, directly in the index itself",
+        "By deleting the clustered index",
+        "By converting the non-clustered index into a hash index"
+      ],
+      "correct_index": 1,
+      "explanation": "A covering index (20.8) includes every column the query needs so the engine never has to hop back to the actual row.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "coding_problems": [],
+  "coding_not_applicable": "Access-path concept topic: a result-only judge cannot prove index selection, covering behavior, or performance. Notes provide projection and compound-index EXPLAIN labs with explicit expected observations and measurement limits.",
+  "review": {
+    "reviewer": "/root/finish_f",
+    "independent_review": "passed",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Independent manual content review passed within independent_review_scope; engine/browser/release gates separate.",
+    "editorial_record": "Original scenario-led prose and assessments. External originality and AdSense review unperformed.",
+    "canonical_answer_indices_preserved": true,
+    "independent_reviewer": "/root/review_f_and_foundations",
+    "independent_review_scope": "Full notes,20MCQs with every option,canonical answer position and explanation,original diagrams,and all exercise contracts/fixtures or solved conceptual labs. Original identities/indices checked against public seed cache where applicable. Reported substantive findings corrected by coordinator and filtered recheck accepted;identified learner-facing spacing polished. Manual technical/editorial reasoning only;engine,provider,browser,external originality and AdSense evidence separate."
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-20-non-clustered-index",
+    "original_note_sha256": "49bd75bc33832d7ad5088fb4b76a1f0fc37afc771bfd959044d7013cfb721703",
+    "status": "drafted; not included in prepared paired migrations"
+  },
+  "notes": "## A second route to the same rows\n\nA non clustered index provides an access path organized separately from the table's clustered row organization. Terminology differs across engines. In MySQL InnoDB, the relevant structure is usually called a secondary index: the clustered index contains table rows, while secondary entries carry their indexed values and the clustered key needed to locate the corresponding row. This lesson uses that concrete model rather than implying every database stores the same kind of physical pointer.\n\nA campus library stores loans by a primary identifier but frequently looks them up by member and due date. A secondary index can narrow the search without changing the logical loan records. It is a navigation aid, not a second authoritative table maintained by application code. The engine maintains its consistency when indexed values are inserted, updated, or removed.\n\n## Follow an InnoDB lookup\n\nConsider a loans table with primary key id and columns member_id, due_date, and fee. An index on member_id groups relevant entries by that search value. A query asking for all columns for member 7 can locate matching secondary entries and then use their primary keys to retrieve the full clustered rows. This additional lookup matters when many rows qualify.\n\n```sql\nCREATE TABLE loans(\n id INT PRIMARY KEY,member_id INT NOT NULL,due_date DATE NOT NULL,fee INT\n) ENGINE=InnoDB;\nCREATE INDEX ix_loans_member ON loans(member_id);\nINSERT INTO loans VALUES\n (10,7,'2026-11-01',4),(11,7,'2026-11-04',6),(12,8,'2026-11-02',8);\nSELECT id,member_id,due_date,fee FROM loans\nWHERE member_id=7 ORDER BY id;\n```\n\nThe logical result is loans 10 and 11 regardless of whether the optimizer chooses the index on this tiny fixture. With only three rows, a scan can be cheaper. A correct explanation distinguishes an available access path from a guaranteed chosen plan. Index demonstrations should not invent performance improvements from unmeasured examples.\n\n## Clustered key choice affects every secondary index\n\nInnoDB normally uses the declared primary key as its clustered index. If no primary key exists, it can select an appropriate unique nonnull key; otherwise it creates an internal clustered identifier. Explicitly choosing a short, stable primary key makes row identity and secondary index overhead easier to reason about. It also avoids relying on an implementation fallback as an application identity contract.\n\nBecause secondary records include clustered key values, a very wide primary key increases the size of secondary structures. More bytes can mean more pages, more cache pressure, and more maintenance. This does not mean every natural key is wrong; compare integrity, lookup patterns, and storage costs for the actual design. Do not change a production primary key merely to follow a simplistic rule of thumb.\n\n## Composite ordering is intentional\n\nAn index on member_id and due_date organizes entries first by member and then by date within each member. It is useful for queries with member equality and a due date range. It can also serve a member only prefix. A due date only query does not have the same straightforward leftmost prefix access, although the optimizer may have other strategies depending on the situation.\n\n```sql\nCREATE INDEX ix_loans_member_due ON loans(member_id,due_date);\nSELECT id,due_date FROM loans\nWHERE member_id=7 AND due_date>='2026-11-01'\nORDER BY due_date,id;\n```\n\nThis result contains the two member 7 loans in due date order. The index definition follows the query pattern rather than an alphabetical list of columns. A leading range condition can limit how later columns narrow a contiguous search range, though later columns may still help filtering or coverage. Avoid describing the leftmost prefix rule as if later columns become completely useless in every plan.\n\n## Covering queries can avoid some row fetches\n\nA covering index has the values needed by a particular query in the index structure. Coverage is a property of the query and index together, not a permanent label that guarantees every caller is covered. In InnoDB, the primary key carried by a secondary entry can make a query selecting that identifier and indexed columns coverable without repeating the identifier explicitly in the index definition.\n\nA query selecting only id and member_id may be covered by the member index, while selecting fee can require fetching the clustered row. Adding fee to make one report covered enlarges the index and increases write work. Evaluate whether the avoided lookups justify that cost across the complete workload. Do not expand every index to include every table column.\n\n## Duplicate values and uniqueness are separate\n\nA nonunique secondary index can contain many entries for the same member. Each still identifies a different loan through its row key. The index does not collapse those loans, so SELECT without DISTINCT retains all qualifying records. A unique secondary index additionally enforces a uniqueness rule, which changes permitted data and requires a separate integrity decision.\n\nNull values can also appear in appropriate secondary indexes. Ordinary equality with null remains unknown; use IS NULL when the requirement asks for missing values. An index does not change SQL comparison semantics or turn unknown into zero. MySQL's treatment of nullable unique keys also requires attention before using one as a promise that every displayed value identifies exactly one row.\n\n## Worked lab: compare projections\n\nCreate the fixture and run EXPLAIN for a query selecting id and member_id for member 7. Then compare a query selecting id, member_id, and fee. Inspect the chosen key and whether the plan indicates coverage. The predicted difference is that fee is absent from the member index, while the primary key and indexed member value are available there. The optimizer may still choose scans on a small table.\n\nTo make the exercise useful, populate a safe local fixture with many members and multiple loans each. Keep identical result checks before and after index creation. Record estimated and actual work separately, and do not claim a speedup unless the workload was measured. A warm cache, a tiny table, and repeated execution can make timing comparisons misleading.\n\n## Worked lab: evaluate a compound access path\n\nCompare member equality plus a due date range against a due date only search. Predict why the member and date composite index naturally narrows the first query. Inspect both plans rather than forcing one index to make a demonstration look successful. If the main application instead searches all overdue loans across members, a different leading column may deserve consideration for that workload.\n\nNow update a loan's due_date inside the safe fixture and query it again. The engine must maintain the corresponding composite index entry. This illustrates why extra indexes add write cost even when a particular statement is a read. Inserts, deletes, and updates touching indexed values all contribute to the operational tradeoff; redundant indexes also consume storage and maintenance effort.\n\n## Read plans without turning estimates into facts\n\nAn EXPLAIN row estimate describes what the optimizer expects, not an observed count of loans returned to a user. Compare it with the known distribution in the fixture. A member with many loans can require substantial row retrieval even when the index lookup itself is quick. If the application selects nearly every column for nearly every loan, avoiding a table scan may provide little benefit and can add scattered clustered lookups instead.\n\nLikewise, an index that helps one selective member lookup may not be useful for a report over the whole table. Keep both queries in the workload comparison and record which business operation each index is intended to support. This prevents tuning a demonstration while slowing the actual application.\n\n## Review before applying an index change\n\nAn index change in a shared production database is an operational and schema change requiring the repository's approval and migration process. Table size, lock behavior, available space, replication, and rollback need review. A lesson's CREATE INDEX snippet is not permission to execute it remotely. Existing application queries and uniqueness constraints must remain compatible with any approved change.\n\nChoose candidate indexes from observed predicates, join keys, ordering, and projection needs. Use statistics and execution plans to decide whether they are chosen, then measure representative read and write workloads. Continue with [Selectivity](/learning/dbms-sql-tutorial/selectivity), [Join Cardinality](/learning/dbms-sql-tutorial/join-cardinality), and [View Limitations](/learning/dbms-sql-tutorial/view-limitations) to connect access path choices with row counts and reusable query interfaces.\n",
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Secondary member entries point to clustered loan rows",
+      "description": "Member values can repeat; the carried primary key identifies the corresponding full loan record.",
+      "columns": [
+        "Secondary member value",
+        "Carried loan ID",
+        "Clustered row fee"
+      ],
+      "rows": [
+        [
+          "7",
+          "10",
+          "4"
+        ],
+        [
+          "7",
+          "11",
+          "6"
+        ],
+        [
+          "8",
+          "12",
+          "8"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "technical_review": "Independent manual diagram/content consistency review passed;actual static/browser rendering tracked separately.",
+    "server_rendering": "pending",
+    "browser_rendering": "unverified",
+    "independent_review": "passed"
+  },
+  "sql_verification": {
+    "scope": "not executed; concurrency/recovery/provider verification separate",
+    "all_passed": false,
+    "cases": []
+  }
+}

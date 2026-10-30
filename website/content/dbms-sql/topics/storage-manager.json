@@ -1,0 +1,522 @@
+{
+  "source_ref": "chapter-1-database-foundations/storage-manager",
+  "slug": "storage-manager",
+  "title": "Storage Manager",
+  "description": "Understand how storage management connects rows to pages, buffers, indexes, space reuse, and recovery, with product-specific limits on page sizes and maintenance effects.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Connecting logical records to persistent representation\n\nA database application asks for logical values: a student's name, a course identifier, or a count of qualifying enrollments. Persistent storage contains bytes organized through the database's physical structures. The storage-management responsibility connects these viewpoints. It includes representing records, locating their storage, allocating and maintaining physical space, and cooperating with indexes, memory management, and recovery facilities.\n\nThis is a responsibility model rather than a universal boundary around one independent program. A product can combine storage, buffering, indexing, and transaction mechanisms within closely connected code. Understanding the distinction still helps you ask a useful question: how does an operation on a logical row translate into access to the physical structures that represent it?\n\nPhysical representation should not be confused with logical meaning. Moving a record to a different physical location does not create a new student identity. Similarly, finding a record quickly does not prove that its data is accurate or that the caller is authorized to see it. Storage facilities support the database's work alongside the other mechanisms responsible for those properties.\n\n## Understanding pages as units of organization\n\nMany relational systems organize persistent data using pages or blocks. A page contains database-managed structures and some portion of the stored data or an access structure. The exact layout depends on the product and object. Page identifiers, record locations, metadata, and available space are implementation details that applications normally access through supported database interfaces rather than calculate themselves.\n\nPage size is product- and configuration-dependent. A default PostgreSQL build commonly uses an eight-kilobyte block, while InnoDB commonly uses a sixteen-kilobyte page by default. These are labeled examples, not a rule that all database pages have either size. InnoDB supports other configured page sizes with related restrictions. Inspect the actual product and configuration before using a remembered default to interpret physical measurements.\n\nA page is not necessarily equivalent to one logical row. Several small records can share a page, while large variable-length values can require additional or off-page storage depending on the engine and row format. Consequently, a request for one row can involve more than one physical access. A simple diagram of rows inside a page is useful, but it should not claim to describe every record format.\n\n## Following a record insertion conceptually\n\nSuppose a table already contains student identifiers 101 and 102, and the application inserts student 103. The database must create a suitable physical representation for the new row. It may find space in an existing page or allocate additional storage. Relevant access structures and constraint-related facilities may also need work. The implementation coordinates these responsibilities under the applicable transaction and recovery rules.\n\nIf the operation changes an in-memory page relative to its persistent copy, that page is dirty. The term means that persistence handling is needed; it does not mean the page is corrupted. Tracking such changes lets the system coordinate later writes and recovery information. The exact moment and component that records dirty state are implementation details, not a universal final step that every database executes in the same function.\n\nAn illustrative page labeled P7 might contain the two original records in persistent storage while a buffered version also contains the new record. This picture describes a possible point during processing, not a claim that the transaction has committed or that every engine maintains the same layout. The system must still satisfy the relevant visibility and recovery ordering before promising its required outcomes.\n\n## Cooperating with the buffer manager\n\nA database ordinarily uses memory to avoid fetching every needed page from persistent storage repeatedly. The buffer manager tracks cached pages and their state, while storage facilities supply and persist the relevant representation. If a needed page is already available and valid, the system can avoid that physical read. The whole request may still perform other work or wait for coordination elsewhere.\n\nOn a cache miss, obtaining a page can involve physical I/O and decisions about buffer space. A dirty page cannot simply be discarded as though its contents were an unchanged reusable copy. The system needs appropriate persistence and recovery handling. This interaction is why separating storage and buffering for teaching should not imply that their implementation or performance can be understood in complete isolation.\n\nWrite-ahead logging adds an important constraint in systems using that recovery protocol. Required log information must become durable before the corresponding changed data page is persisted under the protocol. That ordering supports recovery after failures. It is not equivalent to saying that every row change immediately writes its whole data page or that a dirty page is already durable merely because it exists in memory.\n\n## Accounting for index maintenance accurately\n\nAn index is another stored access structure, not a free property attached to a query. It consumes space and requires maintenance when operations affect the indexed representation, membership, or relevant row references. Inserts and deletes commonly involve index work, and updates can affect particular indexes depending on the changed values and engine behavior. Do not claim that every update necessarily rewrites every index in every implementation.\n\nThe maintenance cost can be justified by a useful access pattern, but the trade-off must be evaluated for the actual workload. An index that helps a frequent lookup can add work to writes and use storage that must be maintained and recovered. The storage manager's contribution is part of this cost. The query processor's choice to use an index does not remove the physical structures or maintenance responsibilities behind it.\n\nAn unsuitable physical layout can also affect access cost even when the logical model is meaningful. Wide records, additional value storage, sparse pages, and scattered access patterns can increase relevant work. Which factor matters depends on the engine, row format, actual data, and queries. A general phrase such as fragmentation should not replace evidence identifying the structures and accesses involved.\n\n## Distinguishing reusable space from returned disk space\n\nDeleting or updating logical records does not imply that the database immediately returns all formerly occupied bytes to the operating system. Space can become reusable within an existing object, remain allocated for future growth, or be managed through product-specific cleanup and reorganization. The file's current size therefore does not directly equal the space needed to serialize only its currently visible rows.\n\nA hypothetical table with relatively few visible records but a large physical footprint needs investigation. The explanation might involve dead or obsolete versions, unused allocated space, indexes, variable-length data, or other layout details. A rough comparison with an assumed record count does not diagnose one cause. Inspect the appropriate object and product measurements before selecting a maintenance action.\n\nMaintenance commands have different meanings across products. PostgreSQL's ordinary VACUUM generally makes space from dead tuples available for reuse without promising to shrink every table file back to the operating system. MySQL's OPTIMIZE TABLE behavior depends on the storage engine and version and can involve reorganization or rebuilding. Do not present these as interchangeable commands with identical physical effects.\n\n## Planning physical maintenance as an operational change\n\nReorganization and rebuilding can consume time, I/O, and temporary space and can have concurrency consequences. A teaching description of their purpose is not permission to run them on a shared database. The operator needs verified product behavior, an exact target, relevant operational checks, and the required authorization. Selecting a command before understanding the symptom risks adding work without addressing the real issue.\n\nThe same care applies to changing physical settings. A fill policy, row format, or page-related configuration can influence capacity and access behavior, but a setting copied from another product or workload is not a universal improvement. Separate the logical design question from the physical access question, and gather evidence appropriate to each before proposing a change.\n\nA useful explanation of storage management names the logical operation, the affected physical structures, and the memory and recovery interactions needed to support it. It acknowledges product-specific layouts and avoids inferring corruption, space reclamation, or latency from one broad label. That foundation makes later study of indexes, buffering, query processing, and recovery more precise without requiring applications to manipulate database files directly.",
+  "references": [
+    {
+      "title": "MySQL InnoDB disk I/O and page sizes",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/innodb-disk-io.html"
+    },
+    {
+      "title": "PostgreSQL routine vacuuming",
+      "url": "https://www.postgresql.org/docs/current/routine-vacuuming.html"
+    },
+    {
+      "title": "MySQL OPTIMIZE TABLE",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/optimize-table.html"
+    },
+    {
+      "title": "PostgreSQL page layout",
+      "url": "https://www.postgresql.org/docs/current/storage-page-layout.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-1-storage-manager",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-1-storage-manager-1",
+          "test_id": "pt-dbms-sql-1-storage-manager",
+          "question_text": "What is the core responsibility of the Storage Manager?",
+          "options": [
+            "Translating between the logical view of data (tables/rows) and its physical byte-level layout on disk",
+            "Parsing and optimizing SQL queries",
+            "Enforcing ACID transaction properties",
+            "Authenticating client connections to the DBMS"
+          ],
+          "correct_index": 0,
+          "explanation": "The notes define the Storage Manager's job as bridging the logical (tables/rows) and physical (bytes on disk) views of data.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-1-storage-manager-2",
+          "test_id": "pt-dbms-sql-1-storage-manager",
+          "question_text": "What unit does the Storage Manager typically use to organize data on disk?",
+          "options": [
+            "Fixed-size pages or blocks, such as 8 KB in PostgreSQL or 16 KB in InnoDB",
+            "Individual bytes with no grouping at all",
+            "Whole tables as a single indivisible unit",
+            "One page per row regardless of row size"
+          ],
+          "correct_index": 0,
+          "explanation": "The notes explicitly describe fixed-size pages (8 KB in PostgreSQL, 16 KB in InnoDB) as the organizing unit.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-1-storage-manager-3",
+          "test_id": "pt-dbms-sql-1-storage-manager",
+          "question_text": "What is a modified in-memory page called when it differs from the persistent copy that needs to be maintained?",
+          "options": [
+            "Dirty",
+            "Encrypted",
+            "Read-only",
+            "Archived"
+          ],
+          "correct_index": 0,
+          "explanation": "The notes state the Storage Manager marks a modified page as 'dirty' to signal it needs eventual flushing to disk.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-1-storage-manager-4",
+          "test_id": "pt-dbms-sql-1-storage-manager",
+          "question_text": "Which statement accurately distinguishes maintenance behavior across database products?",
+          "options": [
+            "Ordinary PostgreSQL VACUUM generally makes dead-tuple space reusable; MySQL OPTIMIZE TABLE has engine/version-specific reorganization behavior",
+            "Every maintenance command immediately returns all file space to the operating system",
+            "VACUUM and OPTIMIZE TABLE always have identical physical effects",
+            "A large file alone proves which maintenance command is authorized"
+          ],
+          "correct_index": 0,
+          "explanation": "Space reuse, file shrinking, and rebuilding are different outcomes. Check the actual product, mode, target and operational requirements.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-1-storage-manager-5",
+          "test_id": "pt-dbms-sql-1-storage-manager",
+          "question_text": "Why does the notes say indexes are not a 'free' performance improvement?",
+          "options": [
+            "Indexes use space and need maintenance when relevant indexed representation, membership, or row references change",
+            "Indexes require no storage",
+            "Every index eliminates every write cost",
+            "All updates in all implementations must perform identical index maintenance"
+          ],
+          "correct_index": 0,
+          "explanation": "Index work depends on the operation and engine. The access benefit is not free, but every update need not rewrite every index in every implementation.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-1-storage-manager-6",
+          "test_id": "pt-dbms-sql-1-storage-manager",
+          "question_text": "According to the notes, what physical design choice can hurt I/O efficiency even when the logical schema is well designed?",
+          "options": [
+            "A very wide row spanning multiple physical pages, or a poorly chosen page fill-factor",
+            "Using a NOT NULL constraint on a column",
+            "Naming a table with lowercase letters",
+            "Choosing a primary key of type INT instead of BIGINT"
+          ],
+          "correct_index": 0,
+          "explanation": "The notes cite wide rows spanning multiple pages and poor fill-factor choices as physical-layout pitfalls independent of logical schema quality.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-1-storage-manager-7",
+          "test_id": "pt-dbms-sql-1-storage-manager",
+          "question_text": "A table has relatively few visible rows but a large footprint. Which conclusion is justified before choosing maintenance?",
+          "options": [
+            "Investigate allocated/reusable space, versions, indexes, and value storage rather than diagnose one cause from size alone",
+            "The file must always be corrupt",
+            "Every stored byte must be immediately returned by an ordinary delete",
+            "A maintenance command is automatically authorized"
+          ],
+          "correct_index": 0,
+          "explanation": "An apparent size mismatch is an observation. Its cause and the appropriate action require product-specific evidence.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-1-storage-manager-8",
+          "test_id": "pt-dbms-sql-1-storage-manager",
+          "question_text": "Which responsibilities can participate in a conceptual row insertion, without asserting one universal internal function order?",
+          "options": [
+            "Find or allocate space, represent the row, maintain affected structures, and track changed pages under transaction/recovery rules",
+            "Only draw the final response",
+            "Always write every index identically before any other work",
+            "Skip every transaction and recovery facility"
+          ],
+          "correct_index": 0,
+          "explanation": "The responsibilities cooperate. Their exact implementation boundaries and ordering are product-specific.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "question_text": "Does a large table file with relatively few visible rows diagnose one specific cause by itself?",
+          "options": [
+            "Yes; it always proves one kind of corruption",
+            "No; allocation, versions, indexes, and value storage may need investigation",
+            "Yes; every visible row must be duplicated identically",
+            "No; physical measurements can never be useful"
+          ],
+          "correct_index": 1,
+          "explanation": "A file-size observation is evidence to investigate, not a complete explanation of its cause.",
+          "marks": 1,
+          "id": "tq-dbx2-storage-manager-1-9",
+          "test_id": "pt-dbms-sql-1-storage-manager",
+          "sort_order": 8
+        },
+        {
+          "question_text": "Does ordinary PostgreSQL VACUUM guarantee that every table file immediately shrinks at the operating-system level?",
+          "options": [
+            "Yes; every deleted row instantly returns all disk bytes",
+            "Yes; it has identical effects to every MySQL maintenance command",
+            "No; it generally makes dead-tuple space reusable without that universal shrink guarantee",
+            "No; it can never make any space reusable"
+          ],
+          "correct_index": 2,
+          "explanation": "Different products and maintenance modes have different physical effects. Reuse and returned filesystem space are distinct.",
+          "marks": 1,
+          "id": "tq-dbx2-storage-manager-1-10",
+          "test_id": "pt-dbms-sql-1-storage-manager",
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbx2-storage-manager-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "question_text": "An application inserts student 103. Which storage responsibility can be involved?",
+          "options": [
+            "Finding or allocating suitable physical space for the row representation",
+            "Inventing a new business identity policy without a model",
+            "Granting the caller every privilege",
+            "Changing every unrelated table name"
+          ],
+          "correct_index": 0,
+          "explanation": "A logical insertion needs an appropriate physical representation, along with relevant index, transaction and integrity work.",
+          "marks": 1,
+          "id": "tq-dbx2-storage-manager-2-1",
+          "test_id": "pt-dbx2-storage-manager-application",
+          "sort_order": 0
+        },
+        {
+          "question_text": "An in-memory P7 page contains a new row that its persistent copy does not yet contain. What state can describe that page?",
+          "options": [
+            "Necessarily corrupted",
+            "Dirty",
+            "Automatically a deleted table",
+            "Necessarily already durably committed"
+          ],
+          "correct_index": 1,
+          "explanation": "Dirty means changed relative to the persistent representation; it does not independently establish corruption or commit status.",
+          "marks": 1,
+          "id": "tq-dbx2-storage-manager-2-2",
+          "test_id": "pt-dbx2-storage-manager-application",
+          "sort_order": 1
+        },
+        {
+          "question_text": "A page is already available in a valid buffer. Which cost can be avoided for that access?",
+          "options": [
+            "Every possible permission check",
+            "Every other data access in the query",
+            "Every computation needed for the result",
+            "Fetching that page again from persistent storage"
+          ],
+          "correct_index": 3,
+          "explanation": "A cache hit describes that page access, not zero work for the complete request.",
+          "marks": 1,
+          "id": "tq-dbx2-storage-manager-2-3",
+          "test_id": "pt-dbx2-storage-manager-application",
+          "sort_order": 2
+        },
+        {
+          "question_text": "Why is a dirty page not simply discardable as an unchanged cached copy?",
+          "options": [
+            "Every dirty page must already be corrupt",
+            "A dirty page can never be replaced by any safe protocol",
+            "Buffering eliminates the need to preserve changes",
+            "Its modifications need suitable persistence and recovery handling"
+          ],
+          "correct_index": 3,
+          "explanation": "The system must coordinate changed contents with its persistence and recovery guarantees.",
+          "marks": 1,
+          "id": "tq-dbx2-storage-manager-2-4",
+          "test_id": "pt-dbx2-storage-manager-application",
+          "sort_order": 3
+        },
+        {
+          "question_text": "A database uses a write-ahead logging recovery protocol. Which ordering matters?",
+          "options": [
+            "The log is always discarded before the page changes",
+            "The page must always bypass memory",
+            "Required log information is durable before the corresponding changed data page is persisted",
+            "Every logical change immediately writes every table page"
+          ],
+          "correct_index": 2,
+          "explanation": "The recovery protocol constrains log/data persistence ordering rather than imposing the same immediate flush behavior on every operation.",
+          "marks": 1,
+          "id": "tq-dbx2-storage-manager-2-5",
+          "test_id": "pt-dbx2-storage-manager-application",
+          "sort_order": 4
+        },
+        {
+          "question_text": "A query benefits from an index. Which additional fact should the explanation include?",
+          "options": [
+            "The index consumes space and needs maintenance when relevant operations affect it",
+            "Every index is free to store and update",
+            "Every update in every engine rewrites every index identically",
+            "The index removes transaction and recovery responsibilities"
+          ],
+          "correct_index": 0,
+          "explanation": "Access benefits must be considered together with actual storage and maintenance costs.",
+          "marks": 1,
+          "id": "tq-dbx2-storage-manager-2-6",
+          "test_id": "pt-dbx2-storage-manager-application",
+          "sort_order": 5
+        },
+        {
+          "question_text": "A wide logical row includes large variable-length values. What should be checked before predicting its page-access cost?",
+          "options": [
+            "An assumption that every row occupies exactly one page",
+            "The actual engine and row format, including possible additional/off-page storage",
+            "A rule that logical meaning determines a universal byte layout",
+            "Only the number of letters in the table name"
+          ],
+          "correct_index": 1,
+          "explanation": "Physical representation varies. One logical row can involve additional access depending on the implementation and data.",
+          "marks": 1,
+          "id": "tq-dbx2-storage-manager-2-7",
+          "test_id": "pt-dbx2-storage-manager-application",
+          "sort_order": 6
+        },
+        {
+          "question_text": "A delete frees space for reuse inside a table but its file remains the same size. Is that inherently contradictory?",
+          "options": [
+            "Yes; a delete must always shrink a file immediately",
+            "Yes; every unchanged file is corrupt",
+            "No; reusable internal space and returned filesystem space are different outcomes",
+            "No; the deleted row must still be visible to every query"
+          ],
+          "correct_index": 2,
+          "explanation": "Allocation and maintenance policies can retain space for future use without the same filesystem footprint change.",
+          "marks": 1,
+          "id": "tq-dbx2-storage-manager-2-8",
+          "test_id": "pt-dbx2-storage-manager-application",
+          "sort_order": 7
+        },
+        {
+          "question_text": "An operator proposes OPTIMIZE TABLE based only on a vague fragmentation claim. What is missing?",
+          "options": [
+            "Only a shorter command name",
+            "Product-specific diagnosis, exact target, operational planning, and required authorization",
+            "A guarantee that every rebuild is instantaneous",
+            "Proof that all maintenance modes are identical"
+          ],
+          "correct_index": 1,
+          "explanation": "Maintenance can be expensive and have concurrency consequences. It needs relevant evidence and authorization.",
+          "marks": 1,
+          "id": "tq-dbx2-storage-manager-2-9",
+          "test_id": "pt-dbx2-storage-manager-application",
+          "sort_order": 8
+        },
+        {
+          "question_text": "A student record moves to a different physical location. What does that not inherently change?",
+          "options": [
+            "The logical student identity represented by its key",
+            "Every possible storage byte",
+            "The exact physical access structure",
+            "Every relevant cache observation"
+          ],
+          "correct_index": 0,
+          "explanation": "Logical identity is distinct from where the engine currently represents the row.",
+          "marks": 1,
+          "id": "tq-dbx2-storage-manager-2-10",
+          "test_id": "pt-dbx2-storage-manager-application",
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [],
+  "coding_not_applicable": "This conceptual topic explains physical responsibilities and diagnosis; actual DDL, index and transaction programming belongs to the corresponding practical topics.",
+  "review": {
+    "reviewer": "coordinator",
+    "independent_review": "unavailable; no agent tools",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "definitions, worked examples and question coverage checked; no external plagiarism certification",
+    "existing_question_corrections": [
+      "tq-dbms-sql-1-storage-manager-3",
+      "tq-dbms-sql-1-storage-manager-4",
+      "tq-dbms-sql-1-storage-manager-5",
+      "tq-dbms-sql-1-storage-manager-7",
+      "tq-dbms-sql-1-storage-manager-8"
+    ],
+    "canonical_answer_indices_preserved": true,
+    "answer_position_policy": "Original indices retained; new canonical positions shuffled; website display order also shuffled per attempt."
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-1-storage-manager",
+    "original_note_sha256": "b5f3c31bc2b44af3bb78f0fb72e2e8d708cce6c9d0dd0dfd9343f69fb4ac3cb7",
+    "status": "paired migration prepared; not applied"
+  },
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-1-storage-manager-1",
+      "test_id": "pt-dbms-sql-1-storage-manager",
+      "question_text": "What is the core responsibility of the Storage Manager?",
+      "options": [
+        "Translating between the logical view of data (tables/rows) and its physical byte-level layout on disk",
+        "Parsing and optimizing SQL queries",
+        "Enforcing ACID transaction properties",
+        "Authenticating client connections to the DBMS"
+      ],
+      "correct_index": 0,
+      "explanation": "The notes define the Storage Manager's job as bridging the logical (tables/rows) and physical (bytes on disk) views of data.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-1-storage-manager-2",
+      "test_id": "pt-dbms-sql-1-storage-manager",
+      "question_text": "What unit does the Storage Manager typically use to organize data on disk?",
+      "options": [
+        "Fixed-size pages or blocks, such as 8 KB in PostgreSQL or 16 KB in InnoDB",
+        "Individual bytes with no grouping at all",
+        "Whole tables as a single indivisible unit",
+        "One page per row regardless of row size"
+      ],
+      "correct_index": 0,
+      "explanation": "The notes explicitly describe fixed-size pages (8 KB in PostgreSQL, 16 KB in InnoDB) as the organizing unit.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-1-storage-manager-3",
+      "test_id": "pt-dbms-sql-1-storage-manager",
+      "question_text": "When a new row is inserted, what does the Storage Manager mark the modified page as, so the Buffer Manager knows to flush it later?",
+      "options": [
+        "Dirty",
+        "Encrypted",
+        "Read-only",
+        "Archived"
+      ],
+      "correct_index": 0,
+      "explanation": "The notes state the Storage Manager marks a modified page as 'dirty' to signal it needs eventual flushing to disk.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-1-storage-manager-4",
+      "test_id": "pt-dbms-sql-1-storage-manager",
+      "question_text": "What maintenance operation does the notes give as an example of reclaiming disk space wasted by fragmentation?",
+      "options": [
+        "VACUUM in PostgreSQL or OPTIMIZE TABLE in MySQL",
+        "GRANT and REVOKE statements",
+        "CREATE INDEX statements only",
+        "The Query Processor's execution plan cache"
+      ],
+      "correct_index": 0,
+      "explanation": "The notes name VACUUM (PostgreSQL) and OPTIMIZE TABLE (MySQL) as the periodic maintenance operations that reclaim fragmented space.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-1-storage-manager-5",
+      "test_id": "pt-dbms-sql-1-storage-manager",
+      "question_text": "Why does the notes say indexes are not a 'free' performance improvement?",
+      "options": [
+        "Every index must be updated on every INSERT/UPDATE/DELETE, so indexes speed up reads but add overhead to writes",
+        "Indexes only work for SELECT statements and cannot be created at all",
+        "Indexes automatically disable the Buffer Manager's caching",
+        "Indexes remove the need for the Storage Manager to track free space"
+      ],
+      "correct_index": 0,
+      "explanation": "The notes explicitly describe this trade-off: indexes must be maintained on every write, adding overhead in exchange for faster reads.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-1-storage-manager-6",
+      "test_id": "pt-dbms-sql-1-storage-manager",
+      "question_text": "According to the notes, what physical design choice can hurt I/O efficiency even when the logical schema is well designed?",
+      "options": [
+        "A very wide row spanning multiple physical pages, or a poorly chosen page fill-factor",
+        "Using a NOT NULL constraint on a column",
+        "Naming a table with lowercase letters",
+        "Choosing a primary key of type INT instead of BIGINT"
+      ],
+      "correct_index": 0,
+      "explanation": "The notes cite wide rows spanning multiple pages and poor fill-factor choices as physical-layout pitfalls independent of logical schema quality.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-1-storage-manager-7",
+      "test_id": "pt-dbms-sql-1-storage-manager",
+      "question_text": "A table logically contains only 10,000 active rows but occupies disk space that would normally hold 200,000 rows. What does the notes attribute this to, and what fixes it?",
+      "options": [
+        "Fragmentation/bloat from unreclaimed deletes and updates, fixed by periodic maintenance like VACUUM or OPTIMIZE TABLE",
+        "A bug in the Query Processor's optimizer that must be patched by the DBMS vendor",
+        "The Transaction Manager incorrectly logging every read operation",
+        "An oversized buffer pool caching too many pages in memory"
+      ],
+      "correct_index": 0,
+      "explanation": "The notes describe exactly this symptom as fragmentation/bloat, remedied by maintenance operations like VACUUM or OPTIMIZE TABLE.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-1-storage-manager-8",
+      "test_id": "pt-dbms-sql-1-storage-manager",
+      "question_text": "When a new student row is inserted, in what order does the notes describe the Storage Manager's actions?",
+      "options": [
+        "Find or allocate a page with free space, write the row's bytes, update any indexes, then mark the page dirty",
+        "Update indexes, allocate a page, mark the page read-only, then discard the row",
+        "Mark the page dirty first, then decide later whether to allocate space or update indexes",
+        "Send the row directly to the Buffer Manager without ever touching a page"
+      ],
+      "correct_index": 0,
+      "explanation": "The notes lay out this exact sequence: find/allocate page space, write the row, update indexes, then mark the page dirty for later flushing.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Illustrative buffered and persistent representations of page P7",
+      "description": "P7 is a teaching label, not a measured address or a universal record format. The example shows a possible point before a data-page flush and does not establish commit status. In a write-ahead logging protocol, required log durability must precede the corresponding data-page persistence.",
+      "columns": [
+        "Representation",
+        "Illustrative records",
+        "Meaning"
+      ],
+      "rows": [
+        [
+          "Persistent P7",
+          "student_id 101 and 102",
+          "Current illustrated on-storage page contents"
+        ],
+        [
+          "Buffered P7",
+          "student_id 101, 102 and newly inserted 103",
+          "Changed in-memory representation; dirty relative to this persistent copy"
+        ],
+        [
+          "Recovery information",
+          "Required description of the change",
+          "Must satisfy the applicable recovery ordering before the related data-page write"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "coordinator review",
+    "server_rendering": "passed",
+    "browser_rendering": "unverified",
+    "independent_review": "unavailable; no agent tools",
+    "rendering_check": "Actual LessonBlock/TopicDiagrams in React server rendering; 18 authored package checks passed; desktop/mobile browser QA remains unverified"
+  }
+}

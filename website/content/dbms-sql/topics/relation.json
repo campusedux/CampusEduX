@@ -1,0 +1,611 @@
+{
+  "source_ref": "chapter-4-relational-model/relation",
+  "slug": "relation",
+  "title": "Relation",
+  "description": "Understand relations as sets of facts, distinguish schemas from instances, and translate set semantics into careful SQL queries.",
+  "dialect": "MySQL 8.4",
+  "notes": "## A relation describes a collection of facts\n\nA relation is a set of tuples that follow the same relation schema. Each tuple supplies a value for each named attribute. For a campus example, Student(student_id, student_name, programme) describes student facts. One tuple might associate identifier 17 with Asha and Computing. Another associates identifier 24 with Ravi and Electronics. The relation contains these facts together, rather than describing one student's details alone.\n\nRead the relation's meaning before interpreting its contents. Does one tuple represent a student, a course registration, or an examination attempt? These are different grains of information. A student who registers for three courses contributes one fact to Student and three facts to Registration. Repeated student identifiers in Registration can therefore be correct, even when Student permits each student identifier only once.\n\n## The schema and its current contents\n\nA relation schema specifies the relation's name, attributes, and their domains. Domains describe permitted values, such as valid identifiers or recognised programme codes. The relation instance is the actual set of tuples currently associated with that schema. Adding a student changes the instance. Adding an attribute changes the schema and requires consideration of every affected fact and application contract.\n\nImagine an empty Student relation at the start of admissions. Its schema still tells us what a student fact must contain, even though there are no current tuples. After admissions, the same schema can describe hundreds of tuples. An empty relation is valid; it has zero cardinality. Emptiness does not erase its attributes or turn it into an undefined structure.\n\n## Reading degree and cardinality separately\n\nDegree counts attributes. Cardinality counts tuples in a particular relation instance. Student(student_id, student_name, programme) has degree three whether it contains zero, two, or ten thousand tuples. Its cardinality changes as facts are added or removed. Keeping these measurements separate prevents mistakes such as describing a wide table as having high cardinality merely because it has many columns.\n\nSuppose two tuples have Computing as their programme. The Student relation still contains two distinct student facts if their identifiers differ. The number of distinct programme values is a different measurement from the relation's cardinality. A report must specify which objects it counts: students, registrations, programmes, or output rows. A familiar column label alone does not determine the answer.\n\n## Domains define possible combinations\n\nIf the schema has domains D1, D2, and D3, their Cartesian product contains all triples that can be formed by choosing one value from each domain. A relation is a subset of that product. This definition describes the shape of a possible tuple; it does not say that every possible combination must actually occur in the database.\n\nFor example, identifiers 17 and 24, names Asha and Ravi, and two programmes generate several possible combinations. The actual Student relation records only the combinations that are true in the campus system. Additional constraints can reject combinations that are individually type-compatible but invalid together. A pair of integer values is not automatically a valid registration just because both fit their respective column types.\n\n## Sets exclude duplicate tuples\n\nA mathematical set contains each element once. Therefore a strict relation cannot contain two distinct copies of the same complete tuple. Adding an already present tuple leaves the relation unchanged. Notice the word complete: two student tuples can share a name or programme and still differ in their identifier. Similarity in selected attributes does not establish duplicate facts.\n\nKeys express a stronger business rule. If student_id is a key, two different tuples cannot share that identifier, even when their names differ. Set semantics alone would allow those different complete tuples; the key constraint rules them out. Distinguish duplicate elimination from identity enforcement. Removing exact duplicate rows is insufficient to resolve conflicting names stored under the same student identifier.\n\n## Row order has no logical meaning\n\nRearranging the tuples in a displayed relation does not change the represented facts. There is no first student or last student as a property of the relation itself. A storage engine may place records on pages or traverse an index in some sequence. Such implementation details do not give the logical relation an inherent order.\n\nIn SQL, request presentation order explicitly with ORDER BY. Ordering by programme alone leaves ties between students in that programme. Add student_id when the report requires a stable sequence within ties. A query that happened to return insertion order yesterday can return another order after an index or execution plan changes. Treat observed output as evidence about that execution, not a continuing ordering guarantee.\n\n## SQL tables approximate the abstraction\n\nSQL uses tables and result sets with rules that differ from strict relational sets. A table without suitable uniqueness constraints can accept duplicate rows. Ordinary SELECT generally retains duplicate result rows. SQL also supports NULL, with comparison behaviour distinct from ordinary domain values. These practical features mean that a rectangular SQL result is not automatically a mathematical relation.\n\nPhysical storage is not the reason for the distinction. Every implementation needs some representation, and physical ordering does not imply a logical ordering contract. The relevant differences include duplicate handling and missing-value semantics. A primary key helps enforce tuple identity, but it does not make every SQL expression behave exactly like classical relational algebra. Inspect the operation being performed rather than assigning one universal interpretation to all tables.\n\n## Selecting and projecting student facts\n\nSelection restricts tuples using a condition. Projection retains specified attributes. In relational algebra, projection produces a set, so repeated projected tuples collapse. In SQL, choosing fewer columns does not automatically remove duplicate result rows. If three students study Computing, SELECT programme can return Computing three times. SELECT DISTINCT programme requests one copy of each distinct selected programme value.\n\n```sql\nSELECT DISTINCT programme\nFROM students\nWHERE active = 1\nORDER BY programme;\n```\n\nThis query asks for programmes represented among active students. It does not list every active student, and it does not count registrations. DISTINCT applies to the entire selected row. Selecting student_id alongside programme preserves separate rows for different students, even when the programme label matches. Decide the desired output grain before choosing columns or adding duplicate elimination.\n\n## Constraints and incomplete information\n\nA relation's intended validity rules extend beyond its visible grid. Student identifiers may need uniqueness, names may be required, and programme references may need to match known programmes. SQL constraints encode selected rules at the database boundary. Application validation can provide feedback, but a screen that hides an invalid choice does not itself enforce a database invariant.\n\nHandle missing information explicitly. A NULL programme in SQL may mean unassigned rather than an actual programme called NULL. Equality with NULL does not behave like ordinary value equality; use IS NULL when testing absence. A task seeking assigned programmes can explicitly exclude missing programme values. Avoid converting absence to an ordinary placeholder unless the data contract defines that interpretation and consumers understand it.\n\n## Checking a relation-based answer\n\nUse small counterexamples when reviewing a query: two students with the same name, several students in one programme, an inactive student, and an empty input. State whether duplicates in projected values should remain. Check whether a key protects business identity and whether the requested order resolves ties. These examples expose errors that a table containing only unique names and programmes would conceal.\n\nA successful explanation connects the schema, tuple meaning, valid states, and output contract. The relation supplies a precise abstraction for a collection of facts; SQL supplies practical operations with additional behaviour that must be specified. Keeping those layers clear makes later work on keys, joins, algebra, and normalisation easier to reason about without relying on accidental display order or a vague resemblance to a spreadsheet.\n",
+  "references": [],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-4-relation",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-4-relation-1",
+          "test_id": "pt-dbms-sql-4-relation",
+          "question_text": "Which of the following best defines a relation in the relational model?",
+          "options": [
+            "A named collection of columns and their data types",
+            "A set of tuples conforming to a relation schema",
+            "A physical file stored on disk",
+            "An ordered list of rows with a fixed sequence"
+          ],
+          "correct_index": 1,
+          "explanation": "A relation is formally a set of tuples that conform to a relation schema, i.e. a subset of the Cartesian product of the attribute domains.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-4-relation-2",
+          "test_id": "pt-dbms-sql-4-relation",
+          "question_text": "Because a relation is mathematically a set, which property must it have?",
+          "options": [
+            "Tuples must be sorted by primary key",
+            "Duplicate tuples are not allowed",
+            "Every attribute must be numeric",
+            "Tuples must be stored contiguously on disk"
+          ],
+          "correct_index": 1,
+          "explanation": "Sets cannot contain duplicate elements, so a strict relation cannot contain two identical tuples.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-4-relation-3",
+          "test_id": "pt-dbms-sql-4-relation",
+          "question_text": "In {(1,Asha,CS,8.7),(2,Ravi,ECE,7.9)}, does swapping the order of the two tuples produce a different relation?",
+          "options": [
+            "Yes, order defines a new relation",
+            "No, because relations are unordered sets",
+            "Only if the primary key changes",
+            "Only in SQL, not in relational theory"
+          ],
+          "correct_index": 1,
+          "explanation": "Tuple order has no significance in a relation since it is a set; reordering gives the same relation.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-4-relation-4",
+          "test_id": "pt-dbms-sql-4-relation",
+          "question_text": "What is the key structural difference between a relation and a relation schema?",
+          "options": [
+            "A relation schema stores data; a relation stores only names",
+            "A relation is the actual data (a set of tuples); a relation schema is the structural blueprint",
+            "There is no difference, the terms are interchangeable",
+            "A relation schema can change every time a row is added"
+          ],
+          "correct_index": 1,
+          "explanation": "The schema is the fixed structure (attributes/domains); the relation is the data instance conforming to it.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-4-relation-5",
+          "test_id": "pt-dbms-sql-4-relation",
+          "question_text": "Why is a plain SQL table not always a pure relation in the strict mathematical sense?",
+          "options": [
+            "SQL tables cannot have more than one attribute",
+            "SQL tables may permit duplicate rows, and SQL supports NULL with special comparison semantics",
+            "SQL tables cannot store NULL values",
+            "SQL tables always enforce set semantics automatically"
+          ],
+          "correct_index": 1,
+          "explanation": "SQL can retain duplicates and represent missing information with NULL. Physical storage order does not create an inherent logical row order.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-4-relation-6",
+          "test_id": "pt-dbms-sql-4-relation",
+          "question_text": "Is an empty set of tuples (zero rows) a valid relation on a given schema?",
+          "options": [
+            "No, a relation must contain at least one tuple",
+            "Yes, a relation with zero tuples is valid; it simply has zero cardinality",
+            "No, only after the first INSERT does a relation exist",
+            "Yes, but only for schemas with a single attribute"
+          ],
+          "correct_index": 1,
+          "explanation": "A relation with no tuples is a legitimate subset of the Cartesian product (the empty subset), so it is a valid relation.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-4-relation-7",
+          "test_id": "pt-dbms-sql-4-relation",
+          "question_text": "Attempting to insert a tuple that is an exact duplicate of an existing tuple into a strict relation:",
+          "options": [
+            "Always doubles the cardinality",
+            "Does not change the relation, since sets cannot hold duplicate elements",
+            "Automatically changes the relation schema",
+            "Is impossible to represent conceptually"
+          ],
+          "correct_index": 1,
+          "explanation": "Since a relation is a set, adding an element already present does not change the set at all.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-4-relation-8",
+          "test_id": "pt-dbms-sql-4-relation",
+          "question_text": "A relation r is formally defined as a subset of which construct?",
+          "options": [
+            "The union of all attribute names",
+            "The Cartesian product of the attribute domains D1 x D2 x ... x Dn",
+            "The intersection of all candidate keys",
+            "The power set of the tuple count"
+          ],
+          "correct_index": 1,
+          "explanation": "A relation is a finite subset of the Cartesian product of the domains of its attributes, as defined by its schema.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-4-relation-new-9",
+          "test_id": "pt-dbms-sql-4-relation",
+          "question_text": "Student has three attributes and twelve tuples. What is its degree?",
+          "options": [
+            "12",
+            "3",
+            "36",
+            "9"
+          ],
+          "correct_index": 1,
+          "explanation": "Degree counts attributes, independently of the number of tuples.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-4-relation-new-10",
+          "test_id": "pt-dbms-sql-4-relation",
+          "question_text": "Two rows share a programme but have different student identifiers. Are they necessarily duplicate tuples?",
+          "options": [
+            "Yes; programme determines all identity",
+            "Yes; matching any attribute is enough",
+            "No; equality must hold across every attribute",
+            "Only the physical position decides"
+          ],
+          "correct_index": 2,
+          "explanation": "Different identifiers make the complete tuples different.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-4-relation-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-4-relation-application-new-1",
+          "test_id": "pt-dbms-sql-4-relation-application",
+          "question_text": "Three active students share one programme. What does SELECT programme return without DISTINCT?",
+          "options": [
+            "One row automatically",
+            "Zero rows",
+            "Three result rows for that programme",
+            "A schema error"
+          ],
+          "correct_index": 2,
+          "explanation": "Ordinary SQL projection retains duplicate output rows.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-4-relation-application-new-2",
+          "test_id": "pt-dbms-sql-4-relation-application",
+          "question_text": "Which request matches SELECT DISTINCT programme FROM students?",
+          "options": [
+            "Every registration attempt",
+            "Students sorted by insertion time",
+            "Only programmes with one student",
+            "The distinct programme values represented by students"
+          ],
+          "correct_index": 3,
+          "explanation": "DISTINCT operates on the selected output values.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-4-relation-application-new-3",
+          "test_id": "pt-dbms-sql-4-relation-application",
+          "question_text": "Why can SELECT DISTINCT student_id, programme still return several Computing rows?",
+          "options": [
+            "Different student_id values make the selected pairs distinct",
+            "DISTINCT ignores numbers",
+            "DISTINCT acts only on the first input tuple",
+            "Programme is automatically a key"
+          ],
+          "correct_index": 0,
+          "explanation": "Uniqueness is evaluated over each complete selected pair.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-4-relation-application-new-4",
+          "test_id": "pt-dbms-sql-4-relation-application",
+          "question_text": "Which change alters an instance while preserving its schema?",
+          "options": [
+            "Adding a programme column",
+            "Inserting a valid student fact",
+            "Renaming an attribute",
+            "Changing an identifier domain"
+          ],
+          "correct_index": 1,
+          "explanation": "Insertion changes current tuples without redefining attributes.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-4-relation-application-new-5",
+          "test_id": "pt-dbms-sql-4-relation-application",
+          "question_text": "A Student relation is empty but has three attributes. What remains known?",
+          "options": [
+            "Its degree is zero",
+            "Its schema has disappeared",
+            "Its degree is three and its cardinality is zero",
+            "It must contain a NULL tuple"
+          ],
+          "correct_index": 2,
+          "explanation": "The schema remains defined for an empty relation.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-4-relation-application-new-6",
+          "test_id": "pt-dbms-sql-4-relation-application",
+          "question_text": "What does a relation being a subset of a Cartesian product mean?",
+          "options": [
+            "Every possible combination must be stored",
+            "Every attribute is a key",
+            "Every domain has the same size",
+            "Every tuple draws compatible values from the attribute domains"
+          ],
+          "correct_index": 3,
+          "explanation": "The product supplies possible combinations; actual facts form a subset.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-4-relation-application-new-7",
+          "test_id": "pt-dbms-sql-4-relation-application",
+          "question_text": "Which report has a deterministic student order when programme values tie?",
+          "options": [
+            "ORDER BY programme, student_id with unique student_id",
+            "No ORDER BY",
+            "ORDER BY programme alone",
+            "Depend on the last insertion sequence"
+          ],
+          "correct_index": 0,
+          "explanation": "The unique identifier resolves ties within programmes.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-4-relation-application-new-8",
+          "test_id": "pt-dbms-sql-4-relation-application",
+          "question_text": "Why does complete-row duplicate removal not enforce a student_id key?",
+          "options": [
+            "Removing duplicates always adds NULL",
+            "Conflicting rows can share an identifier while differing in other attributes",
+            "Keys require sorted storage",
+            "DISTINCT can only inspect text"
+          ],
+          "correct_index": 1,
+          "explanation": "A key forbids repeated identifiers even in otherwise different tuples.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-4-relation-application-new-9",
+          "test_id": "pt-dbms-sql-4-relation-application",
+          "question_text": "How should a query select SQL rows with no assigned programme?",
+          "options": [
+            "Use programme = NULL",
+            "Use programme = 0 for all types",
+            "Use programme IS NULL",
+            "Rely on row position"
+          ],
+          "correct_index": 2,
+          "explanation": "IS NULL tests absence; ordinary equality does not match NULL.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-4-relation-application-new-10",
+          "test_id": "pt-dbms-sql-4-relation-application",
+          "question_text": "A registration relation has one tuple per student-course pair. What does its tuple count measure?",
+          "options": [
+            "Always distinct students",
+            "Always distinct courses",
+            "Attribute domains",
+            "Registrations"
+          ],
+          "correct_index": 3,
+          "explanation": "Tuple meaning establishes what the relation cardinality counts.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cx-relation-active-programmes",
+      "slug": "relation-active-programmes",
+      "title": "List represented active programmes",
+      "difficulty": "Easy",
+      "task": "Return distinct programme values with at least one active student. Output programme alphabetically.",
+      "schema_sql": "CREATE TABLE students (student_id INT PRIMARY KEY, programme VARCHAR(30) NOT NULL, active INT NOT NULL);",
+      "seed_sql": "INSERT INTO students VALUES (1,'Computing',1),(2,'Computing',1),(3,'History',0),(4,'Physics',1);",
+      "expected": "programme\nComputing\nPhysics",
+      "ordering": "Use the ORDER BY shown in the requested output contract.",
+      "constraints": [
+        "Student identifiers are unique; programme is non-NULL; active is 0 or 1 in supplied fixtures."
+      ],
+      "edge_cases": [
+        "Several students share a programme.",
+        "No rows satisfy the condition."
+      ],
+      "hints": [
+        "Decide whether one output row describes a student or a programme.",
+        "DISTINCT compares the whole selected row."
+      ],
+      "solution_sql": "SELECT DISTINCT programme FROM students WHERE active = 1 ORDER BY programme;",
+      "explanation": "The selected attributes establish the output grain. Explicit sorting makes comparison reproducible.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO students VALUES (1,'Art',0);",
+          "expected": ""
+        },
+        {
+          "seed_sql": "INSERT INTO students VALUES (1,'Art',1),(2,'Art',1);",
+          "expected": "programme\nArt"
+        }
+      ]
+    },
+    {
+      "id": "cx-relation-shared-programmes",
+      "slug": "relation-shared-programmes",
+      "title": "Count students in shared programmes",
+      "difficulty": "Medium",
+      "task": "For active students only, return programme and student_count for programmes with at least two active students. Sort programme alphabetically.",
+      "schema_sql": "CREATE TABLE students (student_id INT PRIMARY KEY, programme VARCHAR(30) NOT NULL, active INT NOT NULL);",
+      "seed_sql": "INSERT INTO students VALUES (1,'Computing',1),(2,'Computing',1),(3,'History',1),(4,'History',0),(5,'Physics',1),(6,'Physics',1),(7,'Physics',1);",
+      "expected": "programme\tstudent_count\nComputing\t2\nPhysics\t3",
+      "ordering": "Use the ORDER BY shown in the requested output contract.",
+      "constraints": [
+        "Student identifiers are unique; programme is non-NULL; active is 0 or 1 in supplied fixtures."
+      ],
+      "edge_cases": [
+        "Several students share a programme.",
+        "No rows satisfy the condition."
+      ],
+      "hints": [
+        "Decide whether one output row describes a student or a programme.",
+        "DISTINCT compares the whole selected row."
+      ],
+      "solution_sql": "SELECT programme, COUNT(*) AS student_count FROM students WHERE active = 1 GROUP BY programme HAVING COUNT(*) >= 2 ORDER BY programme;",
+      "explanation": "The selected attributes establish the output grain. Explicit sorting makes comparison reproducible.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO students VALUES (1,'Art',1),(2,'Art',0);",
+          "expected": ""
+        },
+        {
+          "seed_sql": "INSERT INTO students VALUES (1,'Art',1),(2,'Art',1);",
+          "expected": "programme\tstudent_count\nArt\t2"
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-4-relation-1",
+      "test_id": "pt-dbms-sql-4-relation",
+      "question_text": "Which of the following best defines a relation in the relational model?",
+      "options": [
+        "A named collection of columns and their data types",
+        "A set of tuples conforming to a relation schema",
+        "A physical file stored on disk",
+        "An ordered list of rows with a fixed sequence"
+      ],
+      "correct_index": 1,
+      "explanation": "A relation is formally a set of tuples that conform to a relation schema, i.e. a subset of the Cartesian product of the attribute domains.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-4-relation-2",
+      "test_id": "pt-dbms-sql-4-relation",
+      "question_text": "Because a relation is mathematically a set, which property must it have?",
+      "options": [
+        "Tuples must be sorted by primary key",
+        "Duplicate tuples are not allowed",
+        "Every attribute must be numeric",
+        "Tuples must be stored contiguously on disk"
+      ],
+      "correct_index": 1,
+      "explanation": "Sets cannot contain duplicate elements, so a strict relation cannot contain two identical tuples.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-4-relation-3",
+      "test_id": "pt-dbms-sql-4-relation",
+      "question_text": "In {(1,Asha,CS,8.7),(2,Ravi,ECE,7.9)}, does swapping the order of the two tuples produce a different relation?",
+      "options": [
+        "Yes, order defines a new relation",
+        "No, because relations are unordered sets",
+        "Only if the primary key changes",
+        "Only in SQL, not in relational theory"
+      ],
+      "correct_index": 1,
+      "explanation": "Tuple order has no significance in a relation since it is a set; reordering gives the same relation.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-4-relation-4",
+      "test_id": "pt-dbms-sql-4-relation",
+      "question_text": "What is the key structural difference between a relation and a relation schema?",
+      "options": [
+        "A relation schema stores data; a relation stores only names",
+        "A relation is the actual data (a set of tuples); a relation schema is the structural blueprint",
+        "There is no difference, the terms are interchangeable",
+        "A relation schema can change every time a row is added"
+      ],
+      "correct_index": 1,
+      "explanation": "The schema is the fixed structure (attributes/domains); the relation is the data instance conforming to it.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-4-relation-5",
+      "test_id": "pt-dbms-sql-4-relation",
+      "question_text": "Why is a plain SQL table not always a pure relation in the strict mathematical sense?",
+      "options": [
+        "SQL tables cannot have more than one attribute",
+        "SQL tables may permit duplicate rows and have a physical row order",
+        "SQL tables cannot store NULL values",
+        "SQL tables always enforce set semantics automatically"
+      ],
+      "correct_index": 1,
+      "explanation": "Unless a key/unique constraint is defined, SQL allows duplicate rows, and rows have a storage order — both violate pure set semantics.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-4-relation-6",
+      "test_id": "pt-dbms-sql-4-relation",
+      "question_text": "Is an empty set of tuples (zero rows) a valid relation on a given schema?",
+      "options": [
+        "No, a relation must contain at least one tuple",
+        "Yes, a relation with zero tuples is valid; it simply has zero cardinality",
+        "No, only after the first INSERT does a relation exist",
+        "Yes, but only for schemas with a single attribute"
+      ],
+      "correct_index": 1,
+      "explanation": "A relation with no tuples is a legitimate subset of the Cartesian product (the empty subset), so it is a valid relation.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-4-relation-7",
+      "test_id": "pt-dbms-sql-4-relation",
+      "question_text": "Attempting to insert a tuple that is an exact duplicate of an existing tuple into a strict relation:",
+      "options": [
+        "Always doubles the cardinality",
+        "Does not change the relation, since sets cannot hold duplicate elements",
+        "Automatically changes the relation schema",
+        "Is impossible to represent conceptually"
+      ],
+      "correct_index": 1,
+      "explanation": "Since a relation is a set, adding an element already present does not change the set at all.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-4-relation-8",
+      "test_id": "pt-dbms-sql-4-relation",
+      "question_text": "A relation r is formally defined as a subset of which construct?",
+      "options": [
+        "The union of all attribute names",
+        "The Cartesian product of the attribute domains D1 x D2 x ... x Dn",
+        "The intersection of all candidate keys",
+        "The power set of the tuple count"
+      ],
+      "correct_index": 1,
+      "explanation": "A relation is a finite subset of the Cartesian product of the domains of its attributes, as defined by its schema.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "coordinator",
+    "independent_review": "unavailable; no agent tools",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Definitions and examples checked against questions; no plagiarism certification.",
+    "existing_question_corrections": [
+      "tq-dbms-sql-4-relation-5"
+    ],
+    "canonical_answer_indices_preserved": true
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-4-relation",
+    "original_note_sha256": "e19db2dd73082de03e0b54fe78fc5b1302ca05018f2b21b9d3b89fa953d075d6",
+    "status": "paired migration prepared; not applied"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "One schema, several possible relation instances",
+      "description": "The attributes stay fixed while tuple membership and cardinality change; row order does not define a new instance.",
+      "columns": [
+        "State",
+        "Student facts",
+        "Degree",
+        "Cardinality"
+      ],
+      "rows": [
+        [
+          "Before admission",
+          "Empty set",
+          "3",
+          "0"
+        ],
+        [
+          "After admission",
+          "(17, Asha, Computing); (24, Ravi, Electronics)",
+          "3",
+          "2"
+        ],
+        [
+          "Display reversed",
+          "(24, Ravi, Electronics); (17, Asha, Computing)",
+          "3",
+          "2; same relation"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "coordinator checked fixed degree, empty relation and order invariance",
+    "server_rendering": "passed",
+    "browser_rendering": "unverified",
+    "independent_review": "unavailable; no agent tools",
+    "server_rendering_evidence": "2026-10-29: database-authored-content Vitest renders each authored package through LessonBlock; 67 focused tests passed."
+  },
+  "sql_verification": {
+    "engine": "11.8.6-MariaDB-0+deb13u1 from Debian",
+    "scope": "MariaDB compatibility execution; exact MySQL 8.4/provider execution unverified",
+    "fingerprint": "989f1903fd595700bdb560a534e835b18a52fb364d77d9121233d5afbfd71b0b",
+    "cases": [
+      {
+        "problem": "relation-active-programmes",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "relation-active-programmes",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "relation-active-programmes",
+        "case": 2,
+        "passed": true
+      },
+      {
+        "problem": "relation-shared-programmes",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "relation-shared-programmes",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "relation-shared-programmes",
+        "case": 2,
+        "passed": true
+      }
+    ],
+    "all_passed": true
+  }
+}

@@ -38,18 +38,25 @@ export default function MessageThread({
 
   async function handleSend(e: React.FormEvent) {
     e.preventDefault();
+    if (sending) return;
     const trimmed = body.trim();
     if (!trimmed) return;
     setSending(true);
     setError(null);
-    const result = await sendCustomProjectMessageAction({ requestId, body: trimmed });
-    setSending(false);
-    if ("error" in result) {
-      setError(result.error);
-      return;
+    try {
+      const result = await sendCustomProjectMessageAction({ requestId, body: trimmed });
+      setSending(false);
+      if ("error" in result) {
+        setError(result.error);
+        return;
+      }
+      setBody((current) => current.trim() === trimmed ? "" : current);
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
+    } finally {
+      setSending(false);
     }
-    setBody("");
-    await refresh();
   }
 
   return (

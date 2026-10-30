@@ -1,0 +1,497 @@
+{
+  "source_ref": "chapter-2-dbms-architecture/two-tier-architecture",
+  "slug": "two-tier-architecture",
+  "title": "Two Tier Architecture",
+  "description": "Evaluate direct client-to-database applications through deployment, connection ownership, driver coupling, concurrency, and the trusted enforcement needed beyond client-side business checks.",
+  "dialect": "MySQL 8.4",
+  "notes": "## A direct application-to-database arrangement\n\nTwo-tier architecture organizes an application into a client tier and a database-server tier. In the common teaching arrangement, the client contains the user interface and much of the application logic, while the database server stores shared data and enforces its configured rules. The client communicates directly with the database using a supported driver or interface rather than sending every operation through a separate application-server tier.\n\nA teller desktop application provides a useful example. The operator enters an account and withdrawal amount in the client, which sends the required database operations. The database service manages the shared records, constraints, and transactions. This description locates responsibilities; it is not a recommendation to give an untrusted desktop application unrestricted financial authority.\n\nTwo tiers do not necessarily mean two physical machines, and a tier can have many instances. Thousands of teller PCs can belong to the client tier while sharing a database service. Similarly, the database service can use a supported high-availability arrangement. The architectural count describes application responsibilities and communication boundaries, not the number of processors, windows, or deployment files.\n\n## Understanding the client-side business workflow\n\nA rich client can provide forms, local formatting, validation feedback, and workflow logic. For example, it can warn that a requested withdrawal exceeds the balance currently displayed. This is useful for the operator, but the displayed balance may be stale and the client may be modified. The trusted write path must independently verify the rule and maintain correct state under concurrency.\n\nSuppose the displayed balance is one hundred and two tellers each request eighty at nearly the same time. Both clients can pass a local check against the same earlier value. A correct database operation must account for simultaneous changes through an appropriate atomic condition, transaction, or other verified trusted mechanism. Client-side agreement does not turn two independent reads into a safe shared decision.\n\nThis is why saying business logic lives in the client must not mean all authority lives there. A two-tier design can use stored procedures, constraints, privileges, and other database facilities to enforce trusted rules. The exact division varies. The defining feature is direct application-to-database communication without a separate shared application-server tier, not a requirement that the database perform no logical work.\n\n## Following a direct request\n\nA desktop client gathers input, validates it for immediate feedback, and binds values through its database API. The server authenticates the connection, checks the configured permissions, and processes the operation under its transaction rules. The client then interprets results or errors and updates the interface. Each step has a contract that can fail independently.\n\nA read request might ask for account identifier, recorded balance, and currency. It should request the columns and scope the interface needs rather than retrieving unrelated customer information. An update needs a trusted account-access check and a correctly defined operation. The presence of a direct connection does not prove the caller is entitled to every row that connection can reach.\n\nConnection lifecycle is part of the client implementation. The process may retain a session, open one per action, or use a local pool according to its actual design. A transaction's statements must use the intended session. A desktop application is capable of pooling; a shared middle tier is common for deployment-wide reuse but is not a universal prerequisite for every pool.\n\n## Recognizing the fat-client maintenance problem\n\nA client becomes operationally heavy when substantial changing logic is embedded across many separately deployed copies. If the bank changes a withdrawal limit in code installed on five thousand teller PCs, the release process must update those copies or support incompatible versions deliberately. A partially updated fleet can present inconsistent feedback or workflows even when trusted server checks still protect final writes.\n\nThe phrase fat client describes this concentration of responsibilities; it is not a measure of executable size alone. A large graphics interface can have little business authority, while a small program can contain many critical vendor-specific decisions. Inspect which rules, queries, and integration assumptions actually require coordinated distribution when deciding whether maintenance has become difficult.\n\nSome deployments can centralize certain rules in database procedures or remotely supplied configuration without introducing a full third application tier. Those mechanisms have their own change and authorization requirements. Moving one rule does not automatically transform the whole system into three-tier architecture. Describe the actual trusted request path instead of classifying it by one convenient implementation detail.\n\n## Budgeting database sessions across clients\n\nIf each active teller PC keeps one direct database connection, five thousand such clients can demand five thousand sessions. That arithmetic depends on the stated one-session-per-client assumption. Real clients can open several sessions, release idle ones, or use local pools, so connection demand is not universally equal to user count.\n\nThe database must budget memory and other resources for its sessions and the work they perform. Idle sessions differ from active queries, but neither unlimited sessions nor unlimited active work is free. A large direct-client population can therefore create operational pressure even when each individual client makes modest requests.\n\nA shared application tier can manage a bounded pool serving many requests over time, but it does not make database capacity infinite. Multiple application instances multiply their configured potential. The comparison should identify what reuse and coordination improve, then measure whether the database and application can support the resulting workload.\n\n## Evaluating driver and vendor coupling\n\nDirect clients depend on the database API, driver behavior, data types, errors, and SQL dialect they use. If vendor-specific assumptions are scattered through many deployed clients, a database change can require widespread updates and testing. This creates migration cost and coordination risk even when the business interface appears unchanged to operators.\n\nUsing a standard API can reduce some coupling, but it does not guarantee identical SQL semantics or feature support across products. Parameter syntax, generated identifiers, date handling, transaction behavior, and result metadata may still differ. A successful connection through a driver is not proof that every operation will behave equivalently on another database.\n\nKeep that risk concrete. Identify the direct database objects and procedures a client calls, the types it expects, and the errors it handles. A thin, well-defined data-access boundary inside the client can make change easier without introducing a parallel framework. Reuse established abstractions rather than adding layers solely to change the architecture's label.\n\n## Preserving failure and security behavior\n\nA direct client must handle invalid input, denied access, empty results, transient connection failures, and uncertain write outcomes. If a connection drops around commit, the client cannot always infer whether the change occurred. Blind retries can duplicate effects. The operation needs a defined recovery and retry contract instead of a generic reconnect-and-repeat loop.\n\nThe deployment must also protect credentials and network access. Never distribute a privileged shared credential into an untrusted client as a shortcut. Whether the client is installed on a managed machine or a public device changes the threat model, but the trusted database boundary must still restrict what each identity can do. Local validation is useful feedback, not a substitute for those controls.\n\nLogging deserves similar care. A support diagnostic can record a bounded error classification without printing secret connection strings or private account values. A rich client often runs in environments with different local access controls, so assume that embedding a secret in its code or logs does not make the secret safe merely because installation requires a download.\n\n## Deciding where the arrangement fits\n\nA direct design can be reasonable for a controlled application with a manageable client fleet and a well-defined database contract. It offers a straightforward communication path and can avoid an additional service to operate. Its suitability depends on deployment control, trust, workload, and change frequency rather than a blanket claim that two-tier systems are obsolete.\n\nWhen maintenance, connection demand, or shared workflow ownership becomes difficult, compare a middle application tier against the actual requirements. Include its benefits and its new failure modes. Two-tier architecture is most useful as a precise description of direct communication and ownership. Keep client convenience separate from trusted authority, and evaluate deployment and concurrency evidence before choosing or changing that boundary.\n",
+  "references": [],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-2-two-tier-architecture",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-2-two-tier-architecture-1",
+          "test_id": "pt-dbms-sql-2-two-tier-architecture",
+          "question_text": "In the common two-tier teaching arrangement, where are the interface and much application workflow logic located?",
+          "options": [
+            "On the client, while trusted database rules can still enforce shared validity",
+            "On a separate middle application-server tier",
+            "Only on the database server",
+            "Distributed evenly across three tiers"
+          ],
+          "correct_index": 0,
+          "explanation": "The placement of workflow logic does not authorize an untrusted client to be the sole enforcement point.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-2-two-tier-architecture-2",
+          "test_id": "pt-dbms-sql-2-two-tier-architecture",
+          "question_text": "How many tiers does Two-Tier Architecture have, and what are they?",
+          "options": [
+            "Three: client, application server, database server",
+            "Two: client (UI + business logic) and database server",
+            "One: a combined client-database system",
+            "Four: presentation, business, data, and network"
+          ],
+          "correct_index": 1,
+          "explanation": "Two-tier architecture consists of exactly two layers: the client and the database server, connected directly.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-2-two-tier-architecture-3",
+          "test_id": "pt-dbms-sql-2-two-tier-architecture",
+          "question_text": "In the teller example, which rule can the client check for immediate feedback but must also be enforced on the trusted write path?",
+          "options": [
+            "That interest rates must be recalculated nightly",
+            "That a withdrawal must not exceed the available permitted amount",
+            "That the database must use a B+-tree index",
+            "That all queries must go through a connection pool"
+          ],
+          "correct_index": 1,
+          "explanation": "Displayed balances can be stale and clients can be modified; trusted concurrent enforcement is still required.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-2-two-tier-architecture-4",
+          "test_id": "pt-dbms-sql-2-two-tier-architecture",
+          "question_text": "What is the 'fat client' problem specific to two-tier architecture?",
+          "options": [
+            "Clients use too much disk space for temporary files",
+            "Because business logic lives on every client machine, a rule change requires updating and redeploying the application on every client",
+            "The client cannot connect to the database at all",
+            "The database server becomes too large to manage"
+          ],
+          "correct_index": 1,
+          "explanation": "Embedding business logic on each client means every rule change must be redeployed across all client machines, a defining two-tier drawback.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-2-two-tier-architecture-5",
+          "test_id": "pt-dbms-sql-2-two-tier-architecture",
+          "question_text": "Assume each active desktop client retains exactly one direct database session. Why can client growth pressure the server?",
+          "options": [
+            "Under that assumption, more active clients demand proportionally more server sessions",
+            "Because two-tier systems limit all clients to a single shared connection",
+            "Because the database server cannot accept more than one client ever",
+            "Because two-tier architecture requires no network connection at all"
+          ],
+          "correct_index": 0,
+          "explanation": "The one-session assumption defines the arithmetic; actual clients can use other lifecycle strategies.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-2-two-tier-architecture-6",
+          "test_id": "pt-dbms-sql-2-two-tier-architecture",
+          "question_text": "What is the key structural difference between two-tier and three-tier architecture regarding business logic?",
+          "options": [
+            "There is no difference; both place logic on the client",
+            "In two-tier, logic lives on the client; in three-tier, logic moves to a middle application-server tier",
+            "In two-tier, logic lives on the database server; in three-tier, it lives on the client",
+            "Three-tier architecture has no business logic at all"
+          ],
+          "correct_index": 1,
+          "explanation": "The defining distinction between the two architectures is where business logic resides — client-side in two-tier versus a dedicated middle tier in three-tier.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-2-two-tier-architecture-7",
+          "test_id": "pt-dbms-sql-2-two-tier-architecture",
+          "question_text": "A bank needs to change its maximum withdrawal limit and must redeploy the updated application to 5,000 teller PCs to do so. Which two-tier pitfall does this best illustrate?",
+          "options": [
+            "The connection-scaling bottleneck",
+            "The fat client problem, since business logic embedded on every client machine must be updated wherever it lives",
+            "A conceptual schema design flaw",
+            "A violation of physical data independence"
+          ],
+          "correct_index": 1,
+          "explanation": "Needing to redeploy logic changes across every client machine is precisely the fat-client maintenance burden described for two-tier architecture.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-2-two-tier-architecture-8",
+          "test_id": "pt-dbms-sql-2-two-tier-architecture",
+          "question_text": "Why does tightly coupling two-tier client logic to one database vendor's driver create a specific long-term risk?",
+          "options": [
+            "It has no long-term risk since drivers are interchangeable by default",
+            "It creates vendor lock-in, making it harder to migrate to a different database later since the client talks directly to that vendor's protocol",
+            "It automatically enables connection pooling",
+            "It eliminates the fat client problem"
+          ],
+          "correct_index": 1,
+          "explanation": "Because the client connects directly to the database vendor's driver/dialect in two-tier architecture, switching vendors later becomes significantly harder.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-2-two-tier-architecture-new-9",
+          "test_id": "pt-dbms-sql-2-two-tier-architecture",
+          "question_text": "What distinguishes the two-tier request path in this topic?",
+          "options": [
+            "Every SQL statement passes through a separate application server",
+            "The application client communicates directly with the database service",
+            "Every user shares one browser process",
+            "The database has no configured constraints"
+          ],
+          "correct_index": 1,
+          "explanation": "Direct client-to-database communication defines the arrangement.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-2-two-tier-architecture-new-10",
+          "test_id": "pt-dbms-sql-2-two-tier-architecture",
+          "question_text": "Can trusted database procedures enforce rules in a two-tier design?",
+          "options": [
+            "No; all rules must be client-only",
+            "Only if the design has five tiers",
+            "Yes; direct clients do not imply that the database lacks trusted logic",
+            "Only after constraints are disabled"
+          ],
+          "correct_index": 2,
+          "explanation": "Database procedures and constraints can remain authoritative on the trusted path.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-2-two-tier-architecture-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-2-two-tier-architecture-application-new-1",
+          "test_id": "pt-dbms-sql-2-two-tier-architecture-application",
+          "question_text": "Two tellers read balance 100 and each locally approves withdrawal 80. What is missing from local checks alone?",
+          "options": [
+            "A larger font for the balance",
+            "A second copy of the same stale read",
+            "Trusted coordination or an atomic operation against current shared state",
+            "An arbitrary delay in both clients"
+          ],
+          "correct_index": 2,
+          "explanation": "Both checks can pass against stale data; concurrent integrity needs trusted enforcement.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-2-two-tier-architecture-application-new-2",
+          "test_id": "pt-dbms-sql-2-two-tier-architecture-application",
+          "question_text": "A rule change requires updating 5,000 installed clients. Which cost is exposed?",
+          "options": [
+            "Automatic elimination of all database locks",
+            "A requirement to delete account identifiers",
+            "A guaranteed increase in database speed",
+            "Fleet-wide deployment and version coordination"
+          ],
+          "correct_index": 3,
+          "explanation": "Embedded changing logic must be distributed to each relevant installation.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-2-two-tier-architecture-application-new-3",
+          "test_id": "pt-dbms-sql-2-two-tier-architecture-application",
+          "question_text": "Each of 200 clients keeps three direct sessions. What is their configured session demand?",
+          "options": [
+            "600 sessions",
+            "200 sessions",
+            "Three sessions",
+            "Sixty sessions"
+          ],
+          "correct_index": 0,
+          "explanation": "The count follows the stated sessions per client, not user count alone.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-2-two-tier-architecture-application-new-4",
+          "test_id": "pt-dbms-sql-2-two-tier-architecture-application",
+          "question_text": "A desktop process uses a local connection pool. Is that structurally impossible in two-tier architecture?",
+          "options": [
+            "Yes; pooling requires a browser",
+            "No; a client process can manage its own pool",
+            "Yes; only SQL views can reuse sessions",
+            "Only if every request reads the whole database"
+          ],
+          "correct_index": 1,
+          "explanation": "A shared middle tier is common but not required for process-local reuse.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-2-two-tier-architecture-application-new-5",
+          "test_id": "pt-dbms-sql-2-two-tier-architecture-application",
+          "question_text": "The interface blocks an unauthorized account number, but direct SQL through the same credentials can read it. What failed?",
+          "options": [
+            "Only the dropdown styling",
+            "The conceptual meaning of currency",
+            "Trusted access enforcement behind the UI",
+            "The existence of a database server"
+          ],
+          "correct_index": 2,
+          "explanation": "Client-side restrictions cannot be the sole authority.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-2-two-tier-architecture-application-new-6",
+          "test_id": "pt-dbms-sql-2-two-tier-architecture-application",
+          "question_text": "A vendor migration touches SQL and type handling in hundreds of client builds. What is the coupling risk?",
+          "options": [
+            "The clients have no data-access dependencies",
+            "All standard APIs guarantee identical semantics",
+            "The database must have lost its primary keys",
+            "Database-specific assumptions are distributed across the fleet"
+          ],
+          "correct_index": 3,
+          "explanation": "Distributed vendor assumptions increase migration and rollout cost.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-2-two-tier-architecture-application-new-7",
+          "test_id": "pt-dbms-sql-2-two-tier-architecture-application",
+          "question_text": "A client loses its commit response and reconnects. What must it avoid assuming?",
+          "options": [
+            "That the previous write definitely rolled back",
+            "That a new connection is a separate session",
+            "That errors need handling",
+            "That writes require a trusted contract"
+          ],
+          "correct_index": 0,
+          "explanation": "An uncertain outcome can require reconciliation before retry.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-2-two-tier-architecture-application-new-8",
+          "test_id": "pt-dbms-sql-2-two-tier-architecture-application",
+          "question_text": "A managed small desktop fleet uses a narrow database API and strong server checks. What is a fair architectural assessment?",
+          "options": [
+            "Every two-tier application is necessarily unsafe",
+            "Two-tier suitability depends on its actual trust, workload, and maintenance requirements",
+            "Three-tier is always faster for every query",
+            "Client validation eliminates all server checks"
+          ],
+          "correct_index": 1,
+          "explanation": "Architecture choices should follow requirements and verified boundaries.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-2-two-tier-architecture-application-new-9",
+          "test_id": "pt-dbms-sql-2-two-tier-architecture-application",
+          "question_text": "A developer calls a large UI a fat client solely because its binary is large. What should be inspected instead?",
+          "options": [
+            "Only compressed download size",
+            "Only the number of icons",
+            "Which changing logic and database assumptions are deployed in it",
+            "Only the table names"
+          ],
+          "correct_index": 2,
+          "explanation": "The maintenance issue concerns responsibilities and coupling rather than byte size alone.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-2-two-tier-architecture-application-new-10",
+          "test_id": "pt-dbms-sql-2-two-tier-architecture-application",
+          "question_text": "A third application tier is proposed. Which evaluation is necessary?",
+          "options": [
+            "Only whether three is greater than two",
+            "Only whether the new service has a logo",
+            "Only whether SQL is still capitalized",
+            "Its ownership benefits along with new latency and operational failure paths"
+          ],
+          "correct_index": 3,
+          "explanation": "A middle tier adds capabilities and costs that need evidence.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [],
+  "coding_not_applicable": "This architecture comparison needs application deployment, access, and concurrency tests. SQL-output exercises would test later query or transaction syntax rather than tier ownership; those practical topics retain their own coding requirements.",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-2-two-tier-architecture-1",
+      "test_id": "pt-dbms-sql-2-two-tier-architecture",
+      "question_text": "In Two-Tier Architecture, where does the application/business logic reside?",
+      "options": [
+        "On the client, bundled together with the user interface",
+        "On a separate middle application-server tier",
+        "Only on the database server",
+        "Distributed evenly across three tiers"
+      ],
+      "correct_index": 0,
+      "explanation": "Two-tier architecture bundles UI and business logic together on the client (Tier 1), with no middle tier.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-2-two-tier-architecture-2",
+      "test_id": "pt-dbms-sql-2-two-tier-architecture",
+      "question_text": "How many tiers does Two-Tier Architecture have, and what are they?",
+      "options": [
+        "Three: client, application server, database server",
+        "Two: client (UI + business logic) and database server",
+        "One: a combined client-database system",
+        "Four: presentation, business, data, and network"
+      ],
+      "correct_index": 1,
+      "explanation": "Two-tier architecture consists of exactly two layers: the client and the database server, connected directly.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-2-two-tier-architecture-3",
+      "test_id": "pt-dbms-sql-2-two-tier-architecture",
+      "question_text": "In the banking example, what business rule is bundled into the teller's desktop client application?",
+      "options": [
+        "That interest rates must be recalculated nightly",
+        "That a withdrawal cannot exceed the account balance",
+        "That the database must use a B+-tree index",
+        "That all queries must go through a connection pool"
+      ],
+      "correct_index": 1,
+      "explanation": "The withdrawal-limit rule is given as the example of business logic embedded directly in the two-tier client.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-2-two-tier-architecture-4",
+      "test_id": "pt-dbms-sql-2-two-tier-architecture",
+      "question_text": "What is the 'fat client' problem specific to two-tier architecture?",
+      "options": [
+        "Clients use too much disk space for temporary files",
+        "Because business logic lives on every client machine, a rule change requires updating and redeploying the application on every client",
+        "The client cannot connect to the database at all",
+        "The database server becomes too large to manage"
+      ],
+      "correct_index": 1,
+      "explanation": "Embedding business logic on each client means every rule change must be redeployed across all client machines, a defining two-tier drawback.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-2-two-tier-architecture-5",
+      "test_id": "pt-dbms-sql-2-two-tier-architecture",
+      "question_text": "Why does connection count become a bottleneck as the number of two-tier clients grows?",
+      "options": [
+        "Because each client opens its own direct connection to the database server, so connections scale linearly with users",
+        "Because two-tier systems limit all clients to a single shared connection",
+        "Because the database server cannot accept more than one client ever",
+        "Because two-tier architecture requires no network connection at all"
+      ],
+      "correct_index": 0,
+      "explanation": "Every client in a two-tier system maintains its own direct DB connection, so the total connection count grows linearly with user count, straining the server at scale.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-2-two-tier-architecture-6",
+      "test_id": "pt-dbms-sql-2-two-tier-architecture",
+      "question_text": "What is the key structural difference between two-tier and three-tier architecture regarding business logic?",
+      "options": [
+        "There is no difference; both place logic on the client",
+        "In two-tier, logic lives on the client; in three-tier, logic moves to a middle application-server tier",
+        "In two-tier, logic lives on the database server; in three-tier, it lives on the client",
+        "Three-tier architecture has no business logic at all"
+      ],
+      "correct_index": 1,
+      "explanation": "The defining distinction between the two architectures is where business logic resides — client-side in two-tier versus a dedicated middle tier in three-tier.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-2-two-tier-architecture-7",
+      "test_id": "pt-dbms-sql-2-two-tier-architecture",
+      "question_text": "A bank needs to change its maximum withdrawal limit and must redeploy the updated application to 5,000 teller PCs to do so. Which two-tier pitfall does this best illustrate?",
+      "options": [
+        "The connection-scaling bottleneck",
+        "The fat client problem, since business logic embedded on every client machine must be updated wherever it lives",
+        "A conceptual schema design flaw",
+        "A violation of physical data independence"
+      ],
+      "correct_index": 1,
+      "explanation": "Needing to redeploy logic changes across every client machine is precisely the fat-client maintenance burden described for two-tier architecture.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-2-two-tier-architecture-8",
+      "test_id": "pt-dbms-sql-2-two-tier-architecture",
+      "question_text": "Why does tightly coupling two-tier client logic to one database vendor's driver create a specific long-term risk?",
+      "options": [
+        "It has no long-term risk since drivers are interchangeable by default",
+        "It creates vendor lock-in, making it harder to migrate to a different database later since the client talks directly to that vendor's protocol",
+        "It automatically enables connection pooling",
+        "It eliminates the fat client problem"
+      ],
+      "correct_index": 1,
+      "explanation": "Because the client connects directly to the database vendor's driver/dialect in two-tier architecture, switching vendors later becomes significantly harder.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "coordinator",
+    "independent_review": "unavailable; no agent tools",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Definitions and examples checked against questions; no plagiarism certification.",
+    "existing_question_corrections": [
+      "tq-dbms-sql-2-two-tier-architecture-1",
+      "tq-dbms-sql-2-two-tier-architecture-3",
+      "tq-dbms-sql-2-two-tier-architecture-5"
+    ],
+    "canonical_answer_indices_preserved": true
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-2-two-tier-architecture",
+    "original_note_sha256": "677f32fa7c3a0412bdbc6159dcf4d6fb965271e6f20b21778c67dada02c3d4ba",
+    "status": "paired migration prepared; not applied"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Direct teller-to-database responsibilities",
+      "description": "Client feedback and workflow do not replace trusted write enforcement. The two tiers describe responsibilities and communication, not a fixed physical machine count.",
+      "columns": [
+        "Tier",
+        "Responsibilities",
+        "Review risk"
+      ],
+      "rows": [
+        [
+          "Client",
+          "Forms, feedback, workflow, driver calls",
+          "Fleet updates, stale data, untrusted modification"
+        ],
+        [
+          "Database service",
+          "Configured permissions, shared constraints, transactions",
+          "Session budget, contention, operation correctness"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "coordinator review",
+    "server_rendering": "passed",
+    "browser_rendering": "unverified",
+    "independent_review": "unavailable; no agent tools",
+    "rendering_check": "2026-10-28: actual LessonBlock/TopicDiagrams server rendering; 30 authored-package tests passed. Desktop/mobile browser rendering unverified."
+  }
+}

@@ -1,0 +1,666 @@
+{
+  "source_ref": "chapter-4-relational-model/domain",
+  "slug": "domain",
+  "title": "Domain",
+  "description": "Define legal attribute values, separate business domains from storage types, and validate ranges, absence and rejected SQL writes.",
+  "dialect": "MySQL 8.4",
+  "notes": "## A domain describes permitted values\n\nA domain is the set of legal values associated with an attribute's intended meaning. For a campus assessment recorded as whole-number marks, a domain might contain the integers from zero through one hundred. The score attribute names the role, and its domain restricts the values that can fill that role. A score of seventy belongs to the domain; a score of minus five does not.\n\nDomains are about permitted values rather than only values currently present. If a class has recorded marks of sixty and eighty, seventy is still permitted even though nobody currently has that mark. Conversely, finding minus five in an imported file does not make it a valid score. The current data can violate an intended domain and therefore needs validation against independently defined rules.\n\n## Storage types need business restrictions\n\nAn SQL integer type can represent many numbers outside the assessment range. Choosing INT does not automatically restrict scores to zero through one hundred. The business domain can be narrower than the implementation type. A CHECK constraint can express a range condition, while NOT NULL expresses whether an ordinary value is required rather than absent.\n\nConsider a decimal grade-point average on a documented zero-to-ten scale. The precision and scale determine its representable decimal form, while the lower and upper bounds express the permitted interval. Other institutions use different grading scales, so a label such as gpa is insufficient to infer its range. State the actual contract before choosing types, formatting results, or deciding that a supplied value is invalid.\n\n## Representation can change an incoming value\n\nValidation must consider the value reaching the constraint, not just the original text entered by a person. An input pipeline may parse numbers, round decimal values, or convert text before storing it. A check over the stored representation cannot reconstruct information already discarded upstream. If fractional marks must be rejected rather than rounded, validate that requirement before a conversion removes the fractional component.\n\nLikewise, a permitted numeric range does not validate a measurement scale. Eighty can be valid on a hundred-point scale and invalid on a ten-point scale. Record the scale with the attribute definition and keep import mappings explicit. Boundary checks are useful, but they must be applied to the intended quantity after a clearly understood conversion policy.\n\n## Enumerated domains need clear membership\n\nSome attributes permit a small set of codes, such as CS, ECE, and ME. The code must belong to the agreed set. An arbitrary string is not acceptable simply because it fits the column width. A small fixed list can be represented with a suitable condition; a changing catalogue may be better represented by a reference relation and a foreign key.\n\nMembership also depends on comparison rules. Case handling, trailing-space behaviour, and collation can affect SQL string comparisons. If codes must match an exact canonical spelling, document and enforce that contract rather than assuming every engine's default comparison has the desired meaning. A domain description should explain what the codes represent, who maintains them, and how invalid or retired codes are handled.\n\n## Similar representations do not imply similar meaning\n\nA student identifier and a number of course credits can both be stored as integers. That does not make comparing them useful for a business question. Their values describe different concepts. SQL may execute a type-compatible comparison successfully while the resulting condition has no meaningful interpretation in the campus model. Successful execution is not sufficient evidence of a correct query.\n\nDifferent attributes can genuinely share a domain while serving different roles. An interval's start_score and end_score might both draw from the same allowed score range. The interval still needs a separate rule that start_score does not exceed end_score. Membership rules for individual attributes and constraints involving several attributes solve related but distinct problems; one does not replace the other.\n\n## Atomicity depends on the intended value\n\nIn introductory first-normal-form examples, an attribute holds one value from its domain rather than an informal list of independent values. Storing several course codes as comma-separated text makes membership queries and individual references awkward. A separate Enrollment relation represents the independent student-course facts clearly and gives each pair an explicit place in the model.\n\nAtomic does not mean a value has no imaginable internal structure. A date has calendar components, and a string has characters. What matters in the chosen relational design is treating the attribute as one value of its declared type and purpose. Avoid claiming that any value which can be decomposed conceptually violates normal form. The modeled facts and supported operations determine the useful level of representation.\n\n## NULL is distinct from an ordinary value\n\nSQL NULL marks absence rather than an ordinary member of the score range. Whether absence is allowed is a separate decision from which recorded numbers are valid. An optional score may be missing until marking finishes. A required final score may forbid that absence. Neither situation means a missing score is equal to zero or should participate in arithmetic as zero.\n\nIn MySQL 8.4, an enforced CHECK condition accepts TRUE or UNKNOWN and rejects FALSE. A range condition alone can therefore allow NULL because the comparison is unknown. Combine the range rule with NOT NULL when the score is required. This is why checking only the numeric boundary examples misses an important failure mode: the intended domain policy also includes the treatment of absent information.\n\n## Filtering an import is different from enforcement\n\nSuppose a staging table contains proposed scores, including NULL and out-of-range numbers. A SELECT can return proposals that satisfy the documented range. This is useful for preparing a review or identifying eligible records. It does not change the staging table's definition or prevent another statement from inserting an invalid score later. A report and an enforced invariant have different responsibilities.\n\n```sql\nSELECT submission_id, score\nFROM proposed_scores\nWHERE score IS NOT NULL\n  AND score BETWEEN 0 AND 100\nORDER BY submission_id;\n```\n\nThe explicit absence check makes the acceptance policy readable, although the range predicate alone would also exclude NULL in this WHERE clause. The result should retain identifiers so that accepted records remain traceable. Returning only distinct score values would answer a different question and lose the connection to the submitted records.\n\n## Boundaries reveal domain mistakes\n\nTest values immediately below, at, and above each bound. For a closed zero-to-one-hundred interval, zero and one hundred are valid, while minus one and one hundred one are invalid. Also test absence according to the stated policy. A condition written with strict greater-than and less-than operators would incorrectly reject both valid endpoints, even though many middle values still pass.\n\nCross-attribute conditions need their own counterexamples. For a score interval, test equal endpoints, increasing endpoints, and reversed endpoints. An ordinary range check on each endpoint would accept a reversed interval if both values individually lie within bounds. This illustrates why a domain check must be read alongside the rest of the schema rather than treated as proof that every complete tuple is valid.\n\n## Changing a domain is a contract change\n\nWidening a permitted range can admit values existing consumers cannot handle. Narrowing it can reject current data or future writes that were previously legal. Review the affected inputs, stored values, reports, and validation messages before changing the enforcement rule. An application form and a database constraint should communicate the same policy, with the database enforcing the trusted boundary.\n\nDomain reasoning gives a practical review sequence: define the meaning, choose a compatible representation, state membership rules, decide the absence policy, and test both accepted and rejected values. Keep SQL filtering evidence separate from write-enforcement evidence, and keep one engine's local results separate from execution on the intended provider. Those distinctions make validity claims precise and prevent a plausible type declaration from standing in for the complete data contract.\n",
+  "references": [
+    {
+      "title": "MySQL 8.4 CHECK constraints",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/create-table-check-constraints.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-4-domain",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-4-domain-1",
+          "test_id": "pt-dbms-sql-4-domain",
+          "question_text": "What is a domain in the relational model?",
+          "options": [
+            "The set of all legal, atomic values an attribute may take",
+            "A synonym for relation schema",
+            "The number of tuples in a relation",
+            "The physical storage location of a table"
+          ],
+          "correct_index": 0,
+          "explanation": "A domain defines the pool of legal atomic values permitted for an attribute.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-4-domain-2",
+          "test_id": "pt-dbms-sql-4-domain",
+          "question_text": "If the documented GPA scale runs from 0.0 to 10.0 and permits fractional grades, which domain fits?",
+          "options": [
+            "Any string of text",
+            "Decimal values in the range [0.0, 10.0]",
+            "Only the integers 0 through 10",
+            "An enumerated set of department codes"
+          ],
+          "correct_index": 1,
+          "explanation": "The stated contract permits decimal grades in the closed zero-to-ten range; grading scales are not universal.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-4-domain-3",
+          "test_id": "pt-dbms-sql-4-domain",
+          "question_text": "Which of these values would violate the domain of the 'department' attribute if its domain is {CS, ECE, ME, EEE, CE}?",
+          "options": [
+            "'CS'",
+            "'ME'",
+            "9.1",
+            "'ECE'"
+          ],
+          "correct_index": 2,
+          "explanation": "9.1 is a decimal number, not one of the valid enumerated department codes, so it violates the domain constraint.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-4-domain-4",
+          "test_id": "pt-dbms-sql-4-domain",
+          "question_text": "How does a Domain differ from an Attribute?",
+          "options": [
+            "A domain is the pool of legal values; an attribute is the named role/column bound to that pool",
+            "A domain is a row; an attribute is a table",
+            "They are the same thing",
+            "A domain always has fewer values than its attribute"
+          ],
+          "correct_index": 0,
+          "explanation": "The attribute names the column; the domain defines what values that column may legally contain.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-4-domain-5",
+          "test_id": "pt-dbms-sql-4-domain",
+          "question_text": "Can two different attributes in the same schema share the identical domain?",
+          "options": [
+            "No, each attribute must have a unique domain",
+            "Yes — e.g., 'id' and 'advisor_id' can both be integer-domain attributes while remaining distinct attributes",
+            "Yes, but only within the same relation schema they must merge into one attribute",
+            "No, this would violate entity integrity"
+          ],
+          "correct_index": 1,
+          "explanation": "Multiple attributes may share a domain (like integer IDs) yet remain separately named, distinct attributes.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-4-domain-6",
+          "test_id": "pt-dbms-sql-4-domain",
+          "question_text": "In an introductory first-normal-form design, why should a course-code attribute hold one code rather than an informal comma-separated list?",
+          "options": [
+            "To reduce storage space",
+            "Each attribute should represent one value of its declared domain, with independent enrollments modeled separately",
+            "To allow attributes to store lists of values",
+            "Atomicity is not actually required in the relational model"
+          ],
+          "correct_index": 1,
+          "explanation": "Atomicity concerns the chosen domain and modeled facts; dates and strings can still have internal structure.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-4-domain-7",
+          "test_id": "pt-dbms-sql-4-domain",
+          "question_text": "How should SQL NULL be understood relative to ordinary score-domain values?",
+          "options": [
+            "Yes, NULL is just another value drawn from the domain",
+            "It marks absence rather than an ordinary numeric score; nullability is specified separately",
+            "Only for numeric domains",
+            "Only if the domain is explicitly defined to include it"
+          ],
+          "correct_index": 1,
+          "explanation": "NULL is an absence marker, and NOT NULL controls whether the SQL column permits that absence.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-4-domain-8",
+          "test_id": "pt-dbms-sql-4-domain",
+          "question_text": "Comparing 'id' (student-id domain) with 'course_credits' (an integer domain) in a query is:",
+          "options": [
+            "Meaningless in practice, even though both are integer-typed, because they represent unrelated concepts",
+            "Always meaningful since both are integers",
+            "Impossible for the DBMS to execute",
+            "Only valid if they share the exact same attribute name"
+          ],
+          "correct_index": 0,
+          "explanation": "Sharing a domain (type-compatibility) does not imply the values are semantically comparable in a meaningful way.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-4-domain-new-9",
+          "test_id": "pt-dbms-sql-4-domain",
+          "question_text": "Only scores 60 and 80 are stored under a 0-to-100 integer domain. Is 70 legal?",
+          "options": [
+            "No; domains equal observed values",
+            "Yes; legality does not require current occurrence",
+            "Only after altering the column",
+            "Only if every student receives 70"
+          ],
+          "correct_index": 1,
+          "explanation": "A domain describes permitted rather than merely observed values.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-4-domain-new-10",
+          "test_id": "pt-dbms-sql-4-domain",
+          "question_text": "Which combination enforces a required integer score from 0 through 100?",
+          "options": [
+            "INT alone",
+            "A displayed column label",
+            "INT NOT NULL with an enforced CHECK for the range",
+            "ORDER BY score"
+          ],
+          "correct_index": 2,
+          "explanation": "The type, absence policy and range rule have distinct roles.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-4-domain-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-4-domain-application-new-1",
+          "test_id": "pt-dbms-sql-4-domain-application",
+          "question_text": "Which values test both valid boundaries for the stated closed interval?",
+          "options": [
+            "1 and 99",
+            "-1 and 101",
+            "0 and 100",
+            "NULL and -1"
+          ],
+          "correct_index": 2,
+          "explanation": "Closed intervals include both endpoints.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-4-domain-application-new-2",
+          "test_id": "pt-dbms-sql-4-domain-application",
+          "question_text": "Does selecting valid staging rows prevent later invalid writes?",
+          "options": [
+            "Yes; SELECT installs a domain",
+            "Only when ordered",
+            "Only when DISTINCT is used",
+            "No; filtering does not create an enforcement constraint"
+          ],
+          "correct_index": 3,
+          "explanation": "A report is separate from a schema invariant.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-4-domain-application-new-3",
+          "test_id": "pt-dbms-sql-4-domain-application",
+          "question_text": "In MySQL 8.4, why can CHECK(score BETWEEN 0 AND 100) alone permit NULL?",
+          "options": [
+            "The CHECK expression is UNKNOWN, which is accepted",
+            "NULL always equals zero",
+            "BETWEEN ignores its bounds",
+            "CHECK always disables validation"
+          ],
+          "correct_index": 0,
+          "explanation": "Add NOT NULL when absence must be rejected.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-4-domain-application-new-4",
+          "test_id": "pt-dbms-sql-4-domain-application",
+          "question_text": "Why is storing student_id as INT insufficient to validate an advisor reference?",
+          "options": [
+            "INT forces every row to exist",
+            "A type does not establish the referenced identity or existence rule",
+            "Integers cannot form relationships",
+            "Only text can be a key"
+          ],
+          "correct_index": 1,
+          "explanation": "Reference integrity requires an appropriate additional rule.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-4-domain-application-new-5",
+          "test_id": "pt-dbms-sql-4-domain-application",
+          "question_text": "A course code changes catalogue membership over time. What can model the valid codes?",
+          "options": [
+            "A row display order",
+            "A wider VARCHAR alone",
+            "A reference relation with appropriate referential integrity",
+            "A COUNT query alone"
+          ],
+          "correct_index": 2,
+          "explanation": "The catalogue makes permitted codes explicit and maintainable.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-4-domain-application-new-6",
+          "test_id": "pt-dbms-sql-4-domain-application",
+          "question_text": "Do a date having calendar components and a string having characters automatically violate atomicity?",
+          "options": [
+            "Yes; all strings violate it",
+            "Yes; dates must always be split",
+            "Only integers are atomic",
+            "No; atomicity depends on the declared domain and modeled role"
+          ],
+          "correct_index": 3,
+          "explanation": "Internal structure does not automatically imply multiple independent relational facts.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-4-domain-application-new-7",
+          "test_id": "pt-dbms-sql-4-domain-application",
+          "question_text": "Both interval endpoints are in range, but start exceeds end. What is needed?",
+          "options": [
+            "A cross-attribute ordering constraint",
+            "Only another type synonym",
+            "A row counter",
+            "A name alias"
+          ],
+          "correct_index": 0,
+          "explanation": "Individual domain membership does not validate their relationship.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-4-domain-application-new-8",
+          "test_id": "pt-dbms-sql-4-domain-application",
+          "question_text": "Why can comparing student_id with course_credits be incorrect even if SQL executes it?",
+          "options": [
+            "SQL execution proves conceptual correctness",
+            "Compatible storage types do not establish meaningful business comparison",
+            "Both must be text",
+            "The comparison always creates a foreign key"
+          ],
+          "correct_index": 1,
+          "explanation": "Semantic roles matter beyond type compatibility.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-4-domain-application-new-9",
+          "test_id": "pt-dbms-sql-4-domain-application",
+          "question_text": "What risk arises when narrowing an existing domain?",
+          "options": [
+            "All values become sorted",
+            "Every key disappears",
+            "Previously accepted stored values or writes may violate the new rule",
+            "The table degree always doubles"
+          ],
+          "correct_index": 2,
+          "explanation": "A validity change affects data and caller compatibility.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-4-domain-application-new-10",
+          "test_id": "pt-dbms-sql-4-domain-application",
+          "question_text": "What should a report retain to trace accepted imported scores?",
+          "options": [
+            "Only DISTINCT score",
+            "Only the domain name",
+            "Physical disk offsets",
+            "The submission identifier alongside the score"
+          ],
+          "correct_index": 3,
+          "explanation": "Identity links each accepted result back to its submitted fact.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cx-domain-import",
+      "slug": "domain-import",
+      "title": "Filter proposed scores by a declared domain",
+      "difficulty": "Easy",
+      "task": "Return submission_id and score for nonmissing scores in the inclusive integer range 0 through 100. Preserve submissions with equal scores.",
+      "schema_sql": "CREATE TABLE proposed_scores (submission_id INT PRIMARY KEY, score INT NULL);",
+      "seed_sql": "INSERT INTO proposed_scores VALUES (1,-1),(2,0),(3,100),(4,101),(5,NULL),(6,0);",
+      "expected": "submission_id\tscore\n2\t0\n3\t100\n6\t0",
+      "ordering": "Ascending submission_id.",
+      "constraints": [
+        "Scores are integers or NULL; identifiers are unique."
+      ],
+      "edge_cases": [
+        "Closed interval endpoints are valid.",
+        "Missing and out-of-range values are excluded."
+      ],
+      "hints": [
+        "Use BETWEEN for inclusive bounds.",
+        "Retain submission identity rather than distinct score values."
+      ],
+      "solution_sql": "SELECT submission_id, score FROM proposed_scores WHERE score IS NOT NULL AND score BETWEEN 0 AND 100 ORDER BY submission_id;",
+      "explanation": "The predicate accepts the documented range and the result retains each accepted submission. It does not install a constraint.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO proposed_scores VALUES (1,NULL),(2,-1),(3,101);",
+          "expected": ""
+        },
+        {
+          "seed_sql": "INSERT INTO proposed_scores VALUES (2,100),(1,0);",
+          "expected": "submission_id\tscore\n1\t0\n2\t100"
+        }
+      ]
+    },
+    {
+      "id": "cx-domain-enforce",
+      "slug": "domain-enforce",
+      "title": "Enforce the score range at the table boundary",
+      "difficulty": "Medium",
+      "task": "The supplied scores table already requires score to be non-NULL. Add an enforced CHECK constraint named score_range accepting only scores from 0 through 100, then return submission_id and score. Invalid future writes must be rejected.",
+      "starter_sql": "-- Add the score_range constraint to scores, then return its rows.",
+      "schema_sql": "CREATE TABLE scores (submission_id INT PRIMARY KEY, score INT NOT NULL);",
+      "seed_sql": "INSERT INTO scores VALUES (1,0),(2,100),(3,75);",
+      "expected": "submission_id\tscore\n1\t0\n2\t100\n3\t75",
+      "ordering": "Ascending submission_id.",
+      "constraints": [
+        "Existing scores satisfy the new range.",
+        "Target syntax is MySQL 8.4; MariaDB execution is compatibility evidence only."
+      ],
+      "edge_cases": [
+        "Both endpoints must remain permitted.",
+        "Out-of-range scores and missing scores must be rejected."
+      ],
+      "hints": [
+        "Use ALTER TABLE ADD CONSTRAINT with CHECK.",
+        "Nullability and the range rule enforce different parts of the contract."
+      ],
+      "solution_sql": "ALTER TABLE scores ADD CONSTRAINT score_range CHECK (score BETWEEN 0 AND 100);\nSELECT submission_id, score FROM scores ORDER BY submission_id;",
+      "explanation": "The added CHECK rejects FALSE range predicates. The existing NOT NULL column rule separately rejects absent scores.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO scores VALUES (9,100),(1,0);",
+          "expected": "submission_id\tscore\n1\t0\n9\t100"
+        },
+        {
+          "seed_sql": "",
+          "expected": ""
+        }
+      ],
+      "negative_validation_cases": [
+        {
+          "sql": "INSERT INTO scores VALUES (99,-1);",
+          "error_codes": [
+            4025,
+            3819
+          ]
+        },
+        {
+          "sql": "INSERT INTO scores VALUES (99,101);",
+          "error_codes": [
+            4025,
+            3819
+          ]
+        },
+        {
+          "sql": "INSERT INTO scores VALUES (99,NULL);",
+          "error_codes": [
+            1048
+          ]
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-4-domain-1",
+      "test_id": "pt-dbms-sql-4-domain",
+      "question_text": "What is a domain in the relational model?",
+      "options": [
+        "The set of all legal, atomic values an attribute may take",
+        "A synonym for relation schema",
+        "The number of tuples in a relation",
+        "The physical storage location of a table"
+      ],
+      "correct_index": 0,
+      "explanation": "A domain defines the pool of legal atomic values permitted for an attribute.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-4-domain-2",
+      "test_id": "pt-dbms-sql-4-domain",
+      "question_text": "What is the domain of the 'gpa' attribute in the running example likely to be?",
+      "options": [
+        "Any string of text",
+        "Decimal values in the range [0.0, 10.0]",
+        "Only the integers 0 through 10",
+        "An enumerated set of department codes"
+      ],
+      "correct_index": 1,
+      "explanation": "GPA is naturally modeled as a bounded decimal value, e.g. between 0.0 and 10.0.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-4-domain-3",
+      "test_id": "pt-dbms-sql-4-domain",
+      "question_text": "Which of these values would violate the domain of the 'department' attribute if its domain is {CS, ECE, ME, EEE, CE}?",
+      "options": [
+        "'CS'",
+        "'ME'",
+        "9.1",
+        "'ECE'"
+      ],
+      "correct_index": 2,
+      "explanation": "9.1 is a decimal number, not one of the valid enumerated department codes, so it violates the domain constraint.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-4-domain-4",
+      "test_id": "pt-dbms-sql-4-domain",
+      "question_text": "How does a Domain differ from an Attribute?",
+      "options": [
+        "A domain is the pool of legal values; an attribute is the named role/column bound to that pool",
+        "A domain is a row; an attribute is a table",
+        "They are the same thing",
+        "A domain always has fewer values than its attribute"
+      ],
+      "correct_index": 0,
+      "explanation": "The attribute names the column; the domain defines what values that column may legally contain.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-4-domain-5",
+      "test_id": "pt-dbms-sql-4-domain",
+      "question_text": "Can two different attributes in the same schema share the identical domain?",
+      "options": [
+        "No, each attribute must have a unique domain",
+        "Yes — e.g., 'id' and 'advisor_id' can both be integer-domain attributes while remaining distinct attributes",
+        "Yes, but only within the same relation schema they must merge into one attribute",
+        "No, this would violate entity integrity"
+      ],
+      "correct_index": 1,
+      "explanation": "Multiple attributes may share a domain (like integer IDs) yet remain separately named, distinct attributes.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-4-domain-6",
+      "test_id": "pt-dbms-sql-4-domain",
+      "question_text": "Why does the classical relational model require domains to be atomic?",
+      "options": [
+        "To reduce storage space",
+        "To guarantee First Normal Form and keep operations like comparison and join well-defined on indivisible values",
+        "To allow attributes to store lists of values",
+        "Atomicity is not actually required in the relational model"
+      ],
+      "correct_index": 1,
+      "explanation": "Atomic domains are the foundation of 1NF and ensure relational-algebra operations behave predictably on single values.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-4-domain-7",
+      "test_id": "pt-dbms-sql-4-domain",
+      "question_text": "Is NULL considered a member of an attribute's domain?",
+      "options": [
+        "Yes, NULL is just another value drawn from the domain",
+        "No, NULL represents the absence of a value and is not part of any domain",
+        "Only for numeric domains",
+        "Only if the domain is explicitly defined to include it"
+      ],
+      "correct_index": 1,
+      "explanation": "NULL is a special marker for missing/unknown data, distinct from and not a member of any regular domain.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-4-domain-8",
+      "test_id": "pt-dbms-sql-4-domain",
+      "question_text": "Comparing 'id' (student-id domain) with 'course_credits' (an integer domain) in a query is:",
+      "options": [
+        "Meaningless in practice, even though both are integer-typed, because they represent unrelated concepts",
+        "Always meaningful since both are integers",
+        "Impossible for the DBMS to execute",
+        "Only valid if they share the exact same attribute name"
+      ],
+      "correct_index": 0,
+      "explanation": "Sharing a domain (type-compatibility) does not imply the values are semantically comparable in a meaningful way.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "coordinator",
+    "independent_review": "unavailable; no agent tools",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Definitions and examples checked against questions; no plagiarism certification.",
+    "existing_question_corrections": [
+      "tq-dbms-sql-4-domain-2",
+      "tq-dbms-sql-4-domain-6",
+      "tq-dbms-sql-4-domain-7"
+    ],
+    "canonical_answer_indices_preserved": true
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-4-domain",
+    "original_note_sha256": "65bb3c23219b6c8642588096c3bdcdfc8884ff89c57f675841e57766f9fbd511",
+    "status": "paired migration prepared; not applied"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Membership and absence are separate score policies",
+      "description": "The intended domain includes both endpoints. Missing information requires a separate nullability decision.",
+      "columns": [
+        "Proposed score",
+        "Range membership",
+        "Required score policy"
+      ],
+      "rows": [
+        [
+          "-1",
+          "Outside",
+          "Reject"
+        ],
+        [
+          "0",
+          "Inside; lower endpoint",
+          "Accept"
+        ],
+        [
+          "100",
+          "Inside; upper endpoint",
+          "Accept"
+        ],
+        [
+          "101",
+          "Outside",
+          "Reject"
+        ],
+        [
+          "NULL",
+          "Absence, not an ordinary score",
+          "Reject with NOT NULL"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "coordinator checked inclusive endpoints and CHECK UNKNOWN/NOT NULL distinction against MySQL 8.4 manual",
+    "server_rendering": "passed",
+    "browser_rendering": "unverified",
+    "independent_review": "unavailable; no agent tools",
+    "server_rendering_evidence": "2026-10-29: actual LessonBlock static render for every package; focused Vitest suite passed."
+  },
+  "sql_verification": {
+    "engine": "11.8.6-MariaDB-0+deb13u1 from Debian",
+    "scope": "MariaDB compatibility execution; exact MySQL 8.4/provider execution unverified",
+    "fingerprint": "9a5c884ce75ea49a1ee6c361a5114a1e9ca1ce412379fb14eee402f2415bf5b1",
+    "cases": [
+      {
+        "problem": "domain-import",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "domain-import",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "domain-import",
+        "case": 2,
+        "passed": true
+      },
+      {
+        "problem": "domain-enforce",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "domain-enforce",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "domain-enforce",
+        "case": 2,
+        "passed": true
+      },
+      {
+        "problem": "domain-enforce",
+        "negative_case": 0,
+        "error_code": 4025,
+        "passed": true
+      },
+      {
+        "problem": "domain-enforce",
+        "negative_case": 1,
+        "error_code": 4025,
+        "passed": true
+      },
+      {
+        "problem": "domain-enforce",
+        "negative_case": 2,
+        "error_code": 1048,
+        "passed": true
+      }
+    ],
+    "all_passed": true
+  }
+}

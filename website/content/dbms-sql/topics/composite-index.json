@@ -1,0 +1,571 @@
+{
+  "source_ref": "chapter-20-indexes-and-access-paths/composite-index",
+  "slug": "composite-index",
+  "title": "Composite Index",
+  "description": "Reason about MySQL composite index order, equality prefixes, range predicates and ordering, while separating useful access hypotheses from guaranteed query plans.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Design an ordered key for a complete query\n\nA composite index uses several columns as one index key. The key order matters. An index on learner_id followed by registered_at organizes entries first by learner and then by registration time within each learner's key range. It is not equivalent to an index on registered_at followed by learner_id. The choice should follow actual query predicates, ordering and projected values rather than a rule that more columns always means better performance.\n\nRead [why indexes exist](/learning/dbms-sql-tutorial/why-indexes-exist), [selectivity](/learning/dbms-sql-tutorial/selectivity) and [covering indexes](/learning/dbms-sql-tutorial/covering-index). The discussion uses MySQL 8.4 and ordinary ordered indexes. Other index structures and optimizer access methods have different details. The examples describe candidate designs for scratch-data study; changing application indexes requires the existing reviewed migration process.\n\n## Picture lexicographic order\n\nFor a two-column key, compare the first column first. Only entries with equal first values are ordered by the second value. A telephone directory grouped by family name and then given name illustrates the idea, though a database index has implementation details beyond the analogy. Searching by a family-name prefix can locate a contiguous area; searching only by given name does not follow that same leading order.\n\nWith index key learner_id and registered_at, entries for learner 7 appear together, and their times are ordered inside that key region. Entries for learner 8 form another region. A time-only request concerns potentially many separate learner regions. This explains the ordinary leading-prefix principle without claiming that an optimizer can never use a nonleading column in any way.\n\n```sql\nCREATE INDEX ix_registration_learner_time\nON registrations(learner_id, registered_at);\n```\n\nA two-column index can support some uses of its first column or both columns. It does not act as two independent single-column indexes. Conversely, two single-column indexes are not automatically equivalent to the ordered pair; possible index-merge strategies do not reproduce every range, ordering or coverage property of the composite key.\n\n## Start with equality on the leading column\n\nA query for learner 7 during a specific month aligns naturally with the leading learner equality and a following time range. A half-open time interval includes the beginning and excludes the next period boundary. The key arrangement can let the engine identify the corresponding contiguous candidate region rather than treat all registrations as equally relevant.\n\n```sql\nSELECT registration_id, registered_at\nFROM registrations\nWHERE learner_id = 7\n  AND registered_at >= '2028-03-01'\n  AND registered_at <  '2028-04-01'\nORDER BY registered_at, registration_id;\n```\n\nThe actual plan can still depend on how many registrations that learner has, the selected columns and the optimizer's estimates. An index definition is an available option, not an instruction that the optimizer must follow. Include both a frequent learner and a rare learner in a representative evaluation so that data skew is visible.\n\nIf stable ordering includes registration_id after the timestamp, verify whether the candidate path supplies that complete order under the engine's key rules. InnoDB secondary indexes include primary-key values, but practical ordering decisions still require the actual table definition and plan. Do not silently assume every storage engine provides the same implicit suffix.\n\n## Understand where a range changes the search story\n\nA common design heuristic places equality-tested columns before a range-tested column. Once a range opens across several values of a key component, later components may no longer narrow one simple contiguous interval in the same way. They can still be useful for residual filtering, index-condition evaluation or coverage, depending on the query and engine.\n\nConsider a candidate on campus_id, event_date and status. An equality campus filter and a date range define a region containing several dates. A status condition after that range can remove candidates, but the index is not automatically as narrow as a candidate ordering campus_id, status and event_date for that exact equality-plus-range query. Compare the complete workload before choosing either arrangement.\n\nThis is a reasoning aid, not a universal prohibition on using later key columns. MySQL has optimizer techniques beyond the simplest prefix range. Read the actual access details and rows examined rather than deciding from a slogan that every column after a range is useless. A later column can add enough coverage to matter even when it contributes little to candidate positioning.\n\n## Match order requirements to fixed prefixes\n\nAn index on department_id and score can support score order within one fixed department more naturally than global score order across all departments. The equality condition fixes the leading grouping, leaving the following order relevant. Without that equality, entries are primarily department-ordered and do not form one global score sequence.\n\n```sql\nSELECT learner_id, score\nFROM results\nWHERE department_id = 3\nORDER BY score DESC, learner_id;\n```\n\nMixed ascending and descending requirements need careful review of the key definition and supported scan directions. A reverse scan can reverse a compatible ordered sequence; it cannot rearrange arbitrary mixed directions by wishful thinking. Include deterministic tie handling in the query and inspect whether the plan performs additional sorting.\n\nA LIMIT can make an aligned ordered path valuable because the engine may stop after enough qualifying rows, but filters on columns outside the useful key can still force extra candidate visits. A small requested page is not proof that only a small number of entries will be examined. Test cases with many rejected candidates can expose that difference.\n\n## Compare candidate orders across several callers\n\nA campus-first key can serve campus-specific dashboards, while a date-first key may be more useful for a global recent-activity feed. Choosing the most selective column first in every index is too crude: equality patterns, ranges, ordering and reuse of leading prefixes all matter. A workload with several important callers may justify more than one focused structure, but every added structure has maintenance costs.\n\nInspect existing indexes before adding a candidate. A longer index beginning with the same columns may support some of the shorter index's uses, yet uniqueness, width, prefixes and query coverage can change whether removal is safe. Do not delete an apparently redundant index without verifying constraint roles, dependency assumptions and representative plans.\n\nPrimary-key width matters in InnoDB secondary indexes because their entries include primary-key values. Adding a broad text primary key can increase the cost of several secondary indexes, not just the primary structure. This interaction belongs in a whole-table design review rather than a local query-only optimization argument.\n\n## Keep constraints distinct from access support\n\nA unique composite index constrains the complete key combination under its NULL rules. It does not make each component individually unique. A uniqueness rule on workshop_id and learner_id can prevent duplicate learner-workshop registrations while allowing the same learner in several workshops and several learners in one workshop.\n\nRequired identity columns and nullable values need deliberate modeling. A nullable unique index does not necessarily enforce the same absence policy as a non-null business key. Performance examples should not imply that a convenient composite index automatically supplies every integrity invariant. Preserve existing primary keys, foreign keys and access controls when evaluating candidate designs.\n\nA missing leading predicate does not mean the structure becomes physically unreadable. An engine may scan an index, use coverage or choose a skip-scan strategy where supported and cost-effective. Those options differ from a direct leading-prefix lookup. Phrase the limitation precisely: the query may lack the straightforward narrowing opportunity provided by the leading key, while other access strategies remain possible and require plan evidence.\n\n## Verify with synthetic populations and exact outputs\n\nFirst verify query semantics on a small fixture: several learners, repeated timestamps, a row exactly at each time boundary and no match for one learner. The result should be correct with or without the candidate index. Then use a larger authorized synthetic dataset to inspect access behavior for selective and broad values, recording the engine, definitions and measurement conditions.\n\nFor a reasoning exercise, compare learner-time and time-learner candidates for a learner-specific monthly report and a global monthly report. Explain which leading equality or range each caller supplies and whether the requested order follows the key. Continue with [index cardinality](/learning/dbms-sql-tutorial/index-cardinality) and [index maintenance](/learning/dbms-sql-tutorial/index-maintenance) to connect this access hypothesis with statistics and operating costs.",
+  "references": [
+    {
+      "title": "MySQL 8.4 multiple-column indexes",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/multiple-column-indexes.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-20-composite-index",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-20-composite-index-1",
+          "test_id": "pt-dbms-sql-20-composite-index",
+          "question_text": "In a composite index on (department, gpa), which column determines the primary sort order?",
+          "options": [
+            "gpa, always sorted first",
+            "department, since it is listed first",
+            "Whichever column has more distinct values",
+            "Neither; both are sorted independently"
+          ],
+          "correct_index": 1,
+          "explanation": "Composite index entries are sorted by the first declared column, then by the second within groups of the first.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-20-composite-index-2",
+          "test_id": "pt-dbms-sql-20-composite-index",
+          "question_text": "What is the 'leftmost-prefix rule' for composite indexes?",
+          "options": [
+            "Only the rightmost column in the index can be used in a WHERE clause",
+            "A composite index on (A, B, C) can efficiently serve queries on A, or A+B, or A+B+C, but generally not B alone or C alone",
+            "Composite indexes can only have exactly 2 columns",
+            "All columns in a composite index must be used together, always"
+          ],
+          "correct_index": 1,
+          "explanation": "Leading-prefix predicates support straightforward lookup and range reasoning. Nonleading predicates can still benefit from an index scan,coverage or supported skip-scan strategies; inspect the actual plan.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-20-composite-index-3",
+          "test_id": "pt-dbms-sql-20-composite-index",
+          "question_text": "Which predicate supplies the straightforward leading department equality followed by a GPA range for index(department,gpa)?",
+          "options": [
+            "WHERE gpa > 3.5 (alone)",
+            "WHERE department = 'CS' AND gpa > 3.5",
+            "WHERE email = 'x@example.com'",
+            "WHERE name LIKE '%Doe%'"
+          ],
+          "correct_index": 1,
+          "explanation": "Fixing the leading department identifies a department region, then the GPA condition bounds the following key range. Other access patterns may be possible but do not supply this leading-prefix shape.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-20-composite-index-4",
+          "test_id": "pt-dbms-sql-20-composite-index",
+          "question_text": "Why does a GPA-only predicate lack the straightforward leading-prefix lookup offered by an index on (department,gpa)?",
+          "options": [
+            "Because gpa is a floating point number",
+            "Because the index is sorted by department first, so gpa values are only sorted within each department group, not across the whole table",
+            "Because composite indexes never store gpa values",
+            "Because gpa cannot be indexed under any circumstances"
+          ],
+          "correct_index": 1,
+          "explanation": "Without knowing the department, matching gpa values are scattered across many department groups rather than contiguous.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-20-composite-index-5",
+          "test_id": "pt-dbms-sql-20-composite-index",
+          "question_text": "What analogy best explains the leftmost-prefix behavior of composite indexes?",
+          "options": [
+            "A dictionary sorted randomly",
+            "A phone book sorted by last name then first name — easy to find by last name, but finding by first name alone requires scanning the whole book",
+            "A single-column list sorted numerically",
+            "A hash table with no ordering at all"
+          ],
+          "correct_index": 1,
+          "explanation": "This classic analogy captures why leading-column filters are efficient but trailing-column-only filters are not.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-20-composite-index-6",
+          "test_id": "pt-dbms-sql-20-composite-index",
+          "question_text": "Can a composite index on (department, gpa) help satisfy `ORDER BY department, gpa` without an extra sort step?",
+          "options": [
+            "No, composite indexes never help with sorting",
+            "Yes, a compatible chosen index scan can provide that order; the actual plan must confirm it",
+            "Only if a separate index also exists on gpa alone",
+            "Only for tables smaller than 1000 rows"
+          ],
+          "correct_index": 1,
+          "explanation": "The key order can satisfy compatible ordering, but the optimizer may choose another strategy. Keep ORDER BY explicit for the output contract.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-20-composite-index-7",
+          "test_id": "pt-dbms-sql-20-composite-index",
+          "question_text": "An application frequently filters by gpa alone but rarely by department alone or together. What's the implication for index design?",
+          "options": [
+            "An index on (department, gpa) is still the best choice regardless of query patterns",
+            "A separate index with gpa as the leading column (or gpa alone) would better match this query pattern",
+            "Composite indexes cannot ever include gpa",
+            "No index is needed since gpa is a decimal"
+          ],
+          "correct_index": 1,
+          "explanation": "Column order should reflect actual query filter patterns; if gpa-alone filtering dominates, gpa should lead (or have its own index).",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-20-composite-index-8",
+          "test_id": "pt-dbms-sql-20-composite-index",
+          "question_text": "In MySQL, why might extra ordinary key columns beyond filtering columns be added to an index?",
+          "options": [
+            "To make the index unusable for any query",
+            "To turn the composite index into a covering index that can answer a query without a separate row lookup",
+            "To force the table to become a heap",
+            "To remove the leftmost-prefix restriction entirely"
+          ],
+          "correct_index": 1,
+          "explanation": "Adding required output values as key columns can make an access path covering. MySQL syntax differs from engines offering a separate INCLUDE clause, and extra width has costs.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-20-composite-index-new-9",
+          "test_id": "pt-dbms-sql-20-composite-index",
+          "question_text": "Are indexes on (learner_id,registered_at) and (registered_at,learner_id) equivalent?",
+          "options": [
+            "Yes, columns are matched by name",
+            "No, the leading order changes access and ordering options",
+            "Only if both are integers",
+            "Only if the table is empty"
+          ],
+          "correct_index": 1,
+          "explanation": "Ordered keys compare leading components before following ones.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-20-composite-index-new-10",
+          "test_id": "pt-dbms-sql-20-composite-index",
+          "question_text": "Does a two-column composite index act as two independent single-column indexes?",
+          "options": [
+            "Yes, always",
+            "Only with text columns",
+            "No",
+            "Only with SELECT star"
+          ],
+          "correct_index": 2,
+          "explanation": "The composite structure has one ordered key arrangement.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-20-composite-index-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-20-composite-index-application-new-1",
+          "test_id": "pt-dbms-sql-20-composite-index-application",
+          "question_text": "What prefix is fixed in a query WHERE learner_id=7 using learner-time order?",
+          "options": [
+            "Every timestamp globally",
+            "The row-count estimate automatically",
+            "The physical table size",
+            "The learner key region"
+          ],
+          "correct_index": 3,
+          "explanation": "A leading equality isolates the relevant learner key range.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-20-composite-index-application-new-2",
+          "test_id": "pt-dbms-sql-20-composite-index-application",
+          "question_text": "Can a later column still help after an earlier range predicate?",
+          "options": [
+            "Yes, through filtering or coverage depending on the plan",
+            "No, it is always completely useless",
+            "Only by changing stored values",
+            "Only when it is a primary key"
+          ],
+          "correct_index": 0,
+          "explanation": "Positioning,filtering and coverage are different contributions.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-20-composite-index-application-new-3",
+          "test_id": "pt-dbms-sql-20-composite-index-application",
+          "question_text": "What order does (department_id,score) primarily supply without a department filter?",
+          "options": [
+            "Global score only",
+            "Department first, then score within department",
+            "Learner name only",
+            "Random by definition"
+          ],
+          "correct_index": 1,
+          "explanation": "Lexicographic key order does not become a global order on the second column.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-20-composite-index-application-new-4",
+          "test_id": "pt-dbms-sql-20-composite-index-application",
+          "question_text": "Why is most-selective-column-first an incomplete design rule?",
+          "options": [
+            "Selectivity never matters",
+            "Every index must follow alphabetical order",
+            "Queries also need prefix reuse, ranges and order support",
+            "The first column is ignored"
+          ],
+          "correct_index": 2,
+          "explanation": "The complete workload determines useful key order.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-20-composite-index-application-new-5",
+          "test_id": "pt-dbms-sql-20-composite-index-application",
+          "question_text": "Does a small LIMIT prove only a few index entries are examined?",
+          "options": [
+            "Yes, always",
+            "Only when ordered by a name",
+            "Only for month ranges",
+            "No, many candidates may fail other filters"
+          ],
+          "correct_index": 3,
+          "explanation": "The engine may need to inspect extra candidates to find enough qualifying rows.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-20-composite-index-application-new-6",
+          "test_id": "pt-dbms-sql-20-composite-index-application",
+          "question_text": "What does a UNIQUE(workshop_id,learner_id) rule constrain?",
+          "options": [
+            "The combination, not each component individually",
+            "Every learner to one workshop globally",
+            "Every workshop to one learner globally",
+            "Only the first column"
+          ],
+          "correct_index": 0,
+          "explanation": "Composite uniqueness permits repeated components with different partners.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-20-composite-index-application-new-7",
+          "test_id": "pt-dbms-sql-20-composite-index-application",
+          "question_text": "Why examine the primary-key width when designing InnoDB secondary indexes?",
+          "options": [
+            "The primary key is never indexed",
+            "Secondary entries contain primary-key values",
+            "It determines every SQL alias",
+            "It replaces the WHERE clause"
+          ],
+          "correct_index": 1,
+          "explanation": "A wider primary key can increase multiple secondary structures.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-20-composite-index-application-new-8",
+          "test_id": "pt-dbms-sql-20-composite-index-application",
+          "question_text": "What must remain true after adding a purely performance-oriented index?",
+          "options": [
+            "The output automatically becomes ordered",
+            "All NULL values disappear",
+            "The query result contract remains the same",
+            "The caller gains extra privileges"
+          ],
+          "correct_index": 2,
+          "explanation": "An access-path change should preserve semantics and security.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-20-composite-index-application-new-9",
+          "test_id": "pt-dbms-sql-20-composite-index-application",
+          "question_text": "Can overlapping index columns alone prove an index is safe to remove?",
+          "options": [
+            "Yes, always",
+            "Only if both names start with ix",
+            "Only when one query is fast",
+            "No, uniqueness,key order and workload roles matter"
+          ],
+          "correct_index": 3,
+          "explanation": "Constraint and access uses need review before removal.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-20-composite-index-application-new-10",
+          "test_id": "pt-dbms-sql-20-composite-index-application",
+          "question_text": "Which fixture exposes incomplete deterministic timestamp ordering?",
+          "options": [
+            "Several rows sharing the same timestamp",
+            "Only one row",
+            "Only different timestamps",
+            "Only an empty table"
+          ],
+          "correct_index": 0,
+          "explanation": "A tie-breaker is needed when exact order among ties matters.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cx-composite-learner-month",
+      "slug": "composite-learner-month",
+      "title": "Query a learner-specific month range",
+      "difficulty": "Easy",
+      "task": "Return registration_id for learner 7 in March 2028, ordered by registered_at,registration_id.",
+      "schema_sql": "CREATE TABLE registrations(registration_id INT PRIMARY KEY,learner_id INT NOT NULL,registered_at DATETIME NOT NULL); CREATE INDEX ix_learner_time ON registrations(learner_id,registered_at);",
+      "seed_sql": "INSERT INTO registrations VALUES (1,7,'2028-03-01 00:00:00'),(2,8,'2028-03-02 00:00:00'),(3,7,'2028-04-01 00:00:00');",
+      "solution_sql": "SELECT registration_id FROM registrations WHERE learner_id=7 AND registered_at>='2028-03-01' AND registered_at<'2028-04-01' ORDER BY registered_at,registration_id;",
+      "expected": "registration_id\n1",
+      "explanation": "The equality and half-open range define the intended population independently of index choice.",
+      "ordering": "Apply the ORDER BY explicitly required by the task; scalar results contain one row.",
+      "constraints": [
+        "Only synthetic fixture tables are in scope."
+      ],
+      "edge_cases": [
+        "Check empty input and the supplied contrasting fixtures."
+      ],
+      "hints": [
+        "The equality and half-open range define the intended population independently of index choice."
+      ],
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO registrations VALUES (9,7,'2028-03-05 00:00:00'),(2,7,'2028-03-05 00:00:00');",
+          "expected": "registration_id\n2\n9"
+        },
+        {
+          "seed_sql": "",
+          "expected": ""
+        }
+      ]
+    },
+    {
+      "id": "cx-composite-campus-status-range",
+      "slug": "composite-campus-status-range",
+      "title": "Filter two equalities and a date range",
+      "difficulty": "Medium",
+      "task": "Return event_id for campus 2,status open and event dates in March 2028, ordered by event_date,event_id.",
+      "schema_sql": "CREATE TABLE events(event_id INT PRIMARY KEY,campus_id INT NOT NULL,status VARCHAR(10) NOT NULL,event_date DATE NOT NULL); CREATE INDEX ix_campus_status_date ON events(campus_id,status,event_date);",
+      "seed_sql": "INSERT INTO events VALUES (1,2,'open','2028-03-01'),(2,2,'closed','2028-03-02'),(3,3,'open','2028-03-03'),(4,2,'open','2028-03-31');",
+      "solution_sql": "SELECT event_id FROM events WHERE campus_id=2 AND status='open' AND event_date>='2028-03-01' AND event_date<'2028-04-01' ORDER BY event_date,event_id;",
+      "expected": "event_id\n1\n4",
+      "explanation": "The two equalities and date interval are explicit; output judging verifies rows rather than optimizer-plan promises.",
+      "ordering": "Apply the ORDER BY explicitly required by the task; scalar results contain one row.",
+      "constraints": [
+        "Only synthetic fixture tables are in scope."
+      ],
+      "edge_cases": [
+        "Check empty input and the supplied contrasting fixtures."
+      ],
+      "hints": [
+        "The two equalities and date interval are explicit; output judging verifies rows rather than optimizer-plan promises."
+      ],
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO events VALUES (1,2,'open','2028-04-01'),(2,2,'open','2028-02-29');",
+          "expected": ""
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-20-composite-index-1",
+      "test_id": "pt-dbms-sql-20-composite-index",
+      "question_text": "In a composite index on (department, gpa), which column determines the primary sort order?",
+      "options": [
+        "gpa, always sorted first",
+        "department, since it is listed first",
+        "Whichever column has more distinct values",
+        "Neither; both are sorted independently"
+      ],
+      "correct_index": 1,
+      "explanation": "Composite index entries are sorted by the first declared column, then by the second within groups of the first.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-20-composite-index-2",
+      "test_id": "pt-dbms-sql-20-composite-index",
+      "question_text": "What is the 'leftmost-prefix rule' for composite indexes?",
+      "options": [
+        "Only the rightmost column in the index can be used in a WHERE clause",
+        "A composite index on (A, B, C) can efficiently serve queries on A, or A+B, or A+B+C, but generally not B alone or C alone",
+        "Composite indexes can only have exactly 2 columns",
+        "All columns in a composite index must be used together, always"
+      ],
+      "correct_index": 1,
+      "explanation": "The leftmost-prefix rule states that usable query patterns must start from the leftmost column(s) of the index in order.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-20-composite-index-3",
+      "test_id": "pt-dbms-sql-20-composite-index",
+      "question_text": "Given an index on (department, gpa), which query can efficiently use this index?",
+      "options": [
+        "WHERE gpa > 3.5 (alone)",
+        "WHERE department = 'CS' AND gpa > 3.5",
+        "WHERE email = 'x@example.com'",
+        "WHERE name LIKE '%Doe%'"
+      ],
+      "correct_index": 1,
+      "explanation": "This query filters on department first, then gpa — matching the leftmost-prefix order of the composite index.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-20-composite-index-4",
+      "test_id": "pt-dbms-sql-20-composite-index",
+      "question_text": "Why does an index on (department, gpa) generally NOT help a query filtering on gpa alone?",
+      "options": [
+        "Because gpa is a floating point number",
+        "Because the index is sorted by department first, so gpa values are only sorted within each department group, not across the whole table",
+        "Because composite indexes never store gpa values",
+        "Because gpa cannot be indexed under any circumstances"
+      ],
+      "correct_index": 1,
+      "explanation": "Without knowing the department, matching gpa values are scattered across many department groups rather than contiguous.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-20-composite-index-5",
+      "test_id": "pt-dbms-sql-20-composite-index",
+      "question_text": "What analogy best explains the leftmost-prefix behavior of composite indexes?",
+      "options": [
+        "A dictionary sorted randomly",
+        "A phone book sorted by last name then first name — easy to find by last name, but finding by first name alone requires scanning the whole book",
+        "A single-column list sorted numerically",
+        "A hash table with no ordering at all"
+      ],
+      "correct_index": 1,
+      "explanation": "This classic analogy captures why leading-column filters are efficient but trailing-column-only filters are not.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-20-composite-index-6",
+      "test_id": "pt-dbms-sql-20-composite-index",
+      "question_text": "Can a composite index on (department, gpa) help satisfy `ORDER BY department, gpa` without an extra sort step?",
+      "options": [
+        "No, composite indexes never help with sorting",
+        "Yes, because the index's leaf entries are already physically ordered exactly that way",
+        "Only if a separate index also exists on gpa alone",
+        "Only for tables smaller than 1000 rows"
+      ],
+      "correct_index": 1,
+      "explanation": "Since the index already stores entries sorted by (department, gpa), that exact ORDER BY can be satisfied directly from the index order.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-20-composite-index-7",
+      "test_id": "pt-dbms-sql-20-composite-index",
+      "question_text": "An application frequently filters by gpa alone but rarely by department alone or together. What's the implication for index design?",
+      "options": [
+        "An index on (department, gpa) is still the best choice regardless of query patterns",
+        "A separate index with gpa as the leading column (or gpa alone) would better match this query pattern",
+        "Composite indexes cannot ever include gpa",
+        "No index is needed since gpa is a decimal"
+      ],
+      "correct_index": 1,
+      "explanation": "Column order should reflect actual query filter patterns; if gpa-alone filtering dominates, gpa should lead (or have its own index).",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-20-composite-index-8",
+      "test_id": "pt-dbms-sql-20-composite-index",
+      "question_text": "Which of these is a legitimate reason to add extra 'included' columns to a composite index beyond the filter columns?",
+      "options": [
+        "To make the index unusable for any query",
+        "To turn the composite index into a covering index that can answer a query without a separate row lookup",
+        "To force the table to become a heap",
+        "To remove the leftmost-prefix restriction entirely"
+      ],
+      "correct_index": 1,
+      "explanation": "Adding needed output columns to an index (beyond the filter columns) is exactly how a covering index (20.8) is built.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "/root/worker_1",
+    "independent_review": "passed",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "author semantic review; independent review pending",
+    "canonical_answer_indices_preserved": true,
+    "independent_reviewer": "/root",
+    "independent_review_scope": "Full notes,20 MCQs/options/reasoning,both exercises with six predicted outputs and ordered-key diagram reviewed. Lexicographic prefixes, equality-plus-range, residual/coverage usefulness, mixed direction and skip-scan caveats correct. Scoped inherited efficient-use question to the intended leading-prefix shape to avoid multiple potentially valid access paths. Scratch SELECT outcomes assess population/order, not index selection. Exact MySQL/provider, browser and release validation remain separate."
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-20-composite-index",
+    "original_note_sha256": "735ac867f2f39778f379ad83c06bd5f9aa0dde2d3a2b0627118604f7a24521df",
+    "status": "drafted; not included in prepared paired migrations"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Key order groups the second column within the first",
+      "description": "A time-only request spans several learner regions.",
+      "columns": [
+        "Learner",
+        "Time",
+        "Key position"
+      ],
+      "rows": [
+        [
+          "7",
+          "March 1",
+          "First learner7 entry"
+        ],
+        [
+          "7",
+          "March 5",
+          "Next learner7 entry"
+        ],
+        [
+          "8",
+          "March 2",
+          "First learner8 entry"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "provided",
+    "technical_review": "coordinator independent manual review passed",
+    "server_rendering": "passed",
+    "browser_rendering": "unverified",
+    "independent_review": "passed",
+    "server_rendering_evidence": "2026-10-29 full Vitest:1310 passed/12 skipped; actual LessonBlock/TopicDiagrams render over230 packages. Browser visual QA remains unverified."
+  },
+  "authoring_status": "drafted; verification pending",
+  "sql_verification": {
+    "scope": "not executed; exact MySQL/provider verification pending",
+    "all_passed": false,
+    "cases": []
+  }
+}

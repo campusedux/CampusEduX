@@ -55,25 +55,30 @@ function LoginForm() {
     setError(null);
     setGoogleLoading(true);
 
-    const supabase = createBrowserSupabase();
-    // Reuses safeInternalPath so the callback route can only ever bounce back
-    // to a same-origin path — this "next" travels through the Google
-    // redirect round trip as a plain query param.
-    const redirectTo = new URL("/auth/callback", window.location.origin);
-    redirectTo.searchParams.set("next", safeInternalPath(searchParams.get("next")));
+    try {
+      const supabase = createBrowserSupabase();
+      // Reuses safeInternalPath so the callback route can only ever bounce back
+      // to a same-origin path — this "next" travels through the Google
+      // redirect round trip as a plain query param.
+      const redirectTo = new URL("/auth/callback", window.location.origin);
+      redirectTo.searchParams.set("next", safeInternalPath(searchParams.get("next")));
 
-    const { error: oauthError } = await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: { redirectTo: redirectTo.toString() },
-    });
+      const { error: oauthError } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: { redirectTo: redirectTo.toString() },
+      });
 
-    if (oauthError) {
-      setError(oauthError.message ?? "Could not start Google sign-in.");
+      if (oauthError) {
+        setError(oauthError.message ?? "Could not start Google sign-in.");
+        setGoogleLoading(false);
+        return;
+      }
+      // Success leaves googleLoading true — the browser is already navigating
+      // to Google, so there's no "done" state to return to on this page.
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
       setGoogleLoading(false);
-      return;
     }
-    // Success leaves googleLoading true — the browser is already navigating
-    // to Google, so there's no "done" state to return to on this page.
   }
 
   async function handleSubmit(e: React.FormEvent) {

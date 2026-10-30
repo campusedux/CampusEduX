@@ -77,7 +77,7 @@ export function PlacementPrep({ problemCount, interviewTopicCount }: { problemCo
         {cards.map((c) => {
           const Icon = c.icon;
           return (
-            <Link key={c.href} href={c.href} className="card card-hover group flex flex-col p-5">
+            <Link key={c.href} href={c.href} prefetch={c.href === "/compiler" ? false : undefined} className="card card-hover group flex flex-col p-5">
               <div className="flex items-start justify-between gap-3">
                 <span className={cn("flex h-11 w-11 items-center justify-center rounded-xl", c.tile)}>
                   <Icon className={cn("h-5 w-5", c.fg)} aria-hidden />

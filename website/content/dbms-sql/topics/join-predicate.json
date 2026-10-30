@@ -1,0 +1,568 @@
+{
+  "source_ref": "chapter-16-joins/join-predicate",
+  "slug": "join-predicate",
+  "title": "Join Predicate",
+  "description": "Write precise SQL matching conditions for composite identities and ranges, reason about ON versus WHERE, and test NULL, scope and cardinality counterexamples.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Define what makes two rows match\n\nA join predicate is the logical condition that decides whether rows from two inputs match. In an explicit join it is commonly written after ON. The predicate can compare keys, test a range or combine several conditions. It expresses a relationship between rows; it does not itself determine which unmatched rows survive. That preservation decision comes from choosing an inner or outer join.\n\nImagine a room booking report that attaches each reservation to its campus and room. A room number such as ten may exist on several campuses, so joining only on room number can associate a reservation with the wrong building. The predicate must encode the complete identity relationship rather than whichever one column happens to have similar values. Correct column names are helpful documentation, but they do not enforce the intended match by themselves.\n\n## Match complete composite identities\n\nSuppose rooms has campus_id and room_no as its composite key. Reservations records both values. Matching both key components prevents a booking on campus one from joining to the same room number on campus two. A fixture containing repeated room numbers across campuses is therefore essential; a fixture where every room number is globally unique cannot reveal the incomplete predicate.\n\n```sql\nSELECT b.booking_id, r.campus_id, r.room_no, r.room_label\nFROM room_bookings AS b\nJOIN campus_rooms AS r\n  ON r.campus_id = b.campus_id\n AND r.room_no = b.room_no\nORDER BY b.booking_id;\n```\n\nIf booking seven identifies campus one, room ten, only that room should match. A join on room_no alone would produce an extra row for campus two, room ten. Adding DISTINCT does not repair the relationship: the two campus rows may be legitimately different, and even identical projected labels can hide the fact that the query matched the wrong source rows.\n\n## Separate match eligibility from output filtering\n\nFor an inner join, many ordinary predicates can be moved between ON and WHERE without changing the result when the same logical condition is preserved. For an outer join, moving a condition can change whether unmatched preserved rows survive. ON chooses eligible matches; the outer join then introduces NULL-extended rows where required; WHERE filters the resulting rows under three-valued logic.\n\n```sql\nSELECT b.booking_id, r.room_label\nFROM room_bookings AS b\nLEFT JOIN campus_rooms AS r\n  ON r.campus_id = b.campus_id\n AND r.room_no = b.room_no\n AND r.open_flag = 1\nORDER BY b.booking_id;\n```\n\nThis retains bookings even when their room is missing or closed, with no eligible room match displayed. A later WHERE r.open_flag=1 would instead reject the NULL-extended rows. Neither spelling is universally right: one reports every booking with optional open-room details, while the other reports bookings whose joined room qualifies. The business question must choose the intended population.\n\n## Use ranges when equality is not the relationship\n\nA theta join permits a general comparison condition rather than equality alone. A support team might classify a measured wait using lower and upper bounds stored in a band table. Matching a value to a half-open interval, lower bound inclusive and upper bound exclusive, avoids assigning an exact boundary value to two adjacent bands. The boundary policy should be explicit in the table design and query.\n\n```sql\nSELECT s.sample_id, b.band_label\nFROM wait_samples AS s\nJOIN wait_bands AS b\n  ON s.wait_minutes >= b.lower_minutes\n AND s.wait_minutes < b.upper_minutes\nORDER BY s.sample_id, b.band_id;\n```\n\nIf the bands cover zero through nine and ten through nineteen using boundaries zero, ten and twenty, a value of ten belongs only to the second band. Overlapping stored intervals can still produce several matches. A join does not automatically validate that the bands are disjoint, complete or appropriate to the domain. Test overlaps, gaps and exact endpoints instead of assuming the desired classification follows from the table name.\n\n## Parenthesize alternative conditions deliberately\n\nAND and OR can combine predicate terms, but their precedence can make an unparenthesized expression mean something different from the author's intention. Suppose a booking may match its primary room or an authorized alternate room, but both must be on the same campus. Group the alternatives so the campus restriction applies to both branches. Otherwise the alternate branch can accidentally match a room on an unrelated campus.\n\nWrite a short verbal rule before translating it to SQL. Then construct a counterexample that should fail only the shared restriction. If that row still matches, the predicate likely misplaced parentheses or omitted a key component. This technique tests the relationship itself rather than merely comparing output row counts on a friendly fixture.\n\n## Remember that NULL comparisons are not ordinary equality\n\nAn equality comparison involving NULL generally evaluates to unknown rather than true. ON treats only true as a match, so two missing key values do not ordinarily join merely because both are missing. That behavior is usually appropriate for identifiers: two absent identifiers do not establish that the rows refer to the same entity. A fallback expression that maps every NULL key to one constant can invent false relationships.\n\nMySQL's null-safe equality operator has a specific contract and can deliberately match two NULLs when that is the intended rule. Its use should be justified by domain meaning, not added automatically to make unmatched rows disappear. If the product needs missing-key reconciliation, report that condition explicitly instead of silently treating all unknown identities as one known object.\n\n## Keep each reference inside its available scope\n\nAn ON clause can use the table references available to that join expression and the applicable query scope. It cannot casually refer to a later table alias that has not yet entered the relevant join expression. Mixed comma joins and explicit joins can also make binding and visibility less obvious. Prefer explicit joins and qualified columns when the relationship spans several tables.\n\nWhen joining a table to itself, distinct aliases identify distinct row roles. A manager identifier and employee identifier can both come from employees, but the predicate still compares different row instances. Omitting or confusing an alias can turn a valid self relationship into a tautology that matches every row or an ambiguous column error.\n\n## Predict the consequence of an always-true predicate\n\nFor an inner join, ON 1=1 matches every left row with every right row. With three rows and four rows, it produces twelve combinations. The statement can be syntactically valid while expressing a much broader relationship than intended. On an outer join with an empty opposite input, preservation still introduces unmatched rows; it is therefore important to state the join type when describing the always-true case.\n\nA predicate that compares the wrong aliases can accidentally become always true for the same reason. Inspect every term in code review: which row role supplies its left expression, which supplies its right expression and what counterexample it excludes. A successful query execution proves neither that the intended pairings were chosen nor that the row count is sensible.\n\n## Choose types and indexes without changing meaning\n\nImplicit conversions, collations and functions around join keys can affect both equality semantics and access paths. Joining a numeric identifier to loosely formatted text may admit surprising comparisons or require conversions. Align the schema types where the actual data model calls for the same identity domain, and use explicit transformations only when their semantic effect is understood.\n\nPerformance follows the complete query, available indexes and optimizer behavior. A selective predicate on a complete key often helps avoid unnecessary combinations, but there is no universal rule that every equality join is faster than every range join. Use EXPLAIN and representative data after proving the result contract. Optimizing an incorrect predicate only makes incorrect relationships arrive sooner.\n\n## Solve two matching exercises\n\nBeginner exercise: match bookings to rooms using campus and room number. Include campus one room ten and campus two room ten, then prove each booking returns only its own campus label. Intermediate exercise: classify integer waiting times with half-open ranges. Include values at each boundary, a missing measurement and a value outside all bands. Decide whether the report should omit unmatched samples or preserve them with an explicit unmatched display.\n\nThe first solution uses both equality terms. The second uses lower-inclusive and upper-exclusive terms and deliberately chosen join preservation. Continue with [theta joins](/learning/dbms-sql-tutorial/theta-join), [left joins](/learning/dbms-sql-tutorial/left-join) and [multiple table joins](/learning/dbms-sql-tutorial/multi-table-joins). A strong review can explain the intended match, its counterexamples, its cardinality and its NULL behavior before claiming any execution efficiency.",
+  "references": [
+    {
+      "title": "MySQL 8.4 JOIN clause",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/join.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-16-join-predicate",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-16-join-predicate-1",
+          "test_id": "pt-dbms-sql-16-join-predicate",
+          "question_text": "What is a join predicate?",
+          "options": [
+            "The list of columns selected",
+            "The condition (after ON) that determines whether two rows count as a match",
+            "A synonym for ORDER BY",
+            "The name given to a joined table"
+          ],
+          "correct_index": 1,
+          "explanation": "The predicate is the actual matching condition driving the join.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-16-join-predicate-2",
+          "test_id": "pt-dbms-sql-16-join-predicate",
+          "question_text": "Are join predicates limited to equality comparisons?",
+          "options": [
+            "Yes, only = is allowed in ON clauses",
+            "No — any boolean condition is valid, including ranges and inequalities, matching the Theta Join concept",
+            "Only BETWEEN and = are allowed",
+            "Join predicates cannot reference more than one column"
+          ],
+          "correct_index": 1,
+          "explanation": "ON conditions support the full generality of Theta Join, not just equality.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-16-join-predicate-3",
+          "test_id": "pt-dbms-sql-16-join-predicate",
+          "question_text": "For an OUTER join, does putting an extra condition in ON versus WHERE make a difference?",
+          "options": [
+            "No difference at all",
+            "Yes — an ON-clause condition filters before NULL-filling the non-preserved side, while a WHERE-clause condition filters after, potentially discarding preserved NULL rows",
+            "WHERE can never be used with outer joins",
+            "ON conditions are always evaluated after WHERE conditions"
+          ],
+          "correct_index": 1,
+          "explanation": "This ON-vs-WHERE timing difference is exactly the subtlety already flagged for LEFT JOIN filtering in earlier chapters.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-16-join-predicate-4",
+          "test_id": "pt-dbms-sql-16-join-predicate",
+          "question_text": "Can an ON clause reference a later table alias that is not available in its relevant join expression or applicable query scope?",
+          "options": [
+            "Yes, always",
+            "No; references must be available in the relevant join expression and applicable query scope",
+            "Only in subqueries",
+            "Only for LEFT JOIN"
+          ],
+          "correct_index": 1,
+          "explanation": "Explicit join binding and query scope determine alias availability; do not assume every later FROM alias is visible.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-16-join-predicate-5",
+          "test_id": "pt-dbms-sql-16-join-predicate",
+          "question_text": "For an INNER JOIN, what does a nonselective predicate such as ON 1=1 produce?",
+          "options": [
+            "The join fails with an error",
+            "It technically works but effectively produces a Cartesian Product, since every row 'matches'",
+            "It automatically becomes a CROSS JOIN keyword",
+            "SQL rejects this as invalid syntax"
+          ],
+          "correct_index": 1,
+          "explanation": "Every pair qualifies for an inner join. Outer joins with an empty opposite input still have their separate preservation semantics.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-16-join-predicate-6",
+          "test_id": "pt-dbms-sql-16-join-predicate",
+          "question_text": "Can a join predicate combine multiple conditions with AND/OR?",
+          "options": [
+            "No, only one condition is allowed",
+            "Yes — exactly like a WHERE clause, multiple conditions can be combined",
+            "Only AND is allowed, never OR",
+            "Combining conditions requires a subquery instead"
+          ],
+          "correct_index": 1,
+          "explanation": "ON clauses support the same compound-condition logic as WHERE.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-16-join-predicate-7",
+          "test_id": "pt-dbms-sql-16-join-predicate",
+          "question_text": "Which relational algebra concept does a general (non-equality) join predicate correspond to?",
+          "options": [
+            "Projection",
+            "Theta Join",
+            "Union",
+            "Rename"
+          ],
+          "correct_index": 1,
+          "explanation": "A join predicate using any comparison, not just equality, is exactly Theta Join's generality.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-16-join-predicate-8",
+          "test_id": "pt-dbms-sql-16-join-predicate",
+          "question_text": "Which predicate expresses an ordinary relationship matching a foreign key to its referenced primary key?",
+          "options": [
+            "Range comparisons are most common",
+            "Equality between the corresponding key columns",
+            "Both are equally common",
+            "Neither — most real joins use no predicate at all"
+          ],
+          "correct_index": 1,
+          "explanation": "Equality expresses this modeled identity relationship; no unsupported frequency or universal performance claim is needed.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-16-join-predicate-new-9",
+          "test_id": "pt-dbms-sql-16-join-predicate",
+          "question_text": "Why join campus_id as well as room_no?",
+          "options": [
+            "Room numbers can repeat across campuses",
+            "It sorts the output",
+            "Every join needs two terms",
+            "It creates a transaction"
+          ],
+          "correct_index": 0,
+          "explanation": "The complete key defines the actual room identity.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-16-join-predicate-new-10",
+          "test_id": "pt-dbms-sql-16-join-predicate",
+          "question_text": "What does an incomplete room-number-only predicate risk?",
+          "options": [
+            "Automatically rejecting every booking",
+            "Matching rooms on another campus",
+            "Creating a unique constraint",
+            "Replacing NULL labels"
+          ],
+          "correct_index": 1,
+          "explanation": "Shared local numbers need their parent identity.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-16-join-predicate-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-16-join-predicate-application-new-1",
+          "test_id": "pt-dbms-sql-16-join-predicate-application",
+          "question_text": "Which boundary policy avoids double-matching adjacent time bands?",
+          "options": [
+            "Both endpoints inclusive for both bands",
+            "No endpoint conditions",
+            "Lower inclusive and upper exclusive",
+            "Match only band names"
+          ],
+          "correct_index": 2,
+          "explanation": "Half-open adjacent intervals assign a boundary once.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-16-join-predicate-application-new-2",
+          "test_id": "pt-dbms-sql-16-join-predicate-application",
+          "question_text": "Does a range join prove the stored bands do not overlap?",
+          "options": [
+            "Yes, the JOIN keyword proves it",
+            "Only with integer bounds",
+            "Only after ORDER BY",
+            "No, validate the band data separately"
+          ],
+          "correct_index": 3,
+          "explanation": "Overlapping intervals can match multiple bands.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-16-join-predicate-application-new-3",
+          "test_id": "pt-dbms-sql-16-join-predicate-application",
+          "question_text": "Why parenthesize OR branches with a shared campus restriction?",
+          "options": [
+            "The restriction must apply to both alternatives",
+            "OR is never valid in ON",
+            "Parentheses create indexes",
+            "They remove every duplicate"
+          ],
+          "correct_index": 0,
+          "explanation": "Logical grouping must match the verbal rule.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-16-join-predicate-application-new-4",
+          "test_id": "pt-dbms-sql-16-join-predicate-application",
+          "question_text": "Do two NULL identifiers normally match under equality?",
+          "options": [
+            "Yes, because they are both absent",
+            "No, equality is not true for the missing pair",
+            "Only if aliases match",
+            "Only on an outer join"
+          ],
+          "correct_index": 1,
+          "explanation": "Missing identity is not an established shared identity.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-16-join-predicate-application-new-5",
+          "test_id": "pt-dbms-sql-16-join-predicate-application",
+          "question_text": "For an inner join of 3 and 4 rows on 1=1, how many combinations occur?",
+          "options": [
+            "7",
+            "4",
+            "12",
+            "3"
+          ],
+          "correct_index": 2,
+          "explanation": "Every pair qualifies.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-16-join-predicate-application-new-6",
+          "test_id": "pt-dbms-sql-16-join-predicate-application",
+          "question_text": "Does that always-true inner-join explanation fully describe an outer join with an empty input?",
+          "options": [
+            "Yes, every join type is identical",
+            "Only if both inputs have names",
+            "Only after grouping",
+            "No, outer preservation changes the empty-side case"
+          ],
+          "correct_index": 3,
+          "explanation": "Preservation must be considered separately.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-16-join-predicate-application-new-7",
+          "test_id": "pt-dbms-sql-16-join-predicate-application",
+          "question_text": "What must an ON reference satisfy?",
+          "options": [
+            "Its alias is available in the relevant join and query scope",
+            "It may name any future alias freely",
+            "It must appear only in SELECT",
+            "It must be a primary key"
+          ],
+          "correct_index": 0,
+          "explanation": "Scope follows the join expression rather than arbitrary textual names.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-16-join-predicate-application-new-8",
+          "test_id": "pt-dbms-sql-16-join-predicate-application",
+          "question_text": "What can DISTINCT fail to repair after an incomplete predicate?",
+          "options": [
+            "A valid ORDER BY",
+            "The underlying incorrect relationship between source rows",
+            "A missing SELECT keyword",
+            "A correctly declared key"
+          ],
+          "correct_index": 1,
+          "explanation": "Removing displayed duplicates does not establish intended matches.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-16-join-predicate-application-new-9",
+          "test_id": "pt-dbms-sql-16-join-predicate-application",
+          "question_text": "Why inspect types and collation on join keys?",
+          "options": [
+            "Types control only text color",
+            "All identifiers compare identically",
+            "Conversions and comparison rules can alter matches",
+            "Collation changes transaction ownership"
+          ],
+          "correct_index": 2,
+          "explanation": "Semantic compatibility precedes access-path tuning.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-16-join-predicate-application-new-10",
+          "test_id": "pt-dbms-sql-16-join-predicate-application",
+          "question_text": "What is the first review question for a join predicate?",
+          "options": [
+            "How short is the SQL text?",
+            "Can every unmatched row be hidden?",
+            "Which alias is alphabetically first?",
+            "Which exact row pairs should qualify?"
+          ],
+          "correct_index": 3,
+          "explanation": "The result relationship should be explicit before optimization.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cx-join-predicate-composite-room",
+      "slug": "join-predicate-composite-room",
+      "title": "Match complete campus room identities",
+      "difficulty": "Easy",
+      "task": "Return booking_id, room_label for bookings with a matching campus_id and room_no. Order by booking_id.",
+      "schema_sql": "CREATE TABLE booking_rooms(campus_id INT,room_no INT,room_label VARCHAR(30),PRIMARY KEY(campus_id,room_no)); CREATE TABLE bookings(booking_id INT PRIMARY KEY,campus_id INT,room_no INT);",
+      "seed_sql": "INSERT INTO booking_rooms VALUES (1,10,'North lab'),(2,10,'South lab'); INSERT INTO bookings VALUES (7,1,10),(8,2,10),(9,1,99);",
+      "expected": "booking_id\troom_label\n7\tNorth lab\n8\tSouth lab",
+      "ordering": "Use the explicit ORDER BY in the requested result.",
+      "edge_cases": [
+        "Same room number on different campuses must not match."
+      ],
+      "hints": [
+        "Use both identity columns in ON."
+      ],
+      "solution_sql": "SELECT b.booking_id,r.room_label FROM bookings b JOIN booking_rooms r ON r.campus_id=b.campus_id AND r.room_no=b.room_no ORDER BY b.booking_id;",
+      "explanation": "Both components of the composite room identity must match.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO booking_rooms VALUES (1,10,'Only'); INSERT INTO bookings VALUES (1,2,10);",
+          "expected": ""
+        }
+      ]
+    },
+    {
+      "id": "cx-join-predicate-half-open-bands",
+      "slug": "join-predicate-half-open-bands",
+      "title": "Classify waits while retaining unmatched samples",
+      "difficulty": "Medium",
+      "task": "Return sample_id, band_label for every sample. Match wait_minutes to lower_minutes <= wait_minutes < upper_minutes; display 'Unmatched' when no band qualifies. Fixture bands never overlap. Order by sample_id.",
+      "schema_sql": "CREATE TABLE wait_readings(sample_id INT PRIMARY KEY,wait_minutes INT); CREATE TABLE range_bands(band_id INT PRIMARY KEY,lower_minutes INT,upper_minutes INT,band_label VARCHAR(20));",
+      "seed_sql": "INSERT INTO range_bands VALUES (1,0,10,'Short'),(2,10,20,'Medium'); INSERT INTO wait_readings VALUES (1,0),(2,10),(3,20),(4,NULL);",
+      "expected": "sample_id\tband_label\n1\tShort\n2\tMedium\n3\tUnmatched\n4\tUnmatched",
+      "ordering": "Use the explicit ORDER BY in the requested result.",
+      "edge_cases": [
+        "Upper endpoint is excluded.",
+        "Missing measurements remain unmatched."
+      ],
+      "hints": [
+        "Keep the sample population on the preserved side."
+      ],
+      "solution_sql": "SELECT s.sample_id,CASE WHEN b.band_id IS NULL THEN 'Unmatched' ELSE b.band_label END AS band_label FROM wait_readings s LEFT JOIN range_bands b ON s.wait_minutes>=b.lower_minutes AND s.wait_minutes<b.upper_minutes ORDER BY s.sample_id;",
+      "explanation": "The nonnull band_id distinguishes a real interval match from null extension. A matched band with an unknown label remains NULL; only no qualifying band displays Unmatched.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO range_bands VALUES (1,5,7,'Narrow'); INSERT INTO wait_readings VALUES (1,5),(2,7);",
+          "expected": "sample_id\tband_label\n1\tNarrow\n2\tUnmatched"
+        },
+        {
+          "seed_sql": "INSERT INTO wait_readings VALUES (1,1);",
+          "expected": "sample_id\tband_label\n1\tUnmatched"
+        },
+        {
+          "seed_sql": "INSERT INTO range_bands VALUES(1,0,10,NULL); INSERT INTO wait_readings VALUES(1,5),(2,15);",
+          "expected": "sample_id\tband_label\n1\tNULL\n2\tUnmatched"
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": null,
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-16-join-predicate-1",
+      "test_id": "pt-dbms-sql-16-join-predicate",
+      "question_text": "What is a join predicate?",
+      "options": [
+        "The list of columns selected",
+        "The condition (after ON) that determines whether two rows count as a match",
+        "A synonym for ORDER BY",
+        "The name given to a joined table"
+      ],
+      "correct_index": 1,
+      "explanation": "The predicate is the actual matching condition driving the join.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-16-join-predicate-2",
+      "test_id": "pt-dbms-sql-16-join-predicate",
+      "question_text": "Are join predicates limited to equality comparisons?",
+      "options": [
+        "Yes, only = is allowed in ON clauses",
+        "No — any boolean condition is valid, including ranges and inequalities, matching the Theta Join concept",
+        "Only BETWEEN and = are allowed",
+        "Join predicates cannot reference more than one column"
+      ],
+      "correct_index": 1,
+      "explanation": "ON conditions support the full generality of Theta Join, not just equality.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-16-join-predicate-3",
+      "test_id": "pt-dbms-sql-16-join-predicate",
+      "question_text": "For an OUTER join, does putting an extra condition in ON versus WHERE make a difference?",
+      "options": [
+        "No difference at all",
+        "Yes — an ON-clause condition filters before NULL-filling the non-preserved side, while a WHERE-clause condition filters after, potentially discarding preserved NULL rows",
+        "WHERE can never be used with outer joins",
+        "ON conditions are always evaluated after WHERE conditions"
+      ],
+      "correct_index": 1,
+      "explanation": "This ON-vs-WHERE timing difference is exactly the subtlety already flagged for LEFT JOIN filtering in earlier chapters.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-16-join-predicate-4",
+      "test_id": "pt-dbms-sql-16-join-predicate",
+      "question_text": "Can a join predicate reference a table that hasn't been joined yet at that point in the query?",
+      "options": [
+        "Yes, always",
+        "No — a predicate can only reference tables already available at that point in the join chain",
+        "Only in subqueries",
+        "Only for LEFT JOIN"
+      ],
+      "correct_index": 1,
+      "explanation": "Join predicates are scoped to the tables already introduced by that point in the FROM/JOIN chain.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-16-join-predicate-5",
+      "test_id": "pt-dbms-sql-16-join-predicate",
+      "question_text": "What happens if a join predicate is non-selective, like ON 1=1?",
+      "options": [
+        "The join fails with an error",
+        "It technically works but effectively produces a Cartesian Product, since every row 'matches'",
+        "It automatically becomes a CROSS JOIN keyword",
+        "SQL rejects this as invalid syntax"
+      ],
+      "correct_index": 1,
+      "explanation": "A trivially-true predicate matches everything, degenerating the join into a full Cartesian Product.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-16-join-predicate-6",
+      "test_id": "pt-dbms-sql-16-join-predicate",
+      "question_text": "Can a join predicate combine multiple conditions with AND/OR?",
+      "options": [
+        "No, only one condition is allowed",
+        "Yes — exactly like a WHERE clause, multiple conditions can be combined",
+        "Only AND is allowed, never OR",
+        "Combining conditions requires a subquery instead"
+      ],
+      "correct_index": 1,
+      "explanation": "ON clauses support the same compound-condition logic as WHERE.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-16-join-predicate-7",
+      "test_id": "pt-dbms-sql-16-join-predicate",
+      "question_text": "Which relational algebra concept does a general (non-equality) join predicate correspond to?",
+      "options": [
+        "Projection",
+        "Theta Join",
+        "Union",
+        "Rename"
+      ],
+      "correct_index": 1,
+      "explanation": "A join predicate using any comparison, not just equality, is exactly Theta Join's generality.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-16-join-predicate-8",
+      "test_id": "pt-dbms-sql-16-join-predicate",
+      "question_text": "Is the most common real-world join predicate an equality or a range comparison?",
+      "options": [
+        "Range comparisons are most common",
+        "Equality (matching foreign key to primary key) is by far the most common",
+        "Both are equally common",
+        "Neither — most real joins use no predicate at all"
+      ],
+      "correct_index": 1,
+      "explanation": "Foreign-key-to-primary-key equality dominates real-world join usage, consistent with Equi Join being the common case.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "/root/content_b",
+    "independent_review": "passed",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "canonical_answer_indices_preserved": true,
+    "independent_reviewer": "/root/review_d_and_programs",
+    "independent_review_scope": "Full notes,20MCQs with every option,canonical answer position and explanation,original diagrams,and all exercise contracts/fixtures or solved conceptual labs. Original identities/indices checked against public seed cache where applicable. Reported substantive findings corrected by coordinator and filtered recheck accepted;identified learner-facing spacing polished. Manual technical/editorial reasoning only;engine,provider,browser,external originality and AdSense evidence separate."
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-16-join-predicate",
+    "original_note_sha256": "c77d9ba11f35754f05792d62d2803b6691c8da22a37fd22acddf655b08437282",
+    "status": "drafted; not included in prepared paired migrations"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "A complete room identity prevents cross-campus matches",
+      "description": "Room 10 exists on two campuses; matching only its local number associates each booking with an unrelated room.",
+      "columns": [
+        "Booking identity",
+        "Predicate",
+        "Eligible room rows"
+      ],
+      "rows": [
+        [
+          "Campus1, room10",
+          "room_no only",
+          "Campus 1 room 10 and Campus 2 room 10"
+        ],
+        [
+          "Campus1, room10",
+          "campus_id AND room_no",
+          "Campus 1 room 10 only"
+        ],
+        [
+          "Wait 10",
+          "0<=wait<10 / 10<=wait<20",
+          "Second band only"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "provided",
+    "technical_review": "Independent manual diagram/content consistency review passed;actual static/browser rendering tracked separately.",
+    "server_rendering": "unverified",
+    "browser_rendering": "unverified",
+    "independent_review": "passed"
+  },
+  "authoring_status": "drafted; verification pending",
+  "sql_verification": {
+    "scope": "not executed; exact MySQL/provider verification pending",
+    "all_passed": false,
+    "cases": []
+  }
+}

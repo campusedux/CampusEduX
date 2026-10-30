@@ -1,0 +1,603 @@
+{
+  "source_ref": "chapter-12-select-and-filtering/is-not-null",
+  "slug": "is-not-null",
+  "title": "IS NOT NULL",
+  "description": "Use SQL IS NOT NULL to test recorded presence, distinguish known zero from missing data, and combine evidence on the same qualifying row.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Presence answers one specific question\n\nIS NOT [NULL](/learning/dbms-sql-tutorial/null-values) tests whether an expression has a known SQL value. A campus inventory report may need equipment whose stock has been counted, regardless of whether the result was positive or zero. A zero count is known information and should appear in that report. Missing stock belongs to a different population because no measurement has yet been recorded under the column's contract.\n\nThe predicate establishes presence rather than complete validity. A known negative stock value still satisfies IS NOT NULL even if another rule considers it invalid. A known email string can be blank or malformed. Keep these questions separate so a report labeled measured does not silently become a report labeled in stock, and a presence check is not mistaken for a full business validator.\n\n## Ordinary inequality does not test presence\n\nA condition comparing stock not equal to NULL evaluates to UNKNOWN rather than selecting known values. Ordinary comparison with NULL cannot establish either equality or inequality in the usual way. IS NOT NULL is dedicated syntax for the question about presence. In WHERE, it keeps known values and rejects missing ones using a definite predicate result.\n\nNOT applied to IS NULL expresses the same logical presence test, although the direct IS NOT NULL form is usually easier to read. This differs from negating an ordinary equality comparison with NULL, which remains unknown. Read the complete predicate inside NOT rather than assume every negative-looking condition handles missing input in the same way.\n\n```sql\nSELECT equipment_id, stock\nFROM equipment_stock\nWHERE stock IS NOT NULL\nORDER BY equipment_id;\n```\n\n## Required storage and present query results differ\n\nA properly enforced NOT NULL constraint prevents accepted base rows from storing missing values in that column. Testing the same base expression for presence can therefore be redundant for a simple table read. The redundancy is not a syntax error. A generic reporting condition might still be written that way, but its practical purpose should be explained rather than invented.\n\nA query result can introduce NULL through an outer join even for a stored column that is declared NOT NULL. An unmatched right-side row is represented by NULL-extended positions. Testing the right identifier for presence can select matched rows, while testing an optional right note answers only whether that note is present. Query context determines the meaning of the expression.\n\n## Zero and blank text stay present\n\nZero stock, a zero monetary amount and a false-like numeric flag are known values. IS NOT NULL includes them. If a feature requires positive stock, add that domain comparison deliberately. A report collecting all completed counts should not exclude zero merely because a positive comparison is convenient. The difference changes both the result population and any statistics calculated from it.\n\nIn MySQL, empty text is not automatically NULL. A contact field containing an empty string passes a presence test even if it is not a usable address. Spaces may also need explicit handling. If the requirement is nonblank contact information, define trimming and format rules and apply those rules at an appropriate trusted boundary rather than claim IS NOT NULL proves usability.\n\n## Multiple present fields form a completeness rule\n\nA contact report can require both email and phone to be present using AND between their presence predicates. If either is absent, the row does not satisfy that completeness definition. A different feature may require at least one contact route, using OR. Neither is universally better; the query needs to express the particular workflow's information requirement.\n\nInclude a row with only email, one with only phone, one with both and one with neither. Those four cases expose an accidental substitution of AND for OR. They also show that having two values is different from having two validated usable contact routes. Keep the report label accurate if its test establishes presence only and does not inspect content format or consent.\n\n## Aggregates have related but distinct semantics\n\n[COUNT](/learning/dbms-sql-tutorial/count) of a nullable column counts its non-NULL values, while COUNT star counts rows. Filtering by stock IS NOT NULL before counting rows can describe the measured population explicitly. Counting stock without that filter can produce the same count in a simple table read, but the query shapes communicate different purposes when more columns or groups are added.\n\nAVG and other ordinary aggregates commonly ignore NULL input values, which can change the denominator relative to all equipment rows. A mean of measured stock is not a mean that treats every unknown count as zero. Replacing NULL with zero before averaging changes the statistical meaning. State what population the aggregate describes and whether unknown measurements should be excluded, investigated or handled separately.\n\n## Presence can be lost or introduced by expressions\n\nAn expression may return NULL even when some inputs are present, depending on the operation. Another expression such as COALESCE can supply a known fallback when an input is missing. Testing the resulting expression's presence answers a question about that computed result, not necessarily about whether the original source field was recorded. Choose the expression according to the report's purpose.\n\nFor example, checking whether a displayed fallback label is present can hide that a source department is unknown. If the report is intended to audit completeness, inspect the source field before substituting a presentation value. If it is intended to render a safe caption, the fallback can be useful. Audit semantics and display semantics should not silently replace one another.\n\n## A completed relationship needs the right condition\n\nSuppose equipment has inspection records with a nullable completion timestamp. An inspection identity can be present while completion is still absent, indicating a real pending inspection under the fixture's contract. A query requiring a completed passed inspection should test both the passed result and the non-NULL completion timestamp on the same related row.\n\nTesting those facts in separate uncorrelated existence queries can be wrong. One inspection may have a passed result without completion, while another has completion but a failed result. Neither is a completed passed inspection. Keep the required properties within the same correlated relationship condition so the selected evidence actually supports the stated eligibility rule.\n\n## Existence avoids accidental duplicate equipment rows\n\nSeveral completed passed inspections can belong to one equipment item. If the report asks which equipment has at least one, an EXISTS condition expresses that presence directly and returns each outer equipment row once. A direct join can instead repeat the equipment identity per matching inspection unless the query explicitly addresses multiplicity. Decide the intended result grain before choosing the query shape.\n\nA NULL inspection timestamp cannot prove completion through ordinary presence logic, but a non-NULL timestamp alone does not prove that the recorded event is trustworthy or chronologically valid. Source authority and temporal validation remain separate requirements. The exercise treats its timestamps as accepted synthetic facts and tests the stated presence relationship without inventing a production inspection approval system.\n\n## Trusted access and stale observations still matter\n\nA caller must have permission to read or act on the present value. IS NOT NULL is not an authorization policy and does not establish ownership, payment or entitlement. An interface hiding rows with missing information also does not protect known private values from a caller who bypasses the interface. Enforce access at the authoritative server or database boundary.\n\nA presence report is also a point-in-time observation. Another writer can remove or replace an optional value before a later dependent operation. If a mutation requires a recorded field to remain present, validate the current state within its actual decision boundary. Do not treat an earlier search result as a permanent guarantee that every later operation sees the same completeness state.\n\n## Verify present values without overclaiming\n\nThe first exercise returns every equipment row with known stock, deliberately including zero and a known negative value to demonstrate the predicate's narrow meaning. A separate domain validator would reject the negative count. The second returns equipment with at least one inspection whose passed result and completion timestamp occur together. Multiple matches must not create duplicate equipment rows.\n\nExplain each inclusion using the specific tested expression. Then identify the additional checks the business feature would need before interpreting presence as correctness or readiness. This disciplined vocabulary makes missing-value queries more useful: students can say exactly what information is available, what remains unknown and which claims require evidence beyond a simple IS NOT NULL predicate.\n",
+  "references": [
+    {
+      "title": "MySQL 8.4 presence predicates and comparisons",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/comparison-operators.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-12-is-not-null",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-12-is-not-null-1",
+          "test_id": "pt-dbms-sql-12-is-not-null",
+          "question_text": "What does IS NOT NULL establish?",
+          "options": [
+            "The value is positive",
+            "The expression has a known SQL value",
+            "The value is authorized for every caller",
+            "The value is correctly formatted"
+          ],
+          "correct_index": 1,
+          "explanation": "Presence is narrower than domain validity.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-12-is-not-null-2",
+          "test_id": "pt-dbms-sql-12-is-not-null",
+          "question_text": "Why does stock <> NULL not find known stock?",
+          "options": [
+            "It always returns TRUE",
+            "Ordinary comparison with NULL is UNKNOWN",
+            "It substitutes zero",
+            "It is a count operation"
+          ],
+          "correct_index": 1,
+          "explanation": "Use the dedicated presence predicate.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-12-is-not-null-3",
+          "test_id": "pt-dbms-sql-12-is-not-null",
+          "question_text": "Which form matches value IS NOT NULL?",
+          "options": [
+            "value <> NULL",
+            "NOT(value IS NULL)",
+            "value = NULL",
+            "NOT(value = NULL)"
+          ],
+          "correct_index": 1,
+          "explanation": "IS NULL produces a definite missingness result before negation.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-12-is-not-null-4",
+          "test_id": "pt-dbms-sql-12-is-not-null",
+          "question_text": "For a simple read of a correctly enforced NOT NULL base column, what is its IS NOT NULL result?",
+          "options": [
+            "FALSE for every row",
+            "TRUE for every stored row",
+            "UNKNOWN for every row",
+            "A syntax error"
+          ],
+          "correct_index": 1,
+          "explanation": "Outer-join result expressions require separate reasoning.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-12-is-not-null-5",
+          "test_id": "pt-dbms-sql-12-is-not-null",
+          "question_text": "Can a NOT NULL right-side column appear missing after an unmatched outer join?",
+          "options": [
+            "No, never",
+            "Yes",
+            "Only with disabled constraints",
+            "Only for aggregate results"
+          ],
+          "correct_index": 1,
+          "explanation": "NULL extension describes no matched row.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-12-is-not-null-6",
+          "test_id": "pt-dbms-sql-12-is-not-null",
+          "question_text": "What does email IS NOT NULL AND phone IS NOT NULL require?",
+          "options": [
+            "At least one field present",
+            "Both fields present",
+            "Both fields missing",
+            "A valid email format"
+          ],
+          "correct_index": 1,
+          "explanation": "The conjunction is a presence-completeness rule.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-12-is-not-null-7",
+          "test_id": "pt-dbms-sql-12-is-not-null",
+          "question_text": "Does a known stock of zero satisfy IS NOT NULL?",
+          "options": [
+            "No",
+            "Yes",
+            "Only with an index",
+            "Only if stock is positive"
+          ],
+          "correct_index": 1,
+          "explanation": "Zero is a recorded numeric value.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-12-is-not-null-8",
+          "test_id": "pt-dbms-sql-12-is-not-null",
+          "question_text": "Is IS NOT NULL an ordinary not-equal comparison against NULL?",
+          "options": [
+            "Yes, it is just <> NULL",
+            "No, it is dedicated presence-test syntax",
+            "Yes, it is always = NULL internally",
+            "Only for dates"
+          ],
+          "correct_index": 1,
+          "explanation": "Ordinary NULL comparisons have different truth semantics.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-12-is-not-null-new-9",
+          "test_id": "pt-dbms-sql-12-is-not-null",
+          "question_text": "Does a known negative stock pass IS NOT NULL?",
+          "options": [
+            "Yes, although a separate domain rule may reject it",
+            "No, absence and invalidity are identical",
+            "Only if rounded",
+            "Only in an empty table"
+          ],
+          "correct_index": 0,
+          "explanation": "The predicate does not test a numeric range.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-12-is-not-null-new-10",
+          "test_id": "pt-dbms-sql-12-is-not-null",
+          "question_text": "Does an empty MySQL string pass IS NOT NULL?",
+          "options": [
+            "No, empty strings are always NULL",
+            "Yes",
+            "Only under GROUP BY",
+            "Only in numeric columns"
+          ],
+          "correct_index": 1,
+          "explanation": "Nonblank text requires an additional explicit rule.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-12-is-not-null-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-12-is-not-null-application-new-1",
+          "test_id": "pt-dbms-sql-12-is-not-null-application",
+          "question_text": "Which logic requires at least one present contact route?",
+          "options": [
+            "Both predicates joined with AND",
+            "email IS NOT NULL OR phone IS NOT NULL",
+            "email = NULL OR phone = NULL",
+            "Neither field checked"
+          ],
+          "correct_index": 1,
+          "explanation": "OR permits either or both present fields.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-12-is-not-null-application-new-2",
+          "test_id": "pt-dbms-sql-12-is-not-null-application",
+          "question_text": "What does COUNT(stock) count?",
+          "options": [
+            "Every row regardless of stock",
+            "The total numeric stock",
+            "Rows where the stock expression is non-NULL",
+            "Only positive stock"
+          ],
+          "correct_index": 2,
+          "explanation": "COUNT of an expression ignores NULL.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-12-is-not-null-application-new-3",
+          "test_id": "pt-dbms-sql-12-is-not-null-application",
+          "question_text": "What changes when unknown stock is replaced with zero before AVG?",
+          "options": [
+            "Only the output heading",
+            "Nothing in any dataset",
+            "Only the ordering",
+            "The population and denominator semantics can change"
+          ],
+          "correct_index": 3,
+          "explanation": "A measured-only mean differs from zero-imputed unknowns.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-12-is-not-null-application-new-4",
+          "test_id": "pt-dbms-sql-12-is-not-null-application",
+          "question_text": "Why test source_department rather than a fallback label in a completeness audit?",
+          "options": [
+            "The fallback can hide missing source information",
+            "Fallbacks always change stored data",
+            "A source field can never be NULL",
+            "COALESCE forbids comparisons"
+          ],
+          "correct_index": 0,
+          "explanation": "Inspect the fact the audit intends to measure.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-12-is-not-null-application-new-5",
+          "test_id": "pt-dbms-sql-12-is-not-null-application",
+          "question_text": "A real inspection has NULL completed_at. What does present inspection_id prove?",
+          "options": [
+            "That it passed",
+            "The inspection row exists, not that it completed",
+            "That it completed",
+            "That it is current forever"
+          ],
+          "correct_index": 1,
+          "explanation": "Different fields describe distinct evidence.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-12-is-not-null-application-new-6",
+          "test_id": "pt-dbms-sql-12-is-not-null-application",
+          "question_text": "Why require passed and completed on the same inspection row?",
+          "options": [
+            "Every inspection always has both",
+            "EXISTS automatically correlates unrelated subqueries",
+            "Separate rows may each satisfy only one required property",
+            "Completion and result are identical columns"
+          ],
+          "correct_index": 2,
+          "explanation": "The relationship evidence must support the combined rule.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-12-is-not-null-application-new-7",
+          "test_id": "pt-dbms-sql-12-is-not-null-application",
+          "question_text": "Why can EXISTS suit one-row-per-equipment reports?",
+          "options": [
+            "It sorts all inspections automatically",
+            "It validates every timestamp",
+            "It grants access to hidden equipment",
+            "Several matching inspections do not multiply outer rows"
+          ],
+          "correct_index": 3,
+          "explanation": "It tests presence without exposing match multiplicity.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-12-is-not-null-application-new-8",
+          "test_id": "pt-dbms-sql-12-is-not-null-application",
+          "question_text": "Does a non-NULL timestamp prove an event is authoritative?",
+          "options": [
+            "No, source trust and value validity need separate rules",
+            "Yes, any timestamp proves approval",
+            "Only if formatted with dashes",
+            "Only if the table has two columns"
+          ],
+          "correct_index": 0,
+          "explanation": "Presence does not certify event truth.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-12-is-not-null-application-new-9",
+          "test_id": "pt-dbms-sql-12-is-not-null-application",
+          "question_text": "What can happen after a presence report is read?",
+          "options": [
+            "The value is permanently locked",
+            "Another writer can change the optional field",
+            "The report commits every future write",
+            "NULL becomes impossible in all columns"
+          ],
+          "correct_index": 1,
+          "explanation": "Dependent operations need current-state validation.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-12-is-not-null-application-new-10",
+          "test_id": "pt-dbms-sql-12-is-not-null-application",
+          "question_text": "Which test distinguishes presence from positive-stock eligibility?",
+          "options": [
+            "Only positive rows",
+            "Only missing rows",
+            "A row with known zero stock",
+            "An empty equipment table"
+          ],
+          "correct_index": 2,
+          "explanation": "It belongs in a presence report but not a positive-only report.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cx-is-not-null-known-stock",
+      "slug": "is-not-null-known-stock",
+      "title": "Return recorded stock measurements",
+      "difficulty": "Easy",
+      "task": "Return equipment_id,stock wherever stock is not NULL. This task tests presence only: include known zero and known negative values. Do not repair or reinterpret stock. Order by equipment_id.",
+      "schema_sql": "CREATE TABLE equipment_stock(equipment_id INT PRIMARY KEY,stock INT);",
+      "seed_sql": "INSERT INTO equipment_stock VALUES (1,NULL),(2,0),(3,5),(4,-1);",
+      "expected": "equipment_id\tstock\n2\t0\n3\t5\n4\t-1",
+      "ordering": "As explicitly ordered in the result query.",
+      "constraints": [
+        "Use only the supplied synthetic tables and requested transition.",
+        "Preserve unrelated rows."
+      ],
+      "edge_cases": [
+        "Known invalid values still have presence.",
+        "All source values may be absent."
+      ],
+      "hints": [
+        "Use the presence predicate without a range restriction.",
+        "Known zero is not NULL."
+      ],
+      "solution_sql": "SELECT equipment_id,stock FROM equipment_stock WHERE stock IS NOT NULL ORDER BY equipment_id;",
+      "explanation": "The predicate excludes only absence. Additional positive-range validation is outside this deliberately narrow presence report.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO equipment_stock VALUES (8,0),(9,NULL);",
+          "expected": "equipment_id\tstock\n8\t0"
+        },
+        {
+          "seed_sql": "INSERT INTO equipment_stock VALUES (1,NULL);",
+          "expected": ""
+        }
+      ]
+    },
+    {
+      "id": "cx-is-not-null-completed-passed-inspection",
+      "slug": "is-not-null-completed-passed-inspection",
+      "title": "Require a completed passed inspection on one row",
+      "difficulty": "Medium",
+      "task": "Return equipment_id for equipment with at least one inspection having both result='passed' and completed_at IS NOT NULL. The two facts must occur on the same inspection row. Return each equipment once, ordered by equipment_id.",
+      "schema_sql": "CREATE TABLE equipment(equipment_id INT PRIMARY KEY); CREATE TABLE inspections(inspection_id INT PRIMARY KEY,equipment_id INT NOT NULL,result VARCHAR(20) NOT NULL,completed_at DATETIME);",
+      "seed_sql": "INSERT INTO equipment VALUES (1),(2),(3),(4); INSERT INTO inspections VALUES (10,1,'passed','2026-01-01 10:00:00'),(11,1,'passed','2026-01-02 10:00:00'),(12,2,'passed',NULL),(13,2,'failed','2026-01-01 10:00:00'),(14,3,'failed','2026-01-01 10:00:00');",
+      "expected": "equipment_id\n1",
+      "ordering": "As explicitly ordered in the result query.",
+      "constraints": [
+        "Use only the supplied synthetic tables and requested transition.",
+        "Preserve unrelated rows."
+      ],
+      "edge_cases": [
+        "Two separate partial-evidence rows are insufficient.",
+        "Multiple complete passed inspections still produce one equipment row."
+      ],
+      "hints": [
+        "Put both conditions in the same correlated subquery.",
+        "Use existence to preserve one result per equipment."
+      ],
+      "solution_sql": "SELECT e.equipment_id FROM equipment e WHERE EXISTS(SELECT 1 FROM inspections i WHERE i.equipment_id=e.equipment_id AND i.result='passed' AND i.completed_at IS NOT NULL) ORDER BY e.equipment_id;",
+      "explanation": "One correlated EXISTS requires both properties on one matched inspection. It does not combine a pending passed row with a completed failed row, and multiple qualifying inspections do not duplicate equipment.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO equipment VALUES (7); INSERT INTO inspections VALUES (1,7,'passed',NULL),(2,7,'failed','2026-01-01');",
+          "expected": ""
+        },
+        {
+          "seed_sql": "INSERT INTO equipment VALUES (8),(9); INSERT INTO inspections VALUES (1,9,'passed','2026-01-01');",
+          "expected": "equipment_id\n9"
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-12-is-not-null-1",
+      "test_id": "pt-dbms-sql-12-is-not-null",
+      "question_text": "What does IS NOT NULL test for?",
+      "options": [
+        "Whether a value is missing",
+        "Whether a value is present (not NULL)",
+        "Whether a value equals zero",
+        "Whether a value is a string"
+      ],
+      "correct_index": 1,
+      "explanation": "IS NOT NULL is the direct complement of IS NULL.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-12-is-not-null-2",
+      "test_id": "pt-dbms-sql-12-is-not-null",
+      "question_text": "Why doesn't `stock <> NULL` correctly find rows where stock has a real value?",
+      "options": [
+        "It actually works fine",
+        "<> against NULL always evaluates to UNKNOWN, never TRUE, exactly like = against NULL",
+        "<> only works on text columns",
+        "NULL always equals itself under <>"
+      ],
+      "correct_index": 1,
+      "explanation": "The same NULL-comparison semantics that break = NULL also break <> NULL.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-12-is-not-null-3",
+      "test_id": "pt-dbms-sql-12-is-not-null",
+      "question_text": "Are `column IS NOT NULL` and `NOT (column IS NULL)` equivalent?",
+      "options": [
+        "No, they produce different results",
+        "Yes, they are logically equivalent, though IS NOT NULL is the more direct, idiomatic phrasing",
+        "IS NOT NULL is deprecated in favor of NOT (IS NULL)",
+        "These can only be used in different clauses"
+      ],
+      "correct_index": 1,
+      "explanation": "Both express the same condition; IS NOT NULL is simply the clearer, standard way to write it.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-12-is-not-null-4",
+      "test_id": "pt-dbms-sql-12-is-not-null",
+      "question_text": "If a column has a NOT NULL constraint, what does IS NOT NULL evaluate to for every row in that column?",
+      "options": [
+        "It varies row by row",
+        "Always TRUE, since the constraint guarantees no NULLs exist in that column",
+        "Always FALSE",
+        "It causes an error since the check is redundant"
+      ],
+      "correct_index": 1,
+      "explanation": "A NOT NULL constraint guarantees the condition is always satisfied for that column, making the check (for that column specifically) trivially true.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-12-is-not-null-5",
+      "test_id": "pt-dbms-sql-12-is-not-null",
+      "question_text": "Can a column from a NOT NULL-constrained table still show NULL in a query result?",
+      "options": [
+        "Never, under any circumstances",
+        "Yes — after an outer join, columns from the non-preserved side can appear as NULL in the result even if the original column itself disallows NULL",
+        "Only if the column is also a primary key",
+        "Only in aggregate queries"
+      ],
+      "correct_index": 1,
+      "explanation": "An outer join can introduce NULLs into the result for unmatched rows, regardless of the source table's own constraints.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-12-is-not-null-6",
+      "test_id": "pt-dbms-sql-12-is-not-null",
+      "question_text": "What does `WHERE email IS NOT NULL AND phone IS NOT NULL` accomplish?",
+      "options": [
+        "Finds records missing both email and phone",
+        "Finds only records that have BOTH an email and a phone number present",
+        "Finds records with either an email or a phone",
+        "This is invalid syntax"
+      ],
+      "correct_index": 1,
+      "explanation": "Combining multiple IS NOT NULL checks with AND filters to fully complete records across those columns.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-12-is-not-null-7",
+      "test_id": "pt-dbms-sql-12-is-not-null",
+      "question_text": "In the running products example, which product's stock satisfies IS NOT NULL?",
+      "options": [
+        "Notebook",
+        "ProLaptop, Python Basics, and ProPhone",
+        "None of them",
+        "Only Notebook"
+      ],
+      "correct_index": 1,
+      "explanation": "Every product except Notebook has a non-NULL stock value in the running example.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-12-is-not-null-8",
+      "test_id": "pt-dbms-sql-12-is-not-null",
+      "question_text": "Is IS NOT NULL a comparison against the literal value NULL, using the <> operator internally?",
+      "options": [
+        "Yes, that's exactly how it works internally",
+        "No — like IS NULL, it's dedicated SQL syntax, not an application of an ordinary comparison operator",
+        "It uses the = operator internally",
+        "It is implemented as a user-defined function in every dialect"
+      ],
+      "correct_index": 1,
+      "explanation": "IS NOT NULL is its own syntactic construct precisely because ordinary comparison operators can't express this test.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "coordinator",
+    "independent_review": "passed",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Independent manual review passed; native MySQL fixture evidence recorded separately; provider/browser/Supabase release gates remain separate.",
+    "existing_question_corrections": [
+      "tq-dbms-sql-12-is-not-null-1",
+      "tq-dbms-sql-12-is-not-null-2",
+      "tq-dbms-sql-12-is-not-null-3",
+      "tq-dbms-sql-12-is-not-null-4",
+      "tq-dbms-sql-12-is-not-null-5",
+      "tq-dbms-sql-12-is-not-null-6",
+      "tq-dbms-sql-12-is-not-null-7",
+      "tq-dbms-sql-12-is-not-null-8"
+    ],
+    "canonical_answer_indices_preserved": true,
+    "editorial_record": "Original snapshots retained. Questions rewritten for precise dialect and topic coverage while preserving identities and canonical answer positions; technical and independent review pending.",
+    "independent_reviewer": "Codex reviewer, current 2026-10-30 session",
+    "independent_review_scope": "Read full notes, all 640 MCQ stems/options/canonical answers/explanations, 64 exercise contracts/solutions/fixtures, and all 32 diagrams. Verified retained identities/answers through source-continuity tests; SQL execution evidence is recorded separately. No external originality, provider, live application or Supabase authorization clearance.",
+    "independent_review_record": "reports/independent-review-2026-10-30.json",
+    "content_sha256": "d6596034a042f472a8176c2d45e13fb0ba9a5343ff5954068ab01b63e096d9f7"
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-12-is-not-null",
+    "original_note_sha256": "a5ac4a304b460d5f1de2356a7d537cf28e5f93a45650f45a6b9b88e1d4a2c547",
+    "status": "drafted; not yet included in prepared paired migrations"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Presence and positive stock select different populations",
+      "description": "The report includes recorded values even when a separate domain rule would reject them.",
+      "columns": [
+        "Stored stock",
+        "IS NOT NULL",
+        "stock > 0",
+        "Meaning"
+      ],
+      "rows": [
+        [
+          "NULL",
+          "FALSE",
+          "UNKNOWN",
+          "No recorded count"
+        ],
+        [
+          "0",
+          "TRUE",
+          "FALSE",
+          "Known empty"
+        ],
+        [
+          "5",
+          "TRUE",
+          "TRUE",
+          "Known positive"
+        ],
+        [
+          "-1",
+          "TRUE",
+          "FALSE",
+          "Known value; invalid under a nonnegative domain"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "drafted — verification pending",
+    "server_rendering": "pending",
+    "browser_rendering": "unverified",
+    "independent_review": "pending"
+  },
+  "authoring_status": "drafted — verification pending",
+  "sql_verification": {
+    "scope": "not executed; exact MySQL/provider verification pending",
+    "all_passed": false,
+    "cases": []
+  }
+}

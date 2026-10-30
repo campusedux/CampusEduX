@@ -1,0 +1,631 @@
+{
+  "source_ref": "chapter-6-er-and-eer-modeling/eer-diagram",
+  "slug": "eer-diagram",
+  "title": "EER Diagram",
+  "description": "Read an enhanced ER model as an explicit contract for identities, roles and constraints, then compare its membership and reference rules with a concrete relational mapping.",
+  "dialect": "MySQL 8.4",
+  "notes": "## An enhanced diagram communicates a model\n\nAn enhanced entity-relationship diagram describes entity types, their properties, associations, and additional modeling abstractions such as subtype hierarchies. In the vocabulary used here, it also includes aggregation of an association for further relationships. The diagram is a conceptual design artifact. It organizes the facts and rules the system needs to preserve rather than specifying a database's complete physical storage layout.\n\nA useful diagram answers concrete questions. What does one Student occurrence mean? Which attributes identify a Room within its Building? May one Person be both Student and Employee? Does a faculty monitor refer to an existing enrollment occurrence? These questions determine valid states and correct query meaning. A collection of attractive shapes without clear identity or participation semantics does not supply a complete design.\n\n## Establish the notation before reading symbols\n\nDifferent EER conventions use different symbols for hierarchy, optionality, keys, and abstraction boundaries. A legend should state the chosen reading. In common Chen-style examples, entities use rectangles, relationships diamonds, and attributes ovals. Weak entities and identifying relationships use additional borders, while participation lines distinguish required and optional association involvement under that convention.\n\nSubtype notation can use an ISA marker or other explicit hierarchy representation. A boundary around an association can identify an aggregate unit. Do not infer universal semantics from an unfamiliar tool's line style alone. Describe the rule in words alongside the relevant shape, especially when different conventions place min-max labels or cardinality markers at different ends of a connection.\n\n## Identify occurrences before their descriptions\n\nA Person type can have person_id and person_name, where person_id identifies the occurrence and names can repeat. Student and Employee roles can share the same underlying Person identity while storing programme and job_title respectively. An employee and student with matching names are not automatically one person; the common identity mapping needs an explicit policy.\n\nA diagram should separate identifying attributes from descriptive ones and make composite or owner-dependent identities understandable. Room can use building_id together with room_number in the stated weak-entity example. The partial room number is not globally unique. A mapping or query that drops the owner component loses information required to distinguish rooms even if the diagram correctly displayed the dependency.\n\n## Subtype constraints add specific allowed-state rules\n\nA partial Person hierarchy permits a person with no listed Student or Employee role. Total coverage requires at least one specified subtype membership for each relevant Person. Disjointness permits at most one specified role, while overlap allows simultaneous memberships. These are independent dimensions; a total hierarchy can still overlap, and a partial hierarchy can still be disjoint.\n\nWrite the intended combination explicitly. The exercises use a partial overlapping hierarchy so both-role and neither-role people can be valid. Another application might intentionally use a total disjoint classification and reject those cases. The diagram and its validation examples must agree on the selected contract rather than silently treating one set of rules as a universal default for all hierarchies.\n\n## Generalization and specialization describe design direction\n\nGeneralization works from specific types toward a common supertype with genuinely shared meaning. Specialization begins with a broad type and identifies specific roles. They can produce the same Person hierarchy. The final identity and membership constraints, rather than which branch was drawn first, determine the resulting valid data states and relational mapping requirements.\n\nDo not factor attributes merely because labels match. A preferred student contact and an employee's work mailbox can have different authority and lifecycle despite both being called email. Similarly, two unrelated entity types sharing id and name columns do not automatically justify an is-a hierarchy. The common supertype should preserve actual domain meaning instead of reducing column repetition mechanically.\n\n## Relationships retain their own facts\n\nStudent enrolls in Course can have enrollment-specific status, score, or dates. The diagram should identify the intended participation grain: one current pair, one offering, or one historical attempt. A student's different enrollments can carry different scores without changing student identity. An implementation that stores one universal student score would not preserve the modeled relationship attributes.\n\nAggregation can make that Enrollment occurrence the subject of Monitoring by Faculty. It does not imply every monitor is linked independently to every possible student-course combination. A reference must preserve the actual association identity. The monitoring multiplicity and optionality remain separate rules; the abstraction itself does not require exactly one monitor or prescribe parent deletion behaviour.\n\n## A diagram is not executable enforcement\n\nA conceptual mandatory relationship does not become a trusted constraint simply because it has a double line. The relational mapping must identify appropriate required values, supported references, and any other enforcement mechanism needed for the intended invariant. A foreign key and NOT NULL can protect some child-side required assignments, while parent-side minimum counts can require a different transition design.\n\nCross-subtype disjointness and totality also need particular attention. Separate subtype tables can hold overlapping memberships unless something enforces exclusivity, and their references do not automatically create a role for every Person. A successful query over a clean sample is evidence about that sample, not proof that every future accepted write respects the full diagram.\n\n## Map conceptual elements to concrete contracts\n\nOne possible hierarchy mapping uses persons, student_roles, and employee_roles, joined by person_id. A many-to-many Enrollment can use a separate relation with complete participant references and an appropriate occurrence key. A weak Room relation can contain owner identity plus local discriminator. These mappings should preserve the diagram's facts without assuming every conceptual grouping needs its own independent table.\n\n```sql\nSELECT p.person_id, p.person_name, s.programme\nFROM persons p\nJOIN student_roles s ON s.person_id = p.person_id\nORDER BY p.person_id;\n```\n\nThe query illustrates the shared identity in one selected mapping. It returns student-role people rather than all persons, and it does not establish the reality or eligibility of the stored role assignment. Other relational representations can be valid when they preserve the same conceptual rules and compatible application contracts.\n\n## Maintain an explicit constraint ledger\n\nFor each diagram rule, record what it requires and where the chosen mapping enforces it. Distinguish primary identity, alternate uniqueness, parent existence, required participation, subtype coverage, and business eligibility. Some rules can be represented directly in SQL declarations; others need a supported trusted workflow with relevant transaction and concurrency behaviour.\n\nThis ledger prevents a common review mistake: seeing several constraints and assuming every conceptual rule is covered. For example, a Student role row can require an existing Person while an existing Person still has no role. That is acceptable in the partial example, but insufficient for total specialization. The same mapping can satisfy one contract and leave another unenforced.\n\n## Trace representative valid and invalid states\n\nA small fixture should include repeated person names, a student-only person, an employee-only person, a dual-role person, and a person with neither listed role under the selected policy. Add an orphan role proposal when checking parent existence. These cases expose identity mistakes and distinguish allowed overlap from invalid references without conflating the two.\n\nFor the weak-entity branch, include the same room number in two buildings and an owner with no dependents where partial owner participation is allowed. For aggregation, include an unmonitored enrollment and multiple monitors if permitted. The examples should challenge the diagram's important assumptions rather than demonstrate only one perfectly connected row that almost any mapping would accept.\n\n## Keep changes consistent across the model\n\nA revised rule can affect keys, data, queries, input forms, reports, and references. Allowing repeated course attempts can change Enrollment identity, which can then affect Monitoring references. Reclassifying a hierarchy from disjoint to overlapping can invalidate a scalar role representation. Updating the picture alone does not migrate existing facts or preserve caller compatibility.\n\nA real change therefore needs authorized implementation and appropriate evidence. This content-writing exercise prepares descriptions and migrations without applying them. Its synthetic SQL examples verify selected query contracts on the recorded local engine, while exact MySQL/provider execution and production authority remain distinct verification concerns. An EER diagram is valuable when its legend, identities, participation, subtype rules, and relational mapping all describe the same intended facts and clearly identify what remains to be enforced or verified.\n",
+  "references": [],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-6-eer-diagram",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-6-eer-diagram-1",
+          "test_id": "pt-dbms-sql-6-eer-diagram",
+          "question_text": "What is an EER (Enhanced Entity-Relationship) diagram?",
+          "options": [
+            "A diagram using only entities and attributes, with no relationships",
+            "The extended ER notation that adds generalization, specialization, and aggregation on top of the basic ER constructs",
+            "A purely physical database schema diagram",
+            "A diagram that can only represent weak entities"
+          ],
+          "correct_index": 1,
+          "explanation": "Enhanced ER modeling includes additional semantic abstractions; exact supported constructs and symbols vary by modeling convention.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-6-eer-diagram-2",
+          "test_id": "pt-dbms-sql-6-eer-diagram",
+          "question_text": "Which conceptual construct is explicitly represented by enhanced subtype notation in the convention used here?",
+          "options": [
+            "A simple 1:N relationship between Department and Course",
+            "An ISA hierarchy specializing Person into Student and Employee",
+            "An attribute like Date_of_Birth on Student",
+            "A binary relationship Enrolls_In between Student and Course"
+          ],
+          "correct_index": 1,
+          "explanation": "Generalization/specialization (ISA hierarchies) are EER-specific extensions not present in plain ER notation.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-6-eer-diagram-3",
+          "test_id": "pt-dbms-sql-6-eer-diagram",
+          "question_text": "Can an enhanced modeling framework represent a basic ER design that uses none of its optional advanced constructs?",
+          "options": [
+            "No, they are entirely incompatible notations",
+            "Yes — a plain ER diagram simply doesn't use the extended constructs (ISA hierarchies, aggregation), but is still a valid (simple) EER diagram",
+            "Only if it contains at least one weak entity",
+            "Only if it uses ternary relationships"
+          ],
+          "correct_index": 1,
+          "explanation": "A basic design can remain a valid simpler model; the concrete syntax and legend still need to be consistent.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-6-eer-diagram-4",
+          "test_id": "pt-dbms-sql-6-eer-diagram",
+          "question_text": "Which set of advanced modeling constructs is emphasized in this tutorial’s enhanced diagram convention?",
+          "options": [
+            "Entities, attributes, and relationships",
+            "Cardinality, participation, and degree",
+            "Generalization, specialization, and aggregation",
+            "Primary key, foreign key, and candidate key"
+          ],
+          "correct_index": 2,
+          "explanation": "These three EER-specific constructs, plus their disjoint/overlapping and total/partial constraints, are what EER adds beyond basic ER.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-6-eer-diagram-5",
+          "test_id": "pt-dbms-sql-6-eer-diagram",
+          "question_text": "Is an EER diagram itself a physical database schema?",
+          "options": [
+            "Yes, it can be executed directly as SQL",
+            "No — it is a conceptual/logical design artifact that must still be converted into a relational schema via ER-to-relational mapping",
+            "Yes, but only for weak entities",
+            "No, EER diagrams cannot represent database design at all"
+          ],
+          "correct_index": 1,
+          "explanation": "EER diagrams remain a conceptual design tool, one step before the physical schema is derived through mapping rules.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-6-eer-diagram-6",
+          "test_id": "pt-dbms-sql-6-eer-diagram",
+          "question_text": "In a full college-database EER diagram, which element would represent the aggregation of Student-Enrolls_In-Course being monitored by Faculty?",
+          "options": [
+            "An ISA triangle connecting Student and Employee",
+            "A labeled aggregation boundary grouping the enrollment association, connected through Monitoring to Faculty; exact boundary style follows the notation",
+            "A double-line rectangle around Student",
+            "A dashed oval attached to Course"
+          ],
+          "correct_index": 1,
+          "explanation": "The boundary communicates the association occurrence as the monitoring subject rather than enforcing SQL or selecting one universal line style.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-6-eer-diagram-7",
+          "test_id": "pt-dbms-sql-6-eer-diagram",
+          "question_text": "Does replacing an essential ISA structure with unlabeled ordinary relationships automatically preserve all its subtype semantics?",
+          "options": [
+            "Yes, always, with no loss of meaning",
+            "No; shared identity, membership, overlap and coverage rules must still be represented explicitly",
+            "Yes, but only if all subclasses are disjoint",
+            "No EER diagram can ever be simplified"
+          ],
+          "correct_index": 1,
+          "explanation": "Alternative encodings can carry extra constraints; a plain redraw without them is not automatically equivalent.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-6-eer-diagram-8",
+          "test_id": "pt-dbms-sql-6-eer-diagram",
+          "question_text": "What typically comes right after an EER diagram is finalized in the database design lifecycle?",
+          "options": [
+            "Query optimization",
+            "Physical indexing strategy only",
+            "ER-to-relational mapping, converting the diagram into tables, keys, and constraints",
+            "User interface design"
+          ],
+          "correct_index": 2,
+          "explanation": "The next logical design step is translating the EER diagram into a relational schema.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-6-eer-diagram-new-9",
+          "test_id": "pt-dbms-sql-6-eer-diagram",
+          "question_text": "Does an EER diagram determine a complete physical storage layout?",
+          "options": [
+            "Yes; every oval names a disk page",
+            "No; a mapping and implementation decisions are still needed",
+            "Only for empty diagrams",
+            "Only if it has a subtype"
+          ],
+          "correct_index": 1,
+          "explanation": "The diagram primarily communicates conceptual facts and rules.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-6-eer-diagram-new-10",
+          "test_id": "pt-dbms-sql-6-eer-diagram",
+          "question_text": "Can one Person have both Student and Employee memberships under the exercise policy?",
+          "options": [
+            "No; separate boxes prove disjointness",
+            "Only if names differ",
+            "Yes; the hierarchy is explicitly overlapping",
+            "Only if no primary key exists"
+          ],
+          "correct_index": 2,
+          "explanation": "The allowed-state contract decides the role combination.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-6-eer-diagram-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-6-eer-diagram-application-new-1",
+          "test_id": "pt-dbms-sql-6-eer-diagram-application",
+          "question_text": "What does partial subtype coverage allow?",
+          "options": [
+            "Only a person with both roles",
+            "A missing Person primary key",
+            "A relevant Person with neither listed role",
+            "A nonexistent parent for every role"
+          ],
+          "correct_index": 2,
+          "explanation": "Coverage and parent existence are different questions.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-6-eer-diagram-application-new-2",
+          "test_id": "pt-dbms-sql-6-eer-diagram-application",
+          "question_text": "Does a subtype foreign key require a role row for every Person?",
+          "options": [
+            "Yes; it creates all missing memberships",
+            "Only if names repeat",
+            "Only if employee_roles is empty",
+            "No; it checks child references rather than parent coverage"
+          ],
+          "correct_index": 3,
+          "explanation": "Total coverage needs a separate enforcement account.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-6-eer-diagram-application-new-3",
+          "test_id": "pt-dbms-sql-6-eer-diagram-application",
+          "question_text": "Why does a diagram need a legend?",
+          "options": [
+            "Conventions for symbols and label placement can differ",
+            "Symbols always execute code",
+            "Only colours define keys",
+            "A legend replaces every requirement"
+          ],
+          "correct_index": 0,
+          "explanation": "Readers must know how the chosen notation expresses constraints.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-6-eer-diagram-application-new-4",
+          "test_id": "pt-dbms-sql-6-eer-diagram-application",
+          "question_text": "What should identify Room 101 in the owner-dependent example?",
+          "options": [
+            "room_number globally",
+            "Its building identity together with room_number",
+            "Only its capacity",
+            "Only its diagram position"
+          ],
+          "correct_index": 1,
+          "explanation": "The owner completes the local discriminator.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-6-eer-diagram-application-new-5",
+          "test_id": "pt-dbms-sql-6-eer-diagram-application",
+          "question_text": "What does an aggregation boundary preserve?",
+          "options": [
+            "Only a numerical SUM",
+            "A subtype identity for every faculty member",
+            "A specific association occurrence for further participation",
+            "A universal CASCADE rule"
+          ],
+          "correct_index": 2,
+          "explanation": "It is distinct from SQL aggregation and ISA.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-6-eer-diagram-application-new-6",
+          "test_id": "pt-dbms-sql-6-eer-diagram-application",
+          "question_text": "Why can two properties both called email remain role-specific?",
+          "options": [
+            "Every matching label must be merged",
+            "Only the shorter value matters",
+            "Email cannot be an attribute",
+            "Their meaning, authority or lifecycle can differ"
+          ],
+          "correct_index": 3,
+          "explanation": "Shared spelling does not prove shared semantics.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-6-eer-diagram-application-new-7",
+          "test_id": "pt-dbms-sql-6-eer-diagram-application",
+          "question_text": "What does a constraint ledger help reveal?",
+          "options": [
+            "Which conceptual rules are enforced and which still need a mechanism",
+            "Only table colours",
+            "Only current file sizes",
+            "Which font is fastest"
+          ],
+          "correct_index": 0,
+          "explanation": "A few declarations do not necessarily cover the full model.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-6-eer-diagram-application-new-8",
+          "test_id": "pt-dbms-sql-6-eer-diagram-application",
+          "question_text": "What should an orphan-role audit inspect?",
+          "options": [
+            "Persons with neither optional role only",
+            "Role identities with no matching Person",
+            "Shared descriptive names",
+            "Every dual-role person automatically"
+          ],
+          "correct_index": 1,
+          "explanation": "Parent absence is different from permitted overlap or coverage gaps.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-6-eer-diagram-application-new-9",
+          "test_id": "pt-dbms-sql-6-eer-diagram-application",
+          "question_text": "Why review Monitoring after allowing repeated course attempts?",
+          "options": [
+            "The faculty type must vanish",
+            "Every diagram becomes physical SQL",
+            "The referenced enrollment occurrence identity may change",
+            "All student names become keys"
+          ],
+          "correct_index": 2,
+          "explanation": "Changes propagate through dependent conceptual contracts.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-6-eer-diagram-application-new-10",
+          "test_id": "pt-dbms-sql-6-eer-diagram-application",
+          "question_text": "What do synthetic mapping queries establish?",
+          "options": [
+            "Every diagram rule is enforced in production",
+            "All external role facts are true",
+            "Exact provider execution automatically",
+            "Their selected query behaviour on the recorded fixture engine"
+          ],
+          "correct_index": 3,
+          "explanation": "Verification scope must remain explicit.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cx-eer-dual-roles",
+      "slug": "eer-dual-roles",
+      "title": "Read overlapping memberships through a common identity",
+      "difficulty": "Easy",
+      "task": "Return person_id and person_name for persons appearing in both role tables. Do not infer identity from names.",
+      "schema_sql": "CREATE TABLE persons (person_id INT PRIMARY KEY, person_name VARCHAR(80) NOT NULL);\nCREATE TABLE student_roles (person_id INT PRIMARY KEY, programme VARCHAR(50) NOT NULL);\nCREATE TABLE employee_roles (person_id INT PRIMARY KEY, job_title VARCHAR(50) NOT NULL);",
+      "seed_sql": "INSERT INTO persons VALUES (1,'Asha'),(2,'Asha'),(3,'Mira'); INSERT INTO student_roles VALUES (1,'Computing'),(2,'History'); INSERT INTO employee_roles VALUES (1,'Tutor'),(3,'Librarian');",
+      "expected": "person_id\tperson_name\n1\tAsha",
+      "ordering": "Ascending person_id.",
+      "constraints": [
+        "The represented hierarchy is partial and overlapping.",
+        "Staging role tables omit native parent constraints to permit reference diagnosis; these queries do not establish full EER enforcement."
+      ],
+      "edge_cases": [
+        "Names can repeat across distinct people.",
+        "Neither role and both roles are allowed; orphan role proposals are a different issue."
+      ],
+      "hints": [
+        "Use shared person identity rather than descriptive names.",
+        "Match the report’s population and policy explicitly."
+      ],
+      "solution_sql": "SELECT p.person_id, p.person_name FROM persons p JOIN student_roles s ON s.person_id = p.person_id JOIN employee_roles e ON e.person_id = p.person_id ORDER BY p.person_id;",
+      "explanation": "The query reads one precise part of the conceptual mapping without claiming every diagram constraint is enforced.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO persons VALUES (1,'Asha'),(2,'Asha'); INSERT INTO student_roles VALUES (1,'Art'); INSERT INTO employee_roles VALUES (2,'Tutor');",
+          "expected": ""
+        },
+        {
+          "seed_sql": "",
+          "expected": ""
+        }
+      ]
+    },
+    {
+      "id": "cx-eer-orphan-role",
+      "slug": "eer-orphan-role",
+      "title": "Audit a distinct missing-parent rule in the EER mapping",
+      "difficulty": "Medium",
+      "task": "Return person_id and programme for student_roles whose person_id has no Person. Do not report a Person merely for having no role, because coverage is partial.",
+      "schema_sql": "CREATE TABLE persons (person_id INT PRIMARY KEY, person_name VARCHAR(80) NOT NULL);\nCREATE TABLE student_roles (person_id INT PRIMARY KEY, programme VARCHAR(50) NOT NULL);\nCREATE TABLE employee_roles (person_id INT PRIMARY KEY, job_title VARCHAR(50) NOT NULL);",
+      "seed_sql": "INSERT INTO persons VALUES (1,'Asha'),(2,'Mira'); INSERT INTO student_roles VALUES (1,'Computing'),(9,'Art'),(7,'History');",
+      "expected": "person_id\tprogramme\n7\tHistory\n9\tArt",
+      "ordering": "Ascending person_id.",
+      "constraints": [
+        "The represented hierarchy is partial and overlapping.",
+        "Staging role tables omit native parent constraints to permit reference diagnosis; these queries do not establish full EER enforcement."
+      ],
+      "edge_cases": [
+        "Names can repeat across distinct people.",
+        "Neither role and both roles are allowed; orphan role proposals are a different issue."
+      ],
+      "hints": [
+        "Use shared person identity rather than descriptive names.",
+        "Match the report’s population and policy explicitly."
+      ],
+      "solution_sql": "SELECT s.person_id, s.programme FROM student_roles s LEFT JOIN persons p ON p.person_id = s.person_id WHERE p.person_id IS NULL ORDER BY s.person_id;",
+      "explanation": "The query reads one precise part of the conceptual mapping without claiming every diagram constraint is enforced.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO persons VALUES (1,'Asha'),(2,'Mira'); INSERT INTO student_roles VALUES (1,'Art');",
+          "expected": ""
+        },
+        {
+          "seed_sql": "INSERT INTO student_roles VALUES (9,'Art');",
+          "expected": "person_id\tprogramme\n9\tArt"
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-6-eer-diagram-1",
+      "test_id": "pt-dbms-sql-6-eer-diagram",
+      "question_text": "What is an EER (Enhanced Entity-Relationship) diagram?",
+      "options": [
+        "A diagram using only entities and attributes, with no relationships",
+        "The extended ER notation that adds generalization, specialization, and aggregation on top of the basic ER constructs",
+        "A purely physical database schema diagram",
+        "A diagram that can only represent weak entities"
+      ],
+      "correct_index": 1,
+      "explanation": "EER extends plain ER modeling with advanced constructs for more complex real-world requirements.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-6-eer-diagram-2",
+      "test_id": "pt-dbms-sql-6-eer-diagram",
+      "question_text": "Which of the following would specifically require EER notation rather than plain ER notation?",
+      "options": [
+        "A simple 1:N relationship between Department and Course",
+        "An ISA hierarchy specializing Person into Student and Employee",
+        "An attribute like Date_of_Birth on Student",
+        "A binary relationship Enrolls_In between Student and Course"
+      ],
+      "correct_index": 1,
+      "explanation": "Generalization/specialization (ISA hierarchies) are EER-specific extensions not present in plain ER notation.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-6-eer-diagram-3",
+      "test_id": "pt-dbms-sql-6-eer-diagram",
+      "question_text": "Is every plain ER diagram also technically a valid EER diagram?",
+      "options": [
+        "No, they are entirely incompatible notations",
+        "Yes — a plain ER diagram simply doesn't use the extended constructs (ISA hierarchies, aggregation), but is still a valid (simple) EER diagram",
+        "Only if it contains at least one weak entity",
+        "Only if it uses ternary relationships"
+      ],
+      "correct_index": 1,
+      "explanation": "EER is a superset of ER notation; a diagram with no advanced constructs is trivially a basic EER diagram.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-6-eer-diagram-4",
+      "test_id": "pt-dbms-sql-6-eer-diagram",
+      "question_text": "What three advanced constructs distinguish an EER diagram from a basic ER diagram?",
+      "options": [
+        "Entities, attributes, and relationships",
+        "Cardinality, participation, and degree",
+        "Generalization, specialization, and aggregation",
+        "Primary key, foreign key, and candidate key"
+      ],
+      "correct_index": 2,
+      "explanation": "These three EER-specific constructs, plus their disjoint/overlapping and total/partial constraints, are what EER adds beyond basic ER.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-6-eer-diagram-5",
+      "test_id": "pt-dbms-sql-6-eer-diagram",
+      "question_text": "Is an EER diagram itself a physical database schema?",
+      "options": [
+        "Yes, it can be executed directly as SQL",
+        "No — it is a conceptual/logical design artifact that must still be converted into a relational schema via ER-to-relational mapping",
+        "Yes, but only for weak entities",
+        "No, EER diagrams cannot represent database design at all"
+      ],
+      "correct_index": 1,
+      "explanation": "EER diagrams remain a conceptual design tool, one step before the physical schema is derived through mapping rules.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-6-eer-diagram-6",
+      "test_id": "pt-dbms-sql-6-eer-diagram",
+      "question_text": "In a full college-database EER diagram, which element would represent the aggregation of Student-Enrolls_In-Course being monitored by Faculty?",
+      "options": [
+        "An ISA triangle connecting Student and Employee",
+        "A dashed boundary box around Student, Enrolls_In, and Course, with a new relationship line to Faculty",
+        "A double-line rectangle around Student",
+        "A dashed oval attached to Course"
+      ],
+      "correct_index": 1,
+      "explanation": "The dashed boundary box is the standard EER notation for aggregation, distinct from ISA triangles used for generalization/specialization.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-6-eer-diagram-7",
+      "test_id": "pt-dbms-sql-6-eer-diagram",
+      "question_text": "Can an EER diagram be redrawn as an equivalent plain ER diagram without losing any information, when it relies on an essential ISA hierarchy?",
+      "options": [
+        "Yes, always, with no loss of meaning",
+        "Not always — essential generalization/specialization or aggregation semantics cannot be captured by plain ER constructs alone",
+        "Yes, but only if all subclasses are disjoint",
+        "No EER diagram can ever be simplified"
+      ],
+      "correct_index": 1,
+      "explanation": "When ISA hierarchies or aggregation carry real modeling meaning, dropping them to fit plain ER notation loses information.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-6-eer-diagram-8",
+      "test_id": "pt-dbms-sql-6-eer-diagram",
+      "question_text": "What typically comes right after an EER diagram is finalized in the database design lifecycle?",
+      "options": [
+        "Query optimization",
+        "Physical indexing strategy only",
+        "ER-to-relational mapping, converting the diagram into tables, keys, and constraints",
+        "User interface design"
+      ],
+      "correct_index": 2,
+      "explanation": "The next logical design step is translating the EER diagram into a relational schema.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "coordinator",
+    "independent_review": "unavailable; no agent tools",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Definitions and examples checked against questions; no plagiarism certification.",
+    "existing_question_corrections": [
+      "tq-dbms-sql-6-eer-diagram-1",
+      "tq-dbms-sql-6-eer-diagram-2",
+      "tq-dbms-sql-6-eer-diagram-3",
+      "tq-dbms-sql-6-eer-diagram-4",
+      "tq-dbms-sql-6-eer-diagram-6",
+      "tq-dbms-sql-6-eer-diagram-7"
+    ],
+    "canonical_answer_indices_preserved": true,
+    "batch_review": {
+      "reviewer": "coordinator",
+      "independent": false,
+      "scope": "New package only: notes, keyed examples, original question identities and canonical indices, every correct answer, exercises and recorded fixture outputs, diagram trace, content-only paired integration.",
+      "findings_resolved": "Outer Join retained absence question clarified: missing parent is a violation only when the modeled relationship requires it. Division retains its original Hard exercise; validator permits retained Hard alongside Easy while rejecting a new Hard substitute.",
+      "remaining": "Exact MySQL/provider execution, browser QA, independent review and applied-migration behavior unverified; output fixtures do not prove required source technique."
+    }
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-6-eer-diagram",
+    "original_note_sha256": "66b3f37d7eb9920c127878e9f11192bdc22972f92b6937dd19010862430583f0",
+    "status": "paired migration prepared; not applied"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Read each enhanced-model rule and its mapping obligation separately",
+      "description": "The partial overlapping hierarchy permits both and neither roles, while every accepted subtype reference still needs a valid common identity. Other EER abstractions have their own contracts.",
+      "columns": [
+        "Conceptual element",
+        "Meaning",
+        "Mapping or verification obligation"
+      ],
+      "rows": [
+        [
+          "Person ISA Student / Employee",
+          "Shared entity identity with specific roles",
+          "Join by person_id, not name"
+        ],
+        [
+          "Partial coverage",
+          "Neither listed role may be present",
+          "Do not invent mandatory role rows"
+        ],
+        [
+          "Overlapping subtypes",
+          "Both memberships may coexist",
+          "Do not impose a single exclusive role accidentally"
+        ],
+        [
+          "Role parent reference",
+          "A role belongs to an existing Person",
+          "Native parent enforcement or an explicit staging audit"
+        ],
+        [
+          "Aggregated Enrollment",
+          "Monitoring concerns a specific association",
+          "Preserve complete enrollment occurrence identity"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "coordinator checked independent subtype rules, reference-audit scope and conceptual-versus-physical distinction",
+    "server_rendering": "passed",
+    "browser_rendering": "unverified",
+    "independent_review": "unavailable; no agent tools",
+    "server_rendering_evidence": "Focused Vitest actual LessonBlock rendering: 3 selected packages passed; other 102 packages intentionally skipped."
+  },
+  "sql_verification": {
+    "engine": "11.8.6-MariaDB-0+deb13u1 from Debian",
+    "scope": "MariaDB compatibility execution; exact MySQL 8.4/provider execution unverified",
+    "fingerprint": "a99c8ce79ded685130d1c536fc6839e4f639b9f56c0ed843fd0017c1e73d797d",
+    "cases": [
+      {
+        "problem": "eer-dual-roles",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "eer-dual-roles",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "eer-dual-roles",
+        "case": 2,
+        "passed": true
+      },
+      {
+        "problem": "eer-orphan-role",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "eer-orphan-role",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "eer-orphan-role",
+        "case": 2,
+        "passed": true
+      }
+    ],
+    "all_passed": true
+  }
+}

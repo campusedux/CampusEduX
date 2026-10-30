@@ -1,0 +1,507 @@
+{
+  "slug": "clustered-index",
+  "source_ref": "chapter-20-indexes-and-access-paths/clustered-index",
+  "title": "Clustered Index",
+  "description": "Explore InnoDB clustered storage, secondary lookups, covering queries, primary key width, and practical plan-inspection labs without assuming physical order.",
+  "dialect": "MySQL 8.4; engine-specific behavior labeled",
+  "references": [
+    {
+      "title": "MySQL clustered and secondary indexes",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/innodb-index-types.html"
+    },
+    {
+      "title": "PostgreSQL CLUSTER",
+      "url": "https://www.postgresql.org/docs/current/sql-cluster.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-20-clustered-index",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-20-clustered-index-1",
+          "test_id": "pt-dbms-sql-20-clustered-index",
+          "question_text": "What does a clustered index determine that a non-clustered index does not?",
+          "options": [
+            "The number of columns a table can have",
+            "The clustered B-tree leaf organization contains the row records in key order, without guaranteeing contiguous disk addresses",
+            "Whether NULL values are allowed",
+            "The table's primary key name"
+          ],
+          "correct_index": 1,
+          "explanation": "InnoDB clustered leaves store row data in ordered key ranges. Logical page order does not prove contiguous physical storage.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-20-clustered-index-2",
+          "test_id": "pt-dbms-sql-20-clustered-index",
+          "question_text": "How many clustered indexes can a single table have?",
+          "options": [
+            "Unlimited",
+            "Exactly two",
+            "At most one",
+            "Exactly zero, always"
+          ],
+          "correct_index": 2,
+          "explanation": "Since a clustered index defines physical row order, and rows can only be arranged one way at a time, a table can have at most one.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-20-clustered-index-3",
+          "test_id": "pt-dbms-sql-20-clustered-index",
+          "question_text": "Why is the primary key often chosen as a table's clustered index?",
+          "options": [
+            "Because primary keys cannot be indexed any other way",
+            "Because primary-key lookups and joins are extremely common and benefit most from direct, no-extra-hop access to row data",
+            "Because clustered indexes are required by the SQL standard to be on the primary key",
+            "Because it reduces the table to zero rows"
+          ],
+          "correct_index": 1,
+          "explanation": "Given how frequently primary keys are used for lookups and joins, clustering on them maximizes the benefit of avoiding an extra pointer-following step.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-20-clustered-index-4",
+          "test_id": "pt-dbms-sql-20-clustered-index",
+          "question_text": "Why is updating a clustered-index key value potentially expensive?",
+          "options": [
+            "It is never expensive; clustered keys can't be updated",
+            "It can require changes to ordered leaf placement, page splits and secondary entries carrying the clustered key",
+            "It always deletes the row permanently",
+            "It automatically creates a new non-clustered index"
+          ],
+          "correct_index": 1,
+          "explanation": "Changing the clustered identity can require structural maintenance and related secondary-index updates; it is not a promise to rearrange one contiguous disk array.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-20-clustered-index-5",
+          "test_id": "pt-dbms-sql-20-clustered-index",
+          "question_text": "In a clustered index's B+ Tree structure, what do the leaf nodes contain?",
+          "options": [
+            "Pointers to a separate location where row data lives",
+            "The actual row data itself",
+            "Only column names",
+            "Nothing; leaves are empty in a clustered index"
+          ],
+          "correct_index": 1,
+          "explanation": "Unlike a non-clustered index, a clustered index's leaves ARE the actual table rows, not pointers to them elsewhere.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-20-clustered-index-6",
+          "test_id": "pt-dbms-sql-20-clustered-index",
+          "question_text": "Why might using a random UUID as a clustered primary key cause performance problems?",
+          "options": [
+            "UUIDs cannot be stored in a database",
+            "Scattered insertion points can increase page activity, splits and cache costs under some workloads",
+            "UUIDs are always duplicated",
+            "It removes the need for any index at all"
+          ],
+          "correct_index": 1,
+          "explanation": "The effect depends on key width, distribution, occupancy, concurrency and storage. Ordered leaf organization does not require contiguous physical disk placement.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-20-clustered-index-7",
+          "test_id": "pt-dbms-sql-20-clustered-index",
+          "question_text": "What happens to a table's physical row order if it has NO clustered index defined?",
+          "options": [
+            "The table cannot store any rows",
+            "Rows are typically stored in an unordered heap or some engine-specific default order",
+            "Rows are automatically sorted alphabetically by every column",
+            "The table becomes read-only"
+          ],
+          "correct_index": 1,
+          "explanation": "Without a clustered index, many engines store rows in an unordered heap (behavior varies by engine/default configuration).",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-20-clustered-index-8",
+          "test_id": "pt-dbms-sql-20-clustered-index",
+          "question_text": "Which query benefits most directly from a clustered index on `id` when scanning a contiguous range?",
+          "options": [
+            "WHERE department = 'CS'",
+            "WHERE id BETWEEN 1000 AND 2000, which can scan the corresponding ordered clustered leaf range",
+            "WHERE gpa > 3.5, unrelated to id",
+            "SELECT COUNT(*) FROM students with no WHERE clause"
+          ],
+          "correct_index": 1,
+          "explanation": "The range follows ordered leaf entries containing row data. Physical pages need not occupy contiguous disk addresses, and the actual plan remains optimizer-dependent.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "cx-clustered-index-fundamentals-9",
+          "test_id": "pt-dbms-sql-20-clustered-index",
+          "question_text": "In InnoDB, where is full row data stored in the clustered index?",
+          "options": [
+            "Leaf records",
+            "Only root pointers",
+            "Only a separate materialized view",
+            "Only secondary roots"
+          ],
+          "correct_index": 0,
+          "explanation": "The clustered leaf records contain row data.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "cx-clustered-index-fundamentals-10",
+          "test_id": "pt-dbms-sql-20-clustered-index",
+          "question_text": "What does a secondary entry use to identify an InnoDB clustered row?",
+          "options": [
+            "The view name",
+            "The clustered key",
+            "The SQL alias",
+            "The column comment"
+          ],
+          "correct_index": 1,
+          "explanation": "Secondary records identify the row using its clustered key.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "cx-clustered-index-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "cx-clustered-index-application-1",
+          "test_id": "cx-clustered-index-application",
+          "question_text": "Why can a wide primary key enlarge secondary indexes?",
+          "options": [
+            "It creates duplicate tables automatically",
+            "The clustered key is included in secondary entries",
+            "Every secondary index becomes a view",
+            "VARCHAR always disables indexes"
+          ],
+          "correct_index": 1,
+          "explanation": "Repeated key width contributes storage across secondary structures.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "cx-clustered-index-application-2",
+          "test_id": "cx-clustered-index-application",
+          "question_text": "Which evidence proves the optimizer selected a particular access path?",
+          "options": [
+            "The result happened to look sorted",
+            "The table name contains indexed",
+            "A suitable inspected execution plan",
+            "A single correct result row"
+          ],
+          "correct_index": 2,
+          "explanation": "Logical output alone does not identify the access path.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "cx-clustered-index-application-3",
+          "test_id": "cx-clustered-index-application",
+          "question_text": "Does a clustered structure replace ORDER BY for a report contract?",
+          "options": [
+            "Yes always",
+            "Only for all joins",
+            "Only for NULL titles",
+            "No"
+          ],
+          "correct_index": 3,
+          "explanation": "Result order must be requested explicitly.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "cx-clustered-index-application-4",
+          "test_id": "cx-clustered-index-application",
+          "question_text": "Which loan attribute is a poor primary key candidate?",
+          "options": [
+            "A nullable editable display name",
+            "A stable unique loan identifier",
+            "A nonnull immutable generated identifier",
+            "A verified stable composite business key"
+          ],
+          "correct_index": 0,
+          "explanation": "Names may be missing, repeated, and edited.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "cx-clustered-index-application-5",
+          "test_id": "cx-clustered-index-application",
+          "question_text": "Can a nonunique title index contain repeated titles?",
+          "options": [
+            "No, all indexes enforce uniqueness",
+            "Yes",
+            "Only if the table is empty",
+            "Only when the primary key is NULL"
+          ],
+          "correct_index": 1,
+          "explanation": "Nonunique indexes support repeated search values.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "cx-clustered-index-application-6",
+          "test_id": "cx-clustered-index-application",
+          "question_text": "What makes an index cover a query?",
+          "options": [
+            "It has the longest name",
+            "It is the oldest index",
+            "It provides all values that query needs",
+            "It is declared on every table"
+          ],
+          "correct_index": 2,
+          "explanation": "Coverage depends on the projection and predicates of the particular query.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "cx-clustered-index-application-7",
+          "test_id": "cx-clustered-index-application",
+          "question_text": "Why might a scan be reasonable on a tiny table?",
+          "options": [
+            "The primary key is invalid",
+            "All indexes are ignored permanently",
+            "The table lacks row data",
+            "Its cost can be lower than index navigation and lookups"
+          ],
+          "correct_index": 3,
+          "explanation": "The optimizer compares estimated alternatives for the workload.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "cx-clustered-index-application-8",
+          "test_id": "cx-clustered-index-application",
+          "question_text": "What is the leading component of PRIMARY KEY(student_id, loan_id)?",
+          "options": [
+            "student_id",
+            "loan_id",
+            "Both are independently first",
+            "Neither has an order"
+          ],
+          "correct_index": 0,
+          "explanation": "Composite keys use the declared component order.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "cx-clustered-index-application-9",
+          "test_id": "cx-clustered-index-application",
+          "question_text": "What can changing the clustered key affect?",
+          "options": [
+            "Only a comment",
+            "Row organization and secondary row identifiers",
+            "Only SELECT aliases",
+            "Only view text"
+          ],
+          "correct_index": 1,
+          "explanation": "The clustered identifier participates in multiple storage paths.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "cx-clustered-index-application-10",
+          "test_id": "cx-clustered-index-application",
+          "question_text": "Why are these labs not scored solely by SELECT output?",
+          "options": [
+            "SELECT cannot return loan rows",
+            "All indexes change query semantics",
+            "Physical access behavior needs plan or engine evidence",
+            "Physical design has no observable costs"
+          ],
+          "correct_index": 2,
+          "explanation": "Equivalent result rows cannot prove clustering or actual page access.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-20-clustered-index-1",
+      "test_id": "pt-dbms-sql-20-clustered-index",
+      "question_text": "What does a clustered index determine that a non-clustered index does not?",
+      "options": [
+        "The number of columns a table can have",
+        "The physical storage order of the table's rows on disk",
+        "Whether NULL values are allowed",
+        "The table's primary key name"
+      ],
+      "correct_index": 1,
+      "explanation": "A clustered index physically arranges the table's rows in key order; it is not a separate pointer structure.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-20-clustered-index-2",
+      "test_id": "pt-dbms-sql-20-clustered-index",
+      "question_text": "How many clustered indexes can a single table have?",
+      "options": [
+        "Unlimited",
+        "Exactly two",
+        "At most one",
+        "Exactly zero, always"
+      ],
+      "correct_index": 2,
+      "explanation": "Since a clustered index defines physical row order, and rows can only be arranged one way at a time, a table can have at most one.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-20-clustered-index-3",
+      "test_id": "pt-dbms-sql-20-clustered-index",
+      "question_text": "Why is the primary key often chosen as a table's clustered index?",
+      "options": [
+        "Because primary keys cannot be indexed any other way",
+        "Because primary-key lookups and joins are extremely common and benefit most from direct, no-extra-hop access to row data",
+        "Because clustered indexes are required by the SQL standard to be on the primary key",
+        "Because it reduces the table to zero rows"
+      ],
+      "correct_index": 1,
+      "explanation": "Given how frequently primary keys are used for lookups and joins, clustering on them maximizes the benefit of avoiding an extra pointer-following step.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-20-clustered-index-4",
+      "test_id": "pt-dbms-sql-20-clustered-index",
+      "question_text": "Why is updating a clustered-index key value potentially expensive?",
+      "options": [
+        "It is never expensive; clustered keys can't be updated",
+        "It may require physically relocating the row on disk to maintain sorted order",
+        "It always deletes the row permanently",
+        "It automatically creates a new non-clustered index"
+      ],
+      "correct_index": 1,
+      "explanation": "Since row order reflects the clustered key, changing that key can force the engine to physically move the row to keep the table sorted.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-20-clustered-index-5",
+      "test_id": "pt-dbms-sql-20-clustered-index",
+      "question_text": "In a clustered index's B+ Tree structure, what do the leaf nodes contain?",
+      "options": [
+        "Pointers to a separate location where row data lives",
+        "The actual row data itself",
+        "Only column names",
+        "Nothing; leaves are empty in a clustered index"
+      ],
+      "correct_index": 1,
+      "explanation": "Unlike a non-clustered index, a clustered index's leaves ARE the actual table rows, not pointers to them elsewhere.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-20-clustered-index-6",
+      "test_id": "pt-dbms-sql-20-clustered-index",
+      "question_text": "Why might using a random UUID as a clustered primary key cause performance problems?",
+      "options": [
+        "UUIDs cannot be stored in a database",
+        "Random insert order relative to sort order can cause frequent, expensive page reordering",
+        "UUIDs are always duplicated",
+        "It removes the need for any index at all"
+      ],
+      "correct_index": 1,
+      "explanation": "Since a clustered index enforces physical sort order, inserting non-sequential keys scattered across the sorted range causes costly page splits/reordering.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-20-clustered-index-7",
+      "test_id": "pt-dbms-sql-20-clustered-index",
+      "question_text": "What happens to a table's physical row order if it has NO clustered index defined?",
+      "options": [
+        "The table cannot store any rows",
+        "Rows are typically stored in an unordered heap or some engine-specific default order",
+        "Rows are automatically sorted alphabetically by every column",
+        "The table becomes read-only"
+      ],
+      "correct_index": 1,
+      "explanation": "Without a clustered index, many engines store rows in an unordered heap (behavior varies by engine/default configuration).",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-20-clustered-index-8",
+      "test_id": "pt-dbms-sql-20-clustered-index",
+      "question_text": "Which query benefits most directly from a clustered index on `id` when scanning a contiguous range?",
+      "options": [
+        "WHERE department = 'CS'",
+        "WHERE id BETWEEN 1000 AND 2000, since matching rows are also physically adjacent on disk",
+        "WHERE gpa > 3.5, unrelated to id",
+        "SELECT COUNT(*) FROM students with no WHERE clause"
+      ],
+      "correct_index": 1,
+      "explanation": "Because clustered-index order matches physical disk order, a range scan on the clustered key reads physically adjacent, contiguous data.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "coding_problems": [],
+  "coding_not_applicable": "Physical clustering, covered reads, and page costs require engine plans and storage measurements; SELECT output cannot establish them. The notes contain solved key-design and EXPLAIN inspection labs instead.",
+  "review": {
+    "reviewer": "/root/finish_e_views",
+    "independent_review": "passed",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Independent manual content review passed within independent_review_scope; engine/browser/release gates separate.",
+    "editorial_record": "Original scenario-led prose and assessments. External originality and AdSense review unperformed.",
+    "canonical_answer_indices_preserved": true,
+    "independent_reviewer": "/root/review_e_and_gaps",
+    "independent_review_scope": "Full notes,20MCQs with every option,canonical answer position and explanation,original diagrams,and all exercise contracts/fixtures or solved conceptual labs. Original identities/indices checked against public seed cache where applicable. Reported substantive findings corrected by coordinator and filtered recheck accepted;identified learner-facing spacing polished. Manual technical/editorial reasoning only;engine,provider,browser,external originality and AdSense evidence separate."
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-20-clustered-index",
+    "original_note_sha256": "41f90b634a04a9c3d27f062ac60b8dd2f467944c5e1d0ed9a294c598cae86c7b",
+    "status": "drafted; not included in prepared paired migrations"
+  },
+  "notes": "## Find a row through its storage structure\n\nA library stores millions of loan records. A query for loan 9001 should avoid reading every record to locate one row. An index supplies an access path, but indexes do not all point to rows in the same way. In MySQL InnoDB, the clustered index is the structure whose leaf records contain the table row data. A secondary index provides another search order and identifies the clustered record by its key. This lesson uses that engine specifically; a similarly named feature in another database can have different storage and maintenance behavior.\n\nA helpful conceptual picture is a dictionary. Searching its ordered headings leads to the page containing the definition. A separate subject index supplies another route to that definition. The analogy is limited: database pages split, merge, move through caches, and contain internal metadata. Clustered ordering is an organization within an index tree, not a promise that a file is one perfectly contiguous physical sequence on a storage device.\n\n## Read the table definition first\n\nConsider a loan table with a narrow, stable numeric primary key. InnoDB uses that primary key as its clustered index. The title index is secondary. A primary key is a logical uniqueness constraint, while clustering describes a physical access structure; the fact that InnoDB connects them does not make the terms interchangeable in every engine.\n\n```sql\nCREATE TABLE loans (\n loan_id BIGINT PRIMARY KEY,\n student_id INT NOT NULL,\n title VARCHAR(80) NOT NULL,\n borrowed_on DATE NOT NULL,\n returned_on DATE NULL,\n INDEX ix_title (title)\n) ENGINE=InnoDB;\nINSERT INTO loans VALUES\n (101,8,'Databases','2026-01-03',NULL),\n (102,4,'Algorithms','2026-01-05','2026-01-09'),\n (103,8,'Networks','2026-01-06',NULL);\nSELECT loan_id,title FROM loans\nWHERE loan_id BETWEEN 101 AND 102 ORDER BY loan_id;\n```\n\nThe expected logical output is 101 Databases followed by 102 Algorithms. That output demonstrates a range condition and explicit presentation order. It does not prove which access path the optimizer selected, how many pages were read, or how fast the query ran. Small fixtures are good for result correctness but are poor evidence for production index benefit.\n\n## Follow clustered and secondary lookups\n\nAn equality condition on loan_id can navigate the clustered tree to the row record. A title condition can navigate ix_title, obtain a clustered key, then locate the full row when required. This extra lookup is sometimes called a secondary to clustered lookup. The exact work depends on which columns the query needs and what the index already contains.\n\nA secondary index can cover a query when it contains all the needed values. For example, a query returning title and loan_id for a title lookup may be covered by the title index under InnoDB's secondary key design. A query also returning student_id generally needs the row unless another suitable index covers that value. Covering is a relationship between a particular query and an index, not a permanent property that makes an index cover every query.\n\nUse EXPLAIN to inspect the proposed access path. Inspect actual execution measurements only with appropriate test tooling and realistic data. An optimizer may choose a scan when a predicate selects most rows or when a table is tiny. Choosing a scan is not automatically an optimizer failure. The cost of many row lookups can exceed reading the relevant table pages directly.\n\n## Choose a key with downstream costs\n\nThe clustered key influences more than direct primary key queries. InnoDB secondary records carry the clustered key, so a wide primary key increases secondary index storage as well. A long composite text key may be meaningful to the business, but its width is repeated across the secondary structures. A short surrogate key can simplify storage while a separate unique constraint preserves the natural business identifier.\n\nStability matters too. Changing a clustered key affects row organization and the identifiers stored in secondary indexes. Avoid choosing a frequently edited attribute merely because it looks unique today. First establish the real uniqueness and immutability rules. An optimization that permits duplicate business objects or breaks foreign references is not a successful design.\n\nInsertion patterns also affect costs. Increasing keys often direct new entries toward an end of the tree; randomly distributed keys can spread writes and page splits across the structure. These are workload tradeoffs rather than universal commands to use one identifier format. Consider concurrency, replication requirements, distributed generation, key width, and measured write behavior together. Do not infer exact page layout from an identifier alone.\n\n## NULL, duplicates, and composite ranges\n\nA declared primary key cannot contain NULL and cannot repeat. Insert a duplicate loan_id and the key constraint rejects it. Repeated titles are allowed by the nonunique secondary index; different loans of the same book are separate records. Indexing title does not turn it into a unique identifier or remove duplicate output rows.\n\nA composite primary key such as student_id and loan_id orders its key space lexicographically. Queries specifying the leading student_id and a loan_id range naturally match that ordering. A predicate on only the trailing component generally does not have the same simple leading range access opportunity. The optimizer may have other strategies, but a trailing condition should not be described as equivalent to a full leading key lookup.\n\nResult ordering remains a separate requirement. Even when the chosen access path traverses clustered keys, SQL callers should use ORDER BY to request a stable order. Joins, optimizer choices, parallel processing in other systems, and future query changes can alter observed order. Never remove a required ORDER BY because one experiment returned rows in key order.\n\n## Worked lab: reason through two paths\n\nThe first task asks for every loan column where loan_id equals 102. The logical solution is an equality predicate on the primary key; the expected row is the Algorithms loan. The hypothesized access path reaches a clustered leaf record. Compare EXPLAIN for that query with a title equality query requesting every column. The second query can use ix_title and then retrieve the row, but the plan must be inspected rather than assumed.\n\nNow change the projection to title and loan_id only. Explain why the title index may satisfy those values without the same full row retrieval. The solution is that the secondary entry carries its indexed title and clustered identifier. This is an engine specific storage argument. A result set comparison alone cannot confirm whether a physical lookup occurred.\n\n## Worked lab: select a suitable clustered key\n\nA proposed design uses a nullable display name as the primary key. Identify two immediate problems: NULL is incompatible with primary key requirements, and names can repeat or change. A better candidate is a stable loan identifier with separate attributes for the borrower and title. If a genuine business key is enforced separately, explain that the surrogate does not remove that business constraint.\n\nFor a second design, imagine a long text primary key with five secondary indexes. The solution should mention the repeated key storage in secondary entries and the cost of key changes. It should not assert a precise memory saving without row counts, data lengths, overhead, and actual measurements. A valid conceptual answer states the direction of the tradeoff and a plan for measuring it.\n\nKeep the logical uniqueness test separate from the access experiment. A duplicate key rejection demonstrates constraint enforcement, while a measured plan describes one workload and dataset at one point in time.\n\n## Engine boundaries and verification\n\nPostgreSQL's CLUSTER command reorganizes a table using an index at a point in time; it does not establish the same continuously maintained InnoDB clustered table structure. SQL Server also has its own clustered index design. Keep each engine's terminology attached to its actual implementation rather than translating syntax by similarity of names.\n\nThese exercises are solved inspection and design labs. They are intentionally not scored as SELECT coding problems: identical query output cannot prove physical clustering, coverage, or page behavior, and this lesson has not executed engine plans or benchmarks. Continue with [Function Based Index Concept](/learning/dbms-sql-tutorial/function-based-index-concept) to study expression access paths, or [Simple Views](/learning/dbms-sql-tutorial/simple-views) to separate reusable query interfaces from storage structures.\n",
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Two routes to an InnoDB row",
+      "columns": [
+        "Access path",
+        "Search value",
+        "Destination"
+      ],
+      "rows": [
+        [
+          "Clustered primary key",
+          "loan_id",
+          "Leaf record with row data"
+        ],
+        [
+          "Secondary title index",
+          "title",
+          "Clustered key, then row if needed"
+        ]
+      ],
+      "description": "The conceptual lookup paths distinguish full row storage from another search order."
+    }
+  ],
+  "diagram_review": {
+    "technical_review": "Independent manual diagram/content consistency review passed;actual static/browser rendering tracked separately.",
+    "server_rendering": "pending",
+    "browser_rendering": "unverified",
+    "independent_review": "passed"
+  },
+  "sql_verification": {
+    "scope": "not executed; concurrency/recovery/provider verification separate",
+    "all_passed": false,
+    "cases": []
+  }
+}

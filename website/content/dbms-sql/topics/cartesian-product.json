@@ -1,0 +1,616 @@
+{
+  "source_ref": "chapter-7-relational-algebra/cartesian-product",
+  "slug": "cartesian-product",
+  "title": "Cartesian Product",
+  "description": "Understand all-pairs tuple combinations, distinguish intentional grids from missing join predicates, and reason about product size without inventing physical execution guarantees.",
+  "dialect": "MySQL 8.4",
+  "notes": "## Every left tuple pairs with every right tuple\n\nThe Cartesian product of two relations contains every combination of one tuple from the first and one tuple from the second. Its conventional algebraic symbol is a multiplication cross. If Room has two tuples and TimeSlot has three, the product has six room-slot combinations. Each result tuple describes one possible pairing, not proof that a booking or another real relationship exists.\n\nThis all-pairs meaning can be useful. A planning screen may need a candidate grid of each room against each permitted time slot before existing bookings are considered. The product supplies the candidate population. A later predicate or anti-existence condition can restrict it. The operation should be intentional and connected to the required result grain rather than appearing accidentally because two sources were listed together.\n\n## Product size follows both populations\n\nFor finite input cardinalities m and n, the full product has m times n tuple combinations. With five left tuples and eight right tuples, there are forty combinations. If either input is empty, there are no combinations. An empty room population should not produce placeholder rooms merely because some time slots exist.\n\nA product can grow quickly as inputs increase. Three independent sources multiply all three cardinalities before any intended reduction. A grid of hundreds of rooms, many days, and many slots can have a substantial logical result size. Estimate that population before requesting it and distinguish the required output size from an optimizer's particular intermediate representation or access strategy.\n\n## The result carries both input structures\n\nUnlike union, a Cartesian product does not require the input relations to have the same attributes or domains. Room and TimeSlot can describe entirely different roles. The conceptual result combines the input attributes, with names made unambiguous where required. If both relations have an attribute called id, role qualification or renaming is needed to distinguish room identity from slot identity.\n\nUnder a direct classical product with disjoint or suitably distinguished headings, the result degree is the sum of the input degrees. A SQL query over the product can project fewer columns, so its selected output degree follows the actual SELECT list. Do not automatically call a two-column grid a six-column result just because its underlying sources contain six available attributes.\n\n## SQL CROSS JOIN makes the intention visible\n\nCROSS JOIN explicitly requests all combinations in the illustrated query. It communicates the absence of a relationship predicate at that stage and is clearer than an unqualified comma list when the all-pairs population is deliberate. The selected identities make one row's meaning visible: a particular room paired with a particular slot.\n\n```sql\nSELECT r.room_id, s.slot_id\nFROM rooms r\nCROSS JOIN slots s\nORDER BY r.room_id, s.slot_id;\n```\n\nThe output sequence is explicitly ordered. The product itself has no inherent first room or first slot, and a physical traversal order does not become a stable interface. If the report needs additional room capacity or slot start information, select those roles deliberately rather than returning every available column automatically.\n\n## Candidate combinations are not accepted bookings\n\nA room-slot product says which combinations are in the candidate universe. It does not mean every pair is available, valid for a particular class, or authorized for a user to reserve. Capacity, equipment, business hours, existing bookings, and permission rules can restrict accepted choices. Each requirement needs a suitable predicate or trusted enforcement mechanism at its actual scope.\n\nA learning exercise can subtract supplied booking pairs from the candidate grid to report currently unbooked combinations. That is a snapshot query, not a concurrency-safe reservation operation. Two users can observe the same unbooked pair before either reserves it. The final accepted operation needs appropriate uniqueness, transaction and authorization checks rather than relying solely on the earlier display.\n\n## Join predicates restrict the all-pairs population\n\nA classical theta join can be defined as a Cartesian product followed by selection using the join predicate. A room-capacity comparison or an identity equality can keep only appropriate pairs. This is a logical definition of the result. It does not require the engine to physically construct every pair and then discard most of them before returning an answer.\n\nEqually, do not assert that engines never examine or produce a product-like intermediate population. The chosen query, predicates, indexes, supported join strategies, and plan determine actual work. Nested loops or poorly selective conditions can still process many combinations. Use plan and runtime evidence for physical claims instead of turning a useful algebraic definition into a universal execution promise.\n\n## Missing predicates can create an accidental grid\n\nWhen a query intends to connect Enrollment.student_id to Student.student_id but omits that relationship, unrelated rows can pair. A count or sum over the resulting combinations can inflate. Some SQL forms permit an unconditioned join, while others require particular syntax. The defect is the unintended population, not a guarantee that every dialect always silently accepts every omitted ON clause.\n\nA one-row fixture can conceal the problem because the product and the intended matched query can happen to return the same number of rows. Include several identities and an unmatched fact. The result should connect the modeled participants only when a real join is intended, and should include every required combination only when a deliberate grid is the task.\n\n## Distinct descriptions do not define pair identity\n\nTwo rooms can share a name or capacity while having different room_id values. Two slots can share a display label under a broader time model while remaining distinct identities. A candidate grid should preserve the relevant identifiers so those occurrences remain distinguishable. Projecting only names and adding DISTINCT can collapse real different pairs into one displayed tuple.\n\nConversely, input SQL bags can contain repeated rows, creating repeated occurrences in the result even when the selected values look equal. The classical set model and SQL's bag-like behaviour need separate explanations. The exercises use unique room and slot identities so the all-pairs count and candidate membership are unambiguous without an accidental duplicate-elimination shortcut.\n\n## Filtering the sources changes the candidate universe\n\nIf a report asks for enabled rooms and enabled slots only, apply the corresponding eligibility to both sources. An excluded room paired with an allowed slot is still ineligible. Removing duplicate outputs cannot fix an unwanted source occurrence. State the candidate universe before constructing the product so users know which absent pairs were deliberately outside the report.\n\nA predicate involving both sides, such as sufficient room capacity for a class, is a subsequent pair restriction rather than independent source filtering. The logical stages can be described separately even when SQL writes them in one statement and the optimizer rearranges supported work. Keep the source eligibility, pair condition, and final output order visible as distinct responsibilities.\n\n## Empty and degenerate populations clarify the operation\n\nWith one room and three slots, the product has three pairs. With no slots, even ten rooms produce no pairs. Those cases reveal whether a query incorrectly preserves a source as though it were an outer join. A product is not a preserving join that invents NULL partners for unmatched rows. Its existence depends on choosing an actual tuple from each input.\n\nA scalar aggregate over the product can still return one row containing a zero count when the pair population is empty. That aggregate result is different from the product listing itself, which has no tuples. Distinguish the number being reported from the cardinality of the report query's output when documenting expected empty cases.\n\n## Validate all-pairs meaning and intentional restrictions\n\nTest two rooms with several slots, one side empty, a single pair, repeated descriptions with distinct identities, and a booking that excludes exactly one candidate combination. Confirm that an exclusion compares both room_id and slot_id: a booking in one room should not make the same slot unavailable in every room unless that is the actual domain policy.\n\nThe exercises verify a complete grid and a snapshot of candidate pairs without supplied bookings on isolated SQL data. They do not reserve rooms, establish production authority, or prove exact MySQL/provider execution. Cartesian product is useful when its input populations, combined identity, logical size, later restrictions, and physical-verification limits are explicit, allowing deliberate candidate generation without confusing every possible pair with an actual accepted relationship.\n",
+  "references": [],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-7-cartesian-product",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-7-cartesian-product-1",
+          "test_id": "pt-dbms-sql-7-cartesian-product",
+          "question_text": "What does the Cartesian Product (×) of two relations produce?",
+          "options": [
+            "Only rows where a shared column matches",
+            "Every possible combination of rows from both relations",
+            "The rows common to both relations",
+            "A single row combining aggregated data"
+          ],
+          "correct_index": 1,
+          "explanation": "Cartesian Product pairs every row of one relation with every row of the other, with no filtering.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-7-cartesian-product-2",
+          "test_id": "pt-dbms-sql-7-cartesian-product",
+          "question_text": "If relation A has 5 rows and relation B has 8 rows, how many rows does A × B have?",
+          "options": [
+            "13",
+            "40",
+            "5",
+            "8"
+          ],
+          "correct_index": 1,
+          "explanation": "Cartesian Product's row count is the product of the two operand row counts: 5 x 8 = 40.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-7-cartesian-product-3",
+          "test_id": "pt-dbms-sql-7-cartesian-product",
+          "question_text": "Must the two relations combined by Cartesian Product be union-compatible (same columns)?",
+          "options": [
+            "Yes, exactly like Union and Intersection",
+            "No — they can have entirely different columns; the result simply includes all columns from both",
+            "Only if they share a primary key",
+            "Cartesian Product requires exactly one shared column"
+          ],
+          "correct_index": 1,
+          "explanation": "Unlike the set operations, Cartesian Product has no compatibility requirement between the two relations' schemas.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-7-cartesian-product-4",
+          "test_id": "pt-dbms-sql-7-cartesian-product",
+          "question_text": "Which defect can produce an unintended all-pairs population in SQL forms that allow unconditioned source combinations?",
+          "options": [
+            "Using SELECT * instead of naming columns",
+            "Forgetting the JOIN ... ON condition (or WHERE filter in comma-join syntax), which silently returns all combinations instead of an error",
+            "Using ORDER BY without LIMIT",
+            "Using DISTINCT unnecessarily"
+          ],
+          "correct_index": 1,
+          "explanation": "The query lacks its intended relationship predicate. Exact syntax acceptance depends on the dialect and join form.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-7-cartesian-product-5",
+          "test_id": "pt-dbms-sql-7-cartesian-product",
+          "question_text": "How is a Theta Join (7.8) formally related to Cartesian Product?",
+          "options": [
+            "They are unrelated operations",
+            "A Theta Join is formally defined as a Cartesian Product followed by a Selection that applies the join condition",
+            "Theta Join always produces fewer rows than any Cartesian Product",
+            "Cartesian Product is a special, restricted case of Theta Join"
+          ],
+          "correct_index": 1,
+          "explanation": "Every join type builds conceptually on top of Cartesian Product plus a filtering condition.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-7-cartesian-product-6",
+          "test_id": "pt-dbms-sql-7-cartesian-product",
+          "question_text": "Why is an accidental Cartesian Product on two large tables a real operational risk?",
+          "options": [
+            "It has no real risk, just a slightly odd result",
+            "The row count explosion (m x n) can produce an enormous, memory-exhausting result even from moderately sized input tables",
+            "It always causes an immediate syntax error before running",
+            "Cartesian products are automatically capped at 1000 rows by every engine"
+          ],
+          "correct_index": 1,
+          "explanation": "The logical m-by-n population can be very large. Exact memory, execution and intermediate materialization behaviour require plan and workload evidence.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-7-cartesian-product-7",
+          "test_id": "pt-dbms-sql-7-cartesian-product",
+          "question_text": "Which SQL syntax explicitly requests a Cartesian Product?",
+          "options": [
+            "INNER JOIN ... ON",
+            "CROSS JOIN (or a comma-separated FROM list with no condition)",
+            "NATURAL JOIN",
+            "LEFT OUTER JOIN"
+          ],
+          "correct_index": 1,
+          "explanation": "CROSS JOIN is the explicit, intentional way to request a full Cartesian Product in SQL.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-7-cartesian-product-8",
+          "test_id": "pt-dbms-sql-7-cartesian-product",
+          "question_text": "Does the algebraic product-plus-selection definition require an engine to materialize the entire product for every ordinary join?",
+          "options": [
+            "Yes, always, for every join, regardless of size",
+            "No; supported plans can avoid full materialization, but actual work depends on the query and engine rather than a universal never-product rule",
+            "Only for joins on non-indexed columns",
+            "This has no bearing on real engine implementation"
+          ],
+          "correct_index": 1,
+          "explanation": "Logical definition and physical execution are distinct. Some plans or predicates can still process many combinations.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-7-cartesian-product-new-9",
+          "test_id": "pt-dbms-sql-7-cartesian-product",
+          "question_text": "Two rooms and three slots produce how many complete pairs?",
+          "options": [
+            "5",
+            "6",
+            "3",
+            "2"
+          ],
+          "correct_index": 1,
+          "explanation": "Every room pairs with every slot.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-7-cartesian-product-new-10",
+          "test_id": "pt-dbms-sql-7-cartesian-product",
+          "question_text": "What happens to the pair listing if slots is empty?",
+          "options": [
+            "Every room receives one invented NULL slot",
+            "It returns every booking",
+            "It has no rows",
+            "The room schema disappears"
+          ],
+          "correct_index": 2,
+          "explanation": "A product needs an actual tuple from each side.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "pt-dbms-sql-7-cartesian-product-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "pt-dbms-sql-7-cartesian-product-application-new-1",
+          "test_id": "pt-dbms-sql-7-cartesian-product-application",
+          "question_text": "Does a candidate room-slot pair prove it is authorized and reservable?",
+          "options": [
+            "Yes; CROSS JOIN grants reservation rights",
+            "Only if ids are sorted",
+            "No; additional domain and trusted-operation rules apply",
+            "Only if the pair is unique"
+          ],
+          "correct_index": 2,
+          "explanation": "Candidate generation is not an accepted booking operation.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "pt-dbms-sql-7-cartesian-product-application-new-2",
+          "test_id": "pt-dbms-sql-7-cartesian-product-application",
+          "question_text": "Must Room and Slot be union-compatible for a product?",
+          "options": [
+            "Yes; names and counts must match",
+            "Only if both are empty",
+            "Only if they use integers",
+            "No; they can have different attribute structures"
+          ],
+          "correct_index": 3,
+          "explanation": "Product combines structures rather than unioning corresponding tuples.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "pt-dbms-sql-7-cartesian-product-application-new-3",
+          "test_id": "pt-dbms-sql-7-cartesian-product-application",
+          "question_text": "Why can same-named id attributes need aliases?",
+          "options": [
+            "They represent different roles in the combined result",
+            "Aliases make them the same identity",
+            "Every id is globally unique",
+            "A label automatically enforces a reference"
+          ],
+          "correct_index": 0,
+          "explanation": "Source roles must remain distinguishable.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "pt-dbms-sql-7-cartesian-product-application-new-4",
+          "test_id": "pt-dbms-sql-7-cartesian-product-application",
+          "question_text": "Does selecting only room_id and slot_id change the source tables?",
+          "options": [
+            "Yes; other columns are deleted",
+            "No; it defines the query output projection",
+            "Only if CROSS JOIN is used",
+            "Only if results are empty"
+          ],
+          "correct_index": 1,
+          "explanation": "Output structure and persistent structure differ.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "pt-dbms-sql-7-cartesian-product-application-new-5",
+          "test_id": "pt-dbms-sql-7-cartesian-product-application",
+          "question_text": "How can one-row inputs hide a missing relationship predicate?",
+          "options": [
+            "One row proves every future query",
+            "Products cannot use one-row relations",
+            "The accidental product can resemble the intended match on that narrow fixture",
+            "SQL always adds the missing condition"
+          ],
+          "correct_index": 2,
+          "explanation": "Several identities and unmatched facts expose the defect.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "pt-dbms-sql-7-cartesian-product-application-new-6",
+          "test_id": "pt-dbms-sql-7-cartesian-product-application",
+          "question_text": "Why compare both room and slot when excluding a booking?",
+          "options": [
+            "Only the slot matters universally",
+            "Only capacity identifies a booking",
+            "Room names always identify slots",
+            "A booking concerns that complete pair under the stated policy"
+          ],
+          "correct_index": 3,
+          "explanation": "An incomplete comparison can exclude unrelated candidates.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "pt-dbms-sql-7-cartesian-product-application-new-7",
+          "test_id": "pt-dbms-sql-7-cartesian-product-application",
+          "question_text": "Does the product’s logical definition specify its physical execution plan?",
+          "options": [
+            "No",
+            "Yes; it always allocates every tuple first",
+            "Only for large tables",
+            "Only for numeric columns"
+          ],
+          "correct_index": 0,
+          "explanation": "Use actual engine evidence for work and storage claims.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "pt-dbms-sql-7-cartesian-product-application-new-8",
+          "test_id": "pt-dbms-sql-7-cartesian-product-application",
+          "question_text": "What can DISTINCT over room and slot labels lose?",
+          "options": [
+            "Only invalid source rows",
+            "Separate candidate identities sharing those descriptions",
+            "Every empty input",
+            "All booking references"
+          ],
+          "correct_index": 1,
+          "explanation": "Selected labels need not identify occurrences.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "pt-dbms-sql-7-cartesian-product-application-new-9",
+          "test_id": "pt-dbms-sql-7-cartesian-product-application",
+          "question_text": "Does a currently unbooked-grid query enforce concurrency-safe reservation?",
+          "options": [
+            "Yes; reading availability locks every future action",
+            "Only if the table is small",
+            "No; the accepted write needs its own trusted checks",
+            "Only if all rooms are enabled"
+          ],
+          "correct_index": 2,
+          "explanation": "Snapshot reporting differs from accepted state transition enforcement.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "pt-dbms-sql-7-cartesian-product-application-new-10",
+          "test_id": "pt-dbms-sql-7-cartesian-product-application",
+          "question_text": "What does an ungrouped COUNT over an empty pair population ordinarily return?",
+          "options": [
+            "A fabricated room-slot tuple",
+            "No attribute structure",
+            "A random room identity",
+            "One result row containing zero"
+          ],
+          "correct_index": 3,
+          "explanation": "Aggregate output and pair-listing output have different grain.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cx-cartesian-grid",
+      "slug": "cartesian-grid",
+      "title": "Generate every room-slot candidate pair",
+      "difficulty": "Easy",
+      "task": "Return every room_id and slot_id combination using CROSS JOIN. Existing bookings do not restrict this complete-grid task.",
+      "schema_sql": "CREATE TABLE rooms (room_id INT PRIMARY KEY);\nCREATE TABLE slots (slot_id INT PRIMARY KEY);\nCREATE TABLE bookings (room_id INT NOT NULL, slot_id INT NOT NULL, PRIMARY KEY(room_id,slot_id));",
+      "seed_sql": "INSERT INTO rooms VALUES (1),(2); INSERT INTO slots VALUES (10),(20),(30);",
+      "expected": "room_id\tslot_id\n1\t10\n1\t20\n1\t30\n2\t10\n2\t20\n2\t30",
+      "ordering": "Ascending room_id, slot_id.",
+      "constraints": [
+        "Room and slot identities are unique.",
+        "This is synthetic snapshot reporting, not a reservation mutation or concurrency/authorization test."
+      ],
+      "edge_cases": [
+        "An empty source yields no complete candidate pairs.",
+        "One booking excludes only its exact room-slot pair."
+      ],
+      "hints": [
+        "CROSS JOIN expresses the candidate universe.",
+        "Use both identity roles when checking booking membership."
+      ],
+      "solution_sql": "SELECT r.room_id, s.slot_id FROM rooms r CROSS JOIN slots s ORDER BY r.room_id, s.slot_id;",
+      "explanation": "The query constructs the deliberate candidate population and applies only the explicitly requested snapshot restriction.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO rooms VALUES (1);",
+          "expected": ""
+        },
+        {
+          "seed_sql": "INSERT INTO rooms VALUES (9); INSERT INTO slots VALUES (7);",
+          "expected": "room_id\tslot_id\n9\t7"
+        }
+      ]
+    },
+    {
+      "id": "cx-cartesian-unbooked",
+      "slug": "cartesian-unbooked",
+      "title": "Exclude only booked pairs from the candidate universe",
+      "difficulty": "Medium",
+      "task": "Return candidate room_id and slot_id combinations absent from bookings. This is a snapshot of supplied pairs, not an accepted reservation operation.",
+      "schema_sql": "CREATE TABLE rooms (room_id INT PRIMARY KEY);\nCREATE TABLE slots (slot_id INT PRIMARY KEY);\nCREATE TABLE bookings (room_id INT NOT NULL, slot_id INT NOT NULL, PRIMARY KEY(room_id,slot_id));",
+      "seed_sql": "INSERT INTO rooms VALUES (1),(2); INSERT INTO slots VALUES (10),(20); INSERT INTO bookings VALUES (1,10),(2,20);",
+      "expected": "room_id\tslot_id\n1\t20\n2\t10",
+      "ordering": "Ascending room_id, slot_id.",
+      "constraints": [
+        "Room and slot identities are unique.",
+        "This is synthetic snapshot reporting, not a reservation mutation or concurrency/authorization test."
+      ],
+      "edge_cases": [
+        "An empty source yields no complete candidate pairs.",
+        "One booking excludes only its exact room-slot pair."
+      ],
+      "hints": [
+        "CROSS JOIN expresses the candidate universe.",
+        "Use both identity roles when checking booking membership."
+      ],
+      "solution_sql": "SELECT r.room_id, s.slot_id FROM rooms r CROSS JOIN slots s WHERE NOT EXISTS (SELECT 1 FROM bookings b WHERE b.room_id = r.room_id AND b.slot_id = s.slot_id) ORDER BY r.room_id, s.slot_id;",
+      "explanation": "The query constructs the deliberate candidate population and applies only the explicitly requested snapshot restriction.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO rooms VALUES (1),(2); INSERT INTO slots VALUES (10); INSERT INTO bookings VALUES (1,10);",
+          "expected": "room_id\tslot_id\n2\t10"
+        },
+        {
+          "seed_sql": "INSERT INTO slots VALUES (10);",
+          "expected": ""
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-7-cartesian-product-1",
+      "test_id": "pt-dbms-sql-7-cartesian-product",
+      "question_text": "What does the Cartesian Product (×) of two relations produce?",
+      "options": [
+        "Only rows where a shared column matches",
+        "Every possible combination of rows from both relations",
+        "The rows common to both relations",
+        "A single row combining aggregated data"
+      ],
+      "correct_index": 1,
+      "explanation": "Cartesian Product pairs every row of one relation with every row of the other, with no filtering.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-7-cartesian-product-2",
+      "test_id": "pt-dbms-sql-7-cartesian-product",
+      "question_text": "If relation A has 5 rows and relation B has 8 rows, how many rows does A × B have?",
+      "options": [
+        "13",
+        "40",
+        "5",
+        "8"
+      ],
+      "correct_index": 1,
+      "explanation": "Cartesian Product's row count is the product of the two operand row counts: 5 x 8 = 40.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-7-cartesian-product-3",
+      "test_id": "pt-dbms-sql-7-cartesian-product",
+      "question_text": "Must the two relations combined by Cartesian Product be union-compatible (same columns)?",
+      "options": [
+        "Yes, exactly like Union and Intersection",
+        "No — they can have entirely different columns; the result simply includes all columns from both",
+        "Only if they share a primary key",
+        "Cartesian Product requires exactly one shared column"
+      ],
+      "correct_index": 1,
+      "explanation": "Unlike the set operations, Cartesian Product has no compatibility requirement between the two relations' schemas.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-7-cartesian-product-4",
+      "test_id": "pt-dbms-sql-7-cartesian-product",
+      "question_text": "What common SQL bug produces an accidental Cartesian Product?",
+      "options": [
+        "Using SELECT * instead of naming columns",
+        "Forgetting the JOIN ... ON condition (or WHERE filter in comma-join syntax), which silently returns all combinations instead of an error",
+        "Using ORDER BY without LIMIT",
+        "Using DISTINCT unnecessarily"
+      ],
+      "correct_index": 1,
+      "explanation": "A missing join condition doesn't cause an error — it silently falls back to a full Cartesian Product, a classic and dangerous mistake.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-7-cartesian-product-5",
+      "test_id": "pt-dbms-sql-7-cartesian-product",
+      "question_text": "How is a Theta Join (7.8) formally related to Cartesian Product?",
+      "options": [
+        "They are unrelated operations",
+        "A Theta Join is formally defined as a Cartesian Product followed by a Selection that applies the join condition",
+        "Theta Join always produces fewer rows than any Cartesian Product",
+        "Cartesian Product is a special, restricted case of Theta Join"
+      ],
+      "correct_index": 1,
+      "explanation": "Every join type builds conceptually on top of Cartesian Product plus a filtering condition.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-7-cartesian-product-6",
+      "test_id": "pt-dbms-sql-7-cartesian-product",
+      "question_text": "Why is an accidental Cartesian Product on two large tables a real operational risk?",
+      "options": [
+        "It has no real risk, just a slightly odd result",
+        "The row count explosion (m x n) can produce an enormous, memory-exhausting result even from moderately sized input tables",
+        "It always causes an immediate syntax error before running",
+        "Cartesian products are automatically capped at 1000 rows by every engine"
+      ],
+      "correct_index": 1,
+      "explanation": "Multiplying even moderately large row counts together can produce results too large to compute or store practically.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-7-cartesian-product-7",
+      "test_id": "pt-dbms-sql-7-cartesian-product",
+      "question_text": "Which SQL syntax explicitly requests a Cartesian Product?",
+      "options": [
+        "INNER JOIN ... ON",
+        "CROSS JOIN (or a comma-separated FROM list with no condition)",
+        "NATURAL JOIN",
+        "LEFT OUTER JOIN"
+      ],
+      "correct_index": 1,
+      "explanation": "CROSS JOIN is the explicit, intentional way to request a full Cartesian Product in SQL.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-7-cartesian-product-8",
+      "test_id": "pt-dbms-sql-7-cartesian-product",
+      "question_text": "Does a real database engine actually materialize the full Cartesian Product internally when executing an efficient JOIN?",
+      "options": [
+        "Yes, always, for every join, regardless of size",
+        "No — while joins are formally defined in terms of Cartesian Product + filter, real engines use smarter algorithms (like hash or index-based joins) that avoid ever computing the full product",
+        "Only for joins on non-indexed columns",
+        "This has no bearing on real engine implementation"
+      ],
+      "correct_index": 1,
+      "explanation": "The formal definition explains WHAT a join computes, not HOW an engine efficiently computes it — real engines avoid the full product whenever possible.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "review": {
+    "reviewer": "coordinator",
+    "independent_review": "unavailable; no agent tools",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Definitions and examples checked against questions; no plagiarism certification.",
+    "existing_question_corrections": [
+      "tq-dbms-sql-7-cartesian-product-4",
+      "tq-dbms-sql-7-cartesian-product-6",
+      "tq-dbms-sql-7-cartesian-product-8"
+    ],
+    "canonical_answer_indices_preserved": true,
+    "batch_review": {
+      "reviewer": "coordinator",
+      "independent": false,
+      "scope": "New package only: notes, keyed examples, original question identities and canonical indices, every correct answer, exercises and recorded fixture outputs, diagram trace, content-only paired integration.",
+      "findings_resolved": "Outer Join retained absence question clarified: missing parent is a violation only when the modeled relationship requires it. Division retains its original Hard exercise; validator permits retained Hard alongside Easy while rejecting a new Hard substitute.",
+      "remaining": "Exact MySQL/provider execution, browser QA, independent review and applied-migration behavior unverified; output fixtures do not prove required source technique."
+    }
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-7-cartesian-product",
+    "original_note_sha256": "b8923fec29f3ac53758acf91129315c3841ebe3eb88b35ae1db635e7f7f8f1d9",
+    "status": "paired migration prepared; not applied"
+  },
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Two rooms paired with three slots give six candidate tuples",
+      "description": "Every source identity contributes once to each compatible all-pairs combination. These are candidates, not accepted bookings.",
+      "columns": [
+        "Room",
+        "Slot 10",
+        "Slot 20",
+        "Slot 30"
+      ],
+      "rows": [
+        [
+          "1",
+          "(1,10)",
+          "(1,20)",
+          "(1,30)"
+        ],
+        [
+          "2",
+          "(2,10)",
+          "(2,20)",
+          "(2,30)"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "applicability": "required",
+    "technical_review": "coordinator enumerated all pairs and exact-pair booking exclusions; physical-plan claims qualified",
+    "server_rendering": "passed",
+    "browser_rendering": "unverified",
+    "independent_review": "unavailable; no agent tools",
+    "server_rendering_evidence": "Three selected actual LessonBlock tests passed for the product/join batch; unchanged packages intentionally skipped."
+  },
+  "sql_verification": {
+    "engine": "11.8.6-MariaDB-0+deb13u1 from Debian",
+    "scope": "MariaDB compatibility execution; exact MySQL 8.4/provider execution unverified",
+    "fingerprint": "5f58849c37bf1bbb8b7e14aa6153d7d9678fd047d8a4a810c6ac5e5291d01ae4",
+    "cases": [
+      {
+        "problem": "cartesian-grid",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "cartesian-grid",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "cartesian-grid",
+        "case": 2,
+        "passed": true
+      },
+      {
+        "problem": "cartesian-unbooked",
+        "case": 0,
+        "passed": true
+      },
+      {
+        "problem": "cartesian-unbooked",
+        "case": 1,
+        "passed": true
+      },
+      {
+        "problem": "cartesian-unbooked",
+        "case": 2,
+        "passed": true
+      }
+    ],
+    "all_passed": true
+  }
+}

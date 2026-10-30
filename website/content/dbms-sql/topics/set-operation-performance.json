@@ -1,0 +1,576 @@
+{
+  "slug": "set-operation-performance",
+  "source_ref": "chapter-18-set-operations/set-operation-performance",
+  "title": "Set Operation Performance",
+  "description": "Tune set queries by preserving duplicate and identity contracts, then measure branch access, deduplication, ordering and complete execution plans on representative data.",
+  "dialect": "MySQL 8.4; engine-specific behavior labeled",
+  "references": [
+    {
+      "title": "MySQL8.4 UNION clause",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/union.html"
+    },
+    {
+      "title": "MySQL8.4 EXPLAIN",
+      "url": "https://dev.mysql.com/doc/refman/8.4/en/explain.html"
+    }
+  ],
+  "tests": [
+    {
+      "id": "pt-dbms-sql-18-set-operation-performance",
+      "title": "MCQ Test 1",
+      "questions": [
+        {
+          "id": "tq-dbms-sql-18-set-operation-performance-1",
+          "test_id": "pt-dbms-sql-18-set-operation-performance",
+          "question_text": "What is the main performance cost specific to plain UNION (versus UNION ALL)?",
+          "options": [
+            "Sorting the final result",
+            "The deduplication step, requiring rows to be compared against each other",
+            "Checking union-compatibility",
+            "Parsing the SQL syntax"
+          ],
+          "correct_index": 1,
+          "explanation": "Comparing rows to remove duplicates is UNION's distinctive extra cost over UNION ALL.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "tq-dbms-sql-18-set-operation-performance-2",
+          "test_id": "pt-dbms-sql-18-set-operation-performance",
+          "question_text": "When is replacing UNION with UNION ALL a valid candidate optimization?",
+          "options": [
+            "Whenever the query becomes shorter",
+            "When retained multiplicity is required or the full projected input is proved duplicate-free at the required identity",
+            "Whenever sources have different table names",
+            "Whenever an index exists"
+          ],
+          "correct_index": 1,
+          "explanation": "No universal most-impactful rule exists. Prove semantics, including within-source duplicates, before measuring.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "tq-dbms-sql-18-set-operation-performance-3",
+          "test_id": "pt-dbms-sql-18-set-operation-performance",
+          "question_text": "Is there a universal rule for whether a set operation or an equivalent join/subquery performs better?",
+          "options": [
+            "Yes, joins are always faster",
+            "No — it depends on data size, indexes, and the specific engine's optimizer; comparing actual execution plans is more reliable than a general rule",
+            "Yes, set operations are always faster",
+            "Set operations and joins always have identical performance"
+          ],
+          "correct_index": 1,
+          "explanation": "Performance comparisons here are genuinely context-dependent, not governed by a universal rule.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "tq-dbms-sql-18-set-operation-performance-4",
+          "test_id": "pt-dbms-sql-18-set-operation-performance",
+          "question_text": "Can indexes help speed up a set operation's deduplication/matching step?",
+          "options": [
+            "No, indexes only help WHERE clauses",
+            "Yes — indexes on the relevant columns can speed up the comparison work, similar to their effect on JOIN or GROUP BY",
+            "Indexes make set operations slower",
+            "Only INTERSECT can benefit from indexes, not UNION or EXCEPT"
+          ],
+          "correct_index": 1,
+          "explanation": "Indexes can help source access or eligible comparison strategies, but cannot guarantee a particular global combination plan or eliminate distinct work.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "tq-dbms-sql-18-set-operation-performance-5",
+          "test_id": "pt-dbms-sql-18-set-operation-performance",
+          "question_text": "What common, low-effort audit is worth doing on a slow query using plain UNION?",
+          "options": [
+            "Checking whether UNION could be replaced with UNION ALL if duplicates genuinely can't occur or don't matter",
+            "Removing all WHERE clauses",
+            "Adding more UNION statements",
+            "Switching to a NoSQL database"
+          ],
+          "correct_index": 0,
+          "explanation": "This is a frequently overlooked, easy performance check.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "tq-dbms-sql-18-set-operation-performance-6",
+          "test_id": "pt-dbms-sql-18-set-operation-performance",
+          "question_text": "Where should you look to make a reliable performance comparison between competing query formulations?",
+          "options": [
+            "General online rules of thumb only",
+            "Actual execution plans for the realistic alternatives (Chapter 35)",
+            "The query's character count",
+            "The number of tables referenced"
+          ],
+          "correct_index": 1,
+          "explanation": "Inspect plans for realistic equivalent alternatives and use representative actual execution measurements. Estimates alone do not establish elapsed performance.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "tq-dbms-sql-18-set-operation-performance-7",
+          "test_id": "pt-dbms-sql-18-set-operation-performance",
+          "question_text": "Is deduplication's cost purely theoretical, or does it matter in practice for large result sets?",
+          "options": [
+            "Purely theoretical, with no real practical impact",
+            "It's a genuine, significant cost for large result sets, not just a theoretical concern",
+            "It only matters for INTERSECT, not UNION",
+            "It only matters when ORDER BY is also used"
+          ],
+          "correct_index": 1,
+          "explanation": "Distinct work can be material for large or wide populations, but its relative importance depends on the actual plan and workload.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "tq-dbms-sql-18-set-operation-performance-8",
+          "test_id": "pt-dbms-sql-18-set-operation-performance",
+          "question_text": "Can combining several large plain UNIONs in one analytics query create a hidden performance problem?",
+          "options": [
+            "No, UNION has no cumulative cost across multiple uses",
+            "Yes — repeated deduplication passes across several large UNIONed queries can be a genuine, easy-to-overlook cost source",
+            "This only happens with UNION ALL, never plain UNION",
+            "Combining UNIONs always improves performance"
+          ],
+          "correct_index": 1,
+          "explanation": "Several set boundaries can add work, but textual UNION count does not prove physical pass count; inspect grouping, semantics and optimizer plan.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "cx-set-operation-performance-fundamentals-9",
+          "test_id": "pt-dbms-sql-18-set-operation-performance",
+          "question_text": "What must be proved before a performance rewrite is compared?",
+          "options": [
+            "That it preserves the required result contract",
+            "That it has fewer characters",
+            "That it uses a fashionable keyword",
+            "That it removes all ORDER BY clauses"
+          ],
+          "correct_index": 0,
+          "explanation": "A faster answer to a different question is not the same optimization.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "cx-set-operation-performance-fundamentals-10",
+          "test_id": "pt-dbms-sql-18-set-operation-performance",
+          "question_text": "Do nonoverlapping source tables guarantee disjoint projected learner identifiers?",
+          "options": [
+            "Yes, always",
+            "No",
+            "Only if table names include years",
+            "Only after a restart"
+          ],
+          "correct_index": 1,
+          "explanation": "Different stored events can project the same learner identity.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    },
+    {
+      "id": "cx-set-operation-performance-application",
+      "title": "MCQ Test 2",
+      "questions": [
+        {
+          "id": "cx-set-operation-performance-application-1",
+          "test_id": "cx-set-operation-performance-application",
+          "question_text": "Can within-source duplicates make UNION ALL wrong for a distinct report?",
+          "options": [
+            "No, only cross-source overlap matters",
+            "Yes",
+            "Only for strings",
+            "Only if the second source is empty"
+          ],
+          "correct_index": 1,
+          "explanation": "The final distinct population must account for duplicates from any input.",
+          "marks": 1,
+          "sort_order": 0
+        },
+        {
+          "id": "cx-set-operation-performance-application-2",
+          "test_id": "cx-set-operation-performance-application",
+          "question_text": "Does distinctness guarantee final sorted output?",
+          "options": [
+            "Yes, always",
+            "Only for integer keys",
+            "No",
+            "Only with two branches"
+          ],
+          "correct_index": 2,
+          "explanation": "Duplicate comparison and output ordering are separate requirements.",
+          "marks": 1,
+          "sort_order": 1
+        },
+        {
+          "id": "cx-set-operation-performance-application-3",
+          "test_id": "cx-set-operation-performance-application",
+          "question_text": "Why can removing a projected description change the result?",
+          "options": [
+            "It always increases storage",
+            "It disables every index",
+            "It convertsNULLtozero",
+            "It can change which full rows compare equal"
+          ],
+          "correct_index": 3,
+          "explanation": "Projection determines the compared identity.",
+          "marks": 1,
+          "sort_order": 2
+        },
+        {
+          "id": "cx-set-operation-performance-application-4",
+          "test_id": "cx-set-operation-performance-application",
+          "question_text": "What does an index on a branch key not prove?",
+          "options": [
+            "That the global combination needs no distinct work",
+            "That the key exists",
+            "That source rows can be compared",
+            "That the index definition names a branch key"
+          ],
+          "correct_index": 0,
+          "explanation": "The combination plan must be inspected independently.",
+          "marks": 1,
+          "sort_order": 3
+        },
+        {
+          "id": "cx-set-operation-performance-application-5",
+          "test_id": "cx-set-operation-performance-application",
+          "question_text": "Does EXPLAIN by itself provide actual execution timing?",
+          "options": [
+            "Yes, universally",
+            "No",
+            "Only with short aliases",
+            "Only if output has one row"
+          ],
+          "correct_index": 1,
+          "explanation": "Estimates and executed measurements are different evidence levels.",
+          "marks": 1,
+          "sort_order": 4
+        },
+        {
+          "id": "cx-set-operation-performance-application-6",
+          "test_id": "cx-set-operation-performance-application",
+          "question_text": "What can an outer ORDER BY add to UNION ALL?",
+          "options": [
+            "Automatic deduplication always",
+            "A primary-key constraint",
+            "Sorting work on the combined population",
+            "A guaranteed zero-cost limit"
+          ],
+          "correct_index": 2,
+          "explanation": "Retaining duplicates does not remove every later operator cost.",
+          "marks": 1,
+          "sort_order": 5
+        },
+        {
+          "id": "cx-set-operation-performance-application-7",
+          "test_id": "cx-set-operation-performance-application",
+          "question_text": "Does the number of textual UNION operators prove physical deduplication pass count?",
+          "options": [
+            "Yes, one pass per keyword always",
+            "Only for three sources",
+            "Only when cached",
+            "No"
+          ],
+          "correct_index": 3,
+          "explanation": "Optimizer transformations can change the physical plan.",
+          "marks": 1,
+          "sort_order": 6
+        },
+        {
+          "id": "cx-set-operation-performance-application-8",
+          "test_id": "cx-set-operation-performance-application",
+          "question_text": "Can a raw join rewrite multiply rows where a distinct set result would not?",
+          "options": [
+            "Yes",
+            "No, all rowsets have identical multiplicity",
+            "Only without a column alias",
+            "Only after sorting"
+          ],
+          "correct_index": 0,
+          "explanation": "Every matching pair can contribute a joined row.",
+          "marks": 1,
+          "sort_order": 7
+        },
+        {
+          "id": "cx-set-operation-performance-application-9",
+          "test_id": "cx-set-operation-performance-application",
+          "question_text": "What should a fair benchmark record?",
+          "options": [
+            "Only a screenshot",
+            "Engine, schema, indexes, distribution, parameters and matching results",
+            "Only elapsed time from one tiny input",
+            "Only query length"
+          ],
+          "correct_index": 1,
+          "explanation": "The conditions are needed to interpret and reproduce measurements.",
+          "marks": 1,
+          "sort_order": 8
+        },
+        {
+          "id": "cx-set-operation-performance-application-10",
+          "test_id": "cx-set-operation-performance-application",
+          "question_text": "Can a later ALL recover multiplicity removed by an earlier distinct boundary?",
+          "options": [
+            "Yes, always",
+            "Only if the row reappears nowhere",
+            "No",
+            "Only on a replica"
+          ],
+          "correct_index": 2,
+          "explanation": "Discarded duplicates are no longer present to be restored by that operator.",
+          "marks": 1,
+          "sort_order": 9
+        }
+      ]
+    }
+  ],
+  "original_questions": [
+    {
+      "id": "tq-dbms-sql-18-set-operation-performance-1",
+      "test_id": "pt-dbms-sql-18-set-operation-performance",
+      "question_text": "What is the main performance cost specific to plain UNION (versus UNION ALL)?",
+      "options": [
+        "Sorting the final result",
+        "The deduplication step, requiring rows to be compared against each other",
+        "Checking union-compatibility",
+        "Parsing the SQL syntax"
+      ],
+      "correct_index": 1,
+      "explanation": "Comparing rows to remove duplicates is UNION's distinctive extra cost over UNION ALL.",
+      "marks": 1,
+      "sort_order": 0
+    },
+    {
+      "id": "tq-dbms-sql-18-set-operation-performance-2",
+      "test_id": "pt-dbms-sql-18-set-operation-performance",
+      "question_text": "What is the single most impactful, easy optimization mentioned for set operations?",
+      "options": [
+        "Always adding an ORDER BY",
+        "Using UNION ALL instead of UNION whenever duplicates are impossible or don't matter",
+        "Combining as many queries as possible into one UNION",
+        "Avoiding indexes on set-operation columns"
+      ],
+      "correct_index": 1,
+      "explanation": "This single substitution avoids unnecessary deduplication cost in the common case where it isn't needed.",
+      "marks": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "tq-dbms-sql-18-set-operation-performance-3",
+      "test_id": "pt-dbms-sql-18-set-operation-performance",
+      "question_text": "Is there a universal rule for whether a set operation or an equivalent join/subquery performs better?",
+      "options": [
+        "Yes, joins are always faster",
+        "No — it depends on data size, indexes, and the specific engine's optimizer; comparing actual execution plans is more reliable than a general rule",
+        "Yes, set operations are always faster",
+        "Set operations and joins always have identical performance"
+      ],
+      "correct_index": 1,
+      "explanation": "Performance comparisons here are genuinely context-dependent, not governed by a universal rule.",
+      "marks": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "tq-dbms-sql-18-set-operation-performance-4",
+      "test_id": "pt-dbms-sql-18-set-operation-performance",
+      "question_text": "Can indexes help speed up a set operation's deduplication/matching step?",
+      "options": [
+        "No, indexes only help WHERE clauses",
+        "Yes — indexes on the relevant columns can speed up the comparison work, similar to their effect on JOIN or GROUP BY",
+        "Indexes make set operations slower",
+        "Only INTERSECT can benefit from indexes, not UNION or EXCEPT"
+      ],
+      "correct_index": 1,
+      "explanation": "The underlying comparison/matching work benefits from indexing just as similar operations (joins, grouping) do.",
+      "marks": 1,
+      "sort_order": 3
+    },
+    {
+      "id": "tq-dbms-sql-18-set-operation-performance-5",
+      "test_id": "pt-dbms-sql-18-set-operation-performance",
+      "question_text": "What common, low-effort audit is worth doing on a slow query using plain UNION?",
+      "options": [
+        "Checking whether UNION could be replaced with UNION ALL if duplicates genuinely can't occur or don't matter",
+        "Removing all WHERE clauses",
+        "Adding more UNION statements",
+        "Switching to a NoSQL database"
+      ],
+      "correct_index": 0,
+      "explanation": "This is a frequently overlooked, easy performance check.",
+      "marks": 1,
+      "sort_order": 4
+    },
+    {
+      "id": "tq-dbms-sql-18-set-operation-performance-6",
+      "test_id": "pt-dbms-sql-18-set-operation-performance",
+      "question_text": "Where should you look to make a reliable performance comparison between competing query formulations?",
+      "options": [
+        "General online rules of thumb only",
+        "Actual execution plans for the realistic alternatives (Chapter 35)",
+        "The query's character count",
+        "The number of tables referenced"
+      ],
+      "correct_index": 1,
+      "explanation": "Concrete execution plan comparison is the reliable way to settle performance questions, as covered further in Chapter 35.",
+      "marks": 1,
+      "sort_order": 5
+    },
+    {
+      "id": "tq-dbms-sql-18-set-operation-performance-7",
+      "test_id": "pt-dbms-sql-18-set-operation-performance",
+      "question_text": "Is deduplication's cost purely theoretical, or does it matter in practice for large result sets?",
+      "options": [
+        "Purely theoretical, with no real practical impact",
+        "It's a genuine, significant cost for large result sets, not just a theoretical concern",
+        "It only matters for INTERSECT, not UNION",
+        "It only matters when ORDER BY is also used"
+      ],
+      "correct_index": 1,
+      "explanation": "The cost is real and scales with the size of the data being deduplicated.",
+      "marks": 1,
+      "sort_order": 6
+    },
+    {
+      "id": "tq-dbms-sql-18-set-operation-performance-8",
+      "test_id": "pt-dbms-sql-18-set-operation-performance",
+      "question_text": "Can combining several large plain UNIONs in one analytics query create a hidden performance problem?",
+      "options": [
+        "No, UNION has no cumulative cost across multiple uses",
+        "Yes — repeated deduplication passes across several large UNIONed queries can be a genuine, easy-to-overlook cost source",
+        "This only happens with UNION ALL, never plain UNION",
+        "Combining UNIONs always improves performance"
+      ],
+      "correct_index": 1,
+      "explanation": "Multiple deduplication passes compound, making this a real, worth-auditing performance concern in complex reporting queries.",
+      "marks": 1,
+      "sort_order": 7
+    }
+  ],
+  "coding_problems": [
+    {
+      "id": "cx-setperf-distinct-learners",
+      "slug": "setperf-distinct-learners",
+      "title": "Preserve distinct learner semantics before tuning",
+      "difficulty": "Easy",
+      "task": "Return each distinct learner_id appearing in either intake table, ordered by learner_id. Duplicates within and across sources must disappear.",
+      "schema_sql": "CREATE TABLE intake_a(learner_id INT NOT NULL); CREATE TABLE intake_b(learner_id INT NOT NULL);",
+      "seed_sql": "INSERT INTO intake_a VALUES(7),(7),(8); INSERT INTO intake_b VALUES(7),(9);",
+      "solution_sql": "SELECT learner_id FROM intake_a UNION SELECT learner_id FROM intake_b ORDER BY learner_id;",
+      "expected": "learner_id\n7\n8\n9",
+      "ordering": "Order by learner_id.",
+      "edge_cases": [
+        "Within-source duplicates.",
+        "Cross-source overlap.",
+        "Empty source."
+      ],
+      "hints": [
+        "Use the required distinct result contract."
+      ],
+      "explanation": "UNION removes equal learner projections from the entire combined population.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO intake_a VALUES(4),(4);",
+          "expected": "learner_id\n4"
+        },
+        {
+          "seed_sql": "",
+          "expected": ""
+        }
+      ]
+    },
+    {
+      "id": "cx-setperf-event-feed",
+      "slug": "setperf-event-feed",
+      "title": "Retain every namespaced event",
+      "difficulty": "Medium",
+      "task": "Return source_name, event_id, learner_id for every event from both tables, with source_name A or B. Retain distinct events for the same learner and order by source_name, event_id. Each source table has its own event_id key.",
+      "schema_sql": "CREATE TABLE events_a(event_id INT PRIMARY KEY,learner_id INT NOT NULL); CREATE TABLE events_b(event_id INT PRIMARY KEY,learner_id INT NOT NULL);",
+      "seed_sql": "INSERT INTO events_a VALUES(1,7),(2,7); INSERT INTO events_b VALUES(1,7),(2,9);",
+      "solution_sql": "SELECT 'A' AS source_name,event_id,learner_id FROM events_a UNION ALL SELECT 'B' AS source_name,event_id,learner_id FROM events_b ORDER BY source_name,event_id;",
+      "expected": "source_name\tevent_id\tlearner_id\nA\t1\t7\nA\t2\t7\nB\t1\t7\nB\t2\t9",
+      "ordering": "Order by source_name, event_id.",
+      "edge_cases": [
+        "Repeated learner across events.",
+        "Same local event identifier across sources.",
+        "Empty branch."
+      ],
+      "hints": [
+        "The source-event pair is the event identity.",
+        "Keep all contributed event rows."
+      ],
+      "explanation": "UNION ALL preserves the event population while the namespace disambiguates local event identifiers.",
+      "validation_cases": [
+        {
+          "seed_sql": "INSERT INTO events_b VALUES(5,7),(6,7);",
+          "expected": "source_name\tevent_id\tlearner_id\nB\t5\t7\nB\t6\t7"
+        },
+        {
+          "seed_sql": "",
+          "expected": ""
+        }
+      ]
+    }
+  ],
+  "coding_not_applicable": "",
+  "review": {
+    "reviewer": "/root",
+    "independent_review": "passed",
+    "original_questions_retained": 8,
+    "new_questions": 12,
+    "notes_review": "Independent manual content review passed within independent_review_scope; engine/browser/release gates separate.",
+    "editorial_record": "Original scenario-led prose and assessments. External originality and AdSense review unperformed.",
+    "canonical_answer_indices_preserved": true,
+    "independent_reviewer": "/root/review_d_and_programs",
+    "independent_review_scope": "Full notes,20MCQs with every option,canonical answer position and explanation,original diagrams,and all exercise contracts/fixtures or solved conceptual labs. Original identities/indices checked against public seed cache where applicable. Reported substantive findings corrected by coordinator and filtered recheck accepted;identified learner-facing spacing polished. Manual technical/editorial reasoning only;engine,provider,browser,external originality and AdSense evidence separate."
+  },
+  "integration": {
+    "existing_test_id": "pt-dbms-sql-18-set-operation-performance",
+    "original_note_sha256": "870262cc61719f4cb8c6cd99fa23c88322542589d43366787ecdbfdc8d8efb6b",
+    "status": "drafted; not included in prepared paired migrations"
+  },
+  "notes": "## Preserve the result contract before measuring work\n\nSet-operation tuning begins with the rows the report must return and the duplicate policy it requires. UNION removes equal projected rows, while UNION ALL retains contributed multiplicity. INTERSECT and EXCEPT have their own membership and multiplicity rules depending on supported syntax. Replacing one operator with another can change the answer even when it removes expensive work. A correct optimization must preserve the intended result before its speed is compared.\n\nSuppose two workshop intake tables can contain the same learner identifier. A distinct eligible-learner list needs one row per identifier; an event feed may need every contributed event. The same input can therefore justify either a distinct combination or an all-rows combination for different reports. Write the output identity and qualification rules beside the query so a performance edit does not quietly choose a different product requirement.\n\n## Identify what duplicate elimination adds\n\nDistinct set combination requires the engine to determine which projected rows are equal. An implementation can use sorting, hashing or other strategies, possibly involving memory or temporary storage. The exact operator and resource use depend on the engine and plan. Deduplication does not guarantee that the final output is sorted, and its cost cannot be inferred solely from the number of UNION keywords.\n\nUNION ALL can avoid this distinct-result requirement when preserving multiplicity is correct. It still pays for source access, filters, projection, transfer and any final ordering. A wide result with many large columns can remain expensive even when duplicate elimination is removed. Conversely, a small already selective input can make the distinct step a minor part of total latency. Measure where the actual time and resources go.\n\n## Prove that UNION ALL is allowed\n\nOne sufficient case is an output whose duplicates are intentionally meaningful. Another can be a proven disjointness property at the full projected identity, combined with no unwanted duplicates within each branch. Disjoint source tables do not automatically make projected rows disjoint: two event tables can hold different events for the same learner, and a projection containing only learner_id merges those identities.\n\n```sql\nSELECT learner_id FROM intake_a\nUNION\nSELECT learner_id FROM intake_b\nORDER BY learner_id;\n```\n\nIf both tables contain learner 7, the distinct query returns 7 once. Replacing UNION with UNION ALL returns it twice. Even when cross-branch overlap is impossible, duplicates already inside intake_a can make the replacement wrong for a distinct learner report. Test both kinds of duplication before claiming that sources from different years or systems make the all-rows form equivalent.\n\n## Reduce unnecessary width without dropping identity\n\nDuplicate comparison uses the projected row. Selecting an unneeded large description can increase memory, comparison and transfer work. Removing it may help, but it also changes distinctness if that column distinguished two rows. Project the required business identity and measures rather than applying a mechanical rule that fewer columns always preserves meaning.\n\nIf the report first needs distinct learner identifiers and then their current display labels, a deliberate identity-first relation followed by a key-based lookup can make the grain explicit. A nonunique label must not become the deduplication key. Check NULL, collation and type conversions too: changing the result type can change which text values compare equal even when the displayed sample appears unchanged.\n\n## Push eligible filters only when semantics survive\n\nA selective condition on each source can reduce the population reaching the set operation. It must represent the same requirement as filtering the combined result. Conditions involving converted types, derived labels or branch-specific meanings need inspection before being moved. A filter that drops required NULL rows or treats one branch differently is not a valid optimization simply because it reduces work.\n\nIndexes can help branch lookups and sometimes provide useful ordering or comparison opportunities, but they do not guarantee that the engine eliminates a distinct set step. The result may be built from several inputs with different plans. Inspect the actual source access and combination operators rather than assuming an index on the projected column proves an index-only global union.\n\n## Inspect plans and actual measurements separately\n\nEXPLAIN describes the optimizer's selected strategy and estimates. A supported execution-analysis command can run the query and report actual work. These are different evidence levels. Executing analysis can be expensive and can have effects for some statement forms, so use an appropriate controlled read-only benchmark environment rather than treating it as a harmless replacement for every plan inspection.\n\nRecord engine version, table definitions, indexes, row counts, value distribution, query parameters and result cardinality. Include the memory and cache conditions needed to interpret the measurements. A single warm-cache run on ten rows cannot establish production behavior on millions of skewed rows. Compare several representative cases while keeping the result contract constant and accounting for normal variability.\n\n## Keep final ordering and limiting costs visible\n\nAn outer ORDER BY can require sorting the combined population even for UNION ALL. A final LIMIT may reduce output without eliminating all upstream work. Conversely, a branch-local LIMIT selects different input candidates and can change the result compared with a global limit. Do not move limits into each branch without proving the report's ordering and top-N contract.\n\nFor top-five globally ordered events, a correct optimization must retain every candidate that could belong to the final five under complete tie-breaking. A source with most of the newest events can expose an incorrect local selection rule. Include equal timestamps and stable event identifiers. Performance conclusions should describe the full query, including final sort and limit, rather than crediting every gain to one set operator.\n\n## Analyze repeated set boundaries as a whole\n\nAn expression containing several UNION and UNION ALL operators has a duplicate scope determined by grouping and engine precedence. Optimizers can transform compatible expressions, so counting textual UNION occurrences does not prove a matching number of physical deduplication passes. Inspect the plan and preserve parentheses when they express required intermediate semantics.\n\nA later ALL cannot restore multiplicity already discarded by an earlier distinct result. A final distinct step can remove duplicates retained by earlier branches. These facts matter when consolidating several similar queries into one expression. Test a row repeated in the first two branches and again in a third, then compare the exact expected multiplicities under each grouping before treating the expressions as interchangeable.\n\n## Compare joins and existence forms on equal questions\n\nINTERSECT-style membership can sometimes be expressed through an EXISTS predicate, and an absence difference can sometimes use NOT EXISTS. A raw join can multiply rows on several matches, while a set operation may require distinct results. Nullable values can also behave differently between set duplicate comparison and ordinary equality predicates. Any alternative must preserve these cases before plan cost is compared.\n\nNo universal rule makes joins, subqueries or set operators fastest. The optimizer can transform eligible forms into similar strategies, while different data distributions favor different access paths. A comparison on dissimilar queries establishes little. Begin with overlap, duplicates, empty inputs and NULL counterexamples, then benchmark only the forms that pass the intended correctness contract.\n\n## Solve two semantics-first tuning exercises\n\nFirst exercise: combine learner identifiers from two sources as a distinct list. Include repeated 7 within the first source and another 7 in the second. The correct result contains 7 once. Explain why both within-source and cross-source duplicates must be addressed before proposing UNION ALL. An empty source should not erase the other source's eligible identities.\n\nSecond exercise: combine a unique-identity event feed from two sources while retaining a source namespace. Return every event, including two events belonging to the same learner. UNION ALL is appropriate because the contract preserves events; the source-event pair identifies them. Then describe a representative benchmark comparing valid alternative plans without claiming that the exercise's returned rows establish actual timing. Continue with [UNION](/learning/dbms-sql-tutorial/union-sql), [UNION ALL](/learning/dbms-sql-tutorial/union-all) and [set compatibility](/learning/dbms-sql-tutorial/set-compatibility) to keep identity, comparison and execution evidence connected.\n",
+  "diagrams": [
+    {
+      "kind": "table",
+      "caption": "Semantics decides whether duplicate elimination is removable",
+      "description": "A distinct learner list collapses repeats within and across sources. An event feed retains separate events with a source-event identity. These are different requirements, not interchangeable speed variants.",
+      "columns": [
+        "Requirement",
+        "Identity",
+        "Valid duplicate policy"
+      ],
+      "rows": [
+        [
+          "Distinct learner list",
+          "learner_id",
+          "Remove repeated projections"
+        ],
+        [
+          "All namespaced events",
+          "source_name, event_id",
+          "Retain every event"
+        ],
+        [
+          "Performance claim",
+          "Equivalent complete result",
+          "Measure actual plan and workload"
+        ]
+      ]
+    }
+  ],
+  "diagram_review": {
+    "technical_review": "Independent manual diagram/content consistency review passed;actual static/browser rendering tracked separately.",
+    "server_rendering": "pending",
+    "browser_rendering": "unverified",
+    "independent_review": "passed"
+  },
+  "sql_verification": {
+    "scope": "not executed; concurrency/recovery/provider verification separate",
+    "all_passed": false,
+    "cases": []
+  }
+}
