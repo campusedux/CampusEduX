@@ -116,7 +116,7 @@ async function HomeContent() {
 
       {/* Admin `banners` row (placement 'home') — shown as a promo card under the hero. */}
       {banner && (
-        <section className="container-page pt-10 md:pt-14" aria-label="Announcement">
+        <section className="container-page pt-10 md:pt-14 max-md:pt-8" aria-label="Announcement">
           <Link
             href={safeHref(banner.target_url) ?? "/projects"}
             className="card card-hover group grid items-center gap-4 overflow-hidden p-4 md:gap-5 md:p-5 lg:grid-cols-2"
@@ -163,7 +163,7 @@ async function HomeContent() {
       {/* 6 · Latest jobs */}
       {jobs.length > 0 && (
         <Reveal>
-          <section className="container-page pt-10 md:pt-14" aria-labelledby="home-jobs-title">
+          <section className="container-page pt-10 md:pt-14 max-md:pt-8" aria-labelledby="home-jobs-title">
             <SectionHeader
               id="home-jobs-title"
               eyebrow="Careers"
@@ -171,7 +171,7 @@ async function HomeContent() {
               description="Fresh openings for students and freshers."
               viewAllHref="/jobs"
             />
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:gap-5 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:gap-5 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 max-md:!grid-cols-1 max-md:gap-3">
               {jobs.map((j) => (
                 <JobCard key={j.id} job={j} />
               ))}
@@ -183,7 +183,7 @@ async function HomeContent() {
       {/* 7 · Projects marketplace preview */}
       {trending.length > 0 && (
         <Reveal>
-          <section className="container-page pt-10 md:pt-14" aria-labelledby="home-projects-title">
+          <section className="container-page pt-10 md:pt-14 max-md:pt-8" aria-labelledby="home-projects-title">
             <SectionHeader
               id="home-projects-title"
               eyebrow="Marketplace"
@@ -191,7 +191,7 @@ async function HomeContent() {
               description="Final-year projects with source code, ready to learn from and present."
               viewAllHref="/projects/trending"
             />
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:gap-5 lg:grid-cols-4 2xl:grid-cols-5">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:gap-5 lg:grid-cols-4 2xl:grid-cols-5 max-md:!grid-cols-1 max-md:gap-3">
               {trending.map((p, i) => (
                 <ProjectCard key={p.id} project={p} rank={i < 3 ? i + 1 : undefined} />
               ))}
@@ -212,13 +212,14 @@ async function HomeContent() {
 
       {posts.length > 0 && (
         <Reveal>
-          <section className="container-page pt-10 md:pt-14" aria-labelledby="home-blog-title">
-            <SectionHeader id="home-blog-title" eyebrow="Blog" title="Latest from the blog" viewAllHref="/blog" viewAllLabel="All articles" />
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-5 xl:grid-cols-3 2xl:grid-cols-4">
+          <section className="container-page pt-10 md:pt-14 max-md:pt-8" aria-labelledby="home-blog-title">
+            <SectionHeader id="home-blog-title" eyebrow="Blog" title="Latest from the blog" viewAllHref="/blog" viewAllLabel="All articles" className="max-md:[&>a]:hidden" />
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-5 xl:grid-cols-3 2xl:grid-cols-4 max-md:gap-3">
               {posts.map((p) => (
                 <BlogCard key={p.id} post={p} />
               ))}
             </div>
+            <Link href="/blog" className="mt-3 hidden min-h-11 items-center gap-1 text-sm font-semibold text-primary max-md:inline-flex">All articles <ArrowRight className="h-4 w-4" aria-hidden /></Link>
           </section>
         </Reveal>
       )}
@@ -230,7 +231,7 @@ async function HomeContent() {
 
       {faqs.length > 0 && (
         <Reveal>
-          <section className="container-page pt-10 md:pt-14" aria-labelledby="home-faq-title">
+          <section className="container-page pt-10 md:pt-14 max-md:pt-8" aria-labelledby="home-faq-title">
             <div className="grid gap-4 md:gap-5 lg:grid-cols-[1fr_1.6fr] lg:items-start">
               <SectionHeader
                 id="home-faq-title"

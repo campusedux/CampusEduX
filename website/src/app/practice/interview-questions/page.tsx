@@ -51,26 +51,26 @@ export default async function InterviewQuestionsHubPage() {
       {categories.length === 0 ? (
         <p className="mt-8 text-sm text-ink-faint">Interview questions are being added — check back soon.</p>
       ) : (
-        <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 md:gap-5 xl:grid-cols-4">
+        <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 md:gap-5 xl:grid-cols-4 max-md:mt-4 max-md:!grid-cols-2 max-md:gap-3">
           {categories.map((c) => (
             <Link
               key={c.slug}
               href={`/practice/interview-questions/${c.slug}`}
-              className="card card-hover group flex min-h-[160px] min-w-0 flex-col p-4"
+              className="card card-hover group flex min-h-[160px] min-w-0 flex-col p-4 max-md:min-h-[136px] max-md:p-3"
             >
-              <div className="flex min-w-0 items-center gap-3">
+              <div className="flex min-w-0 items-center gap-3 max-md:flex-col max-md:items-start max-md:gap-2">
                 <span
                   className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary-50 text-primary"
                   aria-hidden
                 >
                   <CATEGORY_ICON className="h-5 w-5" />
                 </span>
-                <h2 className="min-w-0 text-base font-semibold text-ink">{c.name}</h2>
+                <h2 className="min-w-0 text-base font-semibold text-ink max-md:text-[15px] max-md:leading-snug">{c.name}</h2>
               </div>
-              <p className="mt-2 line-clamp-2 flex-1 text-sm leading-5 text-ink-muted">{c.description}</p>
+              <p className="mt-2 line-clamp-2 flex-1 text-sm leading-5 text-ink-muted max-md:mt-1 max-md:text-[13px] max-md:leading-4">{c.description}</p>
               <span className="mt-2 flex items-center justify-between text-sm">
                 <span className="font-semibold text-primary inline-flex items-center gap-1">
-                  Open <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" aria-hidden />
+                  <span className="max-md:hidden">Open</span> <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" aria-hidden />
                 </span>
                 <span className="text-ink-faint">
                   {c.topic_count} topic{c.topic_count === 1 ? "" : "s"}

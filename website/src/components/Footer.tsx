@@ -87,7 +87,7 @@ const BOTTOM_LINKS: readonly FooterLink[] = [
 ];
 
 // Phone: full-width 44px rows; sm+: compact text links.
-const linkCls = "block py-3 text-sm text-ink-muted transition-colors hover:text-primary sm:inline sm:py-0";
+const linkCls = "block py-3 text-sm text-ink-muted transition-colors hover:text-primary sm:inline sm:py-0 max-md:!block max-md:!py-3";
 const headingCls = "font-sans text-xs font-bold uppercase tracking-[0.14em] text-ink-faint";
 
 /**
@@ -114,32 +114,32 @@ export default function Footer() {
   const supportEmail = "campusedux@gmail.com";
 
   return (
-    <footer className="mobile-scroll-content mt-8 border-t border-line bg-card">
+    <footer className="mobile-scroll-content mt-8 border-t border-line bg-card max-md:mt-6">
       <div className="container-page pt-10 md:pt-14">
         {/* Call-to-action band — same for every visitor, so the footer stays static. */}
-        <div className="relative overflow-hidden rounded-xl bg-gradient-to-br from-primary via-primary to-accent-violet px-6 py-6 text-white md:px-8">
+        <div className="relative overflow-hidden rounded-xl bg-gradient-to-br from-primary via-primary to-accent-violet px-6 py-6 text-white md:px-8 max-md:p-5">
           <span aria-hidden className="pointer-events-none absolute -right-16 -top-16 h-56 w-56 rounded-full bg-white/10" />
           <span aria-hidden className="pointer-events-none absolute -bottom-24 right-24 h-56 w-56 rounded-full bg-accent-pink/20 blur-2xl" />
           <div className="relative flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <div className="max-w-xl">
-              <p className="font-display text-2xl font-semibold leading-tight tracking-tight">
+              <p className="font-display text-2xl font-semibold leading-tight tracking-tight max-md:text-xl">
                 Learn it. Build it. Get placed.
               </p>
               <p className="mt-1 text-sm text-white/80">
                 Free tutorials, practice problems, real projects and fresh jobs — all in one student account.
               </p>
             </div>
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap gap-2 max-md:flex-col">
               <Link prefetch={false}
                 href="/learning"
-                className="inline-flex h-10 items-center gap-2 rounded-xl bg-card px-4 text-sm font-semibold text-primary-700 transition hover:-translate-y-px motion-reduce:transform-none theme-light"
+                className="inline-flex h-10 items-center gap-2 rounded-xl bg-card px-4 text-sm font-semibold text-primary-700 transition hover:-translate-y-px motion-reduce:transform-none theme-light max-md:w-full max-md:justify-center"
               >
                 <GraduationCap className="h-4 w-4" aria-hidden />
                 Start learning
               </Link>
               <Link prefetch={false}
                 href="/jobs"
-                className="inline-flex h-10 items-center gap-2 rounded-xl border border-white/30 bg-white/10 px-4 text-sm font-semibold text-white transition hover:bg-white/20"
+                className="inline-flex h-10 items-center gap-2 rounded-xl border border-white/30 bg-white/10 px-4 text-sm font-semibold text-white transition hover:bg-white/20 max-md:w-full max-md:justify-center"
               >
                 Browse jobs
                 <ArrowRight className="h-4 w-4" aria-hidden />
@@ -149,10 +149,10 @@ export default function Footer() {
         </div>
       </div>
 
-      <div className="container-page py-10 sm:py-12">
-        <div className="grid grid-cols-2 gap-x-6 gap-y-0 sm:grid-cols-3 sm:gap-x-8 sm:gap-y-10 lg:grid-cols-[1.4fr_1fr_1fr_1fr] lg:gap-x-10">
+      <div className="container-page py-10 sm:py-12 max-md:py-8">
+        <div className="grid grid-cols-2 gap-x-6 gap-y-0 sm:grid-cols-3 sm:gap-x-8 sm:gap-y-10 lg:grid-cols-[1.4fr_1fr_1fr_1fr] lg:gap-x-10 max-md:!grid-cols-2 max-md:gap-x-3 max-md:gap-y-6">
           {/* Brand — always visible above the link groups, full width at every breakpoint. */}
-          <div className="col-span-2 pb-8 sm:col-span-3 sm:pb-0 lg:col-span-1">
+          <div className="col-span-2 pb-8 sm:col-span-3 sm:pb-0 lg:col-span-1 max-md:!col-span-2 max-md:pb-6">
             <BrandMark />
 
             <p className="mt-4 max-w-xs text-sm leading-relaxed text-ink-muted">
@@ -197,13 +197,13 @@ export default function Footer() {
                 key={group.id}
                 aria-labelledby={`footer-nav-${group.id}`}
                 className={`sm:border-0 sm:pt-0 ${
-                  isLastRowOnMobile ? "col-span-2 border-t border-line pt-6 sm:col-span-1" : ""
+                  isLastRowOnMobile ? "col-span-2 border-t border-line pt-6 sm:col-span-1 max-md:!col-span-2" : ""
                 }`}
               >
                 <h2 id={`footer-nav-${group.id}`} className={headingCls}>
                   {group.title}
                 </h2>
-                <div className="mt-4">
+                <div className="mt-4 max-md:mt-2">
                   <FooterLinkList links={group.links} />
                 </div>
               </nav>

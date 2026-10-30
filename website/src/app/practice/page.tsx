@@ -69,25 +69,25 @@ export default async function PracticeHubPage() {
         description="Coding problems, an online compiler and your submission history — one system, separate from Learning."
       />
 
-      <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 md:gap-5 xl:grid-cols-4">
+      <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 md:gap-5 xl:grid-cols-4 max-md:mt-4 max-md:!grid-cols-2 max-md:gap-3">
         {TILES.map((t) => (
           <Link
             key={t.href}
             href={t.href}
-            className="card card-hover group flex min-h-[160px] min-w-0 flex-col p-4"
+            className="card card-hover group flex min-h-[160px] min-w-0 flex-col p-4 max-md:min-h-[136px] max-md:p-3"
           >
-            <div className="flex min-w-0 items-center gap-3">
+            <div className="flex min-w-0 items-center gap-3 max-md:flex-col max-md:items-start max-md:gap-2">
               <span
-                className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl"
+                className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl max-md:h-9 max-md:w-9"
                 style={{ background: t.bg, color: t.tint }}
                 aria-hidden
               >
                 <t.icon className="h-5 w-5" />
               </span>
-              <h2 className="min-w-0 text-base font-semibold text-ink">{t.title}</h2>
+              <h2 className="min-w-0 text-base font-semibold text-ink max-md:line-clamp-2 max-md:text-[15px] max-md:leading-snug">{t.title}</h2>
             </div>
-            <p className="mt-2 line-clamp-2 flex-1 text-sm leading-5 text-ink-muted">{t.body}</p>
-            <span className="mt-2 inline-flex items-center gap-1 text-sm font-semibold text-primary">
+            <p className="mt-2 line-clamp-2 flex-1 text-sm leading-5 text-ink-muted max-md:mt-1 max-md:text-[13px] max-md:leading-4">{t.body}</p>
+            <span className="mt-2 inline-flex items-center gap-1 text-sm font-semibold text-primary max-md:hidden">
               Open <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" aria-hidden />
             </span>
           </Link>
@@ -95,7 +95,7 @@ export default async function PracticeHubPage() {
       </div>
 
       {categories.length > 0 ? (
-        <section className="mt-10">
+        <section className="mt-10 max-md:mt-8">
           <div className="flex items-baseline justify-between gap-3">
             <h2 className="section-title">Browse by topic</h2>
             <span className="text-sm text-ink-faint">

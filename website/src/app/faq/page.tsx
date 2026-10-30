@@ -40,12 +40,12 @@ export default async function FaqPage() {
   return (
     <div className="page-shell-narrow">
       {faqs.length > 0 && <JsonLd data={faqJsonLd(faqs)} />}
-      <h1 className="text-3xl font-bold text-ink">Frequently Asked Questions</h1>
+      <h1 className="text-3xl font-bold text-ink max-md:text-xl max-md:font-semibold">Frequently Asked Questions</h1>
       {faqs.length === 0 ? (
         <EmptyState className="mt-8" title="No FAQs published yet" subtitle="FAQs are managed from the admin panel CMS." />
       ) : (
         Object.entries(grouped).map(([category, items]) => (
-          <section key={category} className="mt-10">
+          <section key={category} className="mt-10 max-md:mt-8">
             <h2 className="text-lg font-bold text-ink">{category}</h2>
             <div className="mt-3 divide-y divide-line rounded-xl border border-line bg-card">
               {items.map((f) => (

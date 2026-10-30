@@ -69,14 +69,14 @@ export default async function ResumeBuilderPage() {
   if (!user) {
     return (
       <div className="page-shell">
-        <section className="relative overflow-hidden rounded-xl border border-line bg-card px-5 py-8 shadow-card md:px-8 md:py-10">
+        <section className="relative overflow-hidden rounded-xl border border-line bg-card px-5 py-8 shadow-card md:px-8 md:py-10 max-md:px-4 max-md:py-6">
           <div aria-hidden className="bg-grid pointer-events-none absolute inset-0 [mask-image:radial-gradient(ellipse_at_top_right,#000_15%,transparent_65%)]" />
           <div aria-hidden className="pointer-events-none absolute -right-16 -top-24 h-64 w-64 rounded-full bg-accent-amber/15 blur-3xl" />
           <p className="eyebrow relative">CampusEduX Résumé Builder</p>
           <h1 className="relative mt-2 font-display text-2xl font-semibold leading-tight tracking-tight text-ink md:text-3xl">
             Pick a template, start from a real résumé, <span className="text-gradient">ship a PDF.</span>
           </h1>
-          <div className="relative mt-4 flex flex-wrap gap-2">
+          <div className="relative mt-4 flex flex-wrap gap-2 max-md:flex-col max-md:[&>a]:w-full">
             <Button href="/resume/templates" size="lg" rightIcon={ArrowRight}>
               Browse templates
             </Button>

@@ -23,7 +23,7 @@ const QUICK_ACCESS = [
 export function HomeHero({ stats, courses }: { stats: HeroStat[]; courses: HeroCourse[] }) {
   const shown = stats.filter((s) => s.value > 0);
   return (
-    <section className="container-page py-8 md:py-10" aria-labelledby="home-hero-title">
+    <section className="container-page py-8 md:py-10 max-md:py-6" aria-labelledby="home-hero-title">
       <div className="relative min-w-0 sm:overflow-hidden sm:rounded-2xl sm:border sm:border-line sm:bg-card sm:px-6 sm:py-5 lg:px-8 lg:py-6">
         <div className="relative grid items-center gap-4 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)] lg:gap-6">
           <div className="min-w-0">

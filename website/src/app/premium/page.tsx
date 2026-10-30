@@ -92,7 +92,7 @@ export default async function PremiumPage() {
     <div className="page-shell">
       <JsonLd data={breadcrumbJsonLd([{ name: "Premium", path: "/premium" }])} />
       {/* Hero — fixed dark panel in both themes */}
-      <section className="relative overflow-hidden rounded-xl bg-[#0F0B2E] px-6 py-8 text-center text-white shadow-card md:px-8 md:py-10">
+      <section className="relative overflow-hidden rounded-xl bg-[#0F0B2E] px-6 py-8 text-center text-white shadow-card md:px-8 md:py-10 max-md:px-4 max-md:py-6">
         <div aria-hidden className="pointer-events-none absolute -left-24 -top-24 h-72 w-72 rounded-full bg-primary/50 blur-3xl" />
         <div aria-hidden className="pointer-events-none absolute -bottom-28 right-0 h-72 w-80 rounded-full bg-warning/25 blur-3xl" />
         <div className="relative">
@@ -109,7 +109,7 @@ export default async function PremiumPage() {
           {plans.length > 0 && (
             <a
               href="#plans"
-              className="mt-4 inline-flex h-10 items-center gap-2 rounded-xl bg-white px-4 text-sm font-semibold text-[#2A1FA8] transition hover:-translate-y-px motion-reduce:transform-none"
+              className="mt-4 inline-flex h-10 items-center gap-2 rounded-xl bg-white px-4 text-sm font-semibold text-[#2A1FA8] transition hover:-translate-y-px motion-reduce:transform-none max-md:w-full max-md:justify-center"
             >
               {recommended ? `See plans — from ${formatINR(Math.min(...plans.map((p) => Number(p.monthly_price) || 0)))}/month` : "See plans"}
               <ArrowDown className="h-4 w-4" aria-hidden />
@@ -127,12 +127,12 @@ export default async function PremiumPage() {
       </section>
 
       {/* Plans */}
-      <section id="plans" className="scroll-mt-24 pt-10 md:pt-14" aria-labelledby="plans-title">
+      <section id="plans" className="scroll-mt-24 pt-10 md:pt-14 max-md:pt-8" aria-labelledby="plans-title">
         <SectionHeader id="plans-title" eyebrow="Pricing" title="Choose your plan" className="justify-center text-center [&>div]:mx-auto" />
         {plans.length === 0 ? (
           <EmptyState title="Plan pricing coming soon" subtitle="Plans appear here once published from the admin panel." />
         ) : (
-          <div className="grid grid-cols-1 gap-4 pt-4 md:grid-cols-2 md:gap-5 xl:grid-cols-3 xl:items-stretch">
+          <div className="grid grid-cols-1 gap-4 pt-4 md:grid-cols-2 md:gap-5 xl:grid-cols-3 xl:items-stretch max-md:gap-3">
             {plans.map((p) => (
               <PremiumCard
                 key={p.id}
@@ -157,7 +157,7 @@ export default async function PremiumPage() {
 
       {/* Benefits */}
       {features.length > 0 && (
-        <section className="mt-10 md:mt-14" aria-labelledby="benefits-title">
+        <section className="mt-10 md:mt-14 max-md:mt-8" aria-labelledby="benefits-title">
           <SectionHeader id="benefits-title" eyebrow="Benefits" title="What Premium unlocks" />
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-5 xl:grid-cols-3 2xl:grid-cols-4">
             {features.map((f, i) => {

@@ -112,7 +112,7 @@ function SearchSkeleton() {
 
 function CourseGrid({ courses }: { courses: LearningGridCard[] }) {
   return (
-    <div className="list-enter grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2 md:gap-5 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
+    <div className="list-enter grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2 md:gap-5 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 max-md:!grid-cols-1 max-md:gap-3">
       {courses.map((g) => (
         <CourseCard key={g.id} course={g} />
       ))}

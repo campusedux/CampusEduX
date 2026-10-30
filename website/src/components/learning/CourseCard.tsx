@@ -20,25 +20,27 @@ export type CourseCardData = Pick<
 export function CourseCard({
   course,
   compactOnMobile = false,
+  variant = "catalogue",
   className,
 }: {
   course: CourseCardData;
   /** Below `sm`: drop the cover art for a compact row (Learning hub lists). */
   compactOnMobile?: boolean;
+  variant?: "catalogue" | "featured";
   className?: string;
 }) {
   const icon = <BookOpen className="h-5 w-5" aria-hidden />;
   return (
     <Link
       href={`/learning/${course.slug}`}
-      className={`course-card ${compactOnMobile ? "course-card-compact" : ""} card card-hover group flex min-w-0 flex-col overflow-hidden [overflow-wrap:anywhere] ${className ?? ""}`}
+      className={`course-card ${compactOnMobile ? "course-card-compact" : ""} card card-hover group flex min-w-0 flex-col overflow-hidden [overflow-wrap:anywhere] ${variant === "featured" ? "max-md:w-[260px] max-md:shrink-0 max-md:snap-start" : "max-md:min-h-[104px] max-md:flex-row"} ${className ?? ""}`}
     >
-      <div className={`course-card-cover relative h-28 overflow-hidden md:h-32 ${compactOnMobile ? "hidden sm:block" : ""}`}>
+      <div className={`course-card-cover relative h-28 overflow-hidden md:h-32 ${variant === "featured" ? "max-md:h-24" : "max-md:h-20 max-md:w-20 max-md:shrink-0 max-md:self-center max-md:rounded-lg max-md:ml-3"} ${compactOnMobile ? "hidden sm:block" : ""}`}>
         <CourseCover course={course} className="course-cover-art" />
         {/* Solid card-coloured underlay so the tinted badges stay legible on any cover image. */}
-        <span className="absolute inset-x-3 top-3 flex flex-wrap gap-1.5">
+        <span className="absolute inset-x-3 top-3 flex flex-wrap gap-1.5 max-md:inset-x-1 max-md:top-1 max-md:gap-0.5">
           {course.is_featured && (
-            <span className="inline-flex rounded-full bg-card shadow-card">
+            <span className="inline-flex rounded-full bg-card shadow-card max-md:hidden">
               <Badge tone="neutral" className="border-0">
                 <Sparkles className="h-3 w-3" aria-hidden />
                 Featured
@@ -46,12 +48,12 @@ export function CourseCard({
             </span>
           )}
           <span className="inline-flex rounded-full bg-card shadow-card">
-            {course.is_premium ? <Badge variant="pro">Premium</Badge> : <Badge variant="free">Free</Badge>}
+            {course.is_premium ? <Badge variant="pro" className="max-md:px-1 max-md:py-0.5 max-md:text-[10px]">Premium</Badge> : <Badge variant="free" className="max-md:px-1 max-md:py-0.5 max-md:text-[10px]">Free</Badge>}
           </span>
         </span>
       </div>
 
-      <div className="course-card-body flex min-w-0 flex-1 flex-col p-4">
+      <div className="course-card-body flex min-w-0 flex-1 flex-col p-4 max-md:p-3">
         {compactOnMobile && (
           <div className="course-card-badges mb-2.5 flex items-center gap-2 sm:hidden">
             <span
@@ -65,12 +67,12 @@ export function CourseCard({
             </div>
           </div>
         )}
-        <h3 className="line-clamp-2 min-h-10 font-display text-base font-semibold leading-5 tracking-tight text-ink group-hover:text-primary">
+        <h3 className="line-clamp-2 min-h-10 font-display text-base font-semibold leading-5 tracking-tight text-ink group-hover:text-primary max-md:min-h-0 max-md:text-[15px] max-md:leading-snug">
           {course.name}
         </h3>
         {/* Always two lines tall, so every card in a row lines up exactly. */}
-        <p className="mt-1 line-clamp-2 min-h-10 text-sm leading-5 text-ink-muted">{course.description}</p>
-        <div className="mt-auto min-w-0 pt-2">
+        <p className={`mt-1 line-clamp-2 min-h-10 text-sm leading-5 text-ink-muted max-md:min-h-0 max-md:text-[13px] max-md:leading-4 ${variant === "catalogue" ? "max-md:line-clamp-1" : ""}`}>{course.description}</p>
+        <div className="mt-auto min-w-0 pt-2 max-md:pt-1">
           <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs font-medium text-ink-faint">
             {course.section_count > 0 && (
               <span className="inline-flex items-center gap-1">
@@ -87,7 +89,7 @@ export function CourseCard({
               aria-hidden
             />
           </div>
-          <CourseCardProgress gridSlug={course.slug} totalLessons={course.topic_count} />
+          <CourseCardProgress gridSlug={course.slug} totalLessons={course.topic_count} mobileAction={variant === "featured"} />
         </div>
       </div>
     </Link>

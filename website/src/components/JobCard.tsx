@@ -41,7 +41,7 @@ export function ExperienceBadge({ level, className }: { level?: string | null; c
  */
 export function JobCard({ job, className }: { job: JobCardData; className?: string }) {
   return (
-    <Link href={`/jobs/${job.id}`} className={cn("card card-hover group flex min-w-0 flex-col p-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2", className)}>
+    <Link href={`/jobs/${job.id}`} className={cn("card card-hover group flex min-w-0 flex-col p-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 max-md:p-3", className)}>
       <div className="flex items-start gap-3">
         <span className="flex h-10 w-10 flex-shrink-0 items-center justify-center overflow-hidden rounded-xl border border-line bg-surface">
           {job.company_logo_url ? (
@@ -51,7 +51,7 @@ export function JobCard({ job, className }: { job: JobCardData; className?: stri
           )}
         </span>
         <div className="min-w-0 flex-1">
-          <h3 className="line-clamp-2 break-words font-display text-base font-semibold leading-6 tracking-tight text-ink [overflow-wrap:anywhere] group-hover:text-primary">
+          <h3 className="line-clamp-2 break-words font-display text-base font-semibold leading-6 tracking-tight text-ink [overflow-wrap:anywhere] group-hover:text-primary max-md:text-[15px] max-md:leading-snug">
             {job.title}
           </h3>
           <p className="mt-0.5 truncate text-sm text-ink-muted">{job.company_name || "Company"}</p>
@@ -62,7 +62,7 @@ export function JobCard({ job, className }: { job: JobCardData; className?: stri
         />
       </div>
 
-      <div className="mb-3 mt-3 flex flex-wrap items-center gap-1.5">
+      <div className="mb-3 mt-3 flex flex-wrap items-center gap-1.5 max-md:mb-2 max-md:mt-2">
         <ExperienceBadge level={job.experience_level} />
         {job.job_type && (
           <Badge>{job.job_type}</Badge>
@@ -72,7 +72,7 @@ export function JobCard({ job, className }: { job: JobCardData; className?: stri
         )}
       </div>
 
-      <div className="mt-auto grid gap-1 border-t border-line pt-2 text-xs text-ink-muted">
+      <div className="mt-auto grid gap-1 border-t border-line pt-2 text-xs text-ink-muted max-md:grid-cols-2 max-md:border-0 max-md:pt-0">
         {job.location && (
           <span className="inline-flex min-w-0 items-start gap-2">
             <MapPin className="h-4 w-4 flex-shrink-0" aria-hidden />
@@ -84,7 +84,7 @@ export function JobCard({ job, className }: { job: JobCardData; className?: stri
           <span className="min-w-0 break-words [overflow-wrap:anywhere]">{job.salary_range || "Salary undisclosed"}</span>
         </span>
         {job.posted_at && (
-          <span className="inline-flex items-center gap-2 text-ink-faint">
+          <span className="inline-flex items-center gap-2 text-ink-faint max-md:hidden">
             <Clock className="h-4 w-4" aria-hidden />
             {timeAgo(job.posted_at)}
           </span>

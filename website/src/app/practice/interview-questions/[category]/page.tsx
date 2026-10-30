@@ -69,12 +69,12 @@ export default async function InterviewCategoryPage({ params }: { params: { cate
       {topics.length === 0 ? (
         <p className="mt-8 text-sm text-ink-faint">Topics are being added — check back soon.</p>
       ) : (
-        <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 md:gap-5 xl:grid-cols-4">
+        <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 md:gap-5 xl:grid-cols-4 max-md:mt-4 max-md:!grid-cols-2 max-md:gap-3">
           {topics.map((t) => (
             <Link
               key={t.slug}
               href={`/practice/interview-questions/${category.slug}/${t.slug}`}
-              className="card card-hover group flex min-h-[150px] min-w-0 flex-col p-4"
+              className="card card-hover group flex min-h-[150px] min-w-0 flex-col p-4 max-md:min-h-[136px] max-md:p-3"
             >
               <span
                 className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-primary-50 text-primary"
@@ -82,9 +82,9 @@ export default async function InterviewCategoryPage({ params }: { params: { cate
               >
                 <BookOpen className="h-5 w-5" />
               </span>
-              <h2 className="mt-2 line-clamp-2 text-base font-semibold text-ink">{t.name}</h2>
+              <h2 className="mt-2 line-clamp-2 text-base font-semibold text-ink max-md:text-[15px] max-md:leading-snug">{t.name}</h2>
               {t.description ? (
-                <p className="mt-1 line-clamp-2 flex-1 text-sm leading-5 text-ink-muted">{t.description}</p>
+                <p className="mt-1 line-clamp-2 flex-1 text-sm leading-5 text-ink-muted max-md:text-[13px] max-md:leading-4">{t.description}</p>
               ) : (
                 <span className="flex-1" />
               )}

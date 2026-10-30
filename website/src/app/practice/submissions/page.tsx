@@ -112,7 +112,28 @@ export default async function PracticeSubmissionsPage({
 
   return (
     <Shell>
-      <div className="overflow-x-auto rounded-xl border border-line bg-card">
+      <div className="grid gap-3 md:hidden">
+        {rows.map((r) => (
+          <article key={r.id} className="rounded-xl border border-line bg-card p-3">
+            <div className="flex min-w-0 items-start justify-between gap-2">
+              <Link href={`/practice/problems/${r.problem_slug}`} className="min-w-0 flex-1 truncate text-[15px] font-semibold text-ink hover:text-primary">
+                {r.problem_slug}
+              </Link>
+              <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold ${VERDICT_CLASS[r.verdict] ?? "bg-surface text-ink-muted"}`}>
+                {VERDICT_LABEL[r.verdict] ?? r.verdict}
+              </span>
+            </div>
+            <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-ink-muted">
+              <span>{PRACTICE_LANGUAGE_LABEL[r.language] ?? r.language}</span>
+              <span>{r.passed}/{r.total} tests</span>
+              <span>{r.runtime_ms ? `${r.runtime_ms} ms` : "—"}</span>
+              <span>{formatMemory(r.memory_kb)}</span>
+              <span>{timeAgo(r.created_at)}</span>
+            </div>
+          </article>
+        ))}
+      </div>
+      <div className="hidden overflow-x-auto rounded-xl border border-line bg-card md:block">
         <table className="w-full min-w-[640px] text-sm">
           <thead>
             <tr className="border-b border-line text-left text-xs uppercase tracking-wide text-ink-faint">
