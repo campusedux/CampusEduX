@@ -23,7 +23,7 @@ const STATUS_UI: Record<AtsStatus, { text: string; badge: string; bar: string }>
 function CategoryCard({ category, resumeId }: { category: AtsCategory; resumeId: string }) {
   const ui = STATUS_UI[category.status];
   return (
-    <div className="rounded-2xl border border-line bg-card p-5">
+    <div className="rounded-xl border border-line bg-card p-4 md:p-5">
       <div className="flex items-start justify-between gap-3">
         <div>
           <h3 className="font-bold text-ink">{category.label}</h3>
@@ -99,12 +99,12 @@ export default async function ResumeAtsPage({ params }: { params: { id: string }
       <h1 className="font-display text-[1.6rem] font-bold tracking-tight text-ink">ATS check — &ldquo;{resume.title}&rdquo;</h1>
 
       {!analysis ? (
-        <div className="mt-6 flex items-center gap-2 rounded-2xl border border-line bg-card p-6 text-sm text-ink-muted">
+        <div className="mt-5 flex items-center gap-2 rounded-xl border border-line bg-card p-4 text-sm text-ink-muted md:p-5">
           <AlertTriangle className="h-4 w-4 text-danger" /> Couldn&apos;t analyse this résumé right now. Please try again shortly.
         </div>
       ) : (
         <>
-          <div className="mt-6 flex items-center gap-6 rounded-2xl border border-line bg-card p-6">
+          <div className="mt-5 flex flex-wrap items-center gap-4 rounded-xl border border-line bg-card p-4 md:p-5">
             <div className="text-4xl font-bold text-ink">{analysis.overall}</div>
             <div>
               <div className="text-sm font-semibold text-ink">{overallLabel(analysis.overall)}</div>
@@ -115,7 +115,7 @@ export default async function ResumeAtsPage({ params }: { params: { id: string }
             </Link>
           </div>
 
-          <div className="mt-6 grid gap-4 lg:grid-cols-2">
+          <div className="mt-5 grid grid-cols-1 gap-4 lg:grid-cols-2 lg:gap-5 2xl:grid-cols-4">
             {analysis.categories.map((c) => (
               <CategoryCard key={c.key} category={c} resumeId={resume.id} />
             ))}

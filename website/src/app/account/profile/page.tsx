@@ -16,7 +16,7 @@ export default async function ProfilePage() {
   return (
     <div>
       <AccountPageHeader title="Profile" description="Your details, course and links — shared with the CampusEduX app." />
-      <div className="card max-w-2xl p-5 sm:p-7">
+      <div className="card max-w-lg p-4 md:p-5">
         <ProfileForm
           initial={user}
           catalog={{

@@ -56,19 +56,19 @@ async function AccountContent() {
         <div className="grid grid-cols-1 gap-4">
           <Link
             href="/account/wallet"
-            className="group relative overflow-hidden rounded-2xl bg-gradient-to-br from-primary via-primary to-accent-violet p-5 text-white shadow-card transition hover:-translate-y-0.5 motion-reduce:transform-none"
+            className="group relative overflow-hidden rounded-xl bg-gradient-to-br from-primary via-primary to-accent-violet p-4 text-white shadow-card transition hover:-translate-y-0.5 motion-reduce:transform-none"
           >
             <span aria-hidden className="pointer-events-none absolute -right-8 -top-8 h-28 w-28 rounded-full bg-white/10" />
             <span className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.12em] text-white/75">
               <Wallet className="h-4 w-4" aria-hidden /> Wallet balance
             </span>
-            <span className="mt-2 block font-display text-3xl font-bold">{formatINR(balance)}</span>
-            <span className="mt-3 inline-flex items-center gap-1 text-sm font-semibold">
+            <span className="mt-1 block font-display text-2xl font-semibold">{formatINR(balance)}</span>
+            <span className="mt-2 inline-flex items-center gap-1 text-sm font-semibold">
               View wallet <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" aria-hidden />
             </span>
           </Link>
-          <Link href="/account/referral" className="card card-hover group flex items-center gap-4 p-5">
-            <span className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl bg-accent-pink/10">
+          <Link href="/account/referral" className="card card-hover group flex items-center gap-3 p-4">
+            <span className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-accent-pink/10">
               <Gift className="h-5 w-5 text-accent-pink" aria-hidden />
             </span>
             <span className="min-w-0 flex-1">
@@ -88,8 +88,8 @@ async function AccountContent() {
         {STATS.map((c) => {
           const Icon = c.icon;
           return (
-            <Link key={c.href} href={c.href} className="group card card-hover flex items-center gap-4 p-5">
-              <span className={`flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl ${c.tone}`}>
+            <Link key={c.href} href={c.href} className="group card card-hover flex items-center gap-3 p-4">
+              <span className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl ${c.tone}`}>
                 <Icon className="h-5 w-5" aria-hidden />
               </span>
               <span className="min-w-0">
@@ -102,7 +102,7 @@ async function AccountContent() {
       </div>
 
       <SectionHeader title="Shortcuts" className="mt-5" />
-      <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2 md:gap-5 lg:grid-cols-3 2xl:grid-cols-4">
         {SHORTCUTS.map((s) => {
           const Icon = s.icon;
           return (

@@ -47,21 +47,21 @@ export default async function AccountReferralPage() {
   ];
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       <ReferralHero title="Refer & earn" subtitle="Share your link — when friends join CampusEduX through it, credit is added to your wallet.">
         {link && (
-          <div className="theme-light mt-7 max-w-2xl rounded-2xl bg-white p-3 text-ink shadow-card sm:p-4">
+          <div className="theme-light mt-4 rounded-xl bg-white p-3 text-ink shadow-card md:p-4">
             <ShareReferralLink link={link} code={code?.code} />
           </div>
         )}
       </ReferralHero>
 
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-5 xl:grid-cols-3">
         {STATS.map((s) => {
           const Icon = s.icon;
           return (
-            <div key={s.label} className="card flex items-center gap-4 p-5">
-              <span className={`flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl ${s.tone}`}>
+            <div key={s.label} className="card flex min-w-0 items-center gap-3 p-4 md:p-5">
+              <span className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl ${s.tone}`}>
                 <Icon className="h-5 w-5" aria-hidden />
               </span>
               <div>
@@ -74,7 +74,7 @@ export default async function AccountReferralPage() {
       </div>
 
       {history.length > 0 && (
-        <div className="card p-5 sm:p-6">
+        <div className="card p-4 md:p-5">
           <div className="flex flex-wrap items-baseline justify-between gap-2">
             <p className="font-display text-lg font-bold text-ink">Your referral progress</p>
             <p className="text-sm text-ink-muted">
@@ -108,7 +108,7 @@ export default async function AccountReferralPage() {
               const done = isDone(r.status);
               const name = r.referred_display_name || "Pending signup";
               return (
-                <div key={r.id} className="flex flex-wrap items-center justify-between gap-3 px-5 py-4 text-sm">
+                <div key={r.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-2 text-sm">
                   <div className="min-w-0">
                     <div className="truncate font-medium text-ink">{name}</div>
                     <div className="text-xs text-ink-faint">{timeAgo(r.created_at)}</div>

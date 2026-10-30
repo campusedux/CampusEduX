@@ -25,7 +25,7 @@ export default async function ReferralPage() {
   const settings = await getRewardSettings();
 
   return (
-    <div className="page-shell space-y-12">
+    <div className="page-shell space-y-10 md:space-y-14">
       <JsonLd data={breadcrumbJsonLd([{ name: "Referral", path: "/referral" }])} />
       <ReferralHero
         title="Invite friends, earn wallet credit"
@@ -33,7 +33,7 @@ export default async function ReferralPage() {
       >
         <Link
           href="/account/referral"
-          className="mt-7 inline-flex h-12 items-center gap-2 rounded-xl bg-white px-6 text-[0.95rem] font-semibold text-[#7A1F5C] shadow-card transition hover:-translate-y-px motion-reduce:transform-none"
+          className="mt-4 inline-flex h-10 items-center gap-2 rounded-xl bg-white px-4 text-sm font-semibold text-[#7A1F5C] transition hover:-translate-y-px motion-reduce:transform-none"
         >
           Get your referral link <ArrowRight className="h-4 w-4" aria-hidden />
         </Link>
@@ -46,9 +46,9 @@ export default async function ReferralPage() {
           Current reward
         </h2>
         {settings ? (
-          <div className="card mt-5 flex flex-col gap-4 p-6 sm:flex-row sm:items-start">
-            <span className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-2xl bg-success/15">
-              <BadgeIndianRupee className="h-6 w-6 text-success" aria-hidden />
+          <div className="card mt-5 flex flex-col gap-3 p-4 md:flex-row md:items-start md:p-5">
+            <span className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-success/15">
+              <BadgeIndianRupee className="h-5 w-5 text-success" aria-hidden />
             </span>
             <div>
               <p className="font-display text-xl font-bold text-ink">

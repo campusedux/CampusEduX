@@ -60,7 +60,7 @@ type SP = { page?: string; q?: string; category?: string; tag?: string };
 
 const chipCls = (active: boolean) =>
   cn(
-    "inline-flex items-center rounded-full border px-3.5 py-1.5 text-sm font-medium transition",
+    "inline-flex h-8 items-center rounded-full border px-3 text-sm font-medium transition",
     active
       ? "border-primary bg-primary text-white"
       : "border-line bg-card text-ink-muted hover:border-primary/40 hover:text-ink",
@@ -122,7 +122,7 @@ export default async function BlogIndexPage({ searchParams }: { searchParams: SP
       ) : (
         <>
           {categories.length > 0 ? (
-            <nav aria-label="Blog categories" className="mt-6 flex flex-wrap gap-2">
+            <nav aria-label="Blog categories" className="mt-4 flex flex-wrap gap-2">
               <Link href="/blog" className={chipCls(!category && !tag && !q)}>
                 All
               </Link>
@@ -135,9 +135,9 @@ export default async function BlogIndexPage({ searchParams }: { searchParams: SP
           ) : null}
 
           {showFeatured && featured.length > 0 ? (
-            <section className="mt-10">
+            <section className="mt-8">
               <h2 className="h-section">Featured articles</h2>
-              <div className="mt-5 space-y-6">
+              <div className="mt-4 space-y-5">
                 {lead ? <BlogCard post={lead} priority featured /> : null}
                 {/* Adaptive so a leftover card never sits in 1/3 width next to
                     empty space: 1 → full-width horizontal card like the lead,
@@ -147,8 +147,8 @@ export default async function BlogIndexPage({ searchParams }: { searchParams: SP
                 ) : restFeatured.length > 1 ? (
                   <div
                     className={cn(
-                      "grid gap-6 sm:grid-cols-2",
-                      restFeatured.length >= 3 && "lg:grid-cols-3",
+                      "grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-5",
+                      restFeatured.length >= 3 && "xl:grid-cols-3 2xl:grid-cols-4",
                     )}
                   >
                     {restFeatured.map((p, i) => (
@@ -161,7 +161,7 @@ export default async function BlogIndexPage({ searchParams }: { searchParams: SP
           ) : null}
 
           {hideLatest ? null : (
-            <section className="mt-12">
+            <section className="mt-10">
               <div className="flex items-baseline justify-between gap-4">
                 <h2 className="h-section">{latestHeading}</h2>
                 {isFiltered ? (
@@ -186,7 +186,7 @@ export default async function BlogIndexPage({ searchParams }: { searchParams: SP
                   }
                 />
               ) : (
-                <div className="mt-6 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+                <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-5 xl:grid-cols-3 2xl:grid-cols-4">
                   {latest.map((p, i) => (
                     <BlogCard key={p.id} post={p} priority={!showFeatured && i < 3} />
                   ))}

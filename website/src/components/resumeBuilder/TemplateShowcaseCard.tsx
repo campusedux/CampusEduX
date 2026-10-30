@@ -13,7 +13,7 @@ export function TemplateShowcaseCard({ template }: { template: ResolvedTemplate 
       href="/resume/templates"
       className="group card card-hover block overflow-hidden"
     >
-      <div className="relative border-b border-line bg-surface">
+      <div className="relative h-40 overflow-hidden border-b border-line bg-surface">
         <ResumeThumbnail template={template} model={model} />
         {template.atsFriendly && (
           <span className="absolute left-2.5 top-2.5">

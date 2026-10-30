@@ -135,7 +135,7 @@ export default function BuilderFeatures({
 
   if (draft.projectType === "academic")
     return (
-      <section className="card p-6">
+      <section className="card p-4 md:p-5">
         <h2 className="text-lg font-semibold">Project mentoring scope</h2>
         <p className="mt-3 text-sm text-ink-muted">
           We can review code you wrote, help debug it, discuss architecture, and
@@ -299,7 +299,7 @@ export default function BuilderFeatures({
   }
 
   return (
-    <div className="grid gap-8 lg:grid-cols-[1fr_340px] lg:items-start">
+    <div className="grid gap-4 md:gap-5 lg:grid-cols-[1fr_340px] lg:items-start">
       <div className="min-w-0 space-y-8">
         <ConfigSummary
           projectType={draft.projectType as ProjectType}

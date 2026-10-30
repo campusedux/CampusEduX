@@ -146,7 +146,7 @@ async function ProjectResults({ query }: { query: ProjectQuery }) {
           }
         />
       ) : (
-        <div className="list-enter grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+        <div className="list-enter grid min-w-0 grid-cols-1 gap-4 md:grid-cols-2 md:gap-5 xl:grid-cols-3 2xl:grid-cols-4">
           {projects.map((p) => (
             <ProjectCard key={p.id} project={p} />
           ))}
@@ -163,7 +163,7 @@ function ProjectResultsSkeleton() {
     <div role="status" aria-label="Loading projects">
       <span className="sr-only">Loading projects…</span>
       <div aria-hidden className="mb-4 h-5 w-28 animate-pulse rounded bg-line/70 motion-reduce:animate-none" />
-      <div aria-hidden className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+      <div aria-hidden className="grid min-w-0 grid-cols-1 gap-4 md:grid-cols-2 md:gap-5 xl:grid-cols-3 2xl:grid-cols-4">
         {Array.from({ length: 6 }).map((_, i) => (
           <SkeletonCard key={i} variant="project" />
         ))}

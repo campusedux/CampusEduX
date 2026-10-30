@@ -81,7 +81,7 @@ export default async function PracticeProblemsPage({ searchParams }: { searchPar
       />
       <PageHeader eyebrow="Practice" title="Coding Problems" />
 
-      <div className="mt-8 grid gap-8 lg:grid-cols-[260px_1fr] lg:items-start">
+      <div className="mt-6 grid gap-4 md:gap-5 lg:grid-cols-[260px_1fr] lg:items-start">
         <FilterSheet title="Filters" activeCount={activeCount}>
           <PracticeFilters categories={categories} state={query} />
         </FilterSheet>

@@ -32,7 +32,7 @@ export default async function SavedJobsPage() {
           action={<Button href="/jobs" size="sm">Find roles</Button>}
         />
       ) : (
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-5 xl:grid-cols-3 2xl:grid-cols-4">
           {jobs.map((j) => (
             <JobCard key={j.id} job={j} />
           ))}

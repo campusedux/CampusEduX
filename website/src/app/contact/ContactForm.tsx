@@ -36,7 +36,7 @@ export default function ContactForm() {
 
   if (status === "sent") {
     return (
-      <div className="mt-8 rounded-2xl border border-success/40 bg-card p-5 shadow-card">
+      <div className="mt-6 rounded-xl border border-success/40 bg-card p-4 shadow-card md:p-5">
         <div className="font-semibold text-ink">Thanks — your message has been sent.</div>
         <p className="mt-1 text-sm text-ink-muted">The CampusEduX team will get back to you by email.</p>
         <button
@@ -51,7 +51,7 @@ export default function ContactForm() {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="mt-8 max-w-md space-y-4">
+    <form onSubmit={handleSubmit} className="mt-6 max-w-md space-y-4">
       <Field label="Your name" htmlFor="contact-name" required>
         <Input
           id="contact-name"

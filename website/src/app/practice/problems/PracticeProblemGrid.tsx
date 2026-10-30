@@ -81,14 +81,14 @@ export function PracticeProblemGrid({
             : "Every problem on this page is solved. Nice."}
         </p>
       ) : (
-        <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:gap-5 xl:grid-cols-3 2xl:grid-cols-4">
           {visible.map((p) => {
             const isSolved = state === "ready" && solved.has(p.id);
             return (
               <li key={p.slug}>
                 <Link
                   href={`/practice/problems/${p.slug}`}
-                  className="card card-hover flex h-full flex-col gap-2 p-4"
+                  className="card card-hover flex h-full min-w-0 flex-col gap-2 p-4"
                 >
                   <div className="flex items-start justify-between gap-2">
                     <span className="flex items-center gap-1.5 text-xs font-medium text-ink-faint">
@@ -116,7 +116,7 @@ export function PracticeProblemGrid({
                     </span>
                   </div>
 
-                  <h3 className="font-semibold leading-snug text-ink">{p.title}</h3>
+                  <h3 className="line-clamp-2 text-base font-semibold leading-snug text-ink">{p.title}</h3>
 
                   <div className="mt-auto flex flex-wrap items-center gap-1.5 pt-1 text-[0.7rem] text-ink-faint">
                     <span className="rounded bg-surface px-1.5 py-0.5 font-medium">{p.category_name}</span>

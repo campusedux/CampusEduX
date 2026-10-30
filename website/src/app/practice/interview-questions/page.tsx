@@ -51,22 +51,24 @@ export default async function InterviewQuestionsHubPage() {
       {categories.length === 0 ? (
         <p className="mt-8 text-sm text-ink-faint">Interview questions are being added — check back soon.</p>
       ) : (
-        <div className="mt-8 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 md:gap-5 xl:grid-cols-4">
           {categories.map((c) => (
             <Link
               key={c.slug}
               href={`/practice/interview-questions/${c.slug}`}
-              className="card card-hover group flex flex-col p-5"
+              className="card card-hover group flex min-h-[160px] min-w-0 flex-col p-4"
             >
-              <span
-                className="inline-flex h-11 w-11 items-center justify-center rounded-xl bg-primary-50 text-primary"
-                aria-hidden
-              >
-                <CATEGORY_ICON className="h-5 w-5" />
-              </span>
-              <h2 className="mt-4 text-lg font-bold text-ink">{c.name}</h2>
-              <p className="mt-1.5 flex-1 text-sm leading-relaxed text-ink-muted">{c.description}</p>
-              <span className="mt-4 flex items-center justify-between text-sm">
+              <div className="flex min-w-0 items-center gap-3">
+                <span
+                  className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary-50 text-primary"
+                  aria-hidden
+                >
+                  <CATEGORY_ICON className="h-5 w-5" />
+                </span>
+                <h2 className="min-w-0 text-base font-semibold text-ink">{c.name}</h2>
+              </div>
+              <p className="mt-2 line-clamp-2 flex-1 text-sm leading-5 text-ink-muted">{c.description}</p>
+              <span className="mt-2 flex items-center justify-between text-sm">
                 <span className="font-semibold text-primary inline-flex items-center gap-1">
                   Open <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" aria-hidden />
                 </span>

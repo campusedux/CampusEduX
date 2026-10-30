@@ -56,7 +56,7 @@ export default async function CompanyDetailPage({ params }: { params: { id: stri
           { label: company.name },
         ]}
       />
-      <header className="card flex flex-col gap-5 p-6 sm:flex-row sm:items-start sm:p-8">
+      <header className="card flex flex-col gap-4 p-4 md:p-5 sm:flex-row sm:items-start">
         <span className="flex h-16 w-16 flex-shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-line bg-surface">
           {company.logo_url ? (
             <Image src={company.logo_url} alt={company.name} width={64} height={64} className="h-full w-full object-cover" />
@@ -85,7 +85,7 @@ export default async function CompanyDetailPage({ params }: { params: { id: stri
       {jobs.length === 0 ? (
         <EmptyState className="mt-4" icon={Briefcase} title="No open roles right now" subtitle="Check back soon, or browse all jobs." />
       ) : (
-        <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-5 xl:grid-cols-3 2xl:grid-cols-4">
           {jobs.map((j) => (
             <JobCard key={j.id} job={j} />
           ))}

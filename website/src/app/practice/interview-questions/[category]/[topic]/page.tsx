@@ -105,7 +105,7 @@ export default async function InterviewTopicPage({
       ) : (
         <div className="mt-8 max-w-none">
           {questions.map((q, i) => (
-            <article key={i} className="border-t border-line py-7 first:border-t-0 first:pt-0">
+            <article key={i} className="border-t border-line py-5 first:border-t-0 first:pt-0">
               <h2 className="text-lg font-bold text-ink">
                 <span className="text-ink-faint">Question {i + 1}:</span> {q.question}
               </h2>
@@ -164,7 +164,7 @@ export default async function InterviewTopicPage({
 
       <section className="mt-10 border-t border-line pt-8">
         <h2 className="section-title">Continue Your Preparation</h2>
-        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 md:gap-5 xl:grid-cols-4">
           {learningLink ? (
             <Link href={learningLink.href} className="card card-hover flex items-center gap-3 p-4">
               <GraduationCap className="h-5 w-5 flex-shrink-0 text-primary" aria-hidden />

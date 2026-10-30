@@ -56,7 +56,7 @@ export default async function Page() {
   if (!draft.title.trim()) missing.push("title");
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6 sm:py-12 lg:px-8">
+    <div className="container-page py-10 md:py-14">
       <StepBar current={2} />
 
       <div className="flex flex-wrap items-start justify-between gap-4">
@@ -129,7 +129,7 @@ function EstimateBody({
   const groupedIncluded = groupByCategory(included);
 
   return (
-    <div className="grid gap-8 lg:grid-cols-[1fr_380px] lg:items-start">
+    <div className="grid gap-4 md:gap-5 lg:grid-cols-[1fr_380px] lg:items-start">
       <div className="min-w-0 space-y-8">
         {/* Project overview */}
         <ConfigSummary

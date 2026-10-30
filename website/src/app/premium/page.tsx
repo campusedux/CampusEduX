@@ -92,30 +92,30 @@ export default async function PremiumPage() {
     <div className="page-shell">
       <JsonLd data={breadcrumbJsonLd([{ name: "Premium", path: "/premium" }])} />
       {/* Hero — fixed dark panel in both themes */}
-      <section className="relative overflow-hidden rounded-3xl bg-[#0F0B2E] px-6 py-12 text-center text-white shadow-card-lg sm:px-10 sm:py-16">
+      <section className="relative overflow-hidden rounded-xl bg-[#0F0B2E] px-6 py-8 text-center text-white shadow-card md:px-8 md:py-10">
         <div aria-hidden className="pointer-events-none absolute -left-24 -top-24 h-72 w-72 rounded-full bg-primary/50 blur-3xl" />
         <div aria-hidden className="pointer-events-none absolute -bottom-28 right-0 h-72 w-80 rounded-full bg-warning/25 blur-3xl" />
         <div className="relative">
-          <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-warning to-accent-pink shadow-glow">
-            <Crown className="h-7 w-7 text-white" aria-hidden />
+          <span className="mx-auto flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-warning to-accent-pink">
+            <Crown className="h-5 w-5 text-white" aria-hidden />
           </span>
-          <p className="mt-5 text-xs font-bold uppercase tracking-[0.18em] text-[#C9C2FF]">CampusEduX Premium</p>
-          <h1 className="mx-auto mt-3 max-w-2xl font-display text-[2.25rem] font-bold leading-[1.05] tracking-tight sm:text-5xl">
+          <p className="mt-2 text-xs font-bold uppercase tracking-[0.18em] text-[#C9C2FF]">CampusEduX Premium</p>
+          <h1 className="mt-2 font-display text-2xl font-semibold leading-tight tracking-tight md:text-3xl">
             Go further, <span className="bg-gradient-to-r from-[#FFD27A] to-[#FF8FC7] bg-clip-text text-transparent">faster.</span>
           </h1>
-          <p className="mx-auto mt-4 max-w-xl text-[15px] text-white/75 sm:text-base">
+          <p className="mt-2 text-sm text-white/75 md:text-base">
             One subscription, same account across web and the app. Everything already free stays free.
           </p>
           {plans.length > 0 && (
             <a
               href="#plans"
-              className="mt-8 inline-flex h-12 items-center gap-2 rounded-xl bg-white px-6 text-[0.95rem] font-semibold text-[#2A1FA8] shadow-card transition hover:-translate-y-px motion-reduce:transform-none"
+              className="mt-4 inline-flex h-10 items-center gap-2 rounded-xl bg-white px-4 text-sm font-semibold text-[#2A1FA8] transition hover:-translate-y-px motion-reduce:transform-none"
             >
               {recommended ? `See plans — from ${formatINR(Math.min(...plans.map((p) => Number(p.monthly_price) || 0)))}/month` : "See plans"}
               <ArrowDown className="h-4 w-4" aria-hidden />
             </a>
           )}
-          <ul className="mt-8 flex flex-wrap justify-center gap-x-6 gap-y-2 text-sm text-white/70">
+          <ul className="mt-4 flex flex-wrap justify-center gap-x-4 gap-y-2 text-sm text-white/70">
             <li className="inline-flex items-center gap-1.5">
               <Lock className="h-4 w-4" aria-hidden /> Secure payments via Razorpay
             </li>
@@ -127,12 +127,12 @@ export default async function PremiumPage() {
       </section>
 
       {/* Plans */}
-      <section id="plans" className="scroll-mt-24 pt-14" aria-labelledby="plans-title">
+      <section id="plans" className="scroll-mt-24 pt-10 md:pt-14" aria-labelledby="plans-title">
         <SectionHeader id="plans-title" eyebrow="Pricing" title="Choose your plan" className="justify-center text-center [&>div]:mx-auto" />
         {plans.length === 0 ? (
           <EmptyState title="Plan pricing coming soon" subtitle="Plans appear here once published from the admin panel." />
         ) : (
-          <div className="mx-auto grid max-w-6xl gap-6 pt-4 md:grid-cols-3 md:items-stretch">
+          <div className="grid grid-cols-1 gap-4 pt-4 md:grid-cols-2 md:gap-5 xl:grid-cols-3 xl:items-stretch">
             {plans.map((p) => (
               <PremiumCard
                 key={p.id}
@@ -157,19 +157,19 @@ export default async function PremiumPage() {
 
       {/* Benefits */}
       {features.length > 0 && (
-        <section className="mt-16" aria-labelledby="benefits-title">
+        <section className="mt-10 md:mt-14" aria-labelledby="benefits-title">
           <SectionHeader id="benefits-title" eyebrow="Benefits" title="What Premium unlocks" />
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-5 xl:grid-cols-3 2xl:grid-cols-4">
             {features.map((f, i) => {
               const Icon = FEATURE_ICONS[i % FEATURE_ICONS.length];
               return (
-                <div key={f.id} className="card flex gap-4 p-5">
-                  <span className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-warning/20 to-accent-pink/15">
+                <div key={f.id} className="card flex min-w-0 gap-3 p-4 md:p-5">
+                  <span className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-warning/20 to-accent-pink/15">
                     <Icon className="h-5 w-5 text-amber-600 dark:text-amber-300" aria-hidden />
                   </span>
                   <div className="min-w-0">
                     <div className="font-semibold text-ink">{f.title}</div>
-                    {f.subtitle && <p className="mt-1 text-sm text-ink-muted">{f.subtitle}</p>}
+                    {f.subtitle && <p className="mt-1 line-clamp-2 text-sm text-ink-muted">{f.subtitle}</p>}
                   </div>
                 </div>
               );
@@ -180,7 +180,7 @@ export default async function PremiumPage() {
 
       {/* Comparison — prices + each plan's own features, exactly as published */}
       {plans.length > 1 && allFeatures.length > 0 && (
-        <section className="mt-16" aria-labelledby="compare-title">
+        <section className="mt-10 md:mt-14" aria-labelledby="compare-title">
           <SectionHeader id="compare-title" eyebrow="Compare" title="Compare plans side by side" />
           <div className="card overflow-x-auto" tabIndex={0} role="region" aria-label="Plan comparison table">
             <table className="w-full min-w-[36rem] border-collapse text-sm">
@@ -254,8 +254,8 @@ export default async function PremiumPage() {
       )}
 
       {/* FAQ */}
-      <section className="mt-16" aria-labelledby="premium-faq-title">
-        <div className="grid gap-8 lg:grid-cols-[1fr_1.6fr] lg:items-start lg:gap-14">
+      <section className="mt-10 md:mt-14" aria-labelledby="premium-faq-title">
+        <div className="grid gap-4 md:gap-5 lg:grid-cols-[1fr_1.6fr] lg:items-start">
           <SectionHeader id="premium-faq-title" eyebrow="FAQ" title="Questions about Premium" description="Anything else? Our support team is a message away." />
           <div className="card divide-y divide-line px-5 sm:px-6">
             {FAQ.map((f) => (
@@ -274,12 +274,12 @@ export default async function PremiumPage() {
       </section>
 
       {plans.length > 0 && (
-        <section className="mt-16 rounded-3xl bg-gradient-to-br from-primary via-primary to-accent-violet px-6 py-10 text-center text-white sm:py-12">
-          <h2 className="font-display text-2xl font-bold tracking-tight sm:text-3xl">Ready to go further?</h2>
+        <section className="mt-10 rounded-xl bg-gradient-to-br from-primary via-primary to-accent-violet px-6 py-6 text-center text-white md:mt-14 md:px-8">
+          <h2 className="font-display text-2xl font-semibold tracking-tight">Ready to go further?</h2>
           <p className="mx-auto mt-2 max-w-md text-sm text-white/80">Pick a plan above — you can choose monthly or yearly billing.</p>
           <a
             href="#plans"
-            className="theme-light mt-6 inline-flex h-12 items-center gap-2 rounded-xl bg-white px-6 text-sm font-semibold text-primary-700 shadow-card transition hover:-translate-y-px motion-reduce:transform-none"
+            className="theme-light mt-4 inline-flex h-10 items-center gap-2 rounded-xl bg-white px-4 text-sm font-semibold text-primary-700 transition hover:-translate-y-px motion-reduce:transform-none"
           >
             {recommended ? `Get ${recommended.name}` : "View plans"}
             <Sparkles className="h-4 w-4" aria-hidden />

@@ -108,7 +108,7 @@ async function JobResults({ searchParams }: { searchParams: SP }) {
           <Link href="/learning" className="btn-ghost min-h-11 px-3 text-xs">Explore Learning</Link>
         </>} />
       ) : (
-        <div className="list-enter grid min-w-0 grid-cols-1 gap-3 md:grid-cols-2 sm:gap-4">
+        <div className="list-enter grid min-w-0 grid-cols-1 gap-4 md:grid-cols-2 md:gap-5 xl:grid-cols-3 2xl:grid-cols-4">
           {jobs.map((j) => (
             <JobCard key={j.id} job={j} />
           ))}
@@ -125,7 +125,7 @@ function JobResultsSkeleton() {
     <div role="status" aria-label="Loading jobs">
       <span className="sr-only">Loading jobs…</span>
       <div aria-hidden className="mb-4 h-5 w-28 animate-pulse rounded bg-line/70 motion-reduce:animate-none" />
-      <div aria-hidden className="grid min-w-0 grid-cols-1 gap-3 md:grid-cols-2 sm:gap-4">
+      <div aria-hidden className="grid min-w-0 grid-cols-1 gap-4 md:grid-cols-2 md:gap-5 xl:grid-cols-3 2xl:grid-cols-4">
         {Array.from({ length: 6 }).map((_, i) => (
           <SkeletonJobCard key={i} />
         ))}

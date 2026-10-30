@@ -8,17 +8,15 @@ import { BlogImage } from "./BlogImage";
 /**
  * The blog listing tile — shared by the Featured block, the Latest grid and the
  * "Related articles" strip so every card in the blog reads the same. Surface
- * language matches `.card` (rounded-2xl, `border-line`, `shadow-card`, hover
+ * language matches `.card` (rounded-xl, `border-line`, `shadow-card`, hover
  * lift). `h-full` + the flex column let a CSS-grid row equalise card heights.
  *
  * `featured` switches to a wide two-column layout (image left, text right) from
  * `lg` up — used for the lead article on the blog index (and a lone leftover
- * featured article). Below `lg` it stacks like a normal card: at tablet widths
- * the text column is taller than a 16:9 image beside it, which forced a crop.
+ * featured article). Below `lg` it stacks like a normal card.
  *
  * Thumbnails are 16:9 with title text baked in near the top, so the wrapper is
- * always `aspect-[16/9]` (never shorter than the image) and the image is
- * anchored `object-top` — any crop comes off the bottom/sides, not the title.
+ * `aspect-[16/9]` with a 150px cap. `object-cover` crops oversized images.
  * Presentation only; same href, same data.
  */
 export function BlogCard({
@@ -34,14 +32,14 @@ export function BlogCard({
     <Link
       href={`/blog/${post.slug}`}
       className={cn(
-        "card card-hover group flex h-full flex-col overflow-hidden",
-        featured && "lg:flex-row",
+        "card card-hover group flex h-full min-w-0 flex-col overflow-hidden",
+        featured && "lg:h-[260px] lg:max-h-[280px] lg:flex-row",
       )}
     >
       <div
         className={cn(
-          "relative flex-shrink-0 overflow-hidden bg-primary-50",
-          featured ? "aspect-[16/9] lg:w-1/2 2xl:w-[42%]" : "aspect-[16/9]",
+          "relative shrink-0 overflow-hidden bg-primary-50",
+          featured ? "aspect-[16/10] lg:aspect-auto lg:h-full lg:w-[40%]" : "aspect-[16/9] max-h-[150px]",
         )}
       >
         {post.featured_image ? (
@@ -51,11 +49,11 @@ export function BlogCard({
             priority={priority}
             sizes={
               featured
-                ? "(min-width: 1536px) 42vw, (min-width: 1024px) 50vw, 100vw"
-                : "(min-width: 1024px) 400px, (min-width: 640px) 50vw, 100vw"
+                ? "(min-width: 1024px) 40vw, 100vw"
+                : "(min-width: 1536px) 25vw, (min-width: 1280px) 33vw, (min-width: 768px) 50vw, 100vw"
             }
             className="h-full w-full"
-            imgClassName="object-top transition-transform duration-500 group-hover:scale-105 motion-reduce:transform-none"
+            imgClassName="object-cover object-top transition-transform duration-500 group-hover:scale-105 motion-reduce:transform-none"
           />
         ) : (
           <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-primary-50 to-surface">
@@ -64,7 +62,7 @@ export function BlogCard({
         )}
       </div>
 
-      <div className={cn("flex flex-1 flex-col p-5", featured && "sm:p-7")}>
+      <div className="flex min-w-0 flex-1 flex-col p-4">
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
           {post.category_name ? (
             <span className="inline-flex items-center rounded-full bg-primary-50 px-2.5 py-1 font-semibold uppercase tracking-wide text-primary">
@@ -81,27 +79,16 @@ export function BlogCard({
 
         <h3
           className={cn(
-            "mt-3 font-bold leading-snug text-ink group-hover:text-primary",
-            featured ? "line-clamp-3 text-xl sm:text-2xl" : "line-clamp-2 text-lg",
+            "mt-2 line-clamp-2 font-semibold leading-snug text-ink group-hover:text-primary",
+            featured ? "text-xl md:text-2xl" : "text-base",
           )}
         >
           {post.title}
         </h3>
 
-        {post.excerpt ? (
-          <p
-            className={cn(
-              "mt-2 flex-1 text-sm text-ink-muted",
-              featured ? "line-clamp-3" : "line-clamp-2",
-            )}
-          >
-            {post.excerpt}
-          </p>
-        ) : (
-          <span className="flex-1" />
-        )}
+        {post.excerpt ? <p className="mt-1 line-clamp-2 text-sm text-ink-muted">{post.excerpt}</p> : null}
 
-        <div className="mt-4 flex items-end justify-between gap-3 border-t border-line pt-3 text-xs text-ink-faint">
+        <div className={cn("flex items-end justify-between gap-3 border-t border-line pt-2 text-xs text-ink-faint", featured ? "mt-3" : "mt-auto")}>
           <span className="min-w-0 truncate">
             {post.author_name}
             {post.published_at ? <span> · {formatBlogDate(post.published_at)}</span> : null}

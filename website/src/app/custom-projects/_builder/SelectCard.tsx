@@ -28,7 +28,7 @@ export function SelectCard({
       aria-pressed={selected}
       onClick={onSelect}
       className={cn(
-        "relative flex flex-col items-start gap-3 rounded-2xl border p-4 text-left transition active:scale-[.99] motion-reduce:transform-none sm:p-5",
+        "relative flex min-w-0 items-start gap-3 rounded-xl border p-4 text-left transition active:scale-[.99] motion-reduce:transform-none",
         selected
           ? "border-primary bg-primary-50/60 shadow-card ring-2 ring-primary/20"
           : "border-line bg-card hover:border-primary/30 hover:bg-surface",
@@ -45,11 +45,10 @@ export function SelectCard({
       >
         <Icon className="h-5 w-5" aria-hidden />
       </span>
-      <span className="flex items-center gap-2 pr-6">
-        <span className="text-sm font-bold text-ink">{title}</span>
-        {badge}
+      <span className="flex min-w-0 flex-1 flex-col gap-1 pr-6">
+        <span className="flex flex-wrap items-center gap-2 text-sm font-semibold text-ink">{title}{badge}</span>
+        <span className="line-clamp-2 text-xs leading-5 text-ink-muted">{description}</span>
       </span>
-      <span className="text-xs leading-relaxed text-ink-muted">{description}</span>
     </button>
   );
 }

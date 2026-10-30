@@ -46,7 +46,7 @@ export default async function ApplicationsPage() {
           {applications.map((a) => {
             const job = Array.isArray(a.job) ? a.job[0] : a.job;
             return (
-              <div key={a.id} className="flex items-center justify-between gap-3 px-4 py-4">
+              <div key={a.id} className="flex items-center justify-between gap-3 px-4 py-2">
                 <div className="min-w-0">
                   <Link href={`/jobs/${job?.id}`} className="font-semibold text-ink hover:text-primary">
                     {job?.title}

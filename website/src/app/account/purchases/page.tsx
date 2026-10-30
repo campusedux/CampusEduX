@@ -37,7 +37,7 @@ export default async function PurchasesPage() {
           {purchases.map((p) => {
             const project = Array.isArray(p.project) ? p.project[0] : p.project;
             return (
-              <div key={p.id} className="flex items-center gap-4 px-4 py-4">
+              <div key={p.id} className="flex items-center gap-3 px-4 py-2">
                 <div className="relative h-14 w-20 flex-shrink-0 overflow-hidden rounded-lg bg-primary-50">
                   {project?.thumbnail_url && (
                     <Image src={project.thumbnail_url} alt={project.title} fill className="object-cover" sizes="80px" />

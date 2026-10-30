@@ -41,11 +41,11 @@ export function ExperienceBadge({ level, className }: { level?: string | null; c
  */
 export function JobCard({ job, className }: { job: JobCardData; className?: string }) {
   return (
-    <Link href={`/jobs/${job.id}`} className={cn("card card-hover group flex min-w-0 flex-col p-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 sm:p-5", className)}>
+    <Link href={`/jobs/${job.id}`} className={cn("card card-hover group flex min-w-0 flex-col p-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2", className)}>
       <div className="flex items-start gap-3">
-        <span className="flex h-12 w-12 flex-shrink-0 items-center justify-center overflow-hidden rounded-xl border border-line bg-surface">
+        <span className="flex h-10 w-10 flex-shrink-0 items-center justify-center overflow-hidden rounded-xl border border-line bg-surface">
           {job.company_logo_url ? (
-            <Image src={job.company_logo_url} alt={job.company_name ?? ""} width={48} height={48} className="h-full w-full object-contain p-1.5" />
+            <Image src={job.company_logo_url} alt={job.company_name ?? ""} width={40} height={40} className="h-full w-full object-contain p-1" />
           ) : (
             <Building2 className="h-5 w-5 text-accent-sky" aria-hidden />
           )}
@@ -62,7 +62,7 @@ export function JobCard({ job, className }: { job: JobCardData; className?: stri
         />
       </div>
 
-      <div className="mb-4 mt-4 flex flex-wrap items-center gap-2">
+      <div className="mb-3 mt-3 flex flex-wrap items-center gap-1.5">
         <ExperienceBadge level={job.experience_level} />
         {job.job_type && (
           <Badge>{job.job_type}</Badge>
@@ -72,7 +72,7 @@ export function JobCard({ job, className }: { job: JobCardData; className?: stri
         )}
       </div>
 
-      <div className="mt-auto grid gap-2 border-t border-line pt-3.5 text-xs text-ink-muted">
+      <div className="mt-auto grid gap-1 border-t border-line pt-2 text-xs text-ink-muted">
         {job.location && (
           <span className="inline-flex min-w-0 items-start gap-2">
             <MapPin className="h-4 w-4 flex-shrink-0" aria-hidden />

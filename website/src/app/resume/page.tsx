@@ -53,7 +53,7 @@ function NewResumeStrip({ templates }: { templates: ResolvedTemplate[] }) {
       <p className="-mt-2 mb-4 text-sm text-ink-muted">
         Every template opens with a complete, realistic demo résumé — edit it in place, or clear it and make it yours.
       </p>
-      <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:gap-5 lg:grid-cols-4 2xl:grid-cols-5">
         {templates.map((t) => (
           <TemplateShowcaseCard key={t.id} template={t} />
         ))}
@@ -69,14 +69,14 @@ export default async function ResumeBuilderPage() {
   if (!user) {
     return (
       <div className="page-shell">
-        <section className="relative overflow-hidden rounded-3xl border border-line bg-card px-6 py-10 shadow-card sm:px-10 sm:py-14">
+        <section className="relative overflow-hidden rounded-xl border border-line bg-card px-5 py-8 shadow-card md:px-8 md:py-10">
           <div aria-hidden className="bg-grid pointer-events-none absolute inset-0 [mask-image:radial-gradient(ellipse_at_top_right,#000_15%,transparent_65%)]" />
           <div aria-hidden className="pointer-events-none absolute -right-16 -top-24 h-64 w-64 rounded-full bg-accent-amber/15 blur-3xl" />
           <p className="eyebrow relative">CampusEduX Résumé Builder</p>
-          <h1 className="h-display relative mt-4 max-w-3xl">
+          <h1 className="relative mt-2 font-display text-2xl font-semibold leading-tight tracking-tight text-ink md:text-3xl">
             Pick a template, start from a real résumé, <span className="text-gradient">ship a PDF.</span>
           </h1>
-          <div className="relative mt-8 flex flex-wrap gap-3">
+          <div className="relative mt-4 flex flex-wrap gap-2">
             <Button href="/resume/templates" size="lg" rightIcon={ArrowRight}>
               Browse templates
             </Button>
@@ -86,7 +86,7 @@ export default async function ResumeBuilderPage() {
           </div>
         </section>
 
-        <section className="mt-12 grid gap-4 sm:grid-cols-3">
+        <section className="mt-10 grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-5 xl:grid-cols-3">
           {[
             { icon: Sparkles, title: "Real demo content", body: "Start with a filled-in résumé for your target role, then make it yours." },
             { icon: ShieldCheck, title: "ATS score", body: "A live, rule-based score with keyword / skills / formatting / readability breakdown." },
@@ -94,20 +94,20 @@ export default async function ResumeBuilderPage() {
           ].map((f) => {
             const Icon = f.icon;
             return (
-              <div key={f.title} className="card p-5">
-                <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary-50">
+              <div key={f.title} className="card p-4 md:p-5">
+                <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary-50">
                   <Icon className="h-5 w-5 text-primary" aria-hidden />
                 </span>
                 <div className="mt-3 font-bold text-ink">{f.title}</div>
-                <p className="mt-1 text-sm text-ink-muted">{f.body}</p>
+                <p className="mt-1 line-clamp-2 text-sm text-ink-muted">{f.body}</p>
               </div>
             );
           })}
         </section>
 
-        <section className="mt-12">
+        <section className="mt-10">
           <SectionHeader title="Templates" viewAllHref="/resume/templates" />
-          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:gap-5 lg:grid-cols-4 2xl:grid-cols-5">
             {templates.map((t) => (
               <TemplateShowcaseCard key={t.id} template={t} />
             ))}

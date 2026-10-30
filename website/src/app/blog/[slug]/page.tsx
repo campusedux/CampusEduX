@@ -108,9 +108,9 @@ export default async function BlogPostPage({ params }: { params: { slug: string 
       />
       {faqs.length > 0 ? <JsonLd data={faqJsonLd(faqs)} /> : null}
 
-      <div className="container-page py-8 sm:py-10">
-        <div className="mx-auto flex max-w-5xl gap-10">
-          <article className="min-w-0 max-w-[44rem] flex-1">
+      <div className="container-page py-8 md:py-10">
+        <div className="mx-auto flex w-full justify-center gap-8">
+          <article className="min-w-0 w-full max-w-3xl leading-relaxed">
             <Breadcrumb items={[{ label: "Blog", href: "/blog" }, { label: post.title }]} />
 
             <header className="mt-5">
@@ -159,7 +159,7 @@ export default async function BlogPostPage({ params }: { params: { slug: string 
                 alt={post.featured_image_alt || post.title}
                 priority
                 sizes="(min-width: 1024px) 704px, 100vw"
-                className="mt-6 aspect-[16/9] rounded-2xl border border-line"
+                className="mt-6 aspect-[16/9] rounded-xl border border-line"
               />
             ) : null}
 
@@ -248,7 +248,7 @@ export default async function BlogPostPage({ params }: { params: { slug: string 
             {related.length > 0 ? (
               <section className="mt-12">
                 <h2 className="text-lg font-bold text-ink">Related articles</h2>
-                <div className="mt-4 grid gap-5 sm:grid-cols-2">
+                <div className="mt-4 grid gap-4 md:grid-cols-2 md:gap-5">
                   {related.map((p) => (
                     <BlogCard key={p.id} post={p} />
                   ))}

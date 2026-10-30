@@ -116,8 +116,8 @@ export default function BuilderStart() {
   }
 
   return (
-    <div className="space-y-8">
-      <section className="rounded-2xl border border-line bg-card p-6 shadow-card sm:p-8">
+    <div className="space-y-5">
+      <section className="rounded-xl border border-line bg-card p-4 shadow-card md:p-5">
         <Field label="Project name" required htmlFor="cp-title">
           <Input
             id="cp-title"
@@ -125,12 +125,12 @@ export default function BuilderStart() {
             onChange={(e) => patch({ title: e.target.value })}
             maxLength={200}
             placeholder="e.g. Online Clothing Store"
-            className="h-12 text-base font-medium"
+            className="h-10 text-sm font-medium"
           />
         </Field>
       </section>
 
-      <section className="rounded-2xl border border-line bg-card p-6 shadow-card sm:p-8">
+      <section className="rounded-xl border border-line bg-card p-4 shadow-card md:p-5">
         <h2 className="text-lg font-bold text-ink">
           What should this project achieve? <span className="text-danger">*</span>
         </h2>
@@ -142,14 +142,14 @@ export default function BuilderStart() {
           id="cp-objective"
           value={draft.objective}
           onChange={(e) => patch({ objective: e.target.value })}
-          rows={6}
+          rows={4}
           maxLength={4000}
           placeholder="Tell us what you want your project to do, who will use it, and what problem it should solve…"
           className="mt-4"
         />
       </section>
 
-      <section className="rounded-2xl border border-line bg-card p-6 shadow-card sm:p-8">
+      <section className="rounded-xl border border-line bg-card p-4 shadow-card md:p-5">
         <h2 className="text-lg font-bold text-ink">
           Project type <span className="text-danger">*</span>
         </h2>
@@ -168,7 +168,7 @@ export default function BuilderStart() {
         </div>
       </section>
 
-      <section className="rounded-2xl border border-line bg-card p-6 shadow-card sm:p-8">
+      <section className="rounded-xl border border-line bg-card p-4 shadow-card md:p-5">
         <h2 className="text-lg font-bold text-ink">
           Project level <span className="text-danger">*</span>
         </h2>
@@ -187,7 +187,7 @@ export default function BuilderStart() {
         </div>
       </section>
 
-      <section className="rounded-2xl border border-line bg-card p-6 shadow-card sm:p-8">
+      <section className="rounded-xl border border-line bg-card p-4 shadow-card md:p-5">
         <h2 className="text-lg font-bold text-ink">
           Platform <span className="text-danger">*</span>
         </h2>
@@ -215,11 +215,11 @@ export default function BuilderStart() {
         </div>
       </section>
 
-      <section className="rounded-2xl border border-line bg-card shadow-card">
+      <section className="rounded-xl border border-line bg-card shadow-card">
         <button
           type="button"
           onClick={() => setOptionalOpen((o) => !o)}
-          className="flex w-full items-center justify-between gap-3 px-6 py-5 text-left sm:px-8"
+          className="flex w-full items-center justify-between gap-3 px-4 py-4 text-left md:px-5"
         >
           <span>
             <span className="block text-sm font-bold text-ink">Optional information</span>
@@ -231,7 +231,7 @@ export default function BuilderStart() {
         </button>
 
         {optionalOpen && (
-          <div className="space-y-8 border-t border-line px-6 py-6 sm:px-8">
+          <div className="space-y-5 border-t border-line px-4 py-4 md:px-5">
             <div className="space-y-5">
               {MORE_DETAIL_FIELDS.map((f) => (
                 <Field key={f.key} label={f.label} hint={f.hint} htmlFor={`cp-${f.key}`}>

@@ -24,15 +24,15 @@ export function TemplateGalleryCard({
   return (
     <div
       className={cn(
-        "group relative flex flex-col overflow-hidden rounded-3xl border border-line bg-card shadow-card transition duration-200",
-        "hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-card-lg motion-reduce:transform-none",
+        "group relative flex min-w-0 flex-col overflow-hidden rounded-xl border border-line bg-card shadow-card transition duration-200",
+        "hover:-translate-y-0.5 hover:border-primary/30 motion-reduce:transform-none",
       )}
     >
       {/* Thumbnail — clicking it opens the full preview */}
       <button
         type="button"
         onClick={() => onPreview(template)}
-        className="relative block w-full border-b border-line bg-surface text-left"
+        className="relative block h-48 w-full overflow-hidden border-b border-line bg-surface text-left"
         aria-label={`Preview the ${template.label} template`}
       >
         {demoModel && <ResumeThumbnail template={template} model={demoModel} />}
@@ -56,7 +56,7 @@ export function TemplateGalleryCard({
           <button
             type="button"
             onClick={() => onPreview(template)}
-            className="inline-flex h-11 flex-1 items-center justify-center gap-1.5 rounded-xl border sm:h-9 border-line bg-card text-xs font-semibold text-ink transition hover:bg-surface"
+            className="inline-flex h-10 flex-1 items-center justify-center gap-1.5 rounded-xl border border-line bg-card text-xs font-semibold text-ink transition hover:bg-surface sm:h-9"
           >
             <Eye className="h-3.5 w-3.5" /> Preview
           </button>
@@ -64,7 +64,7 @@ export function TemplateGalleryCard({
             type="button"
             onClick={() => onUse(template.id)}
             disabled={pending}
-            className="inline-flex h-11 flex-1 items-center justify-center gap-1.5 rounded-xl bg-primary sm:h-9 text-xs font-semibold text-white transition hover:bg-primary-600 disabled:opacity-60"
+            className="inline-flex h-10 flex-1 items-center justify-center gap-1.5 rounded-xl bg-primary text-xs font-semibold text-white transition hover:bg-primary-600 disabled:opacity-60 sm:h-9"
           >
             {pending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
             Use template

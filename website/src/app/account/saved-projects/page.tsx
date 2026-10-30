@@ -29,7 +29,7 @@ export default async function SavedProjectsPage() {
           action={<Button href="/projects" size="sm">Browse the marketplace</Button>}
         />
       ) : (
-        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-5 xl:grid-cols-3 2xl:grid-cols-4">
           {entries.map((e) =>
             e.kind === "project" ? (
               <ProjectCard key={e.project.id} project={e.project} />
@@ -38,7 +38,7 @@ export default async function SavedProjectsPage() {
                 key={e.projectId}
                 data-testid="wishlist-unavailable"
                 aria-disabled="true"
-                className="card flex flex-col justify-between gap-4 p-5 opacity-60 grayscale"
+                className="card flex flex-col justify-between gap-3 p-4 opacity-60 grayscale"
               >
                 <div>
                   <p className="text-base font-semibold text-ink">No longer available</p>

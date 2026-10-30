@@ -12,7 +12,7 @@ export const metadata: Metadata = {
 export default function AboutPage() {
   return (
     <div className="page-shell-narrow">
-      <h1 className="text-3xl font-bold text-ink">About CampusEduX</h1>
+      <h1 className="text-2xl font-semibold text-ink md:text-[28px]">About CampusEduX</h1>
       <p className="mt-2 text-sm text-ink-faint">Last updated: 15 October 2026</p>
       {/* TODO (owner): Complete an About details section here with verified founder
           background, credentials (if any), editorial process, and source links.
@@ -27,13 +27,13 @@ export default function AboutPage() {
         applications, resumes and wallet stay in sync wherever you use it.
       </p>
 
-      <h2 className="mt-8 text-xl font-bold text-ink">Who it&apos;s for</h2>
+      <h2 className="mt-6 text-xl font-semibold text-ink">Who it&apos;s for</h2>
       <p className="mt-3 text-ink-muted">
         CampusEduX is built for college students — from studying project examples and building their own work, to
         preparing for placements, to building a resume for internship and job applications.
       </p>
 
-      <h2 className="mt-8 text-xl font-bold text-ink">What you can do here</h2>
+      <h2 className="mt-6 text-xl font-semibold text-ink">What you can do here</h2>
       <ul className="mt-3 list-disc space-y-2 pl-5 text-ink-muted">
         <li>
           Browse the <Link href="/projects" className="font-medium text-primary hover:underline">project marketplace</Link>{" "}
@@ -61,7 +61,7 @@ export default function AboutPage() {
         </li>
       </ul>
 
-      <h2 className="mt-8 text-xl font-bold text-ink">Operator and contact</h2>
+      <h2 className="mt-6 text-xl font-semibold text-ink">Operator and contact</h2>
       <p className="mt-3 text-ink-muted">
         CampusEduX is operated by {LEGAL.entityDescription}. For support, privacy, legal or grievance matters, see the{" "}
         <Link href="/contact" className="font-medium text-primary hover:underline">Contact</Link> page or the full{" "}

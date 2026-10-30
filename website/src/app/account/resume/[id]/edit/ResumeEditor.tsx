@@ -221,7 +221,7 @@ export default function ResumeEditor({
         ))}
       </div>
 
-      <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[240px_minmax(0,1fr)_minmax(0,1.05fr)]">
+      <div className="mt-5 grid grid-cols-1 gap-4 md:gap-5 lg:grid-cols-[240px_minmax(0,1fr)_minmax(0,1.05fr)]">
         <div className={cn("space-y-3 lg:block", mobileTab === "edit" ? "block" : "hidden")}>
           <CompletionChecklist content={content} personal={personalDetails} onJump={handleJump} />
           <SectionManagerRail
