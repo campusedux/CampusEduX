@@ -8,6 +8,7 @@ import { SITE_URL } from "@/lib/seo";
 import { ReferralHero } from "@/components/referral/ReferralHero";
 import { ReferralHowItWorks } from "@/components/referral/ReferralHowItWorks";
 import { ShareReferralLink } from "@/components/referral/ShareReferralLink";
+import { getRewardSettings, referralRewardText } from "@/lib/referral";
 import { ReferralReminderButton } from "@/components/referral/ReferralReminderButton";
 
 const isDone = (status: string) => status === "successful" || status === "completed";
@@ -25,7 +26,7 @@ export default async function AccountReferralPage() {
   const user = await requireUser();
   const supabase = await createAuthedServerSupabase();
 
-  const [{ data: code }, { data: referrals }] = await Promise.all([
+  const [{ data: code }, { data: referrals }, settings] = await Promise.all([
     supabase.from("referral_codes").select("code,total_referrals,total_earned").eq("user_id", user.id).maybeSingle(),
     // Privacy-safe RPC (migration 0126): masked first-name + last-initial
     // only, never email/phone. The direct `profiles` join this replaced was
@@ -33,6 +34,7 @@ export default async function AccountReferralPage() {
     // referred user's profile row), so history rows always showed "Pending
     // signup" regardless of real status.
     supabase.rpc("referral_history"),
+    getRewardSettings(),
   ]);
 
   const link = code?.code ? `${SITE_URL}/register?ref=${code.code}` : null;
@@ -48,7 +50,7 @@ export default async function AccountReferralPage() {
 
   return (
     <div className="space-y-6">
-      <ReferralHero title="Refer & earn" subtitle="Share your link — when friends join CampusEduX through it, credit is added to your wallet.">
+      <ReferralHero title="Refer & earn" subtitle={referralRewardText(settings)}>
         {link && (
           <div className="theme-light mt-4 rounded-xl bg-white p-3 text-ink shadow-card md:p-4">
             <ShareReferralLink link={link} code={code?.code} />
@@ -94,7 +96,7 @@ export default async function AccountReferralPage() {
         </div>
       )}
 
-      <ReferralHowItWorks />
+      <ReferralHowItWorks rewardText={referralRewardText(settings)} />
 
       <section aria-labelledby="referral-history-title">
         <h2 id="referral-history-title" className="h-section">

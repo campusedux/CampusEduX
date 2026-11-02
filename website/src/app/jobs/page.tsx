@@ -13,7 +13,7 @@ import { JOB_PAGE_SIZE, JOB_SORTS, cleanParams, jobExperience, jobSort, parsePag
 const DESCRIPTION =
   "Browse jobs and internships on CampusEduX — filter by location, role type and freshness to find and apply to openings that match your career goals.";
 
-export const revalidate = 120;
+export const revalidate = 0;
 
 type SP = { q?: string; location?: string; type?: string; exp?: string; sort?: string; page?: string };
 

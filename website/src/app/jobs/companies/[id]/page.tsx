@@ -9,17 +9,16 @@ import { Breadcrumb, EmptyState } from "@/components/ui";
 import { absoluteUrl, breadcrumbJsonLd } from "@/lib/seo";
 import { getCachedCompanyDetail, getCachedCompanyIds } from "@/lib/cache";
 
-export const revalidate = 300;
+export const revalidate = 0;
 
-// Registering generateStaticParams makes this ISR rather than per-request
-// dynamic (see projects/[id]/page.tsx). Company set is small — prerender all.
+// Enumerate known paths, but render role availability fresh on each request.
 export async function generateStaticParams() {
   return (await getCachedCompanyIds()).map((id) => ({ id }));
 }
 
 const getCompany = cache(async (id: string) => {
   const res = await getCachedCompanyDetail(id);
-  return res ? { company: res.company, jobs: res.jobs as JobCardData[] } : null;
+  return res ? { company: res.company, jobs: res.jobs as JobCardData[], count: res.count } : null;
 });
 
 export async function generateMetadata({ params: paramsPromise }: { params: Promise<{ id: string }> }): Promise<Metadata> {
@@ -40,7 +39,7 @@ export default async function CompanyDetailPage({ params: paramsPromise }: { par
   const params = await paramsPromise;
   const res = await getCompany(params.id);
   if (!res) notFound();
-  const { company, jobs } = res;
+  const { company, jobs, count } = res;
 
   return (
     <div className="page-shell">
@@ -76,7 +75,7 @@ export default async function CompanyDetailPage({ params: paramsPromise }: { par
               </span>
             )}
             <span>
-              {jobs.length} open role{jobs.length === 1 ? "" : "s"}
+              {count} open role{count === 1 ? "" : "s"}
             </span>
           </div>
           <p className="mt-4 max-w-3xl leading-relaxed text-ink-muted">{company.about || "No company description provided yet."}</p>

@@ -3,6 +3,7 @@
 import { createAuthedServerSupabase } from "@/lib/supabase/authed-server";
 import { getPublicSupabase } from "@/lib/supabase/server";
 import { CustomProjectReadError, readCustomProject } from "@/lib/customProjectReads";
+import { loadProjectPricing } from "@/lib/customProjectPricing.server";
 import {
   type BuilderDraft,
   type FeatureRow,
@@ -43,7 +44,7 @@ export async function loadCatalog(): Promise<{
   const pub = getPublicSupabase();
   if (!pub) throw new CustomProjectReadError("unavailable");
   const [pr, pl, ft] = await Promise.all([
-    readCustomProject((signal) => pub.from("custom_project_pricing").select("project_type,project_level,base_price,token_amount,pricing_version").eq("is_active", true).abortSignal(signal)),
+    loadProjectPricing(),
     readCustomProject((signal) => pub.from("custom_project_platform_pricing").select("platform,label,charge,sort_order").eq("is_active", true).order("sort_order").abortSignal(signal)),
     readCustomProject((signal) => pub
       .from("custom_project_features")

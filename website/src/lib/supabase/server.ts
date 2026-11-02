@@ -22,7 +22,16 @@ export function getPublicSupabase(options?: { fresh?: boolean }) {
     // Public content whose publication/protection can change must bypass Next's
     // persistent fetch cache. Keep this opt-in for existing catalog callers.
     ...(options?.fresh ? {
-      global: { fetch: (input: RequestInfo | URL, init?: RequestInit) => fetch(input, { ...init, cache: "no-store" }) },
+      global: { fetch: (input: RequestInfo | URL, init?: RequestInit) => {
+        const deadline = AbortSignal.timeout(8000);
+        const controller = new AbortController();
+        const abort = () => controller.abort();
+        deadline.addEventListener("abort", abort, { once: true });
+        if (init?.signal?.aborted) abort();
+        else init?.signal?.addEventListener("abort", abort, { once: true });
+        const signal = controller.signal;
+        return fetch(input, { ...init, signal, cache: "no-store" });
+      } },
     } : {}),
   });
 }

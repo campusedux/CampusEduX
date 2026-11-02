@@ -299,9 +299,10 @@ describe("/learning ItemList of real Course entries", () => {
 describe("root layout WebSite JSON-LD", () => {
   it("adds a WebSite entity alongside the existing Organization, no SearchAction", async () => {
     const { default: RootLayout } = await import("@/app/layout");
-    const html = RootLayout({ children: null }) as unknown as Node;
+    const html = await RootLayout({ children: null }) as unknown as Node;
     const body = (html.props.children as Node[]).find((c) => c.type === "body")!;
-    const blocks = jsonLdBlocks(body);
+    const provider = (body.props.children as Node[]).find(c => c && typeof c === "object" && typeof c.type !== "string")!;
+    const blocks = jsonLdBlocks(provider);
 
     const website = blocks.find((d) => d["@type"] === "WebSite") as Record<string, unknown> | undefined;
     const org = blocks.find((d) => d["@type"] === "Organization") as Record<string, unknown> | undefined;

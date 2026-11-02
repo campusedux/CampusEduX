@@ -6,7 +6,7 @@ import { ReferralHero } from "@/components/referral/ReferralHero";
 import { ReferralHowItWorks } from "@/components/referral/ReferralHowItWorks";
 import { absoluteUrl, breadcrumbJsonLd } from "@/lib/seo";
 import JsonLd from "@/components/JsonLd";
-import { getRewardSettings } from "@/lib/referral";
+import { getRewardSettings, referralRewardText } from "@/lib/referral";
 
 export const revalidate = 300;
 
@@ -29,7 +29,7 @@ export default async function ReferralPage() {
       <JsonLd data={breadcrumbJsonLd([{ name: "Referral", path: "/referral" }])} />
       <ReferralHero
         title="Invite friends, earn wallet credit"
-        subtitle="Every CampusEduX student gets a referral code. When a friend joins through it, credit is added directly to your wallet — tracked on a running dashboard in your account."
+        subtitle={referralRewardText(settings)}
       >
         <Link
           href="/account/referral"
@@ -39,7 +39,7 @@ export default async function ReferralPage() {
         </Link>
       </ReferralHero>
 
-      <ReferralHowItWorks rewardOnSignup={settings?.reward_on_signup} />
+      <ReferralHowItWorks rewardText={referralRewardText(settings)} />
 
       <section aria-labelledby="reward-rule-title">
         <h2 id="reward-rule-title" className="h-section">
@@ -52,24 +52,12 @@ export default async function ReferralPage() {
             </span>
             <div>
               <p className="font-display text-xl font-bold text-ink">
-                {settings.bonus_type === "flat"
-                  ? `₹${settings.bonus_value} per successful referral`
-                  : `${settings.bonus_value}% of your friend's first order`}
-              </p>
-              <p className="mt-1.5 text-sm text-ink-muted">
-                {settings.bonus_type === "flat" ? "" : `Capped at ₹${settings.max_payout}. `}
-                {settings.reward_on_signup
-                  ? "Credited as soon as a referred friend signs up."
-                  : "Credited after the referred friend's first purchase."}
-              </p>
-              <p className="mt-3 text-xs text-ink-faint">
-                Credit is valid for {settings.bonus_validity_days} days. This rule is set in the admin panel and can
-                change — the app and website always show the current value.
+                {referralRewardText(settings)}
               </p>
             </div>
           </div>
         ) : (
-          <EmptyState className="mt-5" title="Reward terms coming soon" subtitle="Current terms appear here once configured." />
+          <EmptyState className="mt-5" title="Reward terms unavailable" subtitle="Please contact us for current referral terms." />
         )}
       </section>
 

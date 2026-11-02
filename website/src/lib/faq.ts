@@ -1,0 +1,16 @@
+import { LEGAL_RULES } from "@/legal/config";
+
+export type Faq = { id: string; question: string; answer: string; category: string };
+
+/** Answers derived from the public learning, account, builder and legal pages. */
+export const FALLBACK_FAQS: Faq[] = [
+  { id: "learning", category: "Learning", question: "How do I start learning?", answer: "Open Learning to choose a course and read its available lessons. You can also use coding practice and the online compiler. Premium content is marked separately." },
+  { id: "account", category: "Accounts", question: "When do I need an account?", answer: "You can browse public lessons, articles and job listings without signing in. Sign in to manage purchases, submit project requests or use account features. Contact us if you need help accessing your account." },
+  { id: "payments", category: "Payments", question: "How are payments handled?", answer: "Prices are shown in Indian Rupees before payment. Razorpay processes payments; CampusEduX verifies the payment before granting the purchased benefit. Keep your order ID for support." },
+  { id: "failed-payment", category: "Payments", question: "What if I am charged but my order fails?", answer: "Contact us with your order ID if a payment is deducted but no benefit is received. Failed payments are usually reversed by the payment gateway within 5–7 business days. Confirmed duplicate charges are refunded after verification." },
+  { id: "refunds", category: "Payments", question: "Can I request a refund?", answer: `Email support from your registered email address within ${LEGAL_RULES.refundRequestWindowDays} days of the transaction, including your order ID and reason. Eligibility depends on the purchase: downloaded digital projects are generally non-refundable, and separate rules apply to Premium and project tokens. Read the Refund Policy or contact us about your case.` },
+  { id: "referral", category: "Referrals", question: "When does a referral earn credit?", answer: "A friend must join through your referral link and complete their first successful purchase to qualify under the referral programme. The Referral page shows the current reward and its validity. Signing up alone does not earn a reward." },
+  { id: "custom", category: "Custom projects", question: "What project help can I request?", answer: "Students can request mentoring, code review, debugging and architecture guidance for their own work. Personal and business customers can commission software. Assessed student work must remain student-authored. The builder shows an estimate and the token due before payment." },
+  { id: "token", category: "Custom projects", question: "Is the project token refundable?", answer: "The token reserves scoping and planning work and is non-refundable once the request is submitted. If we cannot take up your request at all, it is refunded in full. See the Refund Policy for cancellation after work starts, or contact us about your request." },
+  { id: "contact", category: "Support", question: "How can I contact CampusEduX?", answer: "Use the Contact page for account, learning, billing or project help. For a payment query, include your order ID. Never send your password or payment credentials." },
+];

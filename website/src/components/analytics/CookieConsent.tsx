@@ -29,14 +29,21 @@ export default function CookieConsentBanner() {
   const [ready, setReady] = useState(false);
   const [managing, setManaging] = useState(false);
   const [analytics, setAnalytics] = useState(false);
+  const [advertising, setAdvertising] = useState(false);
   const analyticsRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const saved = readCookieConsent();
     setChoice(saved);
     setAnalytics(saved?.analytics ?? false);
+    setAdvertising(saved?.ads ?? false);
     setReady(true);
-    const openSettings = () => setManaging(true);
+    const openSettings = () => {
+      const saved = readCookieConsent();
+      setAnalytics(saved?.analytics ?? false);
+      setAdvertising(saved?.ads ?? false);
+      setManaging(true);
+    };
     window.addEventListener(COOKIE_SETTINGS_EVENT, openSettings);
     return () => window.removeEventListener(COOKIE_SETTINGS_EVENT, openSettings);
   }, []);
@@ -45,12 +52,13 @@ export default function CookieConsentBanner() {
     if (managing) analyticsRef.current?.focus();
   }, [managing]);
 
-  function save(analyticsEnabled: boolean) {
-    const next = { analytics: analyticsEnabled, ads: false };
+  function save(analyticsEnabled: boolean, advertisingEnabled: boolean) {
+    const next = { analytics: analyticsEnabled, ads: advertisingEnabled };
     saveCookieConsent(next);
     if (!analyticsEnabled) clearAnalyticsCookies();
     setChoice(next);
     setAnalytics(analyticsEnabled);
+    setAdvertising(advertisingEnabled);
     setManaging(false);
   }
 
@@ -63,7 +71,7 @@ export default function CookieConsentBanner() {
     >
       <h2 className="text-base font-bold">Cookie choices</h2>
       <p className="mt-2 text-sm leading-relaxed text-ink-muted">
-        Essential cookies keep the site working. With your permission, analytics helps us understand visits. Read our{" "}
+        Essential cookies keep the site working. Optional analytics helps us understand visits. Advertising is a separate choice for when we display ads. Read our{" "}
         <Link href="/cookie-policy" className="hit-44 font-semibold text-primary underline underline-offset-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">
           Cookie Policy
         </Link>.
@@ -82,19 +90,24 @@ export default function CookieConsentBanner() {
             />
             <span className="text-sm">Allow analytics cookies</span>
           </label>
+          <label className="mt-3 flex min-h-11 cursor-pointer items-center gap-3 rounded-lg focus-within:outline focus-within:outline-2 focus-within:outline-primary">
+            <input type="checkbox" checked={advertising} onChange={(event) => setAdvertising(event.target.checked)} className="h-5 w-5 accent-primary" />
+            <span className="text-sm">Advertising — allow cookies and identifiers when we display ads</span>
+          </label>
         </div>
       )}
 
       <div className="mt-4 flex flex-wrap gap-2">
         {managing ? (
           <>
-            <button type="button" className={`${buttonClass} bg-primary text-white`} onClick={() => save(analytics)}>Save choices</button>
+            <button type="button" className={`${buttonClass} bg-primary text-white`} onClick={() => save(analytics, advertising)}>Save choices</button>
+            <button type="button" className={`${buttonClass} border border-line`} onClick={() => save(false, false)}>Withdraw optional consent</button>
             {choice && <button type="button" className={`${buttonClass} border border-line`} onClick={() => setManaging(false)}>Cancel</button>}
           </>
         ) : (
           <>
-            <button type="button" className={`${buttonClass} bg-primary text-white`} onClick={() => save(true)}>Accept all</button>
-            <button type="button" className={`${buttonClass} border border-line`} onClick={() => save(false)}>Reject non-essential</button>
+            <button type="button" className={`${buttonClass} bg-primary text-white`} onClick={() => save(true, true)}>Accept all</button>
+            <button type="button" className={`${buttonClass} border border-line`} onClick={() => save(false, false)}>Reject non-essential</button>
             <button type="button" className={`${buttonClass} border border-line`} onClick={() => setManaging(true)}>Manage</button>
           </>
         )}

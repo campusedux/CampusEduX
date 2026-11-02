@@ -5,6 +5,7 @@
  */
 import type { LegalDocId, LegalDocument } from "./types";
 import { LEGAL_VERSIONS } from "./config";
+import { websiteDocument } from "./website";
 
 import privacyPolicy from "./content/privacy-policy.json";
 import terms from "./content/terms.json";
@@ -18,9 +19,9 @@ import deleteAccount from "./content/delete-account.json";
 import cookiePolicy from "./content/cookie-policy.json";
 
 export const LEGAL_DOCUMENTS: Record<LegalDocId, LegalDocument> = {
-  "privacy-policy": privacyPolicy as LegalDocument,
-  terms: terms as LegalDocument,
-  "refund-policy": refundPolicy as LegalDocument,
+  "privacy-policy": websiteDocument(privacyPolicy as LegalDocument),
+  terms: websiteDocument(terms as LegalDocument),
+  "refund-policy": websiteDocument(refundPolicy as LegalDocument),
   "project-license": projectLicense as LegalDocument,
   "community-guidelines": communityGuidelines as LegalDocument,
   disclaimer: disclaimer as LegalDocument,

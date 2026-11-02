@@ -126,7 +126,7 @@ export default function Footer() {
                 Learn it. Build it. Get placed.
               </p>
               <p className="mt-1 text-sm text-white/80">
-                Free tutorials, practice problems, real projects and fresh jobs — all in one student account.
+                Free tutorials, practice problems, project mentoring and job opportunities — all in one student account.
               </p>
             </div>
             <div className="flex flex-wrap gap-2 max-md:flex-col">

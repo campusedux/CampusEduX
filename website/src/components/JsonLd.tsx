@@ -1,3 +1,7 @@
+"use client";
+
+import { useScriptNonce } from "@/components/analytics/ScriptNonce";
+
 /**
  * Renders a <script type="application/ld+json"> block.
  *
@@ -19,9 +23,11 @@ export function safeJsonLd(data: Record<string, unknown>): string {
 }
 
 export default function JsonLd({ data }: { data: Record<string, unknown> }) {
+  const nonce = useScriptNonce();
   return (
     <script
       type="application/ld+json"
+      nonce={nonce}
       // eslint-disable-next-line react/no-danger -- serialized + HTML-escaped above
       dangerouslySetInnerHTML={{ __html: safeJsonLd(data) }}
     />

@@ -4,6 +4,8 @@ import { getPublicSupabase } from "@/lib/supabase/server";
 import { formatINR } from "@/lib/format";
 import { absoluteUrl, breadcrumbJsonLd } from "@/lib/seo";
 import JsonLd from "@/components/JsonLd";
+import { loadProjectPricing } from "@/lib/customProjectPricing.server";
+import { projectTokenPrices } from "@/lib/projectPricingText";
 
 export const revalidate = 300;
 export const metadata: Metadata = {
@@ -35,12 +37,13 @@ export default async function CustomProjectsPage() {
   let typeStarting: { type: string; from: number; token: number }[] = [];
   let platforms: any[] = [];
   let features: any[] = [];
+  let tokenPrices = projectTokenPrices([]);
 
   if (supabase) {
-    const [{ data: pricing }, { data: p }, { data: f }] = await Promise.all([
+    const [pricing, { data: p }, { data: f }] = await Promise.all([
       // Base price + upfront token per (project_type, project_level) —
       // custom_project_pricing (mobile-app/supabase/migrations/0033).
-      supabase.from("custom_project_pricing").select("project_type,project_level,base_price,token_amount").eq("is_active", true),
+      loadProjectPricing(),
       // Platform is an add-on charge on top of the base price — 0 for web.
       supabase.from("custom_project_platform_pricing").select("platform,label,charge").eq("is_active", true).order("sort_order"),
       // Feature catalog — 0034_custom_feature_catalog.sql (category is free text).
@@ -51,6 +54,7 @@ export default async function CustomProjectsPage() {
         .order("sort_order"),
     ]);
 
+    tokenPrices = projectTokenPrices(pricing);
     const byType = new Map<string, { from: number; token: number }>();
     for (const row of pricing ?? []) {
       const base = Number(row.base_price);
@@ -128,6 +132,7 @@ export default async function CustomProjectsPage() {
       {typeStarting.length > 0 && (
         <>
           <h2 className="h-section mt-10 md:mt-14">Starting price by project type</h2>
+          <p className="mt-2 text-sm text-ink-muted">Prices depend on the selected type and level. Current upfront tokens: {tokenPrices}. The estimate shows your selection before payment.</p>
           <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-5 xl:grid-cols-3">
             {typeStarting.map((t) => (
               <div

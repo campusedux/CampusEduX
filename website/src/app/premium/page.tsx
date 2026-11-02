@@ -130,7 +130,7 @@ export default async function PremiumPage() {
       <section id="plans" className="scroll-mt-24 pt-10 md:pt-14 max-md:pt-8" aria-labelledby="plans-title">
         <SectionHeader id="plans-title" eyebrow="Pricing" title="Choose your plan" className="justify-center text-center [&>div]:mx-auto" />
         {plans.length === 0 ? (
-          <EmptyState title="Plan pricing coming soon" subtitle="Plans appear here once published from the admin panel." />
+          <EmptyState title="No plans available right now" subtitle="Contact us for help with Premium availability." />
         ) : (
           <div className="grid grid-cols-1 gap-4 pt-4 md:grid-cols-2 md:gap-5 xl:grid-cols-3 xl:items-stretch max-md:gap-3">
             {plans.map((p) => (

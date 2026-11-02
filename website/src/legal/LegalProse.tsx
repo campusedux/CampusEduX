@@ -6,11 +6,20 @@ import type { LegalDocument, LegalSection } from "./types";
  * only — never dangerouslySetInnerHTML; the content files hold no markup.
  */
 
+/** Policy URLs remain usable links; content is still rendered as escaped text. */
+function LegalText({ text }: { text: string }) {
+  return <>{text.split(/(https?:\/\/[^\s]+)/g).map((part, i) => {
+    if (!/^https?:\/\//.test(part)) return part;
+    const href = part.replace(/[.,;]+$/, "");
+    return <span key={i}><a href={href} className="text-primary underline underline-offset-2">{href}</a>{part.slice(href.length)}</span>;
+  })}</>;
+}
+
 function Bullets({ items }: { items: string[] }) {
   return (
     <ul className="mt-2 list-disc space-y-1.5 pl-5 text-[15px] leading-relaxed text-ink-muted">
       {items.map((item, i) => (
-        <li key={i}>{item}</li>
+        <li key={i}><LegalText text={item} /></li>
       ))}
     </ul>
   );
@@ -22,7 +31,7 @@ function Section({ section }: { section: LegalSection }) {
       <h2 className="text-lg font-bold tracking-tight text-ink">{section.heading}</h2>
       {section.body?.map((p, i) => (
         <p key={i} className="mt-2 text-[15px] leading-relaxed text-ink-muted">
-          {p}
+          <LegalText text={p} />
         </p>
       ))}
       {section.bullets && <Bullets items={section.bullets} />}
@@ -31,7 +40,7 @@ function Section({ section }: { section: LegalSection }) {
           <h3 className="text-[15px] font-semibold text-ink">{sub.heading}</h3>
           {sub.body?.map((p, j) => (
             <p key={j} className="mt-1.5 text-[15px] leading-relaxed text-ink-muted">
-              {p}
+              <LegalText text={p} />
             </p>
           ))}
           {sub.bullets && <Bullets items={sub.bullets} />}
@@ -58,7 +67,7 @@ export function LegalProse({ doc }: { doc: LegalDocument }) {
     <div>
       {doc.intro.map((p, i) => (
         <p key={i} className="mt-4 text-[15px] leading-relaxed text-ink-muted">
-          {p}
+          <LegalText text={p} />
         </p>
       ))}
       <hr className="mt-6 border-line" />

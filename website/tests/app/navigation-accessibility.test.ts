@@ -1,6 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Children, isValidElement, type ReactElement, type ReactNode } from "react";
 import Link from "next/link";
+import { renderToStaticMarkup } from "react-dom/server";
+import { HeaderLinks } from "@/components/nav/HeaderLinks";
+import { BottomNav } from "@/components/nav/BottomNav";
+import Footer from "@/components/Footer";
+import SupportPage from "@/app/support/page";
 import { MobileNav } from "@/components/nav/MobileNav";
 import { PlacementPrep } from "@/components/home/PlacementPrep";
 import { Drawer } from "@/components/ui";
@@ -49,5 +54,26 @@ describe("mobile navigation accessibility", () => {
     expect(compiler).toBeDefined();
     expect(compiler.props.prefetch).toBe(false);
     expect(links.find(node => node.props.href === "/learning")!.props.prefetch).toBeUndefined();
+  });
+});
+
+
+describe("Projects navigation without inventory gates", () => {
+  it.each([
+    ["header", () => HeaderLinks()],
+    ["bottom tabs", () => BottomNav()],
+    ["footer", () => Footer()],
+    ["support", () => SupportPage()],
+  ] as const)("keeps the original Projects link in the %s", (_name, component) => {
+    const html = renderToStaticMarkup(component());
+    expect(html).toMatch(/href="\/projects"[^>]*>[\s\S]*?(?:Projects|Browse projects)/);
+    expect(html).not.toMatch(/coming soon|Projects · soon/i);
+  });
+
+  it("keeps the drawer Projects wording and destination", () => {
+    const project = nodes(MobileNav()).find(node => node.type === Link && node.props.href === "/projects")!;
+    expect(project).toBeDefined();
+    const labels = nodes(project).filter(node => node.type === "span").map(node => node.props.children);
+    expect(labels).toContain("Projects");
   });
 });

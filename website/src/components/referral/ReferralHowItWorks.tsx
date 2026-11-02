@@ -1,22 +1,14 @@
 import { Share2, UserPlus, Wallet } from "lucide-react";
 
-/**
- * Three-step explainer. Step 3's timing comes from the configured reward rule
- * when the page has it (`rewardOnSignup`); otherwise it stays generic.
- */
-export function ReferralHowItWorks({ rewardOnSignup }: { rewardOnSignup?: boolean }) {
+/** Uses the same qualifying condition and validity as every referral promise. */
+export function ReferralHowItWorks({ rewardText }: { rewardText: string }) {
   const steps = [
     { icon: Share2, title: "Share your link", body: "Send your personal referral link to friends — copy it or share straight to WhatsApp." },
     { icon: UserPlus, title: "A friend joins", body: "They create their CampusEduX account through your link." },
     {
       icon: Wallet,
       title: "You earn credit",
-      body:
-        rewardOnSignup === undefined
-          ? "Referral credit is added to your CampusEduX wallet."
-          : rewardOnSignup
-            ? "Credit lands in your wallet as soon as they sign up."
-            : "Credit lands in your wallet after their first purchase.",
+      body: rewardText,
     },
   ];
   return (
@@ -34,7 +26,7 @@ export function ReferralHowItWorks({ rewardOnSignup }: { rewardOnSignup?: boolea
                 <Icon className="h-5 w-5 text-accent-pink" aria-hidden />
               </span>
               <p className="mt-2 font-display text-base font-semibold text-ink">{s.title}</p>
-              <p className="mt-1 line-clamp-2 text-sm text-ink-muted">{s.body}</p>
+              <p className="mt-1 text-sm text-ink-muted">{s.body}</p>
             </li>
           );
         })}

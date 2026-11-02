@@ -34,6 +34,10 @@ const WEB_ONLY_VERSIONS: Record<"cookie-policy" | "grievance", LegalDocumentVers
 export const LEGAL_VERSIONS: Record<LegalDocId | "grievance", LegalDocumentVersion> = {
   ...(raw.versions as Record<SharedLegalDocId, LegalDocumentVersion>),
   ...WEB_ONLY_VERSIONS,
+  "cookie-policy": { version: "1.3.0", effectiveDate: "2026-11-02" },
+  "privacy-policy": { version: "1.3.0", effectiveDate: "2026-11-02" },
+  terms: { version: "1.3.0", effectiveDate: "2026-11-02" },
+  "refund-policy": { version: "1.3.0", effectiveDate: "2026-11-02" },
 };
 
 /** "2026-08-31" -> "31 August 2026" (UTC, stable across server/client). */

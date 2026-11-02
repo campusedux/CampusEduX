@@ -217,9 +217,10 @@ export interface JobsPageArgs {
   experience?: "Fresher" | "Experienced";
 }
 
-export const getCachedJobsPage = unstable_cache(
+// Deadlines pass without writes. Request memoization only: no persistent job snapshot.
+export const getCachedJobsPage = cache(
   async (a: JobsPageArgs): Promise<{ ok: true; jobs: unknown[]; count: number }> => {
-    const supabase = getPublicSupabase();
+    const supabase = getPublicSupabase({ fresh: true });
     if (!supabase) throw new Error("Jobs catalog is unavailable");
 
     let query = onlyActiveJobs(supabase.from("jobs").select(JOB_LIST_FIELDS, { count: "exact" }))
@@ -235,8 +236,6 @@ export const getCachedJobsPage = unstable_cache(
     if (error || count === null) throw new Error("Jobs catalog query failed");
     return { ok: true, jobs: data ?? [], count };
   },
-  ["catalog:jobs-page"],
-  { revalidate: TWO_MIN, tags: [CACHE_TAGS.jobs] },
 );
 
 /** `resume_templates` (active) — read on every résumé page. */
@@ -383,27 +382,38 @@ export const getCachedRecentJobIds = unstable_cache(
 );
 
 /** One company profile + its open roles, for `/jobs/companies/[id]`. Keyed by id. */
-export const getCachedCompanyDetail = unstable_cache(
+export const getCachedCompanyDetail = cache(
   async (id: string) => {
-    const supabase = getPublicSupabase();
+    const supabase = getPublicSupabase({ fresh: true });
     if (!supabase) return null;
-    const [{ data: company }, { data: jobs }] = await Promise.all([
-      supabase.from("companies").select("id,name,logo_url,about,employee_count,rating").eq("id", id).single(),
+    const [{ data: company, error: companyError }, { data: jobs, error: jobsError, count }] = await Promise.all([
+      supabase.from("companies").select("id,name,logo_url,about,employee_count,rating").eq("id", id).maybeSingle(),
       onlyActiveJobs(
         supabase
           .from("jobs")
-          .select(JOB_LIST_FIELDS),
+          .select(JOB_LIST_FIELDS, { count: "exact" }),
       )
         .eq("company_id", id)
         .order("posted_at", { ascending: false })
         .limit(50),
     ]);
+    if (companyError || jobsError) throw new Error("Company roles are unavailable");
     if (!company) return null;
-    return { company, jobs: jobs ?? [] };
+    return { company, jobs: jobs ?? [], count: count ?? 0 };
   },
-  ["catalog:company-detail"],
-  { revalidate: FIVE_MIN, tags: [CACHE_TAGS.companies, CACHE_TAGS.jobs] },
 );
+
+/** Left embedding retains employers with zero open roles; count uses the listing filter. */
+export const getCompaniesWithOpenRoles = cache(async () => {
+  const supabase = getPublicSupabase({ fresh: true });
+  if (!supabase) throw new Error("Companies are unavailable");
+  const { data, error } = await onlyActiveJobs(supabase.from("companies")
+    .select("id,name,logo_url,jobs!left(count)").order("name").limit(60), "jobs");
+  if (error || !data) throw new Error("Companies are unavailable");
+  return data.map((company) => ({ id: company.id, name: company.name, logo_url: company.logo_url,
+    open_jobs_count: company.jobs?.[0]?.count ?? 0 }))
+    .sort((a, b) => b.open_jobs_count - a.open_jobs_count);
+});
 
 /** All company ids — small set, for `generateStaticParams` on `/jobs/companies/[id]`. */
 export const getCachedCompanyIds = unstable_cache(

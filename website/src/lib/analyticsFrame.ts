@@ -1,10 +1,12 @@
 // The Google tag runs in an opaque sandbox, without application DOM/storage.
-export function analyticsFrameDocument(id: string, origin: string, clientId: string): string {
+export function analyticsFrameDocument(id: string, origin: string, clientId: string, nonce = ""): string {
+  const safeNonce = /^[A-Za-z0-9+/=_-]+$/.test(nonce) ? nonce : "";
+  const scripts = safeNonce ? `'nonce-${safeNonce}' https://www.googletagmanager.com` : "'unsafe-inline' https://www.googletagmanager.com";
   const literal = (value: string) => JSON.stringify(value).replace(/</g, "\\u003c");
   return `<!doctype html><html><head>
 <meta name="referrer" content="no-referrer">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' https://www.googletagmanager.com; connect-src https://www.google-analytics.com https://analytics.google.com; img-src https://www.google-analytics.com; base-uri 'none'; form-action 'none'">
-<title>CampusEduX</title></head><body><script>
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src ${scripts}; connect-src https://www.google-analytics.com https://analytics.google.com; img-src https://www.google-analytics.com; base-uri 'none'; form-action 'none'">
+<title>CampusEduX</title></head><body><script${safeNonce ? ` nonce="${safeNonce}"` : ""}>
 const measurementId = ${literal(id)};
 const siteOrigin = ${literal(origin)};
 const clientId = ${literal(clientId)};
@@ -35,6 +37,7 @@ window.addEventListener('message', function(event) {
     gtag('js', new Date());
     gtag('config', measurementId, {...page, client_id: clientId, send_page_view: false, allow_google_signals: false, allow_ad_personalization_signals: false});
     const script = document.createElement('script');
+    script.nonce = ${literal(safeNonce)};
     script.src = 'https://www.googletagmanager.com/gtag/js?id=' + encodeURIComponent(measurementId);
     script.referrerPolicy = 'no-referrer';
     script.async = true;

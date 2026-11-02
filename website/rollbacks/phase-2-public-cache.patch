@@ -1,10 +1,11 @@
 --- a/website/src/lib/revisionedPublicRead.ts
 +++ b/website/src/lib/revisionedPublicRead.ts
-@@ -1,54 +1,21 @@
+@@ -1,55 +1,21 @@
  import { cache } from "react";
 -import { createHash } from "node:crypto";
  import { getPublicSupabase } from "@/lib/supabase/server";
 -import { RevisionCache } from "@/lib/revisionCache";
+-import { publicReadDeadline } from "@/lib/publicReadDeadline";
  
  type Scope = "learning" | "blog" | "home";
  type Client = NonNullable<ReturnType<typeof getPublicSupabase>>;
@@ -23,7 +24,7 @@
 -const renderRevision = cache(async (scope: Scope, _identity: string) => {
 -  const client = getPublicSupabase({ fresh: true });
 -  if (!client) throw new Error("Public content is unavailable");
--  return revision(client, scope);
+-  return publicReadDeadline(() => revision(client, scope), 5000);
 -});
 -
 -/** Only anonymous projections. Authenticated clients cannot be supplied here.
@@ -32,7 +33,7 @@
 - * Process restarts/evictions cause cold reads; this is not Next/CDN/HTML caching.
 +/** Phase 2 app-first rollback: request memoization and fresh anonymous reads.
 + * No revision RPC, process cache, authenticated client or stale fallback.
-+ * Retains the existing loader projections and Phase 1 query reductions.
++ * The public client retains its transport timeout.
   */
  export function revisionedPublicRead<A extends unknown[], R>(
 -  scope: Scope,
@@ -48,16 +49,16 @@
 -      process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
 -    ])).digest("hex");
 -    const token = await renderRevision(scope, identity);
--    if (token === null) return read(client, ...args);
+-    if (token === null) return publicReadDeadline(() => read(client, ...args));
 -    const key = JSON.stringify(["public-v1", "website", "anon", identity, scope, name, args, token]);
--    return payloads.read(key, async () => {
+-    return payloads.read(key, () => publicReadDeadline(async () => {
 -      const result = await read(client, ...args);
 -      // Reject the render rather than retry with memoized dependencies from a
 -      // different revision (e.g. Blog category resolution). Next render retries.
 -      if (await revision(client, scope) !== token)
 -        throw new Error("Public content changed during read; retry the request");
 -      return result;
--    });
+-    }));
 +    return read(client, ...args);
    });
  }

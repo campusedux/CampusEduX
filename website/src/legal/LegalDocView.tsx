@@ -6,6 +6,8 @@ import { interpolateDocument } from "./interpolate";
 import { getLegalDocument, legalPath, RELATED, LEGAL_DOCUMENTS } from "./registry";
 import { LegalPageShell } from "./LegalPageShell";
 import { LegalProse } from "./LegalProse";
+import { loadProjectPricing } from "@/lib/customProjectPricing.server";
+import { projectTokenPrices } from "@/lib/projectPricingText";
 
 /** Chip row of related policies shown at the foot of every legal page. */
 export function RelatedPolicies({ id }: { id: LegalDocId | "grievance" }) {
@@ -37,7 +39,7 @@ export function RelatedPolicies({ id }: { id: LegalDocId | "grievance" }) {
  * document body and the related-policies row — used for website-specific
  * callouts (e.g. the in-app path on Delete Account, the form on Contact).
  */
-export function LegalDocView({
+export async function LegalDocView({
   docId,
   appNote = true,
   children,
@@ -47,7 +49,9 @@ export function LegalDocView({
   appNote?: boolean;
   children?: React.ReactNode;
 }) {
-  const doc = interpolateDocument(getLegalDocument(docId));
+  const pricing = docId === "terms" || docId === "refund-policy"
+    ? await loadProjectPricing().catch(() => []) : [];
+  const doc = interpolateDocument(getLegalDocument(docId), { customProjectTokenPrices: projectTokenPrices(pricing) });
   const meta = LEGAL_VERSIONS[docId];
 
   return (
@@ -55,7 +59,7 @@ export function LegalDocView({
       {appNote && (
         <p className="mt-4 inline-flex items-start gap-2 rounded-xl bg-surface px-3 py-2 text-xs text-ink-muted">
           <Smartphone className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-ink-faint" aria-hidden />
-          This is the same policy shown in the CampusEduX mobile app.
+          Shared policies also apply to the CampusEduX mobile app. Website-specific disclosures are identified separately.
         </p>
       )}
 

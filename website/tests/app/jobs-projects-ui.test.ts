@@ -196,13 +196,27 @@ describe("Projects listing presentation and preserved contracts", () => {
     expect(html).toContain('href="/custom-projects/start"');
   });
 
-  it.each([false, true])("distinguishes genuine empty results from filtered results (%s)", async filtered => {
+  it.each([false, true])("keeps the normal marketplace shell with empty inventory (no categories: %s)", async noCategories => {
     api.projects.mockResolvedValue({ projects: [], count: 0 });
-    const html = await render(await ProjectsPage({ searchParams: Promise.resolve(filtered ? { q: "no match" } : {}) }));
-    expect(html).toContain(filtered ? "No projects match these filters" : "No projects listed yet");
-    expect(html.includes("Clear filters")).toBe(filtered);
-    expect(html).not.toContain(project.title);
-    expect(html).not.toContain("temporarily unavailable");
+    if (noCategories) api.categories.mockResolvedValue([]);
+    const html = await render(await ProjectsPage({ searchParams: Promise.resolve({}) }));
+    expect(html).toContain("No projects listed right now");
+    expect(html).not.toMatch(/coming soon|CMS|admin panel|published/i);
+    expect(html).toContain('aria-label="Project marketplace"');
+    expect(html).toContain("Filters");
+    expect(html).toContain("Get Your Custom Project");
+    expect(html).toContain('href="/custom-projects"');
+    expect(html).toContain('href="/contact"');
+    expect(html).toContain("Search projects");
+  });
+
+  it("keeps filtered empty results distinct from an empty catalogue", async () => {
+    api.projects.mockImplementation(async (args: { q?: string }) => args.q
+      ? { projects: [], count: 0 } : { projects: [project], count: 1 });
+    const html = await render(await ProjectsPage({ searchParams: Promise.resolve({ q: "no match" }) }));
+    expect(html).toContain("No projects match these filters");
+    expect(html).toContain("Clear filters");
+    expect(html).not.toContain("Coming soon");
   });
 
   it("propagates data failures instead of presenting a genuine empty state", async () => {

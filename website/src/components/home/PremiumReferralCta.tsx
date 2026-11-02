@@ -54,7 +54,7 @@ export async function PremiumReferralCta() {
             <div className="mt-1 flex-1">
               <p className="text-sm font-semibold text-ink">{rewardText}</p>
               <p className="mt-1 line-clamp-2 text-sm text-ink-muted">
-                Share your referral link — when friends join CampusEduX, you earn wallet credit.
+                Share your link with friends. Signing up alone does not qualify for credit.
               </p>
             </div>
             <Link

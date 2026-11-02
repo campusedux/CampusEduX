@@ -1,42 +1,11 @@
 /** @type {import('next').NextConfig} */
 
-// Deliberately permissive enough for what this app actually loads: the
-// Supabase project (REST + Edge Functions + Storage), Razorpay's checkout
-// script/iframe (wallet top-up + Premium), and GA4's gtag.js (script) plus
-// its collect beacon (connect). Fonts are self-hosted by next/font, so no
-// external font host is needed. Nothing else.
-//
-// `next dev` (Fast Refresh / HMR / webpack eval source-maps) evaluates code
-// with eval(), so 'unsafe-eval' is required in development only. A production
-// build never needs it, so it stays out of the deployed policy.
 const contentRedirects = require("./src/lib/contentRedirects.json");
-
-const isDev = process.env.NODE_ENV !== "production";
-const scriptSrc = [
-  "script-src 'self' 'unsafe-inline' https://checkout.razorpay.com https://www.googletagmanager.com",
-  isDev ? "'unsafe-eval'" : "",
-]
-  .filter(Boolean)
-  .join(" ");
-
-const csp = [
-  "default-src 'self'",
-  scriptSrc,
-  "style-src 'self' 'unsafe-inline'",
-  "font-src 'self'",
-  "img-src 'self' data: https://*.supabase.co",
-  "connect-src 'self' https://*.supabase.co https://api.razorpay.com https://lumberjack.razorpay.com https://www.google-analytics.com https://analytics.google.com",
-  "frame-src https://api.razorpay.com https://checkout.razorpay.com",
-  "frame-ancestors 'none'",
-  // Nothing on the site uses <object>/<embed>/<applet>, and there is no
-  // <base> tag — lock both down so an injected one can't repoint relative
-  // URLs or load a plugin. `form-action` keeps a submitted <form> pointed at
-  // our own origin (Razorpay is an iframe/redirect flow, not a cross-origin
-  // form POST from our pages).
-  "object-src 'none'",
-  "base-uri 'self'",
-  "form-action 'self'",
-].join("; ");
+const { buildCsp } = require("./src/lib/csp");
+// Always retain an enforced static fallback, including middleware-excluded assets.
+// Next applies configured headers before middleware; nonce-mode middleware
+// replaces this header for matched requests with its stricter request policy.
+const csp = buildCsp({ isDev: process.env.NODE_ENV !== "production" });
 
 const nextConfig = {
   images: {
@@ -119,22 +88,6 @@ const nextConfig = {
           // CSP `frame-ancestors 'none'` already blocks framing in modern
           // browsers; this is the legacy-browser backstop against clickjacking.
           { key: "X-Frame-Options", value: "DENY" },
-        ],
-      },
-      {
-        // `/projects` and `/jobs` are dynamically rendered (they read
-        // `searchParams`), but their data is served from a per-filter
-        // cross-request cache (src/lib/cache.ts) and the HTML is identical for
-        // every visitor with the same query string. Let a CDN/edge hold the
-        // full response briefly, keyed by URL. Hosts that respect this (Vercel)
-        // turn these into edge hits; `next start` still sends its own
-        // `no-store` and ignores this — that's expected.
-        source: "/:path(projects|jobs)",
-        headers: [
-          {
-            key: "Cache-Control",
-            value: "public, s-maxage=60, stale-while-revalidate=300",
-          },
         ],
       },
     ];

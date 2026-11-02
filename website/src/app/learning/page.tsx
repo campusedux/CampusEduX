@@ -201,7 +201,7 @@ async function LearningContent({ searchParams: searchParamsPromise }: { searchPa
           <EmptyState
             icon={BookOpen}
             title="No courses yet"
-            subtitle="Courses appear here as soon as they are published from the CampusEduX admin panel."
+            subtitle="No courses are available right now. Visit Contact if you need help finding a topic."
           />
         </section>
       ) : (

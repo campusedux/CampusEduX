@@ -1,3 +1,4 @@
+import { documentScriptNonce } from "@/components/analytics/ScriptNonce";
 // Loads Razorpay's Checkout.js once and resolves with the constructor.
 // Used by both the wallet top-up and Premium subscribe flows — both call the
 // *existing* CampusEduX Edge Functions (create-*-order / verify-*-payment),
@@ -9,6 +10,8 @@ export function loadRazorpayScript(): Promise<any> {
     if ((window as any).Razorpay) return resolve((window as any).Razorpay);
 
     const script = document.createElement("script");
+    const nonce = documentScriptNonce();
+    if (nonce) script.nonce = nonce;
     script.src = "https://checkout.razorpay.com/v1/checkout.js";
     script.onload = () => resolve((window as any).Razorpay);
     script.onerror = () => reject(new Error("Failed to load Razorpay checkout."));

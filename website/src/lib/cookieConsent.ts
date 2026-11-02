@@ -1,4 +1,7 @@
-/** First-party website preferences. Advertising stays off until an ad CMP is integrated. */
+/** First-party preferences; this banner is NOT a TCF CMP.
+ * TODO: Integrate a Google-certified TCF CMP before personalised advertising
+ * for EEA/UK/Swiss traffic. A stored ads=true is not a TCF consent signal.
+ */
 export type CookieConsent = { analytics: boolean; ads: boolean };
 
 export const COOKIE_CONSENT_NAME = "campusedux_consent_v1";

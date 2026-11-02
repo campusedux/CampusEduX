@@ -1,3 +1,4 @@
+
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { Header } from "@/components/nav/Header";
@@ -11,6 +12,8 @@ import { BRAND } from "@/lib/brand";
 import { BRAND_LOGO_URL, DEFAULT_OG_IMAGE, SITE_URL, websiteJsonLd } from "@/lib/seo";
 import { THEME_INIT_SCRIPT } from "@/lib/theme";
 import { Toaster } from "@/components/ui/Toast";
+import { headers } from "next/headers";
+import { ScriptNonceProvider } from "@/components/analytics/ScriptNonce";
 
 // System font stacks are defined in globals.css. Builds and first renders do
 // not require Google Fonts network access or an unverified cached font bundle.
@@ -55,6 +58,10 @@ export const metadata: Metadata = {
     title: `${BRAND.name} — for students, from sign-up to placement`,
     description,
   },
+  // Google AdSense site verification
+  other: {
+    "google-adsense-account": "ca-pub-2198114551995689",
+  },
 };
 
 // Origin of the Supabase project. A signed-out first page load no longer
@@ -72,13 +79,19 @@ const supabaseOrigin = (() => {
   }
 })();
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  // Nonces require dynamic HTML. Only opt in when advertising is enabled.
+  const nonce: string | undefined = process.env.NEXT_PUBLIC_ADSENSE_ENABLED === "true"
+    ? (await headers()).get("x-nonce") ?? undefined
+    : undefined;
+
   return (
     // suppressHydrationWarning: THEME_INIT_SCRIPT adds `dark` to <html> before
     // React hydrates, which is expected and must not warn.
     <html lang="en" suppressHydrationWarning>
       <head>
-        <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
+        {nonce && <meta name="csp-nonce" content={nonce} />}
+        <script nonce={nonce} dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
         {supabaseOrigin && <link rel="dns-prefetch" href={supabaseOrigin} />}
         <link rel="dns-prefetch" href="https://checkout.razorpay.com" />
       </head>
@@ -89,18 +102,20 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         >
           Skip to content
         </a>
-        <JsonLd data={organizationJsonLd} />
-        <JsonLd data={websiteJsonLd()} />
-        <GoogleAnalytics />
-        <Header />
-        <AnnouncementBar />
-        <main id="main-content" className="mobile-scroll-content min-h-[60vh]">
-          {children}
-        </main>
-        <Footer />
-        <BottomNav />
-        <CookieConsentBanner />
-        <Toaster />
+        <ScriptNonceProvider nonce={nonce}>
+          <JsonLd data={organizationJsonLd} />
+          <JsonLd data={websiteJsonLd()} />
+          <GoogleAnalytics />
+          <Header />
+          <AnnouncementBar />
+          <main id="main-content" className="mobile-scroll-content min-h-[60vh]">
+            {children}
+          </main>
+          <Footer />
+          <BottomNav />
+          <CookieConsentBanner />
+          <Toaster />
+        </ScriptNonceProvider>
       </body>
     </html>
   );

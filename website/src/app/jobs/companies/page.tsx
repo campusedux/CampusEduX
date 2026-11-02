@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { getPublicSupabase } from "@/lib/supabase/server";
+import { getCompaniesWithOpenRoles } from "@/lib/cache";
 import { Building2 } from "lucide-react";
 import { Breadcrumb, CompanyCard, type CompanyCardData, EmptyState } from "@/components/ui";
 import { absoluteUrl, breadcrumbJsonLd, DEFAULT_OG_IMAGE } from "@/lib/seo";
@@ -8,21 +8,14 @@ import JsonLd from "@/components/JsonLd";
 const DESCRIPTION =
   "See which companies are hiring on CampusEduX and browse each employer's live job and internship openings in one place.";
 
-export const revalidate = 300;
+export const revalidate = 0;
 
 async function getCompanies(): Promise<CompanyCardData[]> {
-  const supabase = getPublicSupabase();
-  if (!supabase) return [];
-  const { data } = await supabase
-    .from("companies")
-    .select("id,name,logo_url,open_jobs_count")
-    .order("open_jobs_count", { ascending: false })
-    .limit(60);
-  return (data ?? []) as CompanyCardData[];
+  return getCompaniesWithOpenRoles();
 }
 
 export async function generateMetadata(): Promise<Metadata> {
-  const companies = await getCompanies();
+  const companies = await getCompanies().catch(() => null);
   return {
     // Absolute: the layout's " | CampusEduX" template would repeat the brand.
     title: { absolute: "Companies Hiring on CampusEduX" },
@@ -36,7 +29,7 @@ export async function generateMetadata(): Promise<Metadata> {
       images: [DEFAULT_OG_IMAGE],
     },
     // No companies listed yet -> don't index an empty shell page.
-    robots: companies.length === 0 ? { index: false, follow: true } : undefined,
+    robots: !companies?.length ? { index: false, follow: true } : undefined,
   };
 }
 

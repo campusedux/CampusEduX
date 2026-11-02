@@ -93,6 +93,8 @@ describe("Home What you get section", () => {
       "custom-project-promo-title",
     ]);
     expect(sections.filter(id => id === "home-features-title")).toHaveLength(1);
+    expect(html).toMatch(/href="\/projects"[^>]*>[\s\S]*?Browse projects/);
+    expect(html).not.toMatch(/coming soon|Projects · soon/i);
     if (signedIn) expect(html).toContain('href="/learning/java/intro"');
     else expect(sections).not.toContain("continue-title");
   });

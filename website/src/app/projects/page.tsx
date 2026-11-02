@@ -133,18 +133,27 @@ async function ProjectResults({ query }: { query: ProjectQuery }) {
         <EmptyState
           className="border-solid bg-card px-4 py-10 sm:py-14"
           icon={LayoutGrid}
-          title={query.filtered ? "No projects match these filters" : "No projects listed yet"}
+          title={query.filtered ? "No projects match these filters" : "No projects listed right now"}
           subtitle={
             query.filtered
               ? "Try widening the price range, clearing a filter, or a different search term."
-              : "Projects appear here as soon as they are published."
+              : "Explore custom projects or contact us to discuss your idea."
           }
           action={
             query.filtered ? (
               <Link href="/projects" className="btn-secondary min-h-11 text-sm">
                 Clear filters
               </Link>
-            ) : undefined
+            ) : (
+              <div className="flex flex-wrap justify-center gap-3">
+                <Link href="/custom-projects" className="btn-secondary min-h-11 text-sm">
+                  Custom Projects
+                </Link>
+                <Link href="/contact" className="btn-secondary min-h-11 text-sm">
+                  Contact
+                </Link>
+              </div>
+            )
           }
         />
       ) : (

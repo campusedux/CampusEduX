@@ -114,7 +114,7 @@ export default async function BlogIndexPage({ searchParams: searchParamsPromise 
           className="mt-8"
           icon={Newspaper}
           title="No articles yet"
-          subtitle="Blog posts appear here as soon as they are published from the CampusEduX admin panel."
+          subtitle="No articles are available right now. Explore our tutorials or contact us for help finding a topic."
         />
       ) : (
         <>

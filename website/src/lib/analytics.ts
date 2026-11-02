@@ -1,4 +1,5 @@
 import { COOKIE_CONSENT_EVENT, readCookieConsent } from "@/lib/cookieConsent";
+import { documentScriptNonce } from "@/components/analytics/ScriptNonce";
 import { analyticsFrameDocument } from "@/lib/analyticsFrame";
 
 export const GA_MEASUREMENT_ID = process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID;
@@ -98,7 +99,7 @@ export function sendPageview(value: string) {
     // cookies or history, regardless of remote Enhanced Measurement settings.
     next.setAttribute("sandbox", "allow-scripts");
     next.referrerPolicy = "no-referrer";
-    next.srcdoc = analyticsFrameDocument(GA_MEASUREMENT_ID, origin, clientId);
+    next.srcdoc = analyticsFrameDocument(GA_MEASUREMENT_ID, origin, clientId, process.env.NEXT_PUBLIC_ADSENSE_ENABLED === "true" ? documentScriptNonce() : undefined);
     next.onload = () => {
       if (frame !== next) return;
       ready = true;

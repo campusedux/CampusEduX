@@ -11,10 +11,11 @@ export function activeDeadlineFilter(now: Date = new Date()): string {
 }
 
 /** Restricts a `jobs` query builder to open, unexpired rows. */
-export function onlyActiveJobs<T>(builder: T): T {
+export function onlyActiveJobs<T>(builder: T, referencedTable?: string): T {
   // Loosely typed on purpose: the concrete PostgREST builder types recurse too deeply for a structural constraint.
-  const q = builder as unknown as { eq: (c: string, v: string) => { or: (f: string) => T } };
-  return q.eq("status", "open").or(activeDeadlineFilter());
+  const q = builder as unknown as { eq: (c: string, v: string) => { or: (f: string, options?: { referencedTable: string }) => T } };
+  const active = q.eq(referencedTable ? `${referencedTable}.status` : "status", "open");
+  return referencedTable ? active.or(activeDeadlineFilter(), { referencedTable }) : active.or(activeDeadlineFilter());
 }
 
 export type JobAvailability = "open" | "closed" | "draft";
