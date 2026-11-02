@@ -14,7 +14,7 @@ jest.mock("@/hooks/useCustomProjects", () => ({
       pricing: [
         { projectType: "academic", projectLevel: "standard", basePrice: 7999, tokenAmount: 1500, pricingVersion: 1 },
         { projectType: "academic", projectLevel: "advanced", basePrice: 9999, tokenAmount: 1500, pricingVersion: 1 },
-        { projectType: "personal", projectLevel: "standard", basePrice: 15999, tokenAmount: 3000, pricingVersion: 1 },
+        { projectType: "personal", projectLevel: "standard", basePrice: 15999, tokenAmount: 2200, pricingVersion: 1 },
         { projectType: "business", projectLevel: "standard", basePrice: 29999, tokenAmount: 6000, pricingVersion: 1 },
       ],
       platformPricing: [],
@@ -62,13 +62,13 @@ describe("Step 1 — Project type", () => {
     expect(allText(r)).toEqual(expect.arrayContaining(["Project Mentoring", "Personal Project", "Business Project"]));
   });
 
-  it("shows 'Starting from' from live pricing (lowest level) and the fixed token per type", () => {
+  it("shows 'Starting from' and edited tokens from live pricing", () => {
     const blob = allText(render(<BuilderTypeScreen />)).join(" | ");
     expect(blob).toContain("Starting from ₹7,999");
     expect(blob).toContain("Starting from ₹15,999");
     expect(blob).toContain("Starting from ₹29,999");
     expect(blob).toContain("Token ₹1,500 to start");
-    expect(blob).toContain("Token ₹3,000 to start");
+    expect(blob).toContain("Token ₹2,200 to start");
     expect(blob).toContain("Token ₹6,000 to start");
   });
 

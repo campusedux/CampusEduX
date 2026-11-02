@@ -7,7 +7,7 @@ import { AccountPageHeader } from "@/components/account/AccountPageHeader";
 
 export default async function SavedJobsPage() {
   const user = await requireUser();
-  const supabase = createAuthedServerSupabase();
+  const supabase = await createAuthedServerSupabase();
 
   const { data } = await supabase
     .from("saved_jobs")

@@ -3,9 +3,10 @@ import { requireUser } from "@/lib/auth";
 import { createAuthedServerSupabase } from "@/lib/supabase/authed-server";
 import JdMatchPanel from "./JdMatchPanel";
 
-export default async function ResumeJdMatchPage({ params }: { params: { id: string } }) {
+export default async function ResumeJdMatchPage({ params: paramsPromise }: { params: Promise<{ id: string }> }) {
+  const params = await paramsPromise;
   const user = await requireUser();
-  const supabase = createAuthedServerSupabase();
+  const supabase = await createAuthedServerSupabase();
 
   const { data: resume } = await supabase.from("resumes_builder").select("id, title").eq("id", params.id).eq("user_id", user.id).maybeSingle();
   if (!resume) notFound();

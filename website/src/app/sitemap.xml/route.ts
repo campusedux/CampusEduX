@@ -5,6 +5,7 @@ import { sitemapIndexResponse } from "@/lib/sitemap/response";
 // most hourly; POST /api/revalidate {"tags":["learning:sitemap"]} (which also
 // revalidates this path) refreshes it and every child on demand.
 export const revalidate = 3600;
+export const dynamic = "force-static";
 
 export function GET() {
   return sitemapIndexResponse();

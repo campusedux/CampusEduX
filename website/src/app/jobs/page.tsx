@@ -17,7 +17,8 @@ export const revalidate = 120;
 
 type SP = { q?: string; location?: string; type?: string; exp?: string; sort?: string; page?: string };
 
-export async function generateMetadata({ searchParams }: { searchParams: SP }): Promise<Metadata> {
+export async function generateMetadata({ searchParams: searchParamsPromise }: { searchParams: Promise<SP> }): Promise<Metadata> {
+  const searchParams = await searchParamsPromise;
   const s = JOB_SORTS[jobSort(searchParams.sort)];
   const { count } = await getCachedJobsPage({
     from: 0,
@@ -134,7 +135,8 @@ function JobResultsSkeleton() {
   );
 }
 
-export default async function JobsPage({ searchParams }: { searchParams: SP }) {
+export default async function JobsPage({ searchParams: searchParamsPromise }: { searchParams: Promise<SP> }) {
+  const searchParams = await searchParamsPromise;
   const sort = jobSort(searchParams.sort);
   const experience = jobExperience(searchParams.exp);
   const filterState = {

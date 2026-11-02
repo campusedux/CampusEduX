@@ -115,6 +115,7 @@ export function CustomProjectDetailScreen() {
   const handlePayBalance = async () => {
     const result = await payBalance();
     if (result.status === "success") notify("Payment received", "Thanks — your balance has been updated.");
+    else if (result.status === "pending") notify("Verification pending", result.message);
     else if (result.status === "failed") notify("Payment not completed", result.message);
     // "cancelled" (user dismissed checkout): silent, same as the token flow.
   };

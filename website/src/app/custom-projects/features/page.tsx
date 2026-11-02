@@ -1,7 +1,9 @@
+import { CustomProjectReadError } from "@/lib/customProjectReads";
+import { LoadError } from "../_builder/LoadError";
 import type { Metadata } from "next";
 import { requireUser } from "@/lib/auth";
 import { loadCatalog } from "@/lib/customProjects.server";
-import StepBar from "../_builder/StepBar";
+import FlowLayout from "../_builder/FlowLayout";
 import BuilderFeatures from "./BuilderFeatures";
 
 export const metadata: Metadata = {
@@ -12,20 +14,25 @@ export const metadata: Metadata = {
 export default async function Page() {
   await requireUser();
 
-  const { pricing, platforms, features, catalogAvailable } = await loadCatalog();
+  let result: Awaited<ReturnType<typeof loadCatalog>>;
+  try {
+    result = await loadCatalog();
+  } catch (error) {
+    if (!(error instanceof CustomProjectReadError)) throw error;
+    return <FlowLayout current={1}><LoadError kind={error.kind} /></FlowLayout>;
+  }
+  const { pricing, platforms, features, catalogAvailable } = result;
 
   return (
-    <div className="container-page py-10 md:py-14">
-      <StepBar current={1} />
+    <FlowLayout current={1}>
 
       <p className="eyebrow">Step 2 · Project scope</p>
-      <h1 className="mt-2 text-[1.6rem] font-bold tracking-tight text-ink sm:text-3xl">Project features &amp; requirements</h1>
+      <h1 className="mt-1 text-[25px] font-semibold leading-tight text-ink">Project features &amp; requirements</h1>
       <p className="mt-2 max-w-2xl text-sm text-ink-muted sm:text-[15px]">
-        Review your mentoring scope or choose features for a personal or
-        business software project.
+        Review mentoring guidance, select features, and upload project references. Confirm how your project will be used at checkout.
       </p>
 
-      <div className="mt-8">
+      <div className="mt-5">
         <BuilderFeatures
           features={features}
           pricing={pricing}
@@ -33,6 +40,6 @@ export default async function Page() {
           catalogAvailable={catalogAvailable}
         />
       </div>
-    </div>
+    </FlowLayout>
   );
 }

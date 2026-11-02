@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { validationError } from "@/lib/validation";
 import { compilerAuthRequired, resolveApiCaller } from "@/lib/apiAuth";
 import { limitResponse, rlHit } from "@/lib/rateLimitDb";
 import { runRequestSchema } from "@/lib/compiler/schema";
@@ -40,7 +41,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, error: "Malformed request." }, { status: 400 });
   }
 
-  const parsed = runRequestSchema.safeParse(json);
+  const parsed = runRequestSchema.safeParse(json, { error: validationError });
   if (!parsed.success) {
     return NextResponse.json(
       { ok: false, error: parsed.error.issues[0]?.message ?? "Check your input and try again." },

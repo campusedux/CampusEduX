@@ -14,6 +14,7 @@ beforeEach(() => resetSupabaseMock());
 
 describe("authService.login", () => {
   it("signs in with an email identifier and returns the session + mapped profile", async () => {
+    setRpcResult("current_user_is_premium", { data: true });
     setAuthResult("signInWithPassword", signInSuccess);
     setTableResult("profiles", { data: [profileRow] });
 
@@ -145,6 +146,27 @@ describe("authService.updatePassword", () => {
 });
 
 describe("authService.getProfile", () => {
+  it.each([false, null, "true", { premium: true }])("ignores stale profile premium for RPC result %j", async (data) => {
+    setTableResult("profiles", { data: [profileRow] });
+    setRpcResult("current_user_is_premium", { data });
+    expect((await authService.getProfile(profileRow.id, profileRow.email)).isPremium).toBe(false);
+    expect(supabase.rpc).toHaveBeenCalledWith("current_user_is_premium");
+  });
+
+  it("accepts a valid entitlement with a false mirror and rechecks on the next read", async () => {
+    setTableResult("profiles", { data: [{ ...profileRow, is_premium: false }] });
+    setRpcResult("current_user_is_premium", { data: true });
+    expect((await authService.getProfile(profileRow.id, profileRow.email)).isPremium).toBe(true);
+    setRpcResult("current_user_is_premium", { data: false });
+    expect((await authService.getProfile(profileRow.id, profileRow.email)).isPremium).toBe(false);
+  });
+
+  it("fails closed on entitlement lookup errors", async () => {
+    setTableResult("profiles", { data: [profileRow] });
+    setRpcResult("current_user_is_premium", { data: true, error: { message: "offline" } });
+    expect((await authService.getProfile(profileRow.id, profileRow.email)).isPremium).toBe(false);
+  });
+
   it("returns the mapped profile when the row exists", async () => {
     setTableResult("profiles", { data: [profileRow] });
 

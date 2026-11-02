@@ -1,3 +1,4 @@
+import { PaymentPendingError, checkoutWasCancelled, usePaymentVerification } from "./usePaymentVerification";
 import { userScopedKey } from "@/lib/queryClient";
 import { useCallback, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -15,12 +16,12 @@ export const customProjectKeys = {
   messages: (id: string) => ["custom-projects", "messages", id] as const,
 };
 
-/** Pricing config is small and rarely changes — cache it for the session. */
+/** Reload pricing when a builder mounts so admin edits are not cached for an hour. */
 export const useCustomPricing = () =>
   useQuery({
     queryKey: customProjectKeys.pricing,
     queryFn: customProjectsService.getPricing,
-    staleTime: 60 * 60 * 1000,
+    staleTime: 0,
   });
 
 export const useCustomFeatures = () =>
@@ -144,6 +145,7 @@ export const useCustomProjectEdits = (requestId: string) => {
 };
 
 type SubmitResult =
+  | { status: "pending"; message: string }
   | {
       status: "success";
       requestId: string;
@@ -165,71 +167,87 @@ export function useCustomProjectSubmit() {
   const [isProcessing, setIsProcessing] = useState(false);
   const queryClient = useQueryClient();
   const user = useAuthStore((s) => s.user);
+  const verification = usePaymentVerification(user?.id);
 
   const submit = useCallback(
-    async (config: CustomProjectBuilderConfig, integrity: { assessmentUse: "yes" | "no"; studentAuthored: boolean; integrityAcknowledged: boolean }): Promise<SubmitResult> => {
+    async (
+      config: CustomProjectBuilderConfig,
+      integrity: {
+        assessmentUse: "yes" | "no";
+        studentAuthored: boolean;
+        integrityAcknowledged: boolean;
+      },
+    ): Promise<SubmitResult> => {
       setIsProcessing(true);
       try {
-        const order = await customProjectsService.createOrder(config, integrity);
+        return await verification.run<SubmitResult>(async () => {
+          const order = await customProjectsService.createOrder(config, integrity);
 
-        let checkoutResult;
-        try {
-          checkoutResult = await openRazorpayCheckout({
-            key: order.razorpayKeyId,
-            order_id: order.razorpayOrderId,
-            amount: order.amount,
-            currency: order.currency,
-            name: "CampusEduX",
-            description: `Custom project token — ${order.projectType}`,
-            prefill: {
-              name: user?.fullName ?? "",
-              email: user?.email ?? "",
-              contact: user?.mobileNumber ?? "",
-            },
-            theme: { color: "#4F39F6" },
+          let checkoutResult;
+          try {
+            checkoutResult = await openRazorpayCheckout({
+              key: order.razorpayKeyId,
+              order_id: order.razorpayOrderId,
+              amount: order.amount,
+              currency: order.currency,
+              name: "CampusEduX",
+              description: `Custom project token — ${order.projectType}`,
+              prefill: {
+                name: user?.fullName ?? "",
+                email: user?.email ?? "",
+                contact: user?.mobileNumber ?? "",
+              },
+              theme: { color: "#4F39F6" },
+            });
+          } catch (error) {
+            if (!checkoutWasCancelled(error)) throw error;
+            return { status: "cancelled", requestId: order.requestId };
+          }
+
+          const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = checkoutResult;
+          if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
+            throw new Error("Razorpay returned an incomplete payment response.");
+          }
+
+          return verification.verify<SubmitResult>(async () => {
+            await customProjectsService.verifyPayment({
+              requestId: order.requestId,
+              razorpayOrderId: razorpay_order_id,
+              razorpayPaymentId: razorpay_payment_id,
+              razorpaySignature: razorpay_signature,
+            });
+
+            if (user?.id) {
+              await customProjectsService.deleteDraft(user.id).catch(() => undefined);
+            }
+            queryClient.invalidateQueries({ queryKey: customProjectKeys.myRequests });
+            queryClient.invalidateQueries({ queryKey: customProjectKeys.draft });
+
+            return {
+              status: "success",
+              requestId: order.requestId,
+              requestCode: order.requestCode,
+              tokenAmount: order.tokenAmount,
+              title: config.title,
+            };
           });
-        } catch {
-          return { status: "cancelled", requestId: order.requestId };
-        }
-
-        const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = checkoutResult;
-        if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
-          throw new Error("Razorpay returned an incomplete payment response.");
-        }
-
-        await customProjectsService.verifyPayment({
-          requestId: order.requestId,
-          razorpayOrderId: razorpay_order_id,
-          razorpayPaymentId: razorpay_payment_id,
-          razorpaySignature: razorpay_signature,
         });
-
-        if (user?.id) {
-          await customProjectsService.deleteDraft(user.id).catch(() => undefined);
-        }
-        queryClient.invalidateQueries({ queryKey: customProjectKeys.myRequests });
-        queryClient.invalidateQueries({ queryKey: customProjectKeys.draft });
-
-        return {
-          status: "success",
-          requestId: order.requestId,
-          requestCode: order.requestCode,
-          tokenAmount: order.tokenAmount,
-          title: config.title,
-        };
       } catch (error: any) {
+        if (error instanceof PaymentPendingError)
+          return { status: "pending", message: error.message };
         return { status: "failed", message: error?.message ?? "Payment failed. Please try again." };
       } finally {
         setIsProcessing(false);
       }
     },
-    [queryClient, user]
+    [queryClient, user, verification],
   );
 
   return { submit, isProcessing };
 }
 
 export type BalanceResult =
+  | { status: "pending"; message: string }
   | { status: "success" }
   | { status: "failed"; message: string }
   | { status: "cancelled" };
@@ -245,53 +263,61 @@ export function useCustomProjectBalance(requestId: string) {
   const [isProcessing, setIsProcessing] = useState(false);
   const queryClient = useQueryClient();
   const user = useAuthStore((s) => s.user);
+  const verification = usePaymentVerification(user?.id);
 
   const pay = useCallback(async (): Promise<BalanceResult> => {
     setIsProcessing(true);
     try {
-      const order = await customProjectsService.createBalanceOrder(requestId);
+      return await verification.run<BalanceResult>(async () => {
+        const order = await customProjectsService.createBalanceOrder(requestId);
 
-      let checkoutResult;
-      try {
-        checkoutResult = await openRazorpayCheckout({
-          key: order.razorpayKeyId,
-          order_id: order.razorpayOrderId,
-          amount: order.amount,
-          currency: order.currency,
-          name: "CampusEduX",
-          description: "Custom project — remaining balance",
-          prefill: {
-            name: user?.fullName ?? "",
-            email: user?.email ?? "",
-            contact: user?.mobileNumber ?? "",
-          },
-          theme: { color: "#4F39F6" },
+        let checkoutResult;
+        try {
+          checkoutResult = await openRazorpayCheckout({
+            key: order.razorpayKeyId,
+            order_id: order.razorpayOrderId,
+            amount: order.amount,
+            currency: order.currency,
+            name: "CampusEduX",
+            description: "Custom project — remaining balance",
+            prefill: {
+              name: user?.fullName ?? "",
+              email: user?.email ?? "",
+              contact: user?.mobileNumber ?? "",
+            },
+            theme: { color: "#4F39F6" },
+          });
+        } catch (error) {
+          if (!checkoutWasCancelled(error)) throw error;
+          return { status: "cancelled" };
+        }
+
+        const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = checkoutResult;
+        if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
+          throw new Error("Razorpay returned an incomplete payment response.");
+        }
+
+        return verification.verify<BalanceResult>(async () => {
+          await customProjectsService.verifyBalancePayment({
+            paymentId: order.paymentId,
+            razorpayOrderId: razorpay_order_id,
+            razorpayPaymentId: razorpay_payment_id,
+            razorpaySignature: razorpay_signature,
+          });
+
+          queryClient.invalidateQueries({ queryKey: customProjectKeys.detail(requestId) });
+          queryClient.invalidateQueries({ queryKey: customProjectKeys.myRequests });
+          return { status: "success" };
         });
-      } catch {
-        return { status: "cancelled" };
-      }
-
-      const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = checkoutResult;
-      if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
-        throw new Error("Razorpay returned an incomplete payment response.");
-      }
-
-      await customProjectsService.verifyBalancePayment({
-        paymentId: order.paymentId,
-        razorpayOrderId: razorpay_order_id,
-        razorpayPaymentId: razorpay_payment_id,
-        razorpaySignature: razorpay_signature,
       });
-
-      queryClient.invalidateQueries({ queryKey: customProjectKeys.detail(requestId) });
-      queryClient.invalidateQueries({ queryKey: customProjectKeys.myRequests });
-      return { status: "success" };
     } catch (error: any) {
+      if (error instanceof PaymentPendingError)
+        return { status: "pending", message: error.message };
       return { status: "failed", message: error?.message ?? "Payment failed. Please try again." };
     } finally {
       setIsProcessing(false);
     }
-  }, [queryClient, requestId, user]);
+  }, [queryClient, requestId, user, verification]);
 
   return { pay, isProcessing };
 }

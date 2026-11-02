@@ -39,6 +39,13 @@ export interface FeaturePricing {
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
+/** Only the server-fetched catalog decides the upfront payment amount. */
+export function catalogTokenAmount(raw: unknown): number | null {
+  if (typeof raw !== 'number' && typeof raw !== 'string') return null;
+  const amount = Number(raw);
+  return Number.isFinite(amount) && amount > 0 ? amount : null;
+}
+
 /**
  * `rows` must be every active feature that is either selected or included for
  * this tier; rows not offered for `projectType`/`projectLevel` are dropped.

@@ -6,10 +6,10 @@ declare
   b uuid := test_make_user('b124@x.io');
   ra uuid; rb uuid; da uuid;
 begin
-  insert into custom_project_requests(user_id,title,project_type,project_level,platform,token_payment_status,status)
-    values (a,'A proj','personal','standard','web','paid','delivered') returning id into ra;
-  insert into custom_project_requests(user_id,title,project_type,project_level,platform,token_payment_status)
-    values (b,'B proj','personal','standard','web','paid') returning id into rb;
+  insert into custom_project_requests(user_id,title,project_type,project_level,platform,token_payment_status,status,service_scope,assessment_use,integrity_acknowledged_at)
+    values (a,'A proj','personal','standard','web','paid','delivered','custom_software','no',now()) returning id into ra;
+  insert into custom_project_requests(user_id,title,project_type,project_level,platform,token_payment_status,service_scope,assessment_use,integrity_acknowledged_at)
+    values (b,'B proj','personal','standard','web','paid','custom_software','no',now()) returning id into rb;
   insert into custom_project_payments(request_id,user_id,project_type,amount,status) values (ra,a,'personal',3000,'paid');
   insert into custom_project_messages(request_id,sender_id,sender_role,body) values (ra,a,'student','hi from A');
   insert into custom_project_request_history(request_id,new_status) values (ra,'new');

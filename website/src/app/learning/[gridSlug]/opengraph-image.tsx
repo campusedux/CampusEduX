@@ -7,7 +7,8 @@ export const alt = "CampusEduX course";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
-export default async function Image({ params }: { params: { gridSlug: string } }) {
+export default async function Image({ params: paramsPromise }: { params: Promise<{ gridSlug: string }> }) {
+  const params = await paramsPromise;
   const grid = await getLearningGridBrief(params.gridSlug).catch(() => null);
   if (!grid) return renderOgCard({ title: "Learning", eyebrow: "CampusEduX" });
   return renderOgCard({ title: grid.name, eyebrow: "Course", footer: "Lessons with examples" });

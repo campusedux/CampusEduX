@@ -13,6 +13,11 @@
 
 import { json, preflight } from "../_shared/cors.ts";
 import { adminClient } from "../_shared/client.ts";
+import { nonEmptyString, paymentIsAvailable } from "../_shared/paymentBinding.ts";
+import { assertCapturedRazorpayPayment, paymentAmountPaise, PaymentVerificationError, premiumPaymentAmountPaise } from "../_shared/razorpay.ts";
+import { settleWalletTopup } from "../_shared/walletSettlement.ts";
+import { settleProjectPurchase } from "../_shared/purchaseSettlement.ts";
+import { activatePremiumSubscription } from "../_shared/premiumActivation.ts";
 
 const WEBHOOK_SECRET = Deno.env.get("RAZORPAY_WEBHOOK_SECRET") ?? "";
 
@@ -134,7 +139,14 @@ Deno.serve(async (req) => {
       );
     }
 
-    let payload: any;
+    let payload: {
+      event?: unknown;
+      payload?: { payment?: { entity?: {
+        order_id?: unknown; id?: unknown; status?: unknown;
+        entity?: unknown; captured?: unknown; amount?: unknown; currency?: unknown;
+        error_description?: string; error_reason?: string;
+      } } };
+    } | null;
 
     try {
       payload = JSON.parse(rawBody);
@@ -196,7 +208,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    if (!orderId || !paymentId) {
+    if (!nonEmptyString(orderId) || !nonEmptyString(paymentId)) {
       console.warn(
         "Webhook payment event does not contain order_id/payment id.",
       );
@@ -220,149 +232,72 @@ Deno.serve(async (req) => {
      *
      * This is the main project purchase flow.
      *
-     * We update only rows whose current status is pending.
-     * This makes the update idempotent and prevents the same
-     * webhook from repeatedly settling the same purchase.
+     * Capture shares the callback's transactional settlement boundary.
      */
-    const { data: purchase } = await db
+    const { data: purchase, error: purchaseFetchError } = await db
       .from("purchases")
       .select(
         "id, user_id, project_id, total_amount, status, razorpay_order_id, razorpay_payment_id, project:projects(title)",
       )
       .eq("razorpay_order_id", orderId)
       .maybeSingle();
+    if (purchaseFetchError) throw purchaseFetchError;
 
     if (purchase) {
-      /*
-       * payment.failed
-       */
+      if (event === "payment.captured") {
+        assertCapturedRazorpayPayment(paymentEntity, {
+          paymentId: purchase.status === "success" ? purchase.razorpay_payment_id : paymentId,
+          orderId: purchase.razorpay_order_id,
+          amountPaise: paymentAmountPaise(purchase.total_amount),
+          currency: "INR",
+        });
+      }
+      if (!await paymentIsAvailable(db, paymentId, orderId, { type: "purchase", id: purchase.id })) {
+        return json({ error: "Payment id is already bound to another order." }, 400);
+      }
       if (event === "payment.failed") {
-        if (purchase.status === "success") {
-          return json({
-            received: true,
-            handled: true,
-            alreadySettled: true,
-            orderType: "purchase",
-            orderId,
-          });
-        }
-
-        const { error } = await db
+        // The database rechecks this predicate after waiting on any concurrent
+        // settlement/refund. Delayed failure events cannot revoke entitlements.
+        const { data: failed, error } = await db
           .from("purchases")
           .update({
             status: "failed",
             razorpay_payment_id: paymentId,
-            failure_reason:
-              paymentEntity?.error_description ??
-              paymentEntity?.error_reason ??
-              "Razorpay payment failed.",
+            failure_reason: paymentEntity?.error_description ?? paymentEntity?.error_reason ?? "Razorpay payment failed.",
           })
           .eq("id", purchase.id)
-          .neq("status", "success");
-
+          .eq("razorpay_order_id", orderId)
+          .in("status", ["pending", "failed"])
+          .select("status")
+          .maybeSingle();
         if (error) throw error;
-
+        if (!failed) {
+          const { data: current, error: currentError } = await db.from("purchases")
+            .select("status").eq("id", purchase.id).single();
+          if (currentError) throw currentError;
+          if (current.status === "success") {
+            return json({
+              received: true, handled: true, alreadySettled: true, orderType: "purchase", orderId,
+            });
+          }
+          return json({
+            received: true, handled: true, alreadySettled: false,
+            orderType: "purchase", status: current.status, orderId, paymentId,
+          });
+        }
         return json({
-          received: true,
-          handled: true,
-          orderType: "purchase",
-          status: "failed",
-          orderId,
-          paymentId,
+          received: true, handled: true, orderType: "purchase", status: "failed", orderId, paymentId,
         });
       }
 
-      /*
-       * payment.captured
-       *
-       * Atomic transition:
-       * pending -> success
-       *
-       * Only the request which successfully changes the row
-       * from pending to success performs the dependent actions.
-       */
-      const { data: updatedPurchase, error } = await db
-        .from("purchases")
-        .update({
-          status: "success",
-          razorpay_payment_id: paymentId,
-          failure_reason: null,
-        })
-        .eq("id", purchase.id)
-        .neq("status", "success")
-        .select(
-          "id, user_id, project_id, total_amount, status, razorpay_order_id, razorpay_payment_id, project:projects(title)",
-        )
-        .maybeSingle();
-
-      if (error) throw error;
-
-      /*
-       * If no row was returned, another request already settled
-       * this purchase. This is the idempotency protection.
-       */
-      if (!updatedPurchase) {
+      const settlement = await settleProjectPurchase(db, purchase, paymentId);
+      if (settlement.alreadySettled) {
         return json({
-          received: true,
-          handled: true,
-          alreadySettled: true,
-          orderType: "purchase",
-          orderId,
-          paymentId,
+          received: true, handled: true, alreadySettled: true, orderType: "purchase", orderId, paymentId,
         });
       }
-
-      /*
-       * Existing business side effects from
-       * verify-razorpay-payment.
-       */
-      const { error: salesError } = await db.rpc(
-        "increment_project_sales_count",
-        {
-          p_project_id: updatedPurchase.project_id,
-        },
-      );
-
-      if (salesError) {
-        console.error(
-          "Failed to increment project sales count:",
-          salesError,
-        );
-      }
-
-      // Untyped client: supabase-js infers the embed as an array, but PostgREST returns a single object
-      // for this many-to-one join (purchases.project_id -> projects.id). Accept either shape.
-      const embeddedProject = updatedPurchase.project as unknown as
-        | { title?: string | null }
-        | { title?: string | null }[]
-        | null;
-      const projectTitle =
-        (Array.isArray(embeddedProject) ? embeddedProject[0]?.title : embeddedProject?.title) ?? "project";
-
-      const { error: ledgerError } = await db
-        .from("wallet_transactions")
-        .insert({
-          user_id: updatedPurchase.user_id,
-          type: "debit",
-          category: "project_purchase",
-          amount: updatedPurchase.total_amount,
-          description: `Purchased "${projectTitle}"`,
-        });
-
-      if (ledgerError) {
-        console.error(
-          "Failed to create wallet transaction:",
-          ledgerError,
-        );
-      }
-
       return json({
-        received: true,
-        handled: true,
-        orderType: "purchase",
-        status: "success",
-        orderId,
-        paymentId,
+        received: true, handled: true, orderType: "purchase", status: "success", orderId, paymentId,
       });
     }
 
@@ -371,29 +306,40 @@ Deno.serve(async (req) => {
      * 2. wallet_topup_orders
      * ---------------------------------------------------------
      *
-     * Webhook marks the payment state only.
-     *
-     * The existing verify-wallet-topup-payment function remains
-     * the primary client callback flow.
+     * Capture uses the same atomic settlement RPC as the client callback.
      */
-    const { data: walletOrder } = await db
+    const { data: walletOrder, error: walletFetchError } = await db
       .from("wallet_topup_orders")
       .select(
-        "id, user_id, amount, status, razorpay_order_id, razorpay_payment_id",
+        "id, user_id, amount, currency, status, razorpay_order_id, razorpay_payment_id",
       )
       .eq("razorpay_order_id", orderId)
       .maybeSingle();
+    if (walletFetchError) throw walletFetchError;
 
     if (walletOrder) {
+      if (event === "payment.captured") {
+        assertCapturedRazorpayPayment(paymentEntity, {
+          paymentId: walletOrder.status === "paid" ? walletOrder.razorpay_payment_id : paymentId,
+          orderId: walletOrder.razorpay_order_id,
+          amountPaise: paymentAmountPaise(walletOrder.amount),
+          currency: walletOrder.currency,
+        });
+      }
+      if (!await paymentIsAvailable(db, paymentId, orderId, { type: "wallet", id: walletOrder.id })) {
+        return json({ error: "Payment id is already bound to another order." }, 400);
+      }
       if (event === "payment.failed") {
-        await db
+        const { error } = await db
           .from("wallet_topup_orders")
           .update({
             status: "failed",
             razorpay_payment_id: paymentId,
           })
           .eq("id", walletOrder.id)
+          .eq("razorpay_order_id", orderId)
           .neq("status", "paid");
+        if (error) throw error;
 
         return json({
           received: true,
@@ -405,46 +351,13 @@ Deno.serve(async (req) => {
         });
       }
 
-      const { data: updatedWalletOrder } = await db
-        .from("wallet_topup_orders")
-        .update({
-          status: "paid",
-          razorpay_payment_id: paymentId,
-        })
-        .eq("id", walletOrder.id)
-        .neq("status", "paid")
-        .select(
-          "id, user_id, amount, status, razorpay_order_id, razorpay_payment_id",
-        )
-        .maybeSingle();
-
-      // This webhook is a fallback credit path: if the browser never
-      // completes its call to verify-wallet-topup-payment (closed tab,
-      // network failure, blocked request) after Razorpay actually captured
-      // the payment, the wallet must still get credited. The .neq("status",
-      // "paid") guard above means only one of the two paths ever wins this
-      // race for a given order, so this insert can't double-credit a top-up
-      // that verify-wallet-topup-payment already settled.
-      if (updatedWalletOrder) {
-        const { error: creditError } = await db.from("wallet_transactions").insert({
-          user_id: updatedWalletOrder.user_id,
-          type: "credit",
-          category: "added_money",
-          amount: updatedWalletOrder.amount,
-          description: "Added Money",
-        });
-        if (creditError) {
-          console.error("Failed to create wallet top-up credit:", creditError);
-        }
-      }
+      const settlement = await settleWalletTopup(db, walletOrder, paymentId);
 
       return json({
         received: true,
         handled: true,
         orderType: "wallet_topup",
-        status: updatedWalletOrder
-          ? "paid"
-          : "already_settled",
+        status: settlement.alreadySettled ? "already_settled" : "paid",
         orderId,
         paymentId,
       });
@@ -455,24 +368,38 @@ Deno.serve(async (req) => {
      * 3. premium_subscriptions
      * ---------------------------------------------------------
      */
-    const { data: premium } = await db
+    const { data: premium, error: premiumFetchError } = await db
       .from("premium_subscriptions")
       .select(
-        "id, user_id, status, razorpay_order_id, razorpay_payment_id",
+        "id, user_id, status, plan_id, billing_cycle, price, razorpay_order_id, razorpay_payment_id",
       )
       .eq("razorpay_order_id", orderId)
       .maybeSingle();
 
+    if (premiumFetchError) throw premiumFetchError;
     if (premium) {
+      if (event === "payment.captured") {
+        assertCapturedRazorpayPayment(paymentEntity, {
+          paymentId: premium.status === "active" ? premium.razorpay_payment_id : paymentId,
+          orderId: premium.razorpay_order_id,
+          amountPaise: premiumPaymentAmountPaise(premium.price),
+          currency: "INR",
+        });
+      }
+      if (!await paymentIsAvailable(db, paymentId, orderId, { type: "premium", id: premium.id })) {
+        return json({ error: "Payment id is already bound to another order." }, 400);
+      }
       if (event === "payment.failed") {
-        await db
+        const { error: failureError } = await db
           .from("premium_subscriptions")
           .update({
             status: "expired",
             razorpay_payment_id: paymentId,
           })
           .eq("id", premium.id)
-          .neq("status", "active");
+          .eq("razorpay_order_id", orderId)
+          .eq("status", "pending");
+        if (failureError) throw failureError;
 
         return json({
           received: true,
@@ -484,26 +411,13 @@ Deno.serve(async (req) => {
         });
       }
 
-      const { data: updatedPremium } = await db
-        .from("premium_subscriptions")
-        .update({
-          status: "active",
-          razorpay_payment_id: paymentId,
-        })
-        .eq("id", premium.id)
-        .neq("status", "active")
-        .select(
-          "id, user_id, status, razorpay_order_id, razorpay_payment_id",
-        )
-        .maybeSingle();
+      const activation = await activatePremiumSubscription(db, premium, paymentId);
 
       return json({
         received: true,
         handled: true,
         orderType: "premium",
-        status: updatedPremium
-          ? "active"
-          : "already_active",
+        status: activation.alreadyActive ? "already_active" : "active",
         orderId,
         paymentId,
       });
@@ -514,15 +428,44 @@ Deno.serve(async (req) => {
      * 4. custom_project_payments
      * ---------------------------------------------------------
      */
-    const { data: customProjectPayment } = await db
+    const { data: customProjectPayment, error: customPaymentFetchError } = await db
       .from("custom_project_payments")
       .select(
-        "id, status, razorpay_order_id, razorpay_payment_id",
+        "id, request_id, user_id, kind, status, amount, currency, razorpay_order_id, razorpay_payment_id",
       )
       .eq("razorpay_order_id", orderId)
       .maybeSingle();
+    if (customPaymentFetchError) throw customPaymentFetchError;
 
     if (customProjectPayment) {
+      if (event === "payment.captured") {
+        // Token settlement also grants the request's token amount through a DB trigger.
+        if (customProjectPayment.kind === "token") {
+          const { data: tokenRequest, error: tokenError } = await db
+            .from("custom_project_requests")
+            .select("id, token_amount, token_payment_status, payment_id")
+            .eq("id", customProjectPayment.request_id)
+            .eq("user_id", customProjectPayment.user_id)
+            .eq("payment_order_id", customProjectPayment.razorpay_order_id)
+            .maybeSingle();
+          if (tokenError) throw tokenError;
+          if (!tokenRequest || customProjectPayment.currency !== "INR" ||
+            paymentAmountPaise(tokenRequest.token_amount) !== paymentAmountPaise(customProjectPayment.amount) ||
+            (tokenRequest.token_payment_status === "paid" && tokenRequest.payment_id !== paymentId)) {
+            throw new PaymentVerificationError("Token payment does not match this request.");
+          }
+        }
+        assertCapturedRazorpayPayment(paymentEntity, {
+          paymentId: ["paid", "refund_due"].includes(customProjectPayment.status)
+            ? customProjectPayment.razorpay_payment_id : paymentId,
+          orderId: customProjectPayment.razorpay_order_id,
+          amountPaise: paymentAmountPaise(customProjectPayment.amount),
+          currency: customProjectPayment.currency,
+        });
+      }
+      if (!await paymentIsAvailable(db, paymentId, orderId, { type: customProjectPayment.kind, id: customProjectPayment.kind === "token" ? customProjectPayment.request_id : customProjectPayment.id })) {
+        return json({ error: "Payment id is already bound to another order." }, 400);
+      }
       const newStatus =
         event === "payment.captured"
           ? "paid"
@@ -530,25 +473,45 @@ Deno.serve(async (req) => {
 
       // captured: settle an open or previously-failed attempt (DB triggers credit the token/balance);
       // failed: only an open row. A 'paid' or 'refund_due' row is final and never touched here.
-      const { data: updatedCustomPayment } = await db
+      const { data: updatedCustomPayment, error: customPaymentUpdateError } = await db
         .from("custom_project_payments")
         .update({
           status: newStatus,
           razorpay_payment_id: paymentId,
         })
         .eq("id", customProjectPayment.id)
+        .eq("razorpay_order_id", orderId)
+        .eq("amount", customProjectPayment.amount)
+        .eq("currency", customProjectPayment.currency)
         .in("status", newStatus === "paid" ? ["created", "failed"] : ["created"])
         .select(
-          "id, status, razorpay_order_id, razorpay_payment_id",
+          "id, request_id, kind, status, razorpay_order_id, razorpay_payment_id",
         )
         .maybeSingle();
+      if (customPaymentUpdateError) throw customPaymentUpdateError;
+
+      // A concurrent delivery may have won the conditional update. Confirm its
+      // committed outcome before acknowledging; zero rows alone proves nothing.
+      if (!updatedCustomPayment) {
+        const { data: current, error: currentError } = await db
+          .from("custom_project_payments")
+          .select("id, status, razorpay_order_id, razorpay_payment_id")
+          .eq("id", customProjectPayment.id)
+          .eq("razorpay_order_id", orderId)
+          .single();
+        if (currentError) throw currentError;
+        if (!current || (event === "payment.captured" &&
+          (!["paid", "refund_due"].includes(current.status) || current.razorpay_payment_id !== paymentId))) {
+          throw new Error("Custom project settlement could not be confirmed. Please retry.");
+        }
+      }
 
       return json({
         received: true,
         handled: true,
         orderType: "custom_project",
         status: updatedCustomPayment
-          ? newStatus
+          ? updatedCustomPayment.status
           : "already_settled",
         orderId,
         paymentId,
@@ -584,7 +547,7 @@ Deno.serve(async (req) => {
             ? err.message
             : "Unexpected webhook error.",
       },
-      500,
+      err instanceof PaymentVerificationError ? err.status : 500,
     );
   }
 });

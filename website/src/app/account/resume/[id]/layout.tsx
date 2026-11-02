@@ -5,7 +5,8 @@ import { ResumeSteps, ResumeStepFooter } from "./ResumeSteps";
  * at the bottom. Navigation only — no data is read here, and each page keeps
  * its own fetching and auth check.
  */
-export default function ResumeStepLayout({ children, params }: { children: React.ReactNode; params: { id: string } }) {
+export default async function ResumeStepLayout({ children, params: paramsPromise }: { children: React.ReactNode; params: Promise<{ id: string }> }) {
+  const params = await paramsPromise;
   return (
     <div>
       <ResumeSteps resumeId={params.id} />

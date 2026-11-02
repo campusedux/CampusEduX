@@ -37,7 +37,9 @@ function describeQueryError(error: { code?: string; message: string }, table: st
   return error.message;
 }
 
-function mapProfileRow(row: any, email: string): UserProfile {
+async function mapProfileRow(row: any, email: string): Promise<UserProfile> {
+  // Cached profile flags are display mirrors, never entitlement authority.
+  const entitlement = await supabase.rpc("current_user_is_premium");
   return {
     id: row.id,
     fullName: row.full_name ?? "",
@@ -53,7 +55,7 @@ function mapProfileRow(row: any, email: string): UserProfile {
     linkedinUrl: row.linkedin_url ?? null,
     githubUrl: row.github_url ?? null,
     portfolioUrl: row.portfolio_url ?? null,
-    isPremium: row.is_premium ?? false,
+    isPremium: !entitlement.error && entitlement.data === true,
     createdAt: row.created_at,
   };
 }

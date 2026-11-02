@@ -45,24 +45,24 @@ describe("DBMS/SQL topic route", () => {
   const params = { gridSlug: DBMS_SQL_SLUG, topicSlug: "primary-key" };
   it("returns not-found for a missing topic instead of redirecting it to the course", async () => {
     reads.page.mockResolvedValue(null);
-    await expect(TopicPage({ params })).rejects.toThrow("NOT_FOUND");
+    await expect(TopicPage({ params: Promise.resolve(params) })).rejects.toThrow("NOT_FOUND");
   });
 
   it("serves readable notes, one H1, descriptive headings and the preserved canonical URL", async () => {
-    const html = renderToStaticMarkup(await TopicPage({ params }));
+    const html = renderToStaticMarkup(await TopicPage({ params: Promise.resolve(params) }));
     expect(html).toContain("A primary key uniquely identifies each row");
     expect(html.match(/<h1\b/g)).toHaveLength(1);
     expect(html).not.toContain("Chapter 5:");
     expect(html).not.toMatch(/Lesson \d+ of/);
-    const metadata = await generateMetadata({ params });
+    const metadata = await generateMetadata({ params: Promise.resolve(params) });
     expect(metadata.alternates?.canonical).toBe("https://www.campusedux.com/learning/dbms-sql-tutorial/primary-key");
   });
 
   it("keeps an empty, unlocked topic unavailable and noindex", async () => {
     const page = await reads.page();
     reads.page.mockResolvedValue({ ...page, contents: [] });
-    await expect(TopicPage({ params })).rejects.toThrow("NOT_FOUND");
-    expect((await generateMetadata({ params })).robots).toMatchObject({ index: false });
+    await expect(TopicPage({ params: Promise.resolve(params) })).rejects.toThrow("NOT_FOUND");
+    expect((await generateMetadata({ params: Promise.resolve(params) })).robots).toMatchObject({ index: false });
   });
 });
 

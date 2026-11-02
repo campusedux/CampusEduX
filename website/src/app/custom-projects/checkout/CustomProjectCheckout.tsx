@@ -2,12 +2,14 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Lock } from "lucide-react";
+import { CheckCircle2, Circle, Lock } from "lucide-react";
 import { createBrowserSupabase } from "@/lib/supabase/browser";
 import { loadRazorpayScript } from "@/lib/razorpay";
 import { interpretVerifyResponse } from "@/lib/payments";
 import { formatINR } from "@/lib/format";
 import { Button } from "@/components/ui";
+import Link from "next/link";
+import { BottomBar } from "../_builder/BottomBar";
 import type { BuilderDraft } from "@/lib/customProjects";
 
 /**
@@ -52,7 +54,7 @@ export default function CustomProjectCheckout({
         await supabase.functions.invoke("create-custom-project-order", {
           body: {
             projectType: draft.projectType,
-            serviceScope: academic ? "mentoring" : "custom_software",
+            serviceScope: academic && assessmentUse === "yes" ? "mentoring" : "custom_software",
             assessmentUse,
             studentAuthored: academic ? studentAuthored : false,
             integrityAcknowledged,
@@ -64,7 +66,7 @@ export default function CustomProjectCheckout({
             description: draft.description,
             targetUsers: draft.targetUsers,
             technologyPreference: draft.technologyPreference,
-            featureIds: academic ? [] : featureIds,
+            featureIds: academic && assessmentUse === "yes" ? [] : featureIds,
             customRequirements: draft.customRequirements,
             projectImagePath: draft.projectImagePath,
             referenceFiles: draft.referenceFiles,
@@ -74,6 +76,7 @@ export default function CustomProjectCheckout({
       if (order?.error) throw new Error(order.error);
 
       const Razorpay = await loadRazorpayScript();
+      let verificationStarted = false;
       const checkout = new Razorpay({
         key: order.razorpayKeyId,
         amount: order.amount,
@@ -82,6 +85,7 @@ export default function CustomProjectCheckout({
         name: "CampusEduX",
         description: `Custom project token — ${order.requestCode}`,
         handler: async function verifyHandler(response: any) {
+          verificationStarted = true;
           setStatus("processing");
           setError(null);
           setRetryVerification(null);
@@ -115,8 +119,11 @@ export default function CustomProjectCheckout({
             router.refresh();
           }
         },
-        modal: { ondismiss: () => setStatus((current) => current === "pending" ? current : "idle") },
+        modal: { ondismiss: () => { if (!verificationStarted) setStatus((current) => current === "pending" ? current : "idle"); } },
         theme: { color: "#4F39F6" },
+      });
+      checkout.on("payment.failed", (response: { error?: { description?: string } }) => {
+        if (!verificationStarted) setError(response.error?.description ?? "Payment failed. Retry in checkout or close it to try again.");
       });
       checkout.open();
     } catch (err: any) {
@@ -127,7 +134,11 @@ export default function CustomProjectCheckout({
 
   return (
     <div>
-      <fieldset className="mb-5 space-y-3 rounded-2xl border border-line p-4">
+      <ul className="mb-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink-muted" aria-label="Integrity check progress">
+        <li className="flex items-center gap-1">{assessmentUse ? <CheckCircle2 className="h-4 w-4 text-success" /> : <Circle className="h-4 w-4" />} Answer selected</li>
+        <li className="flex items-center gap-1">{integrityAcknowledged && (!academic || studentAuthored) ? <CheckCircle2 className="h-4 w-4 text-success" /> : <Circle className="h-4 w-4" />} {academic ? "Both confirmations checked" : "Confirmation checked"}</li>
+      </ul>
+      <fieldset className="mb-4 space-y-3 rounded-xl border border-line p-4">
         <legend className="font-semibold">Academic-integrity check</legend>
         <label className="block text-sm" htmlFor="assessment-use">
           Will this request relate to work assessed by a school, college, or
@@ -158,8 +169,9 @@ export default function CustomProjectCheckout({
               checked={studentAuthored}
               onChange={(event) => setStudentAuthored(event.target.checked)}
             />
-            I will write any assessed code, report, slides, and answers myself.
-            I am requesting guidance and feedback only.
+            {assessmentUse === "yes"
+              ? "I will write any assessed code, report, slides, and answers myself. I am requesting guidance and feedback only."
+              : "I confirm this software is not for assessed work, will not submit it for assessment, and will author any assessed work myself."}
           </label>
         )}
         <label className="flex gap-2 text-sm">
@@ -172,18 +184,16 @@ export default function CustomProjectCheckout({
           provide submission-ready deliverables for me.
         </label>
       </fieldset>
-      <Button
-        type="button"
-        size="lg"
-        fullWidth
-        leftIcon={Lock}
-        onClick={handlePay}
-        disabled={!canPay || status === "processing" || status === "pending"}
-        loading={status === "processing"}
-      >
-        {status === "processing" ? "Opening checkout…" : `Pay ${formatINR(tokenAmount)} token`}
-      </Button>
-      {retryVerification && <button type="button" className="btn-secondary mt-2" onClick={retryVerification}>Retry verification</button>}
+      <BottomBar
+        step={4}
+        left={<Link href="/custom-projects/estimate" className="text-sm font-medium hover:text-primary">← Back</Link>}
+        center={!canPay ? "Complete the integrity check to continue" : "Ready for secure payment"}
+        right={<div className="text-right"><Button type="button" leftIcon={Lock} onClick={handlePay}
+          disabled={!canPay || status === "processing" || status === "pending"} loading={status === "processing"}>
+          {status === "processing" ? "Opening checkout…" : `Pay ${formatINR(tokenAmount)} now`}
+        </Button>{!canPay && <p className="mt-1 text-[11px] text-ink-muted">{!assessmentUse ? "Select an answer" : !academic && assessmentUse === "yes" ? "Choose mentoring for assessed work" : "Check the required confirmations"}</p>}</div>}
+      />
+      {retryVerification && <button type="button" className="btn-secondary mt-2" disabled={status === "processing"} onClick={retryVerification}>Retry verification</button>}
       {error && <p className="mt-2 text-sm text-danger">{error}</p>}
     </div>
   );

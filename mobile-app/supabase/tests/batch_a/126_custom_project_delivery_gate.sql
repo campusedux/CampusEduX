@@ -10,8 +10,8 @@ begin
 
   -- r1: no delivery row at all -> cannot deliver
   insert into custom_project_requests(user_id,title,project_type,project_level,platform,
-                                      estimated_total,token_amount,token_payment_status,status)
-    values (a,'R1','personal','standard','web',5000,3000,'paid','ready') returning id into r1;
+                                      estimated_total,token_amount,token_payment_status,status,service_scope,assessment_use,integrity_acknowledged_at)
+    values (a,'R1','personal','standard','web',5000,3000,'paid','ready','custom_software','no',now()) returning id into r1;
   perform test_as(adm);
   begin perform custom_project_set_status(r1, 'delivered', null); raise exception 'FAIL delivered with no delivery row';
   exception when raise_exception then if sqlerrm not like '%demo URL or at least one file%' then raise; end if; end;
@@ -20,8 +20,8 @@ begin
 
   -- r2: a delivery row exists but is empty (no demo_url, no assets) -> still cannot deliver
   insert into custom_project_requests(user_id,title,project_type,project_level,platform,
-                                      estimated_total,token_amount,token_payment_status,status)
-    values (a,'R2','personal','standard','web',5000,3000,'paid','ready') returning id into r2;
+                                      estimated_total,token_amount,token_payment_status,status,service_scope,assessment_use,integrity_acknowledged_at)
+    values (a,'R2','personal','standard','web',5000,3000,'paid','ready','custom_software','no',now()) returning id into r2;
   insert into custom_project_deliveries(request_id) values (r2);
   perform test_as(adm);
   begin perform custom_project_set_status(r2, 'delivered', null); raise exception 'FAIL delivered with empty delivery row';
@@ -38,8 +38,8 @@ begin
 
   -- r3: an asset alone (no demo_url) is enough, including the new 'pdf'/'ppt' kinds
   insert into custom_project_requests(user_id,title,project_type,project_level,platform,
-                                      estimated_total,token_amount,token_payment_status,status)
-    values (a,'R3','personal','standard','web',5000,3000,'paid','ready') returning id into r3;
+                                      estimated_total,token_amount,token_payment_status,status,service_scope,assessment_use,integrity_acknowledged_at)
+    values (a,'R3','personal','standard','web',5000,3000,'paid','ready','custom_software','no',now()) returning id into r3;
   insert into custom_project_deliveries(request_id) values (r3) returning id into d;
   insert into custom_project_delivery_assets(delivery_id, kind, storage_path)
     values (d, 'pdf', a::text || '/' || r3::text || '/spec.pdf');

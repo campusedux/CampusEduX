@@ -18,7 +18,7 @@
 // The Razorpay key secret never touches the client: the order is created here
 // and only the key *id* is returned.
 
-import { corsHeaders, json, preflight } from "../_shared/cors.ts";
+import { json, preflight } from "../_shared/cors.ts";
 import { adminClient, getUser } from "../_shared/client.ts";
 import { enforceRateLimit, RateLimitError } from "../_shared/rateLimit.ts";
 import {
@@ -132,7 +132,10 @@ Deno.serve(async (req) => {
     const { error: linkError } = await db
       .from("purchases")
       .update({ razorpay_order_id: rzpOrder.id })
-      .eq("id", purchase.id);
+      .eq("id", purchase.id)
+      .is("razorpay_order_id", null)
+      .select("id")
+      .single();
     if (linkError) throw linkError;
 
     return json({

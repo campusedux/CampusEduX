@@ -9,7 +9,7 @@ import { AccountPageHeader } from "@/components/account/AccountPageHeader";
 
 export default async function PurchasesPage() {
   const user = await requireUser();
-  const supabase = createAuthedServerSupabase();
+  const supabase = await createAuthedServerSupabase();
 
   const { data: purchases } = await supabase
     .from("purchases")

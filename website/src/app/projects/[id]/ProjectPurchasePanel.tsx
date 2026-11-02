@@ -68,6 +68,7 @@ export default function ProjectPurchasePanel({
       if (!order || order.error) throw new Error(order?.error || "Could not start checkout.");
 
       const Razorpay = await loadRazorpayScript();
+      let verificationStarted = false;
       const checkout = new Razorpay({
         key: order.razorpayKeyId,
         amount: order.amount,
@@ -76,6 +77,7 @@ export default function ProjectPurchasePanel({
         name: "CampusEduX",
         description: title,
         handler: async function verifyHandler(response: { razorpay_order_id: string; razorpay_payment_id: string; razorpay_signature: string }) {
+          verificationStarted = true;
           setPhase("processing");
           setError(null);
           setRetryVerification(null);
@@ -104,8 +106,11 @@ export default function ProjectPurchasePanel({
             router.refresh();
           }
         },
-        modal: { ondismiss: () => setPhase((current) => current === "pending" ? current : "buy") },
+        modal: { ondismiss: () => { if (!verificationStarted) setPhase((current) => current === "pending" ? current : "buy"); } },
         theme: { color: "#4F39F6" },
+      });
+      checkout.on("payment.failed", (response: { error?: { description?: string } }) => {
+        if (!verificationStarted) setError(response.error?.description ?? "Payment failed. Retry in checkout or close it to try again.");
       });
       checkout.open();
     } catch (err) {
@@ -158,7 +163,7 @@ export default function ProjectPurchasePanel({
       <p className="mt-2 text-xs text-ink-faint">
         Secure payment via Razorpay. Source code &amp; docs unlock in your account after payment.
       </p>
-      {retryVerification && <button type="button" className="btn-secondary mt-2" onClick={retryVerification}>Retry verification</button>}
+      {retryVerification && <button type="button" className="btn-secondary mt-2" disabled={phase === "processing"} onClick={retryVerification}>Retry verification</button>}
       {error && <p className="mt-2 text-sm text-danger">{error}</p>}
     </div>
   );

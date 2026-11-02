@@ -17,7 +17,7 @@ const STEPS = [
 export default function StepBar({ current }: { current: 0 | 1 | 2 | 3 }) {
   const pct = Math.round((current / (STEPS.length - 1)) * 100);
   return (
-    <nav aria-label="Project request steps" className="mb-8 rounded-2xl border border-line bg-card p-4 shadow-card sm:p-5">
+    <nav aria-label="Project request steps" className="mb-5 rounded-xl border border-line bg-card p-3 shadow-sm">
       <div className="flex items-center justify-between gap-3 sm:hidden">
         <p className="text-sm font-semibold text-ink">{STEPS[current].label}</p>
         <p className="text-xs font-semibold text-ink-faint">
@@ -36,7 +36,7 @@ export default function StepBar({ current }: { current: 0 | 1 | 2 | 3 }) {
             <span className="flex items-center gap-2.5">
               <span
                 className={cn(
-                  "flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full border-2 text-xs font-bold transition",
+                  "flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full border-2 text-xs font-bold transition",
                   done
                     ? "border-primary bg-primary text-white"
                     : active

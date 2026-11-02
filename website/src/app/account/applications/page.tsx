@@ -21,7 +21,7 @@ const STATUS_LABEL: Record<string, string> = {
 
 export default async function ApplicationsPage() {
   const user = await requireUser();
-  const supabase = createAuthedServerSupabase();
+  const supabase = await createAuthedServerSupabase();
 
   const { data: applications } = await supabase
     .from("applications")

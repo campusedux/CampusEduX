@@ -44,12 +44,12 @@ export function Dropzone({
         if (e.dataTransfer.files?.length) onFiles(e.dataTransfer.files);
       }}
       className={cn(
-        "flex flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed px-4 py-8 text-center transition",
+        "flex flex-col items-center justify-center min-h-[120px] gap-2 rounded-xl border-2 border-dashed px-4 py-3 text-center transition",
         dragging ? "border-primary bg-primary-50/60" : "border-line bg-surface",
         disabled && "opacity-60",
       )}
     >
-      <UploadCloud className={cn("h-7 w-7", dragging ? "text-primary" : "text-ink-faint")} aria-hidden />
+      <UploadCloud className={cn("h-6 w-6", dragging ? "text-primary" : "text-ink-faint")} aria-hidden />
       <p className="text-sm text-ink-muted">
         {label}{" "}
         <button

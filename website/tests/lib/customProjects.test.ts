@@ -59,13 +59,41 @@ describe("featuresForTier", () => {
 });
 
 describe("computeEstimate", () => {
-  it("quotes academic mentoring without implementation features or platform charges", () => {
+  it('uses edited catalog prices and tokens for either level', () => {
+    const pricing = PRICING.map((row) => ({ ...row, base_price: 12345, token_amount: 2123.45 }));
+    for (const projectLevel of ['standard', 'advanced'] as const) {
+      const estimate = computeEstimate({ ...emptyDraft(), projectType: 'academic', projectLevel, platform: 'web', title: 'Review' }, pricing, PLATFORMS, []);
+      expect(estimate.basePrice).toBe(12345);
+      expect(estimate.tokenAmount).toBe(2123.45);
+    }
+  });
+
+  it("quotes academic configuration features and platform without an assessment choice", () => {
     const draft = { ...emptyDraft(), projectType: "academic" as const, projectLevel: "standard" as const, platform: "android" as const, title: "Thing", featureIds: ["f-free", "f-paid"] };
     const est = computeEstimate(draft, PRICING, PLATFORMS, FEATURES);
     expect(est.basePrice).toBe(7999);
-    expect(est.platformCharge).toBe(0);
-    expect(est.featureTotal).toBe(0);
-    expect(est.estimatedTotal).toBe(7999);
+    expect(est.platformCharge).toBe(1500);
+    expect(est.featureTotal).toBe(800);
+    expect(est.estimatedTotal).toBe(7999 + 800 + 1500);
+    expect(est.ready).toBe(true);
+  });
+
+  it("quotes non-assessed academic features and the platform charge", () => {
+    const draft = { ...emptyDraft(), projectType: "academic" as const, projectLevel: "standard" as const, platform: "android" as const, title: "Independent project", featureIds: ["f-paid"] };
+    const est = computeEstimate(draft, PRICING, PLATFORMS, FEATURES);
+    expect(est.selectedFeatures.map((f) => f.id)).toEqual(["f-paid"]);
+    expect(est.featureTotal).toBe(800);
+    expect(est.platformCharge).toBe(1500);
+    expect(est.estimatedTotal).toBe(7999 + 800 + 1500);
+    expect(est.tokenAmount).toBe(1500);
+    expect(est.ready).toBe(true);
+  });
+
+  it("uses the Academic extra price override without an assessment choice", () => {
+    const draft = { ...emptyDraft(), projectType: "academic" as const, projectLevel: "standard" as const, platform: "web" as const, title: "Independent project", featureIds: ["auth-google"] };
+    const est = computeEstimate(draft, PRICING, PLATFORMS, REAL_FEATURES);
+    expect(est.featureTotal).toBe(50);
+    expect(est.selectedFeatures.find((f) => f.id === "auth-google")?.price).toBe(50);
     expect(est.ready).toBe(true);
   });
 
@@ -73,11 +101,11 @@ describe("computeEstimate", () => {
     const draft = { ...emptyDraft(), projectType: "academic" as const, projectLevel: "standard" as const, platform: "web" as const, title: "Thing", featureIds: ["f-paid", "f-biz-only"] };
     const est = computeEstimate(draft, PRICING, PLATFORMS, FEATURES);
     // f-biz-only is business-only — must not be priced in for an academic project
-    expect(est.selectedFeatures.map((f) => f.id)).toEqual([]);
-    expect(est.featureTotal).toBe(0);
+    expect(est.selectedFeatures.map((f) => f.id)).toEqual(["f-paid"]);
+    expect(est.featureTotal).toBe(800);
   });
 
-  it("takes the token from the fixed per-type constant, not from the estimate or features", () => {
+  it("takes the catalog token independently of the estimate and features", () => {
     const draft = { ...emptyDraft(), projectType: "business" as const, projectLevel: "standard" as const, platform: "web" as const, title: "Big", featureIds: ["f-biz-only"] };
     const est = computeEstimate(draft, PRICING, PLATFORMS, FEATURES);
     expect(est.tokenAmount).toBe(6000); // not 6000 + 4500, not a % of estimatedTotal
@@ -98,12 +126,13 @@ describe("normalizeDraft", () => {
   });
 
   it("drops invalid enum values and unknown keys", () => {
-    const d = normalizeDraft({ projectType: "spaceship", projectLevel: "advanced", platform: "web", nope: 1, title: "Hi" });
+    const d = normalizeDraft({ projectType: "spaceship", projectLevel: "advanced", platform: "web", assessmentUse: "yes", nope: 1, title: "Hi" });
     expect(d.projectType).toBeNull();
     expect(d.projectLevel).toBe("advanced");
     expect(d.platform).toBe("web");
     expect(d.title).toBe("Hi");
     expect("nope" in d).toBe(false);
+    expect("assessmentUse" in d).toBe(false);
   });
 
   it("clamps arrays and keeps only string feature ids", () => {
@@ -228,7 +257,7 @@ describe("priceForFeature — Academic Extra Feature pricing", () => {
     }
   });
 
-  it("7. computeEstimate excludes all implementation features on new mentoring requests", () => {
+  it("7. computeEstimate includes selected Academic features in the configuration estimate", () => {
     const draft = {
       ...emptyDraft(),
       projectType: "academic" as const,
@@ -238,8 +267,9 @@ describe("priceForFeature — Academic Extra Feature pricing", () => {
       featureIds: ["auth-google", "pay-razorpay"],
     };
     const est = computeEstimate(draft, PRICING, PLATFORMS, REAL_FEATURES);
-    expect(est.featureTotal).toBe(0);
-    expect(est.estimatedTotal).toBe(9999);
+    const featureTotal = ACADEMIC_EXTRA_FEATURE_PRICES["auth-google"] + ACADEMIC_EXTRA_FEATURE_PRICES["pay-razorpay"];
+    expect(est.featureTotal).toBe(featureTotal);
+    expect(est.estimatedTotal).toBe(9999 + featureTotal);
     // the actual amount charged is still the flat per-type token, never the feature total
     expect(est.tokenAmount).toBe(1500);
   });
@@ -383,11 +413,11 @@ describe("included_in_levels (admin \"Included by default\")", () => {
     expect(isIncludedForTier({}, "academic", "advanced")).toBe(false);
   });
 
-  it("does not include admin defaults in a new mentoring estimate", () => {
+  it("includes admin defaults in an Academic configuration estimate", () => {
     const draft = { ...emptyDraft(), projectType: "academic" as const, projectLevel: "advanced" as const, platform: "web" as const, title: "T", featureIds: ["f-paid"] };
     const est = computeEstimate(draft, PRICING, PLATFORMS, [...FEATURES, INCLUDED]);
-    expect(est.selectedFeatures).toEqual([]);
-    expect(est.featureTotal).toBe(0);
+    expect(est.selectedFeatures.map((feature) => feature.id)).toEqual(["notif-inapp", "f-paid"]);
+    expect(est.featureTotal).toBe(800);
   });
 
   it("stays a paid add-on for a tier it is not included in", () => {

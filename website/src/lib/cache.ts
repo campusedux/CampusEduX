@@ -1,14 +1,15 @@
+import { cache } from "react";
 import { unstable_cache } from "next/cache";
 import { getPublicSupabase } from "@/lib/supabase/server";
 import { onlyActiveJobs } from "@/lib/jobsActive";
+import { revisionedPublicRead } from "@/lib/revisionedPublicRead";
 
 /**
  * Cross-request cache layer for **public catalog** reads.
  *
- * Why this exists: `@supabase/supabase-js` issues its HTTP calls through a
- * wrapped `fetch`, so Next's built-in fetch cache never sees them — every
- * Supabase query is a fresh round-trip on every render. `unstable_cache()`
- * memoises the *result* of a query across requests and users, keyed by its
+ * `unstable_cache()` memoises the result of a catalog query across requests
+ * and users. Fetch caching also depends on the client and route configuration;
+ * freshness-sensitive Home reads explicitly opt out below. Results are keyed by
  * arguments, with `revalidate` + tag-based invalidation.
  *
  * Only ever wrap ANON, non-personalised reads here (RLS `using (true)` tables:
@@ -85,9 +86,8 @@ export const getCachedCategoryIds = unstable_cache(
 );
 
 // ---- Home page ------------------------------------------------------------
-// The home route is ISR (`revalidate = 300`) but its 5 queries still run on
-// every cold/background render. Cache the raw rows (tags: home + cms) so a
-// revalidation is one cache read, and an admin edit can bust it immediately.
+// Atomic revisions cover projects/CMS. Jobs stay fresh: deadlines can pass
+// without a database write. Banner scheduling remains evaluated by the page.
 
 export interface HomeRawData {
   trending: unknown[];
@@ -105,19 +105,14 @@ export interface HomeRawData {
   }[];
 }
 
-export const getCachedHomeData = unstable_cache(
-  async (): Promise<HomeRawData> => {
-    const empty: HomeRawData = { trending: [], jobs: [], testimonials: [], faqs: [], banners: [] };
-    const supabase = getPublicSupabase();
-    if (!supabase) return empty;
-
-    const [trending, jobs, testimonials, faqs, banners] = await Promise.all([
+const getHomePublicPayload = revisionedPublicRead("home", "home-public",
+  async (supabase): Promise<Omit<HomeRawData, "jobs">> => {
+    const [trending, testimonials, faqs, banners] = await Promise.all([
       supabase
         .from("projects")
         .select(PROJECT_LIST_FIELDS)
         .order("sales_count", { ascending: false })
         .limit(8),
-      onlyActiveJobs(supabase.from("jobs").select(JOB_LIST_FIELDS)).order("posted_at", { ascending: false }).limit(6),
       supabase
         .from("testimonials")
         .select("id,author_name,author_role,quote,rating")
@@ -134,17 +129,29 @@ export const getCachedHomeData = unstable_cache(
         .limit(5),
     ]);
 
+    if ([trending, testimonials, faqs, banners].some((r) => r.error || !Array.isArray(r.data)))
+      throw new Error("Home content is unavailable");
+
     return {
       trending: trending.data ?? [],
-      jobs: jobs.data ?? [],
       testimonials: testimonials.data ?? [],
       faqs: faqs.data ?? [],
       banners: banners.data ?? [],
     };
   },
-  ["catalog:home"],
-  { revalidate: FIVE_MIN, tags: [CACHE_TAGS.home, CACHE_TAGS.cms] },
 );
+
+export const getCachedHomeData = cache(async (): Promise<HomeRawData> => {
+  const supabase = getPublicSupabase({ fresh: true });
+  if (!supabase) throw new Error("Home content is unavailable");
+  const [content, jobs] = await Promise.all([
+    getHomePublicPayload(),
+    onlyActiveJobs(supabase.from("jobs").select(JOB_LIST_FIELDS))
+      .order("posted_at", { ascending: false }).limit(6),
+  ]);
+  if (jobs.error) throw new Error("Home content is unavailable");
+  return { ...content, jobs: jobs.data ?? [] };
+});
 
 // ---- Marketplace / jobs list pages -----------------------------------------
 // These routes are dynamically rendered (they read `searchParams`), but the
@@ -252,45 +259,77 @@ export const getCachedResumeTemplates = unstable_cache(
 
 /**
  * One project row + its reviews + related, for `/projects/[id]`. Keyed by id.
- * Returns `null` when Supabase is unconfigured, `{ project: null }` when the id
- * doesn't exist (caller 404s).
+ * Only a successful anonymous lookup with no visible row returns a missing
+ * project. Operational failures throw through metadata/page to the retry
+ * boundary, so unstable_cache never stores them as successful empty results.
  */
 export const getCachedProjectDetail = unstable_cache(
   async (id: string) => {
-    const supabase = getPublicSupabase();
-    if (!supabase) return null;
+    const controller = new AbortController();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const unavailable = () => new Error("Project data is temporarily unavailable. Please try again.");
+    try {
+      const load = async () => {
+        // Cache only the validated payload below, never an individual failed
+        // HTTP response (including transport failures normalized by the SDK).
+        const supabase = getPublicSupabase({ fresh: true });
+        if (!supabase) throw unavailable();
 
-    const { data: project } = await supabase
-      .from("projects")
-      .select(
-        "id,title,category_id,category_name,tech_stack,price,rating,review_count,thumbnail_url,is_premium,is_best_seller,description,images,license,platform_fee_percent",
-      )
-      .eq("id", id)
-      .single();
-    if (!project) return { project: null, reviews: [], related: [] };
+        const { data: project, error, status } = await supabase
+          .from("projects")
+          .select(
+            "id,title,category_id,category_name,tech_stack,price,rating,review_count,thumbnail_url,is_premium,is_best_seller,description,images,license,platform_fee_percent",
+          )
+          .eq("id", id)
+          .abortSignal(controller.signal)
+          .maybeSingle();
+        if (error || status >= 400 || project === undefined) throw unavailable();
+        if (project === null) return { project: null, reviews: [], related: [] };
 
-    const [{ data: reviews }, { data: related }] = await Promise.all([
-      supabase
-        .from("reviews")
-        .select("id,rating,comment,created_at,profile:profiles(full_name)")
-        .eq("project_id", id)
-        .order("created_at", { ascending: false })
-        .limit(10),
-      project.category_id
-        ? supabase
-            .from("projects")
-            .select(
-              "id,title,category_name,tech_stack,price,rating,review_count,thumbnail_url,is_premium,is_best_seller",
-            )
-            .eq("category_id", project.category_id)
-            .neq("id", id)
-            .limit(4)
-        : Promise.resolve({ data: [] }),
-    ]);
+        const [reviews, related] = await Promise.all([
+          supabase
+            .from("reviews")
+            .select("id,rating,comment,created_at,profile:profiles(full_name)")
+            .eq("project_id", id)
+            .order("created_at", { ascending: false })
+            .limit(10)
+            .abortSignal(controller.signal),
+          project.category_id
+            ? supabase
+                .from("projects")
+                .select(
+                  "id,title,category_name,tech_stack,price,rating,review_count,thumbnail_url,is_premium,is_best_seller",
+                )
+                .eq("category_id", project.category_id)
+                .neq("id", id)
+                .limit(4)
+                .abortSignal(controller.signal)
+            : Promise.resolve({ data: [], error: null, status: 200 }),
+        ]);
+        if ([reviews, related].some((r) => r.error || r.status >= 400 || !Array.isArray(r.data)))
+          throw unavailable();
 
-    return { project, reviews: reviews ?? [], related: related ?? [] };
+        return { project, reviews: reviews.data ?? [], related: related.data ?? [] };
+      };
+      // Bound the complete fill, even if a transport fails to settle on abort.
+      return await Promise.race([
+        load(),
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(() => {
+            controller.abort();
+            reject(unavailable());
+          }, 10_000);
+        }),
+      ]);
+    } catch {
+      controller.abort();
+      // No raw provider/transport details or private payloads in public errors.
+      throw unavailable();
+    } finally {
+      clearTimeout(timer);
+    }
   },
-  ["catalog:project-detail"],
+  ["catalog:project-detail:v2"],
   { revalidate: FIVE_MIN, tags: [CACHE_TAGS.projects] },
 );
 

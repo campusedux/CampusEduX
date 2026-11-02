@@ -5,9 +5,10 @@ import { listMyResumeProjectCandidatesAction } from "@/lib/actions/resumeBuilder
 import { EmptyState } from "@/components/ui";
 import ProjectPicker from "./ProjectPicker";
 
-export default async function ResumeAddProjectPage({ params }: { params: { id: string } }) {
+export default async function ResumeAddProjectPage({ params: paramsPromise }: { params: Promise<{ id: string }> }) {
+  const params = await paramsPromise;
   const user = await requireUser();
-  const supabase = createAuthedServerSupabase();
+  const supabase = await createAuthedServerSupabase();
 
   const { data: resume } = await supabase
     .from("resumes_builder")

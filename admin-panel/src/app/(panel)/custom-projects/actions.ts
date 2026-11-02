@@ -792,18 +792,36 @@ export async function updatePricingRow(
   fd: FormData,
 ): Promise<Result> {
   await requirePermission('custom_projects', 'edit');
+  const basePrice = Number(str(fd, 'base_price'));
+  const tokenAmount = Number(str(fd, 'token_amount'));
+  const pricingVersion = Number(str(fd, 'pricing_version'));
+  if (['base_price', 'token_amount'].some((key) => !str(fd, key)) ||
+      !Number.isFinite(basePrice) || basePrice < 0 || basePrice > 99999999.99 ||
+      !Number.isFinite(tokenAmount) || tokenAmount < 0 || tokenAmount > 99999999.99) {
+    return { ok: false, error: 'Enter valid non-negative prices.' };
+  }
+  if (!Number.isInteger(pricingVersion) || pricingVersion < 1 || pricingVersion > 2147483647) {
+    return { ok: false, error: 'Enter a valid pricing version.' };
+  }
   const supabase = createClient();
-  const { error } = await supabase
+  const { data, error, status } = await supabase
     .from('custom_project_pricing')
     .update({
-      base_price: num(fd, 'base_price'),
-      token_amount: num(fd, 'token_amount'),
-      pricing_version: num(fd, 'pricing_version') || 1,
+      base_price: basePrice,
+      token_amount: tokenAmount,
+      pricing_version: pricingVersion,
       is_active: fd.get('is_active') === 'on',
     })
     .eq('project_type', projectType)
-    .eq('project_level', projectLevel);
-  if (error) return { ok: false, error: error.message };
+    .eq('project_level', projectLevel)
+    .select('project_type, project_level');
+  if (error || data?.length !== 1) {
+    console.error('[custom_pricing.update]', {
+      status, code: error?.code ?? null, message: error?.message ?? null,
+      rows: data?.length ?? 0,
+    });
+    return { ok: false, error: error?.message ?? 'No pricing row was updated. Reload and check your pricing permissions.' };
+  }
   await logActivity({
     action: 'custom_pricing.update',
     module: 'custom_projects',

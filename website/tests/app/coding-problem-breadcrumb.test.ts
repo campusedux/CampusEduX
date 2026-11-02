@@ -96,7 +96,7 @@ describe("Phase 3 Batch 2: /coding-problems/[problemSlug] page", () => {
     vi.mocked(getCodingProblem).mockResolvedValue(detail);
 
     const { default: CodingProblemPage } = await import("@/app/coding-problems/[problemSlug]/page");
-    const result = await CodingProblemPage({ params: { problemSlug: "merge-intervals" } });
+    const result = await CodingProblemPage({ params: Promise.resolve({ problemSlug: "merge-intervals" }) });
     const body = findByType(result, CodingProblemBody);
 
     expect(body).not.toBeNull();
@@ -113,7 +113,7 @@ describe("Phase 3 Batch 2: /coding-problems/[problemSlug] page", () => {
     vi.mocked(getCodingProblem).mockResolvedValue(detail);
 
     const { default: CodingProblemPage } = await import("@/app/coding-problems/[problemSlug]/page");
-    const result = await CodingProblemPage({ params: { problemSlug: "trapping-rain-water" } });
+    const result = await CodingProblemPage({ params: Promise.resolve({ problemSlug: "trapping-rain-water" }) });
     const gate = findByType(result, CodingProblemPremiumGate);
 
     expect(gate).not.toBeNull();
@@ -145,7 +145,7 @@ describe("Phase 3 Batch 2: /practice/problems/[slug] page", () => {
     vi.mocked(getPracticeProblem).mockResolvedValue(makePracticeProblemDetail("Binary Search"));
 
     const { default: PracticeProblemPage } = await import("@/app/practice/problems/[slug]/page");
-    const result = await PracticeProblemPage({ params: { slug: "binary-search" } });
+    const result = await PracticeProblemPage({ params: Promise.resolve({ slug: "binary-search" }) });
     const body = findByType(result, CodingProblemBody);
 
     expect(body).not.toBeNull();
@@ -165,7 +165,7 @@ describe("Phase 3 Batch 2: /practice/problems/[slug] page", () => {
     vi.mocked(getPracticeProblem).mockResolvedValue(makePracticeProblemDetail("Valid Parentheses", true));
 
     const { default: PracticeProblemPage } = await import("@/app/practice/problems/[slug]/page");
-    const result = await PracticeProblemPage({ params: { slug: "valid-parentheses" } });
+    const result = await PracticeProblemPage({ params: Promise.resolve({ slug: "valid-parentheses" }) });
     const gate = findByType(result, PracticeProblemPremiumGate);
 
     expect(gate).not.toBeNull();

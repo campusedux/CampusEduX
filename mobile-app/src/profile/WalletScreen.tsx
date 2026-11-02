@@ -51,6 +51,8 @@ export function WalletScreen() {
       setAddMoneyVisible(false);
       setAmountText("");
       notify("Money added", "Your wallet has been credited successfully.");
+    } else if (result.status === "pending") {
+      notify("Verification pending", result.message);
     } else if (result.status === "failed") {
       notify("Payment failed", result.message);
     }

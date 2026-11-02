@@ -10,6 +10,7 @@ export const revalidate = 300;
  * `/learning/<grid>/<topic>` page — or `/learning` when the note has no
  * published Learning topic yet.
  */
-export default async function LegacyNoteRedirect({ params }: { params: { id: string } }) {
+export default async function LegacyNoteRedirect({ params: paramsPromise }: { params: Promise<{ id: string }> }) {
+  const params = await paramsPromise;
   permanentRedirect(await resolveLegacyNotePath(params.id));
 }

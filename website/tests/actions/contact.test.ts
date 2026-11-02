@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 vi.mock("next/navigation", () => ({ redirect: vi.fn() }));
 vi.mock("next/headers", () => ({
-  headers: () =>
+  headers: async () =>
     new Map([
       ["x-forwarded-for", "203.0.113.7, 10.0.0.1"],
       ["user-agent", "vitest"],

@@ -1,3 +1,4 @@
+import { PaymentPendingError, checkoutWasCancelled, usePaymentVerification } from "./usePaymentVerification";
 import { userScopedKey } from "@/lib/queryClient";
 import { useState, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -19,53 +20,61 @@ export const useWalletTransactions = () => {
   return useQuery({ queryKey: userScopedKey(walletQueryKeys.transactions, userId), queryFn: () => walletService.getAllTransactions(userId as string), enabled: !!userId });
 };
 
-type TopUpResult = { status: "success" } | { status: "failed"; message: string } | { status: "cancelled" };
+type TopUpResult = { status: "pending"; message: string } | { status: "success" } | { status: "failed"; message: string } | { status: "cancelled" };
 
 /** Same Razorpay checkout + server-side verification pattern as project purchases (Module 3). */
 export function useWalletTopUp() {
   const [isProcessing, setIsProcessing] = useState(false);
   const queryClient = useQueryClient();
   const user = useAuthStore((s) => s.user);
+  const verification = usePaymentVerification(user?.id);
 
   const topUp = useCallback(
     async (amount: number): Promise<TopUpResult> => {
       setIsProcessing(true);
       try {
-        const order = await walletService.createTopUpOrder(amount);
+        return await verification.run<TopUpResult>(async () => {
+          const order = await walletService.createTopUpOrder(amount);
 
-        let checkoutResult;
-        try {
-          checkoutResult = await walletService.openCheckout(order, {
-            name: user?.fullName,
-            email: user?.email,
-            contact: user?.mobileNumber,
+          let checkoutResult;
+          try {
+            checkoutResult = await walletService.openCheckout(order, {
+              name: user?.fullName,
+              email: user?.email,
+              contact: user?.mobileNumber,
+            });
+          } catch (error) {
+            if (!checkoutWasCancelled(error)) throw error;
+            return { status: "cancelled" };
+          }
+
+          const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = checkoutResult;
+          if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
+            throw new Error("Razorpay returned an incomplete payment response.");
+          }
+
+          return verification.verify<TopUpResult>(async () => {
+            await walletService.verifyTopUp({
+              orderId: order.orderId,
+              razorpayOrderId: razorpay_order_id,
+              razorpayPaymentId: razorpay_payment_id,
+              razorpaySignature: razorpay_signature,
+            });
+
+            queryClient.invalidateQueries({ queryKey: walletQueryKeys.summary });
+            queryClient.invalidateQueries({ queryKey: walletQueryKeys.transactions });
+            return { status: "success" };
           });
-        } catch {
-          return { status: "cancelled" };
-        }
-
-        const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = checkoutResult;
-        if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
-          throw new Error("Razorpay returned an incomplete payment response.");
-        }
-
-        await walletService.verifyTopUp({
-          orderId: order.orderId,
-          razorpayOrderId: razorpay_order_id,
-          razorpayPaymentId: razorpay_payment_id,
-          razorpaySignature: razorpay_signature,
         });
-
-        queryClient.invalidateQueries({ queryKey: walletQueryKeys.summary });
-        queryClient.invalidateQueries({ queryKey: walletQueryKeys.transactions });
-        return { status: "success" };
       } catch (error: any) {
+        if (error instanceof PaymentPendingError)
+          return { status: "pending", message: error.message };
         return { status: "failed", message: error.message ?? "Payment failed. Please try again." };
       } finally {
         setIsProcessing(false);
       }
     },
-    [queryClient, user]
+    [queryClient, user, verification],
   );
 
   return { topUp, isProcessing };

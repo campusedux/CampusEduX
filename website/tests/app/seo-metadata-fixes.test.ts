@@ -11,7 +11,7 @@ import { loadSitemapRoutes, locs, unloadSitemapRoutes } from "../helpers/sitemap
 describe("static page metadata (canonical + description + OG)", () => {
   it("/projects has a self-referencing canonical, description and OG copy", async () => {
     const { generateMetadata } = await import("@/app/projects/page");
-    const metadata = await generateMetadata({ searchParams: {} });
+    const metadata = await generateMetadata({ searchParams: Promise.resolve({}) });
     expect(metadata.description).toBeTruthy();
     expect(metadata.alternates?.canonical).toBe("https://www.campusedux.com/projects");
     expect(metadata.openGraph?.title).toBeTruthy();
@@ -21,7 +21,7 @@ describe("static page metadata (canonical + description + OG)", () => {
 
   it("/jobs has a self-referencing canonical, description and OG copy", async () => {
     const { generateMetadata } = await import("@/app/jobs/page");
-    const metadata = await generateMetadata({ searchParams: {} });
+    const metadata = await generateMetadata({ searchParams: Promise.resolve({}) });
     expect(metadata.description).toBeTruthy();
     expect(metadata.alternates?.canonical).toBe("https://www.campusedux.com/jobs");
     expect(metadata.openGraph?.title).toBeTruthy();
@@ -59,8 +59,8 @@ describe("static page metadata (canonical + description + OG)", () => {
 
   it("none of the five pages point their canonical at the homepage anymore", async () => {
     const [projects, jobs, resume, companies, resumeTemplates] = await Promise.all([
-      import("@/app/projects/page").then((m) => m.generateMetadata({ searchParams: {} })),
-      import("@/app/jobs/page").then((m) => m.generateMetadata({ searchParams: {} })),
+      import("@/app/projects/page").then((m) => m.generateMetadata({ searchParams: Promise.resolve({}) })),
+      import("@/app/jobs/page").then((m) => m.generateMetadata({ searchParams: Promise.resolve({}) })),
       import("@/app/resume/page").then((m) => m.metadata),
       import("@/app/jobs/companies/page").then((m) => m.generateMetadata()),
       import("@/app/resume/templates/page").then((m) => m.metadata),
@@ -73,8 +73,8 @@ describe("static page metadata (canonical + description + OG)", () => {
 
   it("descriptions are unique across the five fixed pages (no duplicate-meta-description regression)", async () => {
     const [projects, jobs, resume, companies, resumeTemplates] = await Promise.all([
-      import("@/app/projects/page").then((m) => m.generateMetadata({ searchParams: {} })),
-      import("@/app/jobs/page").then((m) => m.generateMetadata({ searchParams: {} })),
+      import("@/app/projects/page").then((m) => m.generateMetadata({ searchParams: Promise.resolve({}) })),
+      import("@/app/jobs/page").then((m) => m.generateMetadata({ searchParams: Promise.resolve({}) })),
       import("@/app/resume/page").then((m) => m.metadata),
       import("@/app/jobs/companies/page").then((m) => m.generateMetadata()),
       import("@/app/resume/templates/page").then((m) => m.metadata),
@@ -119,7 +119,7 @@ vi.mock("react", async (importOriginal) => {
 describe("/projects/category/[category] dynamic metadata", () => {
   it("builds an encoded, self-referencing canonical and dynamic OG/description", async () => {
     const { generateMetadata } = await import("@/app/projects/category/[category]/page");
-    const metadata = await generateMetadata({ params: { category: "web & mobile" } });
+    const metadata = await generateMetadata({ params: Promise.resolve({ category: "web & mobile" }) });
 
     expect(metadata.title).toBe("Web & Mobile projects");
     expect(metadata.description).toContain("Web & Mobile");

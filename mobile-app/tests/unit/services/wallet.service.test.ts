@@ -136,3 +136,14 @@ describe("walletService.verifyTopUp", () => {
     ).rejects.toThrow("signature mismatch");
   });
 });
+
+describe("wallet settlement acknowledgement", () => {
+  it.each([null, {}, { ok: false }, { error: "Synthetic rejected payment" }])("rejects an unconfirmed body: %p", async (data) => {
+    setFunctionResult("verify-wallet-topup-payment", { data });
+    await expect(walletService.verifyTopUp({ orderId: "synthetic", razorpayOrderId: "order_synthetic", razorpayPaymentId: "pay_synthetic", razorpaySignature: "synthetic" })).rejects.toThrow();
+  });
+  it("accepts the existing server acknowledgement", async () => {
+    setFunctionResult("verify-wallet-topup-payment", { data: { ok: true, amount: 500 } });
+    await expect(walletService.verifyTopUp({ orderId: "synthetic", razorpayOrderId: "order_synthetic", razorpayPaymentId: "pay_synthetic", razorpaySignature: "synthetic" })).resolves.toBeUndefined();
+  });
+});

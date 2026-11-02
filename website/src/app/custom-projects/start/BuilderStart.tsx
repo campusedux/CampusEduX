@@ -1,11 +1,17 @@
 "use client";
 
+import { LoadError } from "../_builder/LoadError";
+
 import { toast } from "@/components/ui/Toast";
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { ArrowRight, ChevronDown, GraduationCap, Info, User, Briefcase, Layers, Rocket, Globe } from "lucide-react";
+import { ArrowRight, CheckCircle2, ChevronDown, GraduationCap, Info, User, Briefcase, Layers, Rocket, Globe } from "lucide-react";
 import {
+  computeEstimate,
+  type PricingRow,
+  type PlatformRow,
+  type FeatureRow,
   PLATFORMS,
   PLATFORM_LABELS,
   PROJECT_LEVELS,
@@ -22,6 +28,7 @@ import { Button, Field, Input, Select, Textarea } from "@/components/ui";
 import { useDraft } from "../_builder/useDraft";
 import { SelectCard } from "../_builder/SelectCard";
 import { BottomBar } from "../_builder/BottomBar";
+import { SelectionSummary } from "../_builder/SelectionSummary";
 
 const TYPE_ICONS: Record<ProjectType, typeof GraduationCap> = {
   academic: GraduationCap,
@@ -54,18 +61,29 @@ interface UnderstandResponse {
   suggestedExtraFeatureIds: string[];
 }
 
-export default function BuilderStart() {
+export default function BuilderStart({ pricing, platforms, features }: { pricing: PricingRow[]; platforms: PlatformRow[]; features: FeatureRow[] }) {
   const router = useRouter();
-  const { draft, patch, update, saveNow, clearDraft, loaded, userId } = useDraft();
+  const { draft, patch, update, saveNow, clearDraft, loaded, userId, loadError, retryLoad } = useDraft();
   const [going, setGoing] = useState(false);
+  const [missingField, setMissingField] = useState("");
   const [reqText, setReqText] = useState("");
   const [optionalOpen, setOptionalOpen] = useState(false);
 
+  if (loadError) return <LoadError kind={loadError.kind} onRetry={retryLoad} />;
   if (!loaded) return <p className="text-sm text-ink-muted">Loading your draft…</p>;
 
   const canContinue = !!(draft.title.trim() && draft.objective.trim() && draft.projectType && draft.projectLevel && draft.platform);
 
   async function handleContinue() {
+    const missing = !draft.title.trim() ? "cp-title" : !draft.objective.trim() ? "cp-objective" : !draft.projectType ? "cp-type" : !draft.projectLevel ? "cp-level" : !draft.platform ? "cp-platform" : "";
+    if (missing) {
+      setMissingField(missing);
+      const element = document.getElementById(missing);
+      element?.scrollIntoView({ behavior: "smooth", block: "center" });
+      (element?.matches("input, textarea, select, button") ? element : element?.querySelector("button"))?.focus();
+      return;
+    }
+    setMissingField("");
     setGoing(true);
     try {
       const understanding = await understandProject();
@@ -116,11 +134,13 @@ export default function BuilderStart() {
   }
 
   return (
-    <div className="space-y-5">
-      <section className="rounded-xl border border-line bg-card p-4 shadow-card md:p-5">
+    <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-start">
+    <div className="space-y-4">
+      <section className="rounded-xl border border-line bg-card p-4 shadow-sm md:p-5">
         <Field label="Project name" required htmlFor="cp-title">
           <Input
             id="cp-title"
+            invalid={missingField === "cp-title"}
             value={draft.title}
             onChange={(e) => patch({ title: e.target.value })}
             maxLength={200}
@@ -128,11 +148,12 @@ export default function BuilderStart() {
             className="h-10 text-sm font-medium"
           />
         </Field>
+        <p className="mt-1 text-xs">{draft.title.trim() ? <span className="inline-flex items-center gap-1 text-success"><CheckCircle2 className="h-3 w-3" /> Complete</span> : <span className="text-ink-faint">Required</span>}</p>
       </section>
 
-      <section className="rounded-xl border border-line bg-card p-4 shadow-card md:p-5">
-        <h2 className="text-lg font-bold text-ink">
-          What should this project achieve? <span className="text-danger">*</span>
+      <section className="rounded-xl border border-line bg-card p-4 shadow-sm md:p-5">
+        <h2 className="text-base font-semibold text-ink">
+          What should this project achieve? <span className="text-danger">*</span> {draft.objective.trim() ? <CheckCircle2 className="inline h-4 w-4 text-success" aria-label="Complete" /> : <span className="text-xs font-normal text-ink-faint">Required</span>}
         </h2>
         <p className="mt-1 text-sm text-ink-muted">
           Tell us what you want your project to do, who will use it, and what problem it should solve. No technical
@@ -140,6 +161,7 @@ export default function BuilderStart() {
         </p>
         <Textarea
           id="cp-objective"
+          invalid={missingField === "cp-objective"}
           value={draft.objective}
           onChange={(e) => patch({ objective: e.target.value })}
           rows={4}
@@ -149,9 +171,9 @@ export default function BuilderStart() {
         />
       </section>
 
-      <section className="rounded-xl border border-line bg-card p-4 shadow-card md:p-5">
-        <h2 className="text-lg font-bold text-ink">
-          Project type <span className="text-danger">*</span>
+      <section id="cp-type" className={`rounded-xl border bg-card p-4 shadow-sm md:p-5 ${missingField === "cp-type" ? "border-danger ring-2 ring-danger/20" : "border-line"}`}>
+        <h2 className="text-base font-semibold text-ink">
+          Project type <span className="text-danger">*</span> {draft.projectType ? <CheckCircle2 className="inline h-4 w-4 text-success" aria-label="Complete" /> : <span className="text-xs font-normal text-ink-faint">Required</span>}
         </h2>
         <p className="mt-1 text-sm text-ink-muted">Choose the option that best describes your project.</p>
         <div className="mt-4 grid gap-3 sm:grid-cols-3">
@@ -168,9 +190,9 @@ export default function BuilderStart() {
         </div>
       </section>
 
-      <section className="rounded-xl border border-line bg-card p-4 shadow-card md:p-5">
-        <h2 className="text-lg font-bold text-ink">
-          Project level <span className="text-danger">*</span>
+      <section id="cp-level" className={`rounded-xl border bg-card p-4 shadow-sm md:p-5 ${missingField === "cp-level" ? "border-danger ring-2 ring-danger/20" : "border-line"}`}>
+        <h2 className="text-base font-semibold text-ink">
+          Project level <span className="text-danger">*</span> {draft.projectLevel ? <CheckCircle2 className="inline h-4 w-4 text-success" aria-label="Complete" /> : <span className="text-xs font-normal text-ink-faint">Required</span>}
         </h2>
         <p className="mt-1 text-sm text-ink-muted">How much complexity does this project need?</p>
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
@@ -187,15 +209,16 @@ export default function BuilderStart() {
         </div>
       </section>
 
-      <section className="rounded-xl border border-line bg-card p-4 shadow-card md:p-5">
-        <h2 className="text-lg font-bold text-ink">
-          Platform <span className="text-danger">*</span>
+      <section className="rounded-xl border border-line bg-card p-4 shadow-sm md:p-5">
+        <h2 className="text-base font-semibold text-ink">
+          Platform <span className="text-danger">*</span> {draft.platform ? <CheckCircle2 className="inline h-4 w-4 text-success" aria-label="Complete" /> : <span className="text-xs font-normal text-ink-faint">Required</span>}
         </h2>
         <p className="mt-1 text-sm text-ink-muted">Choose the platform where your project will primarily run.</p>
         <div className="relative mt-4 max-w-sm">
           <Globe className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-faint" aria-hidden />
           <Select
             id="cp-platform"
+            invalid={missingField === "cp-platform"}
             value={draft.platform ?? ""}
             onChange={(e) => patch({ platform: (e.target.value || null) as Platform | null })}
             className="pl-10"
@@ -215,7 +238,7 @@ export default function BuilderStart() {
         </div>
       </section>
 
-      <section className="rounded-xl border border-line bg-card shadow-card">
+      <section className="rounded-xl border border-line bg-card shadow-sm">
         <button
           type="button"
           onClick={() => setOptionalOpen((o) => !o)}
@@ -231,8 +254,8 @@ export default function BuilderStart() {
         </button>
 
         {optionalOpen && (
-          <div className="space-y-5 border-t border-line px-4 py-4 md:px-5">
-            <div className="space-y-5">
+          <div className="space-y-4 border-t border-line px-4 py-4 md:px-5">
+            <div className="space-y-4">
               {MORE_DETAIL_FIELDS.map((f) => (
                 <Field key={f.key} label={f.label} hint={f.hint} htmlFor={`cp-${f.key}`}>
                   <Textarea
@@ -325,7 +348,7 @@ export default function BuilderStart() {
 
       <BottomBar
         step={1}
-        left={<span className="text-xs font-medium text-ink-faint">Step 1 of 4</span>}
+        left={null}
         center={
           <span className="inline-flex items-center gap-1.5">
             <span className="h-1.5 w-1.5 rounded-full bg-success" aria-hidden />
@@ -333,11 +356,15 @@ export default function BuilderStart() {
           </span>
         }
         right={
-          <Button type="button" onClick={handleContinue} disabled={!canContinue || going} loading={going} rightIcon={ArrowRight}>
+          <Button type="button" onClick={handleContinue} disabled={going} loading={going} rightIcon={ArrowRight}>
             {going ? "Understanding your project…" : "Continue to features"}
           </Button>
         }
       />
+    </div>
+    <SelectionSummary draft={draft} estimate={computeEstimate(draft, pricing, platforms, features)}
+      onRemoveFeature={(id) => update((d) => ({ ...d, featureIds: d.featureIds.filter((item) => item !== id) }))}
+      onRemoveFile={(path) => update((d) => ({ ...d, projectImagePath: d.projectImagePath === path ? null : d.projectImagePath, referenceFiles: d.referenceFiles.filter((file) => file.path !== path) }))} />
     </div>
   );
 }

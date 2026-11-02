@@ -43,18 +43,18 @@ describe("listing canonicals", () => {
       "practice/problems": () => import("@/app/practice/problems/page"),
     };
     const { generateMetadata } = await modules[path as keyof typeof modules]();
-    const metadata = await generateMetadata({ searchParams: { page: "2" } });
+    const metadata = await generateMetadata({ searchParams: Promise.resolve({ page: "2" }) });
     const canonicalPath = path;
     expect(metadata.alternates?.canonical).toBe(`https://www.campusedux.com/${canonicalPath}?page=2`);
     expect(metadata.robots).toBeUndefined();
   });
   it("retains noindex for an out-of-range marketplace page", async () => {
     const { generateMetadata } = await import("@/app/projects/page");
-    expect((await generateMetadata({ searchParams: { page: "99" } })).robots).toMatchObject({ index: false });
+    expect((await generateMetadata({ searchParams: Promise.resolve({ page: "99" }) })).robots).toMatchObject({ index: false });
   });
   it("retains facet canonical consolidation", async () => {
     const { generateMetadata } = await import("@/app/jobs/page");
-    expect((await generateMetadata({ searchParams: { page: "2", location: "Remote" } })).alternates?.canonical).toBe("https://www.campusedux.com/jobs");
+    expect((await generateMetadata({ searchParams: Promise.resolve({ page: "2", location: "Remote" }) })).alternates?.canonical).toBe("https://www.campusedux.com/jobs");
   });
   it("does not index empty blog or practice listings", async () => {
     const blog = await import("@/lib/blog");
@@ -63,8 +63,8 @@ describe("listing canonicals", () => {
     vi.mocked(practice.getPracticeProblemsPage).mockResolvedValueOnce({ items: [], total: 0 });
     const b = await import("@/app/blog/page");
     const p = await import("@/app/practice/problems/page");
-    expect((await b.generateMetadata({ searchParams: {} })).robots).toMatchObject({ index: false });
-    expect((await p.generateMetadata({ searchParams: {} })).robots).toMatchObject({ index: false });
+    expect((await b.generateMetadata({ searchParams: Promise.resolve({}) })).robots).toMatchObject({ index: false });
+    expect((await p.generateMetadata({ searchParams: Promise.resolve({}) })).robots).toMatchObject({ index: false });
   });
 });
 

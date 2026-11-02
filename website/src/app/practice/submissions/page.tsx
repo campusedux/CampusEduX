@@ -49,10 +49,11 @@ interface SubmissionRow {
 }
 
 export default async function PracticeSubmissionsPage({
-  searchParams,
+  searchParams: searchParamsPromise,
 }: {
-  searchParams: { page?: string };
+  searchParams: Promise<{ page?: string }>;
 }) {
+  const searchParams = await searchParamsPromise;
   const user = await getOptionalUser();
 
   const Shell = ({ children }: { children: React.ReactNode }) => (
@@ -82,7 +83,7 @@ export default async function PracticeSubmissionsPage({
   const pageNum = Math.max(1, Number.parseInt(searchParams.page ?? "1", 10) || 1);
   const from = (pageNum - 1) * PAGE_SIZE;
 
-  const supabase = createAuthedServerSupabase();
+  const supabase = await createAuthedServerSupabase();
   const { data, count } = await supabase
     .from("coding_submissions")
     .select("id,problem_slug,language,verdict,passed,total,runtime_ms,memory_kb,created_at", { count: "exact" })

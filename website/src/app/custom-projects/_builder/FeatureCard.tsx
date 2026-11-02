@@ -62,19 +62,20 @@ export function FeatureCard({
   const price = Number(feature.price) || 0;
 
   return (
-    <div className="flex items-start gap-3 px-4 py-3">
-      <span className="mt-0.5 flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-primary-50 text-primary">
+    <div className={`flex min-h-14 items-center gap-3 border-l-2 px-4 py-2 transition-colors duration-150 ${checked && !readOnly ? "border-primary bg-primary-50/60" : "border-transparent"}`}>
+      <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-xl bg-primary-50 text-primary">
         <Icon className="h-4 w-4" aria-hidden />
       </span>
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-sm font-semibold text-ink">{feature.name}</span>
           {recommended && <Badge tone="primary">Recommended</Badge>}
+          {checked && !readOnly && price > 0 && <span className="rounded-full bg-primary-50 px-2 py-0.5 text-xs font-medium text-primary">Added</span>}
         </div>
-        {feature.description && <p className="mt-0.5 text-xs leading-relaxed text-ink-muted">{feature.description}</p>}
+        {feature.description && <p className="mt-0.5 truncate text-[13px] text-ink-muted">{feature.description}</p>}
       </div>
-      <div className="flex flex-shrink-0 flex-col items-end gap-1.5">
-        {price > 0 && <span className="text-sm font-semibold text-ink">+{formatINR(price)}</span>}
+      <div className="flex flex-shrink-0 items-center gap-2">
+        {price > 0 && <span className={`text-sm font-semibold ${checked ? "text-primary" : "text-ink"}`}>+{formatINR(price)}</span>}
         {readOnly ? (
           <span
             className={

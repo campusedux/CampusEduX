@@ -8,7 +8,7 @@ const { redirect } = vi.hoisted(() => ({
 }));
 vi.mock("next/navigation", () => ({ redirect }));
 
-import { supabase, resetSupabaseMock, setUser, setTableResult } from "../helpers/supabase.mock";
+import { supabase, resetSupabaseMock, setUser, setTableResult, setRpcResult } from "../helpers/supabase.mock";
 vi.mock("@/lib/supabase/authed-server", () => ({ createAuthedServerSupabase: () => supabase }));
 
 import { requireUser, getOptionalUser, getAccountUser, isAcademicComplete, postLoginDestination } from "@/lib/auth";
@@ -31,6 +31,7 @@ describe("requireUser", () => {
   });
 
   it("returns the account directly (no redirect) for a complete existing profile", async () => {
+    setRpcResult("current_user_is_premium", { data: true });
     setUser({ id: "u-1", email: "auth@campusedux.app" });
     setTableResult("profiles", {
       data: {
@@ -87,6 +88,28 @@ describe("requireUser", () => {
 });
 
 describe("getAccountUser", () => {
+  it.each([false, null, "true", { error: true }])("denies stale-flag access for entitlement response %j", async (data) => {
+    setUser({ id: "u-1" });
+    setTableResult("profiles", { data: { id: "u-1", is_premium: true } });
+    setRpcResult("current_user_is_premium", { data });
+    expect((await getAccountUser())?.isPremium).toBe(false);
+    expect(supabase.rpc).toHaveBeenCalledWith("current_user_is_premium");
+  });
+
+  it("fails closed on entitlement errors even with a stale flag and true data", async () => {
+    setUser({ id: "u-1" });
+    setTableResult("profiles", { data: { is_premium: true } });
+    setRpcResult("current_user_is_premium", { data: true, error: { message: "unavailable" } });
+    expect((await getAccountUser())?.isPremium).toBe(false);
+  });
+
+  it("accepts a valid entitlement even when the display mirror is false", async () => {
+    setUser({ id: "u-1" });
+    setTableResult("profiles", { data: { is_premium: false } });
+    setRpcResult("current_user_is_premium", { data: true });
+    expect((await getAccountUser())?.isPremium).toBe(true);
+  });
+
   it("does not crash when the profiles row is missing — falls back to auth email", async () => {
     setUser({ id: "u-2", email: "only-auth@campusedux.app" });
     setTableResult("profiles", { data: null });

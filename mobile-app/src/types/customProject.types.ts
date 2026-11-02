@@ -32,10 +32,8 @@ export type CustomProjectStatus = (typeof CUSTOM_PROJECT_STATUSES)[number];
 export type CustomTokenPaymentStatus = "pending" | "paid" | "failed";
 
 /**
- * Trusted token per project type (spec §2). The SERVER decides the real charge
- * (create-custom-project-order recomputes it); this map is for DISPLAY only —
- * button labels and the estimate screen. It is NOT derived from the estimate or
- * the selected features, and Standard↔Advanced never changes it.
+ * Legacy seed defaults, retained for compatibility. Live displays and checkout
+ * read the admin-managed pricing catalog instead of this map.
  */
 export const CUSTOM_PROJECT_TOKENS: Record<CustomProjectType, number> = {
   academic: 1500,
@@ -43,9 +41,9 @@ export const CUSTOM_PROJECT_TOKENS: Record<CustomProjectType, number> = {
   business: 6000,
 };
 
-/** Token to display for a project type (0 until a type is chosen). Server-authoritative — see CUSTOM_PROJECT_TOKENS. */
-export function tokenForType(projectType: CustomProjectType | null): number {
-  return projectType ? CUSTOM_PROJECT_TOKENS[projectType] : 0;
+/** Token from the live catalog (0 until pricing is loaded or a type is chosen). */
+export function tokenForType(projectType: CustomProjectType | null, pricing: CustomProjectPricing[] = []): number {
+  return pricing.find((p) => p.projectType === projectType)?.tokenAmount ?? 0;
 }
 
 /** Progress % per status (spec §27). Mirrors custom_project_progress_for() in SQL. */

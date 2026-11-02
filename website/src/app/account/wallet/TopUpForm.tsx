@@ -36,6 +36,7 @@ export default function TopUpForm() {
 
       const Razorpay = await loadRazorpayScript();
 
+      let verificationStarted = false;
       const checkout = new Razorpay({
         key: order.razorpayKeyId,
         amount: order.amount,
@@ -44,6 +45,7 @@ export default function TopUpForm() {
         name: "CampusEduX",
         description: "Wallet top-up",
         handler: async function verifyHandler(response: any) {
+          verificationStarted = true;
           setStatus("processing");
           setError(null);
           setRetryVerification(null);
@@ -75,11 +77,14 @@ export default function TopUpForm() {
           }
         },
         modal: {
-          ondismiss: () => setStatus((current) => current === "pending" ? current : "idle"),
+          ondismiss: () => { if (!verificationStarted) setStatus((current) => current === "pending" ? current : "idle"); },
         },
         theme: { color: "#4F39F6" },
       });
 
+      checkout.on("payment.failed", (response: { error?: { description?: string } }) => {
+        if (!verificationStarted) setError(response.error?.description ?? "Payment failed. Retry in checkout or close it to try again.");
+      });
       checkout.open();
     } catch (err: any) {
       setStatus("error");
@@ -106,7 +111,7 @@ export default function TopUpForm() {
       <Button onClick={handleTopUp} disabled={status === "pending"} loading={status === "processing"}>
         {status === "processing" ? "Opening checkout…" : "Top up"}
       </Button>
-      {retryVerification && <button type="button" className="btn-secondary mt-2" onClick={retryVerification}>Retry verification</button>}
+      {retryVerification && <button type="button" className="btn-secondary mt-2" disabled={status === "processing"} onClick={retryVerification}>Retry verification</button>}
       {error && <p className="w-full text-sm text-danger">{error}</p>}
     </div>
   );

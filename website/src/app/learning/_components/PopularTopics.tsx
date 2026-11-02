@@ -13,7 +13,7 @@ import { popularPickGridSlugs, selectPopularLessons } from "@/lib/learningDiscov
  * owner-only RLS). `POPULAR_LESSON_PICKS` in `src/lib/learningDiscovery.ts` is
  * the documented list; each pick is resolved against the real, published
  * course tree and dropped if it's gone, premium, or in a premium /
- * thin-template course. Trees come from the same cached `getLearningTree`
+ * thin-template course. Trees come from the same request-memoized `getLearningTree`
  * entries the course pages use (one per course referenced by the picks, and
  * only for courses `learning_grids_list` says are published). Server
  * Component — plain crawlable links, no client JS.

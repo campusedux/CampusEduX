@@ -49,7 +49,7 @@ export function BasePriceRow({
       </label>
       <label className="text-xs text-ink-muted">
         Token (₹)
-        <Input name="token_amount" type="number" min="0" step="1" defaultValue={row.token_amount} className="mt-1 w-28" />
+        <Input key={row.token_amount} name="token_amount" type="number" min="0" step="1" defaultValue={row.token_amount} className="mt-1 w-28" />
       </label>
       <label className="text-xs text-ink-muted">
         Pricing version

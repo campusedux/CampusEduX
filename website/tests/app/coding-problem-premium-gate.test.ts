@@ -120,7 +120,7 @@ describe("Phase 3 Batch 4: /coding-problems/[problemSlug] generateMetadata", () 
       makeCodingProblemDetail({ title: "Trapping Rain Water", difficulty: "Hard", description: null }, true),
     );
 
-    const metadata = await generateMetadata({ params: { problemSlug: "trapping-rain-water" } });
+    const metadata = await generateMetadata({ params: Promise.resolve({ problemSlug: "trapping-rain-water" }) });
 
     expect(metadata.robots).toBeUndefined();
   });
@@ -132,7 +132,7 @@ describe("Phase 3 Batch 4: /coding-problems/[problemSlug] generateMetadata", () 
       makeCodingProblemDetail({ title: "Trapping Rain Water", difficulty: "Hard", description: null }, true),
     );
 
-    const metadata = await generateMetadata({ params: { problemSlug: "trapping-rain-water" } });
+    const metadata = await generateMetadata({ params: Promise.resolve({ problemSlug: "trapping-rain-water" }) });
 
     expect(metadata.description).toContain("Trapping Rain Water");
     expect(metadata.description).toContain("Hard");
@@ -148,7 +148,7 @@ describe("Phase 3 Batch 4: /coding-problems/[problemSlug] generateMetadata", () 
     // guarantees this — pin that by keeping `locked: true` here.
     vi.mocked(getCodingProblem).mockResolvedValue(makeCodingProblemDetail({ description: null }, true));
 
-    const metadata = await generateMetadata({ params: { problemSlug: "two-sum" } });
+    const metadata = await generateMetadata({ params: Promise.resolve({ problemSlug: "two-sum" }) });
 
     expect(metadata.description).not.toContain(GATED_MARKER);
   });
@@ -158,7 +158,7 @@ describe("Phase 3 Batch 4: /coding-problems/[problemSlug] generateMetadata", () 
     const { generateMetadata } = await import("@/app/coding-problems/[problemSlug]/page");
     vi.mocked(getCodingProblem).mockResolvedValue(makeCodingProblemDetail({ slug: "two-sum" }, true));
 
-    const metadata = await generateMetadata({ params: { problemSlug: "two-sum" } });
+    const metadata = await generateMetadata({ params: Promise.resolve({ problemSlug: "two-sum" }) });
 
     expect(metadata.alternates?.canonical).toBe("https://www.campusedux.com/coding-problems/two-sum");
   });
@@ -171,7 +171,7 @@ describe("Phase 3 Batch 4: /coding-problems/[problemSlug] generateMetadata", () 
       makeCodingProblemDetail({ title: "Two Sum", difficulty: "Easy", description: longDescription }, false),
     );
 
-    const metadata = await generateMetadata({ params: { problemSlug: "two-sum" } });
+    const metadata = await generateMetadata({ params: Promise.resolve({ problemSlug: "two-sum" }) });
 
     const description = String(metadata.description);
     expect(description.startsWith("Two Sum is an Easy ")).toBe(true);
@@ -209,7 +209,7 @@ describe("Phase 3 Batch 4: /practice/problems/[slug] generateMetadata", () => {
       makePracticeProblemDetail({ title: "Valid Parentheses", difficulty: "Medium", description: null }, true, "Stacks"),
     );
 
-    const metadata = await generateMetadata({ params: { slug: "valid-parentheses" } });
+    const metadata = await generateMetadata({ params: Promise.resolve({ slug: "valid-parentheses" }) });
 
     expect(metadata.robots).toBeUndefined();
   });
@@ -221,7 +221,7 @@ describe("Phase 3 Batch 4: /practice/problems/[slug] generateMetadata", () => {
       makePracticeProblemDetail({ title: "Valid Parentheses", difficulty: "Medium", description: null }, true, "Stacks"),
     );
 
-    const metadata = await generateMetadata({ params: { slug: "valid-parentheses" } });
+    const metadata = await generateMetadata({ params: Promise.resolve({ slug: "valid-parentheses" }) });
 
     expect(metadata.description).toContain("Valid Parentheses");
     expect(metadata.description).toContain("Medium");
@@ -234,7 +234,7 @@ describe("Phase 3 Batch 4: /practice/problems/[slug] generateMetadata", () => {
     const { generateMetadata } = await import("@/app/practice/problems/[slug]/page");
     vi.mocked(getPracticeProblem).mockResolvedValue(makePracticeProblemDetail({ description: null }, true));
 
-    const metadata = await generateMetadata({ params: { slug: "two-sum" } });
+    const metadata = await generateMetadata({ params: Promise.resolve({ slug: "two-sum" }) });
 
     expect(metadata.description).not.toContain(GATED_MARKER);
   });
@@ -247,7 +247,7 @@ describe("Phase 3 Batch 4: /practice/problems/[slug] generateMetadata", () => {
       makePracticeProblemDetail({ title: "Valid Parentheses", difficulty: "Medium", description: longDescription }, false),
     );
 
-    const metadata = await generateMetadata({ params: { slug: "valid-parentheses" } });
+    const metadata = await generateMetadata({ params: Promise.resolve({ slug: "valid-parentheses" }) });
 
     const description = String(metadata.description);
     expect(description.startsWith("Valid Parentheses is a Medium ")).toBe(true);

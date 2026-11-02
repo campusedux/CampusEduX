@@ -4,8 +4,9 @@ import Link from "next/link";
 import { LayoutGrid, X } from "lucide-react";
 import ProjectCard, { ProjectCardData } from "@/components/ProjectCard";
 import { CustomProjectBanner } from "@/components/CustomProjectBanner";
-import { FilterSheet, Pagination, EmptyState, PageHeader, SearchBar, SkeletonCard, Chip, ChipRow } from "@/components/ui";
+import { FilterSheet, Pagination, EmptyState, SearchBar, SkeletonCard, Chip, ChipRow } from "@/components/ui";
 import { ProjectFilters } from "@/components/marketplace/ProjectFilters";
+import styles from "@/components/marketplace/projects.module.css";
 import { getCachedProjectsPage, getCachedCategories } from "@/lib/cache";
 import {
   absoluteUrl,
@@ -39,7 +40,8 @@ type SP = {
   page?: string;
 };
 
-export async function generateMetadata({ searchParams }: { searchParams: SP }): Promise<Metadata> {
+export async function generateMetadata({ searchParams: searchParamsPromise }: { searchParams: Promise<SP> }): Promise<Metadata> {
+  const searchParams = await searchParamsPromise;
   const { count } = await getCachedProjectsPage({
     page: 1,
     from: 0,
@@ -146,7 +148,7 @@ async function ProjectResults({ query }: { query: ProjectQuery }) {
           }
         />
       ) : (
-        <div className="list-enter grid min-w-0 grid-cols-1 gap-4 md:grid-cols-2 md:gap-5 xl:grid-cols-3 2xl:grid-cols-4">
+        <div className="list-enter grid min-w-0 grid-cols-1 gap-4 md:grid-cols-2 md:gap-5 xl:grid-cols-3">
           {projects.map((p) => (
             <ProjectCard key={p.id} project={p} />
           ))}
@@ -163,7 +165,7 @@ function ProjectResultsSkeleton() {
     <div role="status" aria-label="Loading projects">
       <span className="sr-only">Loading projects…</span>
       <div aria-hidden className="mb-4 h-5 w-28 animate-pulse rounded bg-line/70 motion-reduce:animate-none" />
-      <div aria-hidden className="grid min-w-0 grid-cols-1 gap-4 md:grid-cols-2 md:gap-5 xl:grid-cols-3 2xl:grid-cols-4">
+      <div aria-hidden className="grid min-w-0 grid-cols-1 gap-4 md:grid-cols-2 md:gap-5 xl:grid-cols-3">
         {Array.from({ length: 6 }).map((_, i) => (
           <SkeletonCard key={i} variant="project" />
         ))}
@@ -172,7 +174,8 @@ function ProjectResultsSkeleton() {
   );
 }
 
-export default async function ProjectsPage({ searchParams }: { searchParams: SP }) {
+export default async function ProjectsPage({ searchParams: searchParamsPromise }: { searchParams: Promise<SP> }) {
+  const searchParams = await searchParamsPromise;
   const page = parsePage(searchParams.page);
   const sort = projectSort(searchParams.sort);
   const min = parsePrice(searchParams.min);
@@ -232,58 +235,57 @@ export default async function ProjectsPage({ searchParams }: { searchParams: SP 
   };
 
   return (
-    <div className="mobile-discovery page-shell max-sm:py-4">
+    <div className="mobile-discovery min-w-0">
       <JsonLd data={breadcrumbJsonLd([{ name: "Projects", path: "/projects" }])} />
-      <PageHeader title="Project Marketplace" caption="Explore projects and build practical skills." icon={LayoutGrid} iconClassName="text-orange-400" />
-      <div className="mt-3 grid min-w-0 grid-cols-[minmax(0,1fr)_44px] gap-3 lg:grid-cols-[260px_minmax(0,1fr)] lg:items-start lg:gap-6">
-        <SearchBar
-          action="/projects"
-          label="Search projects"
-          defaultValue={searchParams.q ?? ""}
-          placeholder="Search projects, e.g. e-commerce, ML, Android…"
-          hiddenParams={cleanParams({ category: filterState.category, min: filterState.min, max: filterState.max, sort: filterState.sort, flag })}
-          className="col-start-1 row-start-1 lg:col-start-2"
-        />
-        <div className="col-start-2 row-start-1 min-w-0 lg:col-start-1 lg:row-span-4 lg:sticky lg:top-24">
-          <FilterSheet title="Filters" activeCount={activeCount} iconOnly>
-            <ProjectFilters categories={categories} state={filterState} />
-          </FilterSheet>
-        </div>
-        {categories.length > 1 && (
-          <ChipRow label="Categories" sticky className="col-span-2 row-start-2 lg:col-span-1 lg:col-start-2">
-            {[{ id: undefined as string | undefined, name: "All" }, ...categories].map((c) => (
-              <Chip key={c.id ?? "all"} href={hrefWith({ category: c.id })} active={(searchParams.category ?? undefined) === c.id}>{c.name}</Chip>
-            ))}
-          </ChipRow>
-        )}
-        <div className="col-span-2 row-start-3 min-w-0 lg:col-span-1 lg:col-start-2">
-          <CustomProjectBanner />
-        </div>
-        <div className="col-span-2 row-start-4 min-w-0 lg:col-span-1 lg:col-start-2">
-          <h2 className="sr-only">Projects</h2>
-          {chips.length > 0 && (
-            <div className="mb-4 flex flex-wrap items-center gap-2">
-              {chips.map((c) => (
-                <Link
-                  key={c.label}
-                  href={c.href}
-                  aria-label={`Remove ${c.label} filter`}
-                  className="inline-flex min-h-11 max-w-full items-center gap-1.5 rounded-full border border-line bg-card px-3 py-2 text-xs font-medium text-ink-muted transition hover:border-primary/40 hover:text-ink"
-                >
-                  <span className="min-w-0 break-words [overflow-wrap:anywhere]">{c.label}</span>
-                  <X className="h-3 w-3 shrink-0" aria-hidden />
-                </Link>
+      <CustomProjectBanner />
+      <section aria-label="Project marketplace" className={`container-page py-6 sm:py-8 lg:py-10 ${styles.marketplace}`}>
+        <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_44px] gap-4 lg:grid-cols-[250px_minmax(0,1fr)] lg:grid-rows-[auto_auto_1fr] lg:items-start lg:gap-x-7 lg:gap-y-5">
+          <SearchBar
+            action="/projects"
+            label="Search projects"
+            defaultValue={searchParams.q ?? ""}
+            placeholder="Search projects, e.g. e-commerce, ML, Android…"
+            hiddenParams={cleanParams({ category: filterState.category, min: filterState.min, max: filterState.max, sort: filterState.sort, flag })}
+            className={`col-start-1 row-start-1 lg:col-start-2 ${styles.search}`}
+          />
+          <div className="col-start-2 row-start-1 min-w-0 lg:col-start-1 lg:row-span-3 lg:sticky lg:top-24">
+            <FilterSheet title="Filters" activeCount={activeCount} iconOnly>
+              <ProjectFilters categories={categories} state={filterState} />
+            </FilterSheet>
+          </div>
+          {categories.length > 1 && (
+            <ChipRow label="Categories" sticky className={`col-span-2 row-start-2 lg:col-span-1 lg:col-start-2 ${styles.categories}`}>
+              {[{ id: undefined as string | undefined, name: "All" }, ...categories].map((c) => (
+                <Chip key={c.id ?? "all"} href={hrefWith({ category: c.id })} active={(searchParams.category ?? undefined) === c.id}>{c.name}</Chip>
               ))}
-              <Link href={clearAllHref} className="inline-flex min-h-11 items-center px-2 text-xs font-semibold text-primary hover:underline">
-                Clear all
-              </Link>
-            </div>
+            </ChipRow>
           )}
-          <Suspense key={JSON.stringify(searchParams)} fallback={<ProjectResultsSkeleton />}>
-            <ProjectResults query={query} />
-          </Suspense>
+          <div id="project-results" tabIndex={-1} className="col-span-2 row-start-3 min-w-0 scroll-mt-24 lg:col-span-1 lg:col-start-2">
+            <h2 className="sr-only">Projects</h2>
+            {chips.length > 0 && (
+              <div className="mb-4 flex flex-wrap items-center gap-2">
+                {chips.map((c) => (
+                  <Link
+                    key={c.label}
+                    href={c.href}
+                    aria-label={`Remove ${c.label} filter`}
+                    className="inline-flex min-h-11 max-w-full items-center gap-1.5 rounded-full border border-line bg-card px-3 py-2 text-xs font-medium text-ink-muted transition hover:border-primary/40 hover:text-ink"
+                  >
+                    <span className="min-w-0 break-words [overflow-wrap:anywhere]">{c.label}</span>
+                    <X className="h-3 w-3 shrink-0" aria-hidden />
+                  </Link>
+                ))}
+                <Link href={clearAllHref} className="inline-flex min-h-11 items-center px-2 text-xs font-semibold text-primary hover:underline">
+                  Clear all
+                </Link>
+              </div>
+            )}
+            <Suspense key={JSON.stringify(searchParams)} fallback={<ProjectResultsSkeleton />}>
+              <ProjectResults query={query} />
+            </Suspense>
+          </div>
         </div>
-      </div>
+      </section>
     </div>
   );
 }

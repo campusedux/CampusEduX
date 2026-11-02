@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Input, Select } from "@/components/ui";
 import { PRACTICE_DIFFICULTIES, PRACTICE_LANGUAGES, PRACTICE_LANGUAGE_LABEL } from "@/lib/practice.types";
 import type { PracticeCategory, PracticeQuery } from "@/lib/practice.types";
@@ -99,9 +100,9 @@ export function PracticeFilters({
         <button type="submit" className="btn-primary h-10 flex-1 px-4 text-sm">
           Apply
         </button>
-        <a href="/practice/problems" className="btn-ghost h-10 px-4 text-sm">
+        <Link href="/practice/problems" prefetch={false} className="btn-ghost h-10 px-4 text-sm">
           Reset
-        </a>
+        </Link>
       </div>
     </form>
   );

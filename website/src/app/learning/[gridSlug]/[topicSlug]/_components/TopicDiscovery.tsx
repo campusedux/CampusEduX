@@ -18,10 +18,10 @@ import { getTopicDiscovery } from "@/lib/learning";
  *   4. Latest Jobs            — newest roles (minus anything shown as "related")
  *   5. Other Learning Topics  — grid overflow + the learning hubs on CampusEduX
  *
- * Server Component — zero added client JS. All data comes from one cached
+ * Server Component — zero added client JS. All data comes from one request-memoized
  * `getTopicDiscovery()` call (see `src/lib/learning.ts`): a single `Promise.all`
- * of bounded, tag-invalidated catalog reads, so this inherits the page's ISR
- * and never turns it dynamic.
+ * of bounded anonymous catalog reads. Fresh publication checks keep withdrawn
+ * tutorials out of the next server render without relying on a refresh webhook.
  */
 
 /** Curated, real CampusEduX learning routes for "Other Learning Topics". Kept

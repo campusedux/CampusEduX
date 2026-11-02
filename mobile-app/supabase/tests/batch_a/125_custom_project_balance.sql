@@ -24,8 +24,8 @@ begin
   -- DEFAULT 'status' backfill/default is real, not just an aspiration in a comment.
   declare v_legacy_req uuid; v_legacy_hist uuid; v_legacy_event text;
   begin
-    insert into custom_project_requests(user_id,title,project_type,project_level,platform,token_payment_status)
-      values (a,'Legacy row proj','personal','standard','web','paid') returning id into v_legacy_req;
+    insert into custom_project_requests(user_id,title,project_type,project_level,platform,token_payment_status,service_scope,assessment_use,integrity_acknowledged_at)
+      values (a,'Legacy row proj','personal','standard','web','paid','custom_software','no',now()) returning id into v_legacy_req;
     insert into custom_project_request_history(request_id, old_status, new_status, changed_by_role, note)
       values (v_legacy_req, null, 'new', 'system', null) returning id into v_legacy_hist;
     select event into v_legacy_event from custom_project_request_history where id = v_legacy_hist;
@@ -39,8 +39,8 @@ begin
 
   -- token counts as the first payment
   insert into custom_project_requests(user_id,title,project_type,project_level,platform,
-                                      estimated_total,token_amount,token_payment_status)
-    values (a,'A proj','personal','standard','web',10000,3000,'pending') returning id into r;
+                                      estimated_total,token_amount,token_payment_status,service_scope,assessment_use,integrity_acknowledged_at)
+    values (a,'A proj','personal','standard','web',10000,3000,'pending','custom_software','no',now()) returning id into r;
   if (select amount_paid from custom_project_requests where id = r) <> 0 then raise exception 'FAIL unpaid amount_paid'; end if;
   update custom_project_requests set token_payment_status = 'paid' where id = r;
   if (select amount_paid from custom_project_requests where id = r) <> 3000 then raise exception 'FAIL token did not count as paid'; end if;
@@ -170,8 +170,8 @@ begin
   -- an amount larger than the remaining balance is refused too — same proof, this time on a
   -- fully 'delivered' project (the other end of the workflow, and the one the owner named)
   insert into custom_project_requests(user_id,title,project_type,project_level,platform,
-                                      estimated_total,token_amount,token_payment_status)
-    values (a,'A2','personal','standard','web',6000,3000,'paid') returning id into r;
+                                      estimated_total,token_amount,token_payment_status,service_scope,assessment_use,integrity_acknowledged_at)
+    values (a,'A2','personal','standard','web',6000,3000,'paid','custom_software','no',now()) returning id into r;
   -- migration 0125's delivery gate requires an actual deliverable before 'delivered' is reachable.
   insert into custom_project_deliveries(request_id, demo_url) values (r, 'https://example.com/a2-demo');
   perform test_as(adm);
@@ -225,11 +225,11 @@ begin
   exception when insufficient_privilege then null; end;
   begin update custom_project_requests set estimated_total = 1, amount_paid = 1, final_price = 1 where id = r; raise exception 'FAIL user multi-col';
   exception when insufficient_privilege then null; end;
-  begin insert into custom_project_requests(user_id,title,project_type,project_level,platform,amount_paid)
-        values (a,'x','personal','standard','web',999); raise exception 'FAIL user insert amount_paid';
+  begin insert into custom_project_requests(user_id,title,project_type,project_level,platform,amount_paid,service_scope,assessment_use,integrity_acknowledged_at)
+        values (a,'x','personal','standard','web',999,'custom_software','no',now()); raise exception 'FAIL user insert amount_paid';
   exception when insufficient_privilege then null; end;
-  begin insert into custom_project_requests(user_id,title,project_type,project_level,platform,final_price)
-        values (a,'x','personal','standard','web',1); raise exception 'FAIL user insert final_price';
+  begin insert into custom_project_requests(user_id,title,project_type,project_level,platform,final_price,service_scope,assessment_use,integrity_acknowledged_at)
+        values (a,'x','personal','standard','web',1,'custom_software','no',now()); raise exception 'FAIL user insert final_price';
   exception when insufficient_privilege then null; end;
   perform test_reset();
 

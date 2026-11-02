@@ -30,17 +30,8 @@ import { RelatedLessons } from "./_components/RelatedLessons";
 import { RecordLessonVisit } from "./RecordLessonVisit";
 import { databaseGroupName, DBMS_SQL_SLUG } from "@/lib/databaseTutorial";
 
-export const revalidate = 86400;
+export const revalidate = 0; // Publication changes must be checked on each render.
 export const dynamicParams = true;
-
-// Returning [] (not the full topic list) still registers this route for ISR —
-// on-demand renders are then full-route cached for `revalidate` seconds. The
-// grid can hold 150+ topics; prerendering them all would run that many RPCs at
-// build time. Raise this to `getLearningTopicParams()` (or a bounded slice)
-// once build infra can absorb it.
-export function generateStaticParams() {
-  return [];
-}
 
 /** How many lessons in the course carry this exact short_description (1 = unique to this lesson). */
 function shortDescriptionDuplicates(tree: LearningTree | null, shortDescription: string): number {
@@ -71,10 +62,11 @@ function describeLesson(page: LearningTopicPage, tree: LearningTree | null): str
 }
 
 export async function generateMetadata({
-  params,
+  params: paramsPromise,
 }: {
-  params: { gridSlug: string; topicSlug: string };
+  params: Promise<{ gridSlug: string; topicSlug: string }>;
 }): Promise<Metadata> {
+  const params = await paramsPromise;
   const [page, tree] = await Promise.all([
     getLearningTopicPage(params.gridSlug, params.topicSlug),
     getLearningTree(params.gridSlug),
@@ -105,10 +97,11 @@ export async function generateMetadata({
 }
 
 export default async function TopicPage({
-  params,
+  params: paramsPromise,
 }: {
-  params: { gridSlug: string; topicSlug: string };
+  params: Promise<{ gridSlug: string; topicSlug: string }>;
 }) {
+  const params = await paramsPromise;
   const [tree, page] = await Promise.all([
     getLearningTree(params.gridSlug),
     getLearningTopicPage(params.gridSlug, params.topicSlug),

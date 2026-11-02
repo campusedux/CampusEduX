@@ -471,3 +471,67 @@ describe("resume version-history actions", () => {
     expect(result).toEqual({ error: expect.stringMatching(/could not restore/i) });
   });
 });
+
+
+describe("Zod release gate: bounded resume validation", () => {
+  const block = { id: "b1", type: "summary", heading: "Summary", variant: "text", text: "Hello" };
+  const entry = { id: "e1", title: "Role", subtitle: "Team", location: "", startDate: "", endDate: "", description: "", url: "", tags: [] };
+  function unreadArray(length: number): unknown[] {
+    const values = new Array(length);
+    Object.defineProperty(values, 0, { get() { throw new Error("Oversized collection elements must not be read"); } });
+    return values;
+  }
+
+  it.each([
+    ["education", () => updateResumeEducationAction(RESUME_ID, unreadArray(21))],
+    ["technical skills", () => updateResumeSkillsAction(RESUME_ID, { technical: unreadArray(51), soft: [] })],
+    ["soft skills", () => updateResumeSkillsAction(RESUME_ID, { technical: [], soft: unreadArray(51) })],
+    ["layout order", () => updateResumeLayoutAction(RESUME_ID, { order: unreadArray(51), hidden: [] })],
+    ["layout hidden", () => updateResumeLayoutAction(RESUME_ID, { order: [], hidden: unreadArray(51) })],
+    ["content", () => updateResumeContentAction(RESUME_ID, unreadArray(81))],
+    ["entries", () => updateResumeContentAction(RESUME_ID, [{ ...block, entries: unreadArray(121) }])],
+    ["tags", () => updateResumeContentAction(RESUME_ID, [{ ...block, entries: [{ ...entry, tags: unreadArray(81) }] }])],
+    ["groups", () => updateResumeContentAction(RESUME_ID, [{ ...block, groups: unreadArray(61) }])],
+    ["group items", () => updateResumeContentAction(RESUME_ID, [{ ...block, groups: [{ id: "g1", label: "Skills", items: unreadArray(251) }] }])],
+    ["links", () => updateResumeContentAction(RESUME_ID, [{ ...block, links: unreadArray(121) }])],
+    ["import education", () => createResumeFromImportAction({ ...VALID_IMPORT, education: unreadArray(21) })],
+    ["import skills", () => createResumeFromImportAction({ ...VALID_IMPORT, technicalSkills: unreadArray(51) })],
+  ])("rejects excessive %s before reading any element or authenticating", async (_name, call) => {
+    expect(await call()).toEqual({ error: "Invalid request." });
+    expect(supabase.auth.getUser).not.toHaveBeenCalled();
+    expect(supabase.calls).toEqual([]);
+  });
+
+  it("skips payload validation when the resume id is invalid", async () => {
+    const content = [{ get id(): string { throw new Error("Do not validate this payload"); } }];
+    expect(await updateResumeContentAction("invalid", content)).toEqual({ error: "Invalid request." });
+    expect(supabase.auth.getUser).not.toHaveBeenCalled();
+  });
+
+  it("accepts the existing education and skill maxima with owner-scoped writes", async () => {
+    setUser(USER);
+    setTableResult("resumes_builder", { data: { id: RESUME_ID } });
+    expect(await updateResumeEducationAction(RESUME_ID, Array.from({ length: 20 }, (_, i) => ({ ...VALID_IMPORT.education[0], id: `e${i}` })))).toEqual({ ok: true });
+    expect(await updateResumeSkillsAction(RESUME_ID, { technical: Array(50).fill("React"), soft: Array(50).fill("Teamwork") })).toEqual({ ok: true });
+    expect(callsFor("resumes_builder").some((c) => c.verb === "eq" && c.args[0] === "user_id" && c.args[1] === USER.id)).toBe(true);
+  });
+
+  it("accepts the existing content and nested collection maxima", async () => {
+    setUser(USER);
+    setTableResult("resumes_builder", { data: { id: RESUME_ID } });
+    for (const content of [
+      Array.from({ length: 80 }, (_, i) => ({ ...block, id: `b${i}` })),
+      [{ ...block, entries: Array.from({ length: 120 }, (_, i) => ({ ...entry, id: `e${i}` })) }],
+      [{ ...block, entries: [{ ...entry, tags: Array(80).fill("React") }] }],
+      [{ ...block, groups: Array.from({ length: 60 }, (_, i) => ({ id: `g${i}`, label: "Skills", items: [] })) }],
+      [{ ...block, groups: [{ id: "g1", label: "Skills", items: Array(250).fill("React") }] }],
+      [{ ...block, links: Array.from({ length: 120 }, (_, i) => ({ id: `l${i}`, label: "Site", url: "https://example.com" })) }],
+    ]) expect(await updateResumeContentAction(RESUME_ID, content)).toEqual({ ok: true });
+  });
+
+  it("rejects an invalid extensible section record before authentication", async () => {
+    expect(await createResumeFromImportAction({ ...VALID_IMPORT, sections: Object.fromEntries(Array.from({ length: 40 }, (_, i) => [`section${i}`, {}])) })).toEqual({ error: "Invalid request." });
+    expect(supabase.auth.getUser).not.toHaveBeenCalled();
+    expect(supabase.calls).toEqual([]);
+  });
+});

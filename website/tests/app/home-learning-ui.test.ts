@@ -1,3 +1,4 @@
+import { tagWithAttributes } from "../helpers/html";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Children, cloneElement, createElement, isValidElement, type ReactElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -38,8 +39,8 @@ async function serverChildren(node: ReactNode): Promise<ReactNode> {
   }
   return cloneElement(node, {}, await serverChildren(node.props.children));
 }
-async function learning(searchParams: Parameters<typeof LearningIndexPage>[0]["searchParams"] = {}) {
-  const node = await LearningIndexPage({ searchParams });
+async function learning(searchParams: Awaited<Parameters<typeof LearningIndexPage>[0]["searchParams"]> = {}) {
+  const node = await LearningIndexPage({ searchParams: Promise.resolve(searchParams) });
   return renderToStaticMarkup(await serverChildren(node) as ReactElement);
 }
 function section(html: string, id: string) {
@@ -93,7 +94,7 @@ describe("Learning catalogue presentation", () => {
   it.each([undefined, "free", "premium"])("keeps one labelled native query and named submit with access=%s", async access => {
     const html = await learning({ q: "  java & sql  ", access });
     const form = html.match(/<form\b[\s\S]*?<\/form>/)?.[0] ?? "";
-    expect(form).toContain('action="/learning" method="get" role="search"');
+    expect(form).toMatch(tagWithAttributes("form", { action: "/learning", method: "get", role: "search" }));
     expect((form.match(/type="search"/g) ?? [])).toHaveLength(1);
     expect(form).toContain("Search courses and lessons</span>");
     expect(form).toContain('name="q"');
@@ -102,7 +103,7 @@ describe("Learning catalogue presentation", () => {
     expect((form.match(/<button\b/g) ?? [])).toHaveLength(1);
     expect(form).toContain('type="submit" aria-label="Search"');
     expect((form.match(/name="access"/g) ?? [])).toHaveLength(access ? 1 : 0);
-    if (access) expect(form).toContain(`type="hidden" name="access" value="${access}"`);
+    if (access) expect(form).toMatch(tagWithAttributes("input", { type: "hidden", name: "access", value: access }));
     expect(form).not.toMatch(/onSubmit|onClick/);
     expect(api.search).toHaveBeenCalledWith("java & sql", 30);
   });
@@ -142,8 +143,8 @@ describe("Learning catalogue presentation", () => {
 
   it("keeps premium filtering, search parameters, and filter destinations", async () => {
     const html = await learning({ q: "  java  ", access: "premium" });
-    expect(html).toContain('action="/learning" method="get" role="search"');
-    expect(html).toContain('type="hidden" name="access" value="premium"');
+    expect(html).toMatch(tagWithAttributes("form", { action: "/learning", method: "get", role: "search" }));
+    expect(html).toMatch(tagWithAttributes("input", { type: "hidden", name: "access", value: "premium" }));
     expect(html).toContain('name="q"');
     expect(html).toContain('value="java"');
     expect(html).toContain('href="/learning?q=java&amp;access=free"');

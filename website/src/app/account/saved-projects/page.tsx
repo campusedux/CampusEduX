@@ -11,7 +11,7 @@ export const metadata = { robots: { index: false, follow: false }, title: "Saved
 
 export default async function SavedProjectsPage() {
   await requireUser();
-  const supabase = createAuthedServerSupabase();
+  const supabase = await createAuthedServerSupabase();
 
   // my_wishlist() (0120/092): published/purchased projects come back with card data, anything
   // unpublished or removed is a detail-free tombstone ("No longer available").

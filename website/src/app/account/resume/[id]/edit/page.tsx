@@ -5,9 +5,10 @@ import { getPublicSupabase } from "@/lib/supabase/server";
 import { mapResumeRow } from "@/lib/resumeBuilder/types";
 import ResumeEditor from "./ResumeEditor";
 
-export default async function ResumeEditPage({ params }: { params: { id: string } }) {
+export default async function ResumeEditPage({ params: paramsPromise }: { params: Promise<{ id: string }> }) {
+  const params = await paramsPromise;
   const user = await requireUser();
-  const supabase = createAuthedServerSupabase();
+  const supabase = await createAuthedServerSupabase();
 
   // The resume row, its share links and the (public) template catalog are all
   // independent lookups — fetch them in one round-trip instead of three.

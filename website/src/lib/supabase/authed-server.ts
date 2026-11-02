@@ -6,8 +6,8 @@ import { createServerClient, type CookieOptions } from "@supabase/ssr";
 // always enforced, and this is the only client account pages should use for
 // a signed-in user's own rows (purchases, applications, resumes_builder,
 // wallet_transactions, referrals, notifications, etc.).
-export function createAuthedServerSupabase() {
-  const cookieStore = cookies();
+export async function createAuthedServerSupabase() {
+  const cookieStore = await cookies();
 
   return createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,

@@ -1,4 +1,4 @@
-/** New academic orders buy guidance on the student's work, never a deliverable for assessment. */
+/** Assessed academic orders buy guidance; non-assessed orders may buy software. */
 export const ACADEMIC_SCOPE = "mentoring" as const;
 
 export type AcademicOrderInput = {
@@ -24,9 +24,18 @@ export function validateAcademicOrder(input: AcademicOrderInput): string | null 
     if (input.assessmentUse === "yes" || input.text.some((value) => COMPLETION_REQUEST.test(value as string) || ACADEMIC_CONTEXT.test(value as string))) {
       return "Assessed student work can only receive mentoring. Choose project mentoring instead.";
     }
+    if (input.serviceScope !== "custom_software") return "Personal and business requests must be custom software.";
     return null;
   }
-  if (input.serviceScope !== ACADEMIC_SCOPE) return "Academic requests must be for project mentoring.";
+  if (input.assessmentUse === "no" && input.serviceScope === "custom_software") {
+    if (input.studentAuthored !== true) return "Confirm this software is not for assessed work and will not be submitted for assessment.";
+    if (input.text.some((value) => COMPLETION_REQUEST.test(value as string) || ACADEMIC_CONTEXT.test(value as string))) {
+      return "Assessed student work can only receive mentoring. Choose project mentoring instead.";
+    }
+    if (!Array.isArray(input.featureIds) || input.featureIds.some((id) => typeof id !== "string")) return "Invalid feature selection.";
+    return null;
+  }
+  if (input.serviceScope !== ACADEMIC_SCOPE) return "Academic requests for assessed work must be for project mentoring.";
   if (input.studentAuthored !== true) return "Confirm that you will author any assessed work yourself.";
   if (!Array.isArray(input.featureIds) || input.featureIds.length !== 0) return "Implementation and document packages are unavailable for academic mentoring.";
   if (input.text.some((value) => COMPLETION_REQUEST.test(value as string))) return "We cannot complete assessed work or presentation materials for you. Request guidance on your own work instead.";

@@ -50,7 +50,8 @@ const getProject = cache(async (id: string) => {
   return { project: result.project, reviews: mappedReviews, related: result.related as ProjectCardData[] };
 });
 
-export async function generateMetadata({ params }: { params: { id: string } }): Promise<Metadata> {
+export async function generateMetadata({ params: paramsPromise }: { params: Promise<{ id: string }> }): Promise<Metadata> {
+  const params = await paramsPromise;
   const result = await getProject(params.id);
   if (!result?.project) return { title: "Project not found", robots: { index: false, follow: false } };
   const { project } = result;
@@ -64,7 +65,8 @@ export async function generateMetadata({ params }: { params: { id: string } }): 
   };
 }
 
-export default async function ProjectDetailPage({ params }: { params: { id: string } }) {
+export default async function ProjectDetailPage({ params: paramsPromise }: { params: Promise<{ id: string }> }) {
+  const params = await paramsPromise;
   const result = await getProject(params.id);
   if (!result?.project) notFound();
   const { project, reviews, related } = result;

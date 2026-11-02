@@ -4,7 +4,6 @@ import { notFound } from "next/navigation";
 import { ArrowLeft, ArrowRight, CalendarDays, Clock, RefreshCw } from "lucide-react";
 import {
   getBlogPost,
-  getAllBlogSlugs,
   getRelatedPosts,
   getAdjacentPosts,
   articleJsonLd,
@@ -26,20 +25,12 @@ import { authoredDescription } from "@/lib/metaDescription";
 import { plainTitle } from "@/lib/seoTitles";
 import { BRAND } from "@/lib/brand";
 
-// Blog mutations invalidate the `blog` tag on demand (admin-panel blog actions),
-// so the timer is only the fallback for out-of-band writes.
-export const revalidate = 1800;
+// Best-effort CMS invalidation cannot guarantee immediate unpublish removal.
+export const revalidate = 0;
 export const dynamicParams = true;
 
-// Prerender the most recent posts at build; the long tail renders on demand and
-// is then full-route cached for `revalidate` seconds (same ISR pattern as
-// `/projects/[id]`).
-export async function generateStaticParams() {
-  const slugs = await getAllBlogSlugs();
-  return slugs.slice(0, 24).map((s) => ({ slug: s.slug }));
-}
-
-export async function generateMetadata({ params }: { params: { slug: string } }): Promise<Metadata> {
+export async function generateMetadata({ params: paramsPromise }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
+  const params = await paramsPromise;
   const post = await getBlogPost(params.slug);
   if (!post) return { title: "Article not found", robots: { index: false, follow: false } };
 
@@ -78,7 +69,8 @@ export async function generateMetadata({ params }: { params: { slug: string } })
   };
 }
 
-export default async function BlogPostPage({ params }: { params: { slug: string } }) {
+export default async function BlogPostPage({ params: paramsPromise }: { params: Promise<{ slug: string }> }) {
+  const params = await paramsPromise;
   const post = await getBlogPost(params.slug);
   if (!post) notFound();
 

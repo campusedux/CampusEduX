@@ -8,7 +8,8 @@ import { MockTestRunner } from "./MockTestRunner";
 
 // Auth-gated attempt flow — never index. The self-referencing canonical stops
 // the page inheriting the root layout's `canonical: "/"` (the homepage).
-export function generateMetadata({ params }: { params: { testId: string } }): Metadata {
+export async function generateMetadata({ params: paramsPromise }: { params: Promise<{ testId: string }> }): Promise<Metadata> {
+  const params = await paramsPromise;
   return {
     robots: { index: false, follow: false },
     alternates: { canonical: absoluteUrl(`/mock-tests/${encodeURIComponent(params.testId)}`) },
@@ -16,7 +17,8 @@ export function generateMetadata({ params }: { params: { testId: string } }): Me
 }
 export const dynamic = "force-dynamic";
 
-export default async function MockTestPage({ params }: { params: { testId: string } }) {
+export default async function MockTestPage({ params: paramsPromise }: { params: Promise<{ testId: string }> }) {
+  const params = await paramsPromise;
   const test = await getMockTest(params.testId);
   if (!test) notFound();
   const backToTopic = test.topic ? `/learning/${test.topic.grid_slug}/${test.topic.topic_slug}` : "/learning";

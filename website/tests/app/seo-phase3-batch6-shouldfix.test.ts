@@ -37,7 +37,7 @@ vi.mock("@/lib/learning", () => ({
 describe("Phase 3 Batch 6: /placement/notes/[id] legacy redirect", () => {
   it("calls permanentRedirect (not redirect) with the resolver's path", async () => {
     const { default: LegacyNoteRedirect } = await import("@/app/placement/notes/[id]/page");
-    await expect(LegacyNoteRedirect({ params: { id: "note-1" } })).rejects.toMatchObject({
+    await expect(LegacyNoteRedirect({ params: Promise.resolve({ id: "note-1" }) })).rejects.toMatchObject({
       url: "/learning/java-tutorial/intro-to-java",
     });
     expect(permanentRedirect).toHaveBeenCalledWith("/learning/java-tutorial/intro-to-java");
@@ -92,19 +92,19 @@ vi.mock("react", async (importOriginal) => {
 describe("Phase 3 Batch 6: not-found metadata is explicitly noindex, nofollow", () => {
   it("/jobs/[id]", async () => {
     const { generateMetadata } = await import("@/app/jobs/[id]/page");
-    const metadata = await generateMetadata({ params: { id: "missing" } });
+    const metadata = await generateMetadata({ params: Promise.resolve({ id: "missing" }) });
     expect(metadata.robots).toEqual({ index: false, follow: false });
   });
 
   it("/jobs/companies/[id]", async () => {
     const { generateMetadata } = await import("@/app/jobs/companies/[id]/page");
-    const metadata = await generateMetadata({ params: { id: "missing" } });
+    const metadata = await generateMetadata({ params: Promise.resolve({ id: "missing" }) });
     expect(metadata.robots).toEqual({ index: false, follow: false });
   });
 
   it("/projects/[id]", async () => {
     const { generateMetadata } = await import("@/app/projects/[id]/page");
-    const metadata = await generateMetadata({ params: { id: "missing" } });
+    const metadata = await generateMetadata({ params: Promise.resolve({ id: "missing" }) });
     expect(metadata.robots).toEqual({ index: false, follow: false });
   });
 
@@ -114,7 +114,7 @@ describe("Phase 3 Batch 6: not-found metadata is explicitly noindex, nofollow", 
       getLearningTree: vi.fn(async () => null),
     }));
     const { generateMetadata } = await import("@/app/learning/[gridSlug]/[topicSlug]/page");
-    const metadata = await generateMetadata({ params: { gridSlug: "missing", topicSlug: "missing" } });
+    const metadata = await generateMetadata({ params: Promise.resolve({ gridSlug: "missing", topicSlug: "missing" }) });
     expect(metadata.robots).toEqual({ index: false, follow: false });
     vi.doUnmock("@/lib/learning");
   });
@@ -125,7 +125,7 @@ describe("Phase 3 Batch 6: not-found metadata is explicitly noindex, nofollow", 
       return { ...actual, getBlogPost: vi.fn(async () => null) };
     });
     const { generateMetadata } = await import("@/app/blog/[slug]/page");
-    const metadata = await generateMetadata({ params: { slug: "missing" } });
+    const metadata = await generateMetadata({ params: Promise.resolve({ slug: "missing" }) });
     expect(metadata.robots).toEqual({ index: false, follow: false });
     vi.doUnmock("@/lib/blog");
   });

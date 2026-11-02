@@ -22,7 +22,8 @@ const getCompany = cache(async (id: string) => {
   return res ? { company: res.company, jobs: res.jobs as JobCardData[] } : null;
 });
 
-export async function generateMetadata({ params }: { params: { id: string } }): Promise<Metadata> {
+export async function generateMetadata({ params: paramsPromise }: { params: Promise<{ id: string }> }): Promise<Metadata> {
+  const params = await paramsPromise;
   const res = await getCompany(params.id);
   if (!res) return { title: "Company not found", robots: { index: false, follow: false } };
   return {
@@ -35,7 +36,8 @@ export async function generateMetadata({ params }: { params: { id: string } }): 
   };
 }
 
-export default async function CompanyDetailPage({ params }: { params: { id: string } }) {
+export default async function CompanyDetailPage({ params: paramsPromise }: { params: Promise<{ id: string }> }) {
+  const params = await paramsPromise;
   const res = await getCompany(params.id);
   if (!res) notFound();
   const { company, jobs } = res;

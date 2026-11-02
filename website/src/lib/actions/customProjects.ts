@@ -1,6 +1,7 @@
 "use server";
 
 import { z } from "zod";
+import { validationError } from "@/lib/validation";
 import { getOptionalUser } from "@/lib/auth";
 import { createAuthedServerSupabase } from "@/lib/supabase/authed-server";
 
@@ -11,7 +12,7 @@ import { createAuthedServerSupabase } from "@/lib/supabase/authed-server";
 // ownership for a friendlier error than a bare RLS rejection.
 
 const messageSchema = z.object({
-  requestId: z.string().uuid(),
+  requestId: z.guid(),
   body: z.string().trim().min(1, "Write a message first.").max(4000, "That message is too long."),
 });
 
@@ -20,14 +21,14 @@ export type SendMessageInput = z.infer<typeof messageSchema>;
 export async function sendCustomProjectMessageAction(
   input: SendMessageInput,
 ): Promise<{ ok: true } | { error: string }> {
-  const parsed = messageSchema.safeParse(input);
+  const parsed = messageSchema.safeParse(input, { error: validationError });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid message." };
   const { requestId, body } = parsed.data;
 
   const user = await getOptionalUser();
   if (!user) return { error: "Please sign in again to send a message." };
 
-  const supabase = createAuthedServerSupabase();
+  const supabase = await createAuthedServerSupabase();
 
   const { data: owned, error: ownErr } = await supabase
     .from("custom_project_requests")
@@ -63,11 +64,11 @@ function rpcError(error: { code?: string; message?: string } | null, fallback: s
 async function signedInClient() {
   const user = await getOptionalUser();
   if (!user) return null;
-  return createAuthedServerSupabase();
+  return await createAuthedServerSupabase();
 }
 
 const requestEditSchema = z.object({
-  requestId: z.string().uuid(),
+  requestId: z.guid(),
   changes: z
     .object({
       title: z.string().trim().min(1, "Title is required.").max(200),
@@ -87,7 +88,7 @@ const requestEditSchema = z.object({
 });
 
 export async function updateCustomProjectRequestAction(input: z.infer<typeof requestEditSchema>): Promise<ActionResult> {
-  const parsed = requestEditSchema.safeParse(input);
+  const parsed = requestEditSchema.safeParse(input, { error: validationError });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid changes." };
   const supabase = await signedInClient();
   if (!supabase) return { error: "Please sign in again." };
@@ -104,14 +105,14 @@ export async function updateCustomProjectRequestAction(input: z.infer<typeof req
 }
 
 const attachmentSchema = z.object({
-  requestId: z.string().uuid(),
+  requestId: z.guid(),
   path: z.string().min(1).max(500),
   fileName: z.string().min(1).max(255),
   sizeMb: z.number().min(0).max(100),
 });
 
 export async function addCustomProjectAttachmentAction(input: z.infer<typeof attachmentSchema>): Promise<ActionResult> {
-  const parsed = attachmentSchema.safeParse(input);
+  const parsed = attachmentSchema.safeParse(input, { error: validationError });
   if (!parsed.success) return { error: "Invalid file." };
   const supabase = await signedInClient();
   if (!supabase) return { error: "Please sign in again." };
@@ -126,7 +127,7 @@ export async function addCustomProjectAttachmentAction(input: z.infer<typeof att
 }
 
 export async function removeCustomProjectAttachmentAction(input: { fileId: string }): Promise<ActionResult> {
-  const parsed = z.object({ fileId: z.string().uuid() }).safeParse(input);
+  const parsed = z.object({ fileId: z.guid() }).safeParse(input, { error: validationError });
   if (!parsed.success) return { error: "Invalid file." };
   const supabase = await signedInClient();
   if (!supabase) return { error: "Please sign in again." };
@@ -145,7 +146,7 @@ const addonSchema = z.object({
 export async function createCustomProjectAddonAction(
   input: { requestId: string } & z.infer<typeof addonSchema>,
 ): Promise<ActionResult> {
-  const parsed = addonSchema.extend({ requestId: z.string().uuid() }).safeParse(input);
+  const parsed = addonSchema.extend({ requestId: z.guid() }).safeParse(input, { error: validationError });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid extra feature." };
   const supabase = await signedInClient();
   if (!supabase) return { error: "Please sign in again." };
@@ -160,7 +161,7 @@ export async function createCustomProjectAddonAction(
 export async function updateCustomProjectAddonAction(
   input: { addonId: string } & z.infer<typeof addonSchema>,
 ): Promise<ActionResult> {
-  const parsed = addonSchema.extend({ addonId: z.string().uuid() }).safeParse(input);
+  const parsed = addonSchema.extend({ addonId: z.guid() }).safeParse(input, { error: validationError });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid extra feature." };
   const supabase = await signedInClient();
   if (!supabase) return { error: "Please sign in again." };
@@ -173,7 +174,7 @@ export async function updateCustomProjectAddonAction(
 }
 
 export async function deleteCustomProjectAddonAction(input: { addonId: string }): Promise<ActionResult> {
-  const parsed = z.object({ addonId: z.string().uuid() }).safeParse(input);
+  const parsed = z.object({ addonId: z.guid() }).safeParse(input, { error: validationError });
   if (!parsed.success) return { error: "Invalid extra feature." };
   const supabase = await signedInClient();
   if (!supabase) return { error: "Please sign in again." };
@@ -182,7 +183,7 @@ export async function deleteCustomProjectAddonAction(input: { addonId: string })
 }
 
 export async function acceptCustomProjectAddonAction(input: { addonId: string }): Promise<ActionResult> {
-  const parsed = z.object({ addonId: z.string().uuid() }).safeParse(input);
+  const parsed = z.object({ addonId: z.guid() }).safeParse(input, { error: validationError });
   if (!parsed.success) return { error: "Invalid extra feature." };
   const supabase = await signedInClient();
   if (!supabase) return { error: "Please sign in again." };

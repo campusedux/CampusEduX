@@ -18,7 +18,7 @@ export const metadata: Metadata = {
 
 export default async function Page() {
   const user = await requireUser();
-  const supabase = createAuthedServerSupabase();
+  const supabase = await createAuthedServerSupabase();
 
   // token_payment_status = paid — a request only exists for real once the
   // Edge Function has verified the token payment (spec §15). RLS scopes this

@@ -4,7 +4,7 @@
 jest.mock("@/lib/supabase", () => require("../../mocks/supabase.mock").mockModule());
 
 import { calculateEstimate } from "@/services/customProjects.service";
-import { priceFeatures, type FeatureRow } from "../../../supabase/functions/_shared/customProjectPricing";
+import { catalogTokenAmount, priceFeatures, type FeatureRow } from "../../../supabase/functions/_shared/customProjectPricing";
 import {
   CUSTOM_PROJECT_LEVELS,
   CUSTOM_PROJECT_TYPES,
@@ -48,6 +48,19 @@ const PLATFORMS: CustomPlatformPricing[] = [{ platform: "web_android", label: "W
 const SELECTIONS = [[], ["auth-google"], ["search-filters", "auth-google"], ["auth-email-password", "rt-live-chat", "ai-chatbot", "search-filters"]];
 
 describe("server ⇄ client pricing parity", () => {
+  it('uses an edited catalog token on the server and client', () => {
+    const pricing = PRICING.map((row) => ({ ...row, tokenAmount: 2123.45 }));
+    for (const projectLevel of CUSTOM_PROJECT_LEVELS) {
+      const estimate = calculateEstimate({ projectType: 'personal', projectLevel, platform: 'web_android', featureIds: [] }, pricing, PLATFORMS, []);
+      expect(catalogTokenAmount('2123.45')).toBe(estimate.token);
+      expect(estimate.token).toBe(2123.45);
+    }
+  });
+
+  it.each([null, undefined, '', 'bad', 'NaN', 0, -1, Infinity, true])('rejects an unchargeable catalog token: %s', (value) => {
+    expect(catalogTokenAmount(value)).toBeNull();
+  });
+
   it.each(ALL_TIERS.filter((tier) => !tier.startsWith("academic:")))("%s: estimated_total and included set match for every selection", (tier) => {
     const [projectType, projectLevel] = tier.split(":") as [CustomProjectPricing["projectType"], CustomProjectPricing["projectLevel"]];
     for (const featureIds of SELECTIONS) {

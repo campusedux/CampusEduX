@@ -1,6 +1,7 @@
 "use server";
 
 import { z } from "zod";
+import { stringRecordSchema, validationError } from "@/lib/validation";
 import { getOptionalUser } from "@/lib/auth";
 import { createAuthedServerSupabase } from "@/lib/supabase/authed-server";
 import type { CustomProjectStatus } from "@/lib/customProjects";
@@ -34,7 +35,7 @@ export async function listMyResumeProjectCandidatesAction(): Promise<ResumeProje
   const user = await getOptionalUser();
   if (!user) return { error: "Please sign in again." };
 
-  const supabase = createAuthedServerSupabase();
+  const supabase = await createAuthedServerSupabase();
   const { data, error } = await supabase
     .from("custom_project_requests")
     .select("id, title, description, technology_preference, status")
@@ -51,7 +52,7 @@ export async function listMyResumeProjectCandidatesAction(): Promise<ResumeProje
   }));
 }
 
-const resumeIdSchema = z.string().uuid();
+const resumeIdSchema = z.guid();
 const projectIdSchema = z.string().trim().min(1).max(200);
 
 /**
@@ -74,7 +75,7 @@ export async function appendCustomProjectToResumeAction(
   const user = await getOptionalUser();
   if (!user) return { error: "Please sign in again." };
 
-  const supabase = createAuthedServerSupabase();
+  const supabase = await createAuthedServerSupabase();
 
   const [{ data: resume, error: resumeError }, { data: project, error: projectError }] = await Promise.all([
     supabase.from("resumes_builder").select("id, sections").eq("id", resumeId).eq("user_id", user.id).maybeSingle(),
@@ -127,7 +128,7 @@ async function updateOwnResume(resumeId: string, patch: Record<string, unknown>)
   const user = await getOptionalUser();
   if (!user) return { error: "Please sign in again." };
 
-  const supabase = createAuthedServerSupabase();
+  const supabase = await createAuthedServerSupabase();
   const { data, error } = await supabase
     .from("resumes_builder")
     .update({ ...patch, updated_at: new Date().toISOString() })
@@ -187,8 +188,9 @@ const educationSchema = z
 
 export async function updateResumeEducationAction(rawResumeId: string, rawEducation: unknown): Promise<OkResult> {
   const resumeParsed = resumeIdSchema.safeParse(rawResumeId);
+  if (!resumeParsed.success) return { error: "Invalid request." };
   const educationParsed = educationSchema.safeParse(rawEducation);
-  if (!resumeParsed.success || !educationParsed.success) return { error: "Invalid request." };
+  if (!educationParsed.success) return { error: "Invalid request." };
   return updateOwnResume(resumeParsed.data, { education: educationParsed.data });
 }
 
@@ -199,14 +201,15 @@ const skillsSchema = z.object({
 
 export async function updateResumeSkillsAction(rawResumeId: string, rawSkills: unknown): Promise<OkResult> {
   const resumeParsed = resumeIdSchema.safeParse(rawResumeId);
+  if (!resumeParsed.success) return { error: "Invalid request." };
   const skillsParsed = skillsSchema.safeParse(rawSkills);
-  if (!resumeParsed.success || !skillsParsed.success) return { error: "Invalid request." };
+  if (!skillsParsed.success) return { error: "Invalid request." };
   return updateOwnResume(resumeParsed.data, { skills: skillsParsed.data });
 }
 
 const freeformKeySchema = z.enum(RESUME_FREEFORM_SECTIONS);
 const freeformContentSchema = z.string().max(20_000);
-const currentSectionsSchema = z.record(z.string());
+const currentSectionsSchema = stringRecordSchema();
 
 export async function updateResumeFreeformSectionAction(
   rawResumeId: string,
@@ -215,10 +218,11 @@ export async function updateResumeFreeformSectionAction(
   rawCurrentSections: unknown,
 ): Promise<OkResult> {
   const resumeParsed = resumeIdSchema.safeParse(rawResumeId);
+  if (!resumeParsed.success) return { error: "Invalid request." };
   const keyParsed = freeformKeySchema.safeParse(rawKey);
   const contentParsed = freeformContentSchema.safeParse(rawContent);
   const currentParsed = currentSectionsSchema.safeParse(rawCurrentSections ?? {});
-  if (!resumeParsed.success || !keyParsed.success || !contentParsed.success || !currentParsed.success) {
+  if (!keyParsed.success || !contentParsed.success || !currentParsed.success) {
     return { error: "Invalid request." };
   }
   const key: ResumeFreeformSectionKey = keyParsed.data;
@@ -233,8 +237,9 @@ const layoutSchema = z.object({
 /** Persists a section order/visibility change. Normalizes server-side too, so a stale/partial client layout never corrupts the stored value. */
 export async function updateResumeLayoutAction(rawResumeId: string, rawLayout: unknown): Promise<OkResult> {
   const resumeParsed = resumeIdSchema.safeParse(rawResumeId);
+  if (!resumeParsed.success) return { error: "Invalid request." };
   const layoutParsed = layoutSchema.safeParse(rawLayout);
-  if (!resumeParsed.success || !layoutParsed.success) return { error: "Invalid request." };
+  if (!layoutParsed.success) return { error: "Invalid request." };
   const normalized: ResumeLayout = normalizeLayout(layoutParsed.data);
   return updateOwnResume(resumeParsed.data, { layout: normalized });
 }
@@ -262,7 +267,7 @@ export async function createResumeFromTemplateAction(rawTemplateId: string): Pro
   const user = await getOptionalUser();
   if (!user) return { needsAuth: true, error: "Please sign in to start a resume." };
 
-  const supabase = createAuthedServerSupabase();
+  const supabase = await createAuthedServerSupabase();
 
   const demo = demoResume(template);
   const content = normalizeContent(demo.content);
@@ -329,8 +334,9 @@ const contentSchema = z.array(blockSchema).max(80);
 
 export async function updateResumeContentAction(rawResumeId: string, rawContent: unknown): Promise<OkResult> {
   const idParsed = resumeIdSchema.safeParse(rawResumeId);
+  if (!idParsed.success) return { error: "Invalid request." };
   const contentParsed = contentSchema.safeParse(rawContent);
-  if (!idParsed.success || !contentParsed.success) return { error: "Invalid request." };
+  if (!contentParsed.success) return { error: "Invalid request." };
 
   const content = normalizeContent(contentParsed.data);
   const legacy = contentToLegacyColumns(content);
@@ -408,7 +414,7 @@ export async function duplicateResumeAction(rawResumeId: string): Promise<{ resu
   const user = await getOptionalUser();
   if (!user) return { error: "Please sign in again." };
 
-  const supabase = createAuthedServerSupabase();
+  const supabase = await createAuthedServerSupabase();
   const { data: src } = await supabase
     .from("resumes_builder")
     .select("title, template, design, personal_details, content, education, skills, sections, layout")
@@ -464,7 +470,7 @@ export async function getCampusEduxImportDataAction(): Promise<CampusEduxImportD
   const user = await getOptionalUser();
   if (!user) return { error: "Please sign in again." };
 
-  const supabase = createAuthedServerSupabase();
+  const supabase = await createAuthedServerSupabase();
   const [{ data: profile }, projects] = await Promise.all([
     supabase
       .from("profiles")
@@ -508,7 +514,7 @@ export async function deleteResumeAction(rawResumeId: string): Promise<OkResult>
   const user = await getOptionalUser();
   if (!user) return { error: "Please sign in again." };
 
-  const supabase = createAuthedServerSupabase();
+  const supabase = await createAuthedServerSupabase();
   const { data, error } = await supabase
     .from("resumes_builder")
     .delete()
@@ -539,14 +545,14 @@ const jdTextSchema = z.string().trim().min(1, "Paste a job description first.").
 
 export async function matchResumeToJdAction(rawResumeId: string, rawJdText: string): Promise<JdMatchResult | ActionError> {
   const resumeParsed = resumeIdSchema.safeParse(rawResumeId);
-  const jdParsed = jdTextSchema.safeParse(rawJdText);
+  const jdParsed = jdTextSchema.safeParse(rawJdText, { error: validationError });
   if (!resumeParsed.success) return { error: "Invalid request." };
   if (!jdParsed.success) return { error: jdParsed.error.issues[0]?.message ?? "Invalid job description." };
 
   const user = await getOptionalUser();
   if (!user) return { error: "Please sign in again." };
 
-  const supabase = createAuthedServerSupabase();
+  const supabase = await createAuthedServerSupabase();
   const { data, error } = await supabase.rpc("match_resume_to_jd", {
     p_resume_id: resumeParsed.data,
     p_jd_text: jdParsed.data,
@@ -586,7 +592,7 @@ const importSchema = z.object({
   website: z.string().trim().max(300),
   education: importEducationSchema,
   technicalSkills: z.array(z.string().trim().max(100)).max(50),
-  sections: z.record(z.string().max(20_000)),
+  sections: stringRecordSchema(20_000),
 });
 
 export async function createResumeFromImportAction(rawInput: unknown): Promise<{ resumeId: string } | ActionError> {
@@ -618,7 +624,7 @@ export async function createResumeFromImportAction(rawInput: unknown): Promise<{
   // imported resume is consistent with everything else even before 0062 runs.
   const content = normalizeContent(undefined, legacy);
 
-  const supabase = createAuthedServerSupabase();
+  const supabase = await createAuthedServerSupabase();
   const { data, error } = await supabase
     .from("resumes_builder")
     .insert({
@@ -659,7 +665,7 @@ export async function createResumeShareAction(rawResumeId: string): Promise<Resu
   const user = await getOptionalUser();
   if (!user) return { error: "Please sign in again." };
 
-  const supabase = createAuthedServerSupabase();
+  const supabase = await createAuthedServerSupabase();
   // Confirm ownership before creating a share for it — same re-check pattern as the rest of this file.
   const { data: resume } = await supabase.from("resumes_builder").select("id").eq("id", resumeParsed.data).eq("user_id", user.id).maybeSingle();
   if (!resume) return { error: "That resume could not be found." };
@@ -681,7 +687,7 @@ export async function listResumeSharesAction(rawResumeId: string): Promise<Resum
   const user = await getOptionalUser();
   if (!user) return { error: "Please sign in again." };
 
-  const supabase = createAuthedServerSupabase();
+  const supabase = await createAuthedServerSupabase();
   const { data, error } = await supabase
     .from("resume_shares")
     .select("id, token, is_active, view_count, created_at")
@@ -693,7 +699,7 @@ export async function listResumeSharesAction(rawResumeId: string): Promise<Resum
   return (data ?? []).map((row) => ({ id: row.id, token: row.token, isActive: row.is_active, viewCount: row.view_count, createdAt: row.created_at }));
 }
 
-const shareIdSchema = z.string().uuid();
+const shareIdSchema = z.guid();
 
 export async function toggleResumeShareAction(rawShareId: string, next: boolean): Promise<OkResult> {
   const shareParsed = shareIdSchema.safeParse(rawShareId);
@@ -702,7 +708,7 @@ export async function toggleResumeShareAction(rawShareId: string, next: boolean)
   const user = await getOptionalUser();
   if (!user) return { error: "Please sign in again." };
 
-  const supabase = createAuthedServerSupabase();
+  const supabase = await createAuthedServerSupabase();
   const { data, error } = await supabase
     .from("resume_shares")
     .update({ is_active: next })
@@ -722,7 +728,7 @@ export async function deleteResumeShareAction(rawShareId: string): Promise<OkRes
   const user = await getOptionalUser();
   if (!user) return { error: "Please sign in again." };
 
-  const supabase = createAuthedServerSupabase();
+  const supabase = await createAuthedServerSupabase();
   const { error } = await supabase.from("resume_shares").delete().eq("id", shareParsed.data).eq("user_id", user.id);
   if (error) return { error: "Could not delete the share link." };
   return { ok: true };
@@ -751,7 +757,7 @@ export async function createResumeVersionAction(rawResumeId: string, rawLabel: s
   const user = await getOptionalUser();
   if (!user) return { error: "Please sign in again." };
 
-  const supabase = createAuthedServerSupabase();
+  const supabase = await createAuthedServerSupabase();
   const { data: resume } = await supabase
     .from("resumes_builder")
     .select("title, template, personal_details, content, education, skills, sections, layout")
@@ -777,7 +783,7 @@ export async function listResumeVersionsAction(rawResumeId: string): Promise<Res
   const user = await getOptionalUser();
   if (!user) return { error: "Please sign in again." };
 
-  const supabase = createAuthedServerSupabase();
+  const supabase = await createAuthedServerSupabase();
   const { data, error } = await supabase
     .from("resume_versions")
     .select("id, label, created_at")
@@ -789,7 +795,7 @@ export async function listResumeVersionsAction(rawResumeId: string): Promise<Res
   return (data ?? []).map((row) => ({ id: row.id, label: row.label, createdAt: row.created_at }));
 }
 
-const versionIdSchema = z.string().uuid();
+const versionIdSchema = z.guid();
 
 /** Delegates to restore_resume_version() — SECURITY INVOKER, so it only ever succeeds for a version/resume the caller already owns per normal RLS. */
 export async function restoreResumeVersionAction(rawVersionId: string): Promise<OkResult> {
@@ -799,7 +805,7 @@ export async function restoreResumeVersionAction(rawVersionId: string): Promise<
   const user = await getOptionalUser();
   if (!user) return { error: "Please sign in again." };
 
-  const supabase = createAuthedServerSupabase();
+  const supabase = await createAuthedServerSupabase();
   const { error } = await supabase.rpc("restore_resume_version", { p_version_id: versionParsed.data });
   if (error) return { error: "Could not restore that version. Please try again." };
   return { ok: true };

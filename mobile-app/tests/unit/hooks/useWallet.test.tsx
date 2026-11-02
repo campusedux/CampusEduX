@@ -17,19 +17,27 @@ jest.mock("@/services/wallet.service", () => ({
 
 import { useWalletSummary, walletQueryKeys } from "@/hooks/useWallet";
 
+const renderedTrees: TestRenderer.ReactTestRenderer[] = [];
+const queryClients: QueryClient[] = [];
+afterEach(async () => {
+  await act(async () => { for (const tree of renderedTrees.splice(0)) tree.unmount(); });
+  for (const client of queryClients.splice(0)) client.clear();
+});
+
 async function renderHookValue<T>(useHook: () => T): Promise<{ get: () => T }> {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
+  queryClients.push(client);
   const box: { value?: T } = {};
   function Probe() {
     box.value = useHook();
     return null;
   }
   await act(async () => {
-    TestRenderer.create(
+    renderedTrees.push(TestRenderer.create(
       <QueryClientProvider client={client}>
         <Probe />
       </QueryClientProvider>
-    );
+    ));
   });
   for (let i = 0; i < 5; i++) {
     await act(async () => {
@@ -50,16 +58,17 @@ describe("useWalletSummary", () => {
   it("scopes the cache entry to the signed-in user (MOB-07)", async () => {
     mockGetWalletSummary.mockResolvedValue({ balance: 1 });
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    queryClients.push(client);
     function Probe() {
       useWalletSummary();
       return null;
     }
     await act(async () => {
-      TestRenderer.create(
+      renderedTrees.push(TestRenderer.create(
         <QueryClientProvider client={client}>
           <Probe />
         </QueryClientProvider>
-      );
+      ));
     });
     for (let i = 0; i < 5; i++) await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
     expect(client.getQueryData([...walletQueryKeys.summary, "u-1"])).toEqual({ balance: 1 });

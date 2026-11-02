@@ -27,7 +27,8 @@ const getData = cache(async (categoryId: string) => {
   return { name: res.name, projects: res.projects as ProjectCardData[], missing: res.found === false };
 });
 
-export async function generateMetadata({ params }: { params: { category: string } }): Promise<Metadata> {
+export async function generateMetadata({ params: paramsPromise }: { params: Promise<{ category: string }> }): Promise<Metadata> {
+  const params = await paramsPromise;
   const { name, projects, missing } = await getData(params.category);
   if (missing)
     return {
@@ -48,7 +49,8 @@ export async function generateMetadata({ params }: { params: { category: string 
   };
 }
 
-export default async function CategoryPage({ params }: { params: { category: string } }) {
+export default async function CategoryPage({ params: paramsPromise }: { params: Promise<{ category: string }> }) {
+  const params = await paramsPromise;
   const { name, projects, missing } = await getData(params.category);
   if (missing) notFound();
   return (

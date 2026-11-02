@@ -134,3 +134,14 @@ describe("premiumService.cancelSubscription", () => {
     await expect(premiumService.cancelSubscription("sub-1")).rejects.toThrow("Couldn't cancel auto-renewal: rls");
   });
 });
+
+describe("premium response safety", () => {
+  it.each([null, {}, { error: "Synthetic rejected payment" }])("rejects an unconfirmed body: %p", async (data) => {
+    setFunctionResult("verify-premium-payment", { data });
+    await expect(premiumService.verifyPayment({ orderId: "synthetic", razorpayOrderId: "order_synthetic", razorpayPaymentId: "pay_synthetic", razorpaySignature: "synthetic" })).rejects.toThrow();
+  });
+  it("rejects an order error body", async () => {
+    setFunctionResult("create-premium-order", { data: { error: "Synthetic rejected order" } });
+    await expect(premiumService.createOrder("synthetic-plan", "monthly")).rejects.toThrow("Synthetic rejected order");
+  });
+});

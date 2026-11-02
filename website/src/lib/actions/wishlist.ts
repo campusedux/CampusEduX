@@ -13,7 +13,7 @@ export async function removeFromWishlistAction(rawProjectId: string): Promise<{ 
   if (!parsed.success) return { error: "Invalid project." };
   const user = await getOptionalUser();
   if (!user) return { error: "Please sign in again." };
-  const supabase = createAuthedServerSupabase();
+  const supabase = await createAuthedServerSupabase();
   const { error } = await supabase.from("wishlists").delete().eq("project_id", parsed.data).eq("user_id", user.id);
   if (error) return { error: "Could not remove it from your saved projects. Please try again." };
   revalidatePath("/account/saved-projects");

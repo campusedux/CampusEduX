@@ -22,7 +22,6 @@ import {
   type CustomProjectRequest,
   type CustomProjectRequestDetail,
   type CustomProjectType,
-  tokenForType,
   type CustomRequirement,
 } from "@/types";
 
@@ -279,7 +278,7 @@ const round2 = (n: number) => Math.round(n * 100) / 100;
  * `featureIds` (old drafts). Computed on the client so a tap never hits the
  * database; create-custom-project-order recomputes the same figure server-side
  * (parity asserted in tests/unit/services/customProjectsServerParity.test.ts).
- * The token is a fixed per-type constant and is deducted from the total.
+ * The catalog token is per type and is deducted from the total.
  */
 export function calculateEstimate(
   config: Pick<
@@ -308,7 +307,7 @@ export function calculateEstimate(
   const addOnsTotal = round2(addOns.reduce((s, f) => s + f.price, 0));
 
   const total = round2(basePrice + addOnsTotal + platformCharges);
-  const token = tokenForType(projectType);
+  const token = priceRow?.tokenAmount ?? 0;
 
   return {
     basePrice,
@@ -530,6 +529,7 @@ export const customProjectsService = {
     });
     if (error) throw new Error(error.message);
     if (data?.error) throw new Error(data.error);
+    if (!data?.id || data.token_payment_status !== "paid") throw new Error("Payment verification pending.");
     return mapRequestRow(data);
   },
 
@@ -562,6 +562,7 @@ export const customProjectsService = {
     });
     if (error) throw new Error(error.message);
     if (data?.error) throw new Error(data.error);
+    if (!data?.id || data.token_payment_status !== "paid") throw new Error("Payment verification pending.");
     return mapRequestRow(data);
   },
 

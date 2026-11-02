@@ -87,6 +87,7 @@ export const premiumService = {
   async createOrder(planId: string, billingCycle: BillingCycle): Promise<PremiumOrder> {
     const { data, error } = await supabase.functions.invoke("create-premium-order", { body: { planId, billingCycle } });
     if (error) throw new Error(error.message);
+    if (!data || data.error || !data.orderId || !data.razorpayOrderId) throw new Error(data?.error || "Could not create payment order.");
     return {
       orderId: data.orderId,
       razorpayOrderId: data.razorpayOrderId,
@@ -110,6 +111,7 @@ export const premiumService = {
   }): Promise<{ subscriptionId: string }> {
     const { data, error } = await supabase.functions.invoke("verify-premium-payment", { body: params });
     if (error) throw new Error(error.message);
+    if (!data || data.error || !data.subscriptionId) throw new Error(data?.error || "Payment verification pending.");
     return { subscriptionId: data.subscriptionId };
   },
 

@@ -28,9 +28,9 @@ export function SelectCard({
       aria-pressed={selected}
       onClick={onSelect}
       className={cn(
-        "relative flex min-w-0 items-start gap-3 rounded-xl border p-4 text-left transition active:scale-[.99] motion-reduce:transform-none",
+        "relative flex min-w-0 items-start gap-3 rounded-xl border p-4 text-left transition duration-150 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary",
         selected
-          ? "border-primary bg-primary-50/60 shadow-card ring-2 ring-primary/20"
+          ? "border-primary bg-primary-50/60 ring-1 ring-inset ring-primary"
           : "border-line bg-card hover:border-primary/30 hover:bg-surface",
       )}
     >
@@ -39,7 +39,7 @@ export function SelectCard({
       )}
       <span
         className={cn(
-          "flex h-10 w-10 items-center justify-center rounded-xl",
+          "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl",
           selected ? "bg-primary text-white" : "bg-primary-50 text-primary",
         )}
       >

@@ -27,7 +27,7 @@ export async function resolveApiCaller(req: Request): Promise<ApiCaller | null> 
     if (error || !data.user) return null;
     return { user: data.user, supabase: client };
   }
-  const supabase = createAuthedServerSupabase() as unknown as SupabaseClient;
+  const supabase = await createAuthedServerSupabase() as unknown as SupabaseClient;
   const {
     data: { user },
   } = await supabase.auth.getUser();

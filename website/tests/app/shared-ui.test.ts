@@ -1,3 +1,4 @@
+import { tagWithAttributes } from "../helpers/html";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -21,11 +22,11 @@ describe("shared search presentation preserves form contracts", () => {
       action: "/search", name: "q", defaultValue: "java & sql", placeholder: "Search courses, projects, jobs…",
       hiddenParams: { type: "learning", sort: "newest", empty: "", missing: undefined },
     }));
-    expect(html).toContain('action="/search" method="get" role="search"');
-    expect(html).toContain('type="search" name="q"');
+    expect(html).toMatch(tagWithAttributes("form", { action: "/search", method: "get", role: "search" }));
+    expect(html).toMatch(tagWithAttributes("input", { type: "search", name: "q" }));
     expect(html).toContain('value="java &amp; sql"');
-    expect(html).toContain('type="hidden" name="type" value="learning"');
-    expect(html).toContain('type="hidden" name="sort" value="newest"');
+    expect(html).toMatch(tagWithAttributes("input", { type: "hidden", name: "type", value: "learning" }));
+    expect(html).toMatch(tagWithAttributes("input", { type: "hidden", name: "sort", value: "newest" }));
     expect(html).not.toContain('name="empty"');
     expect(html).not.toContain('name="missing"');
     expect(html).toContain('aria-label="Search courses, projects, jobs…"');
@@ -35,13 +36,13 @@ describe("shared search presentation preserves form contracts", () => {
   it("preserves caller-selected destinations and parameter names", () => {
     const html = renderToStaticMarkup(createElement(SearchBar, { action: "/learning", name: "query", defaultValue: "loops" }));
     expect(html).toContain('action="/learning"');
-    expect(html).toContain('type="search" name="query"');
+    expect(html).toMatch(tagWithAttributes("input", { type: "search", name: "query" }));
     expect(html).toContain('value="loops"');
   });
 
   it.each(["header", "page"] as const)("keeps the %s global search combobox and GET fallback", variant => {
     const html = renderToStaticMarkup(createElement(GlobalSearchField, { variant, defaultValue: "java" }));
-    expect(html).toContain('action="/search" method="get"');
+    expect(html).toMatch(tagWithAttributes("form", { action: "/search", method: "get" }));
     expect(html).toContain('name="q"');
     expect(html).toContain('role="combobox"');
     expect(html).toContain('aria-label="Search CampusEduX…"');

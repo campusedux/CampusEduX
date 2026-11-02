@@ -43,7 +43,7 @@ export interface AccountUser {
  * making its own round-trip to the Supabase Auth server.
  */
 export const getAuthUser = requestCache(async () => {
-  const supabase = createAuthedServerSupabase();
+  const supabase = await createAuthedServerSupabase();
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -62,7 +62,7 @@ export const getAccountUser = requestCache(async (): Promise<AccountUser | null>
   const user = await getAuthUser();
   if (!user) return null;
 
-  const supabase = createAuthedServerSupabase();
+  const supabase = await createAuthedServerSupabase();
   const { data: profile, error } = await supabase
     .from("profiles")
     .select(
@@ -71,6 +71,9 @@ export const getAccountUser = requestCache(async (): Promise<AccountUser | null>
     .eq("id", user.id)
     .maybeSingle();
   if (error) throw new Error("Account profile is unavailable. Please retry.");
+  // The profile mirror can remain true after expiry. Only the database's
+  // read-time entitlement check may populate this request's premium state.
+  const entitlement = await supabase.rpc("current_user_is_premium");
 
   return {
     id: user.id,
@@ -81,7 +84,7 @@ export const getAccountUser = requestCache(async (): Promise<AccountUser | null>
     course: profile?.course ?? null,
     branch: profile?.branch ?? null,
     year: profile?.year ?? null,
-    isPremium: profile?.is_premium ?? false,
+    isPremium: !entitlement.error && entitlement.data === true,
     referralCode: profile?.referral_code ?? null,
     linkedinUrl: profile?.linkedin_url ?? null,
     githubUrl: profile?.github_url ?? null,

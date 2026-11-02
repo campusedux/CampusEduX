@@ -126,8 +126,9 @@ export const walletService = {
     razorpayPaymentId: string;
     razorpaySignature: string;
   }): Promise<void> {
-    const { error } = await supabase.functions.invoke("verify-wallet-topup-payment", { body: params });
+    const { data, error } = await supabase.functions.invoke("verify-wallet-topup-payment", { body: params });
     if (error) throw new Error(error.message);
+    if (!data || data.error || data.ok !== true) throw new Error(data?.error || "Payment verification pending.");
   },
 
   /**

@@ -40,7 +40,7 @@ const lesson: LearningTopicPage = {
   prev: { slug: "intro", title: "Introduction" }, next: { slug: "classes", title: "Classes" },
 };
 async function render() {
-  return renderToStaticMarkup(await TopicPage({ params: { gridSlug: "java", topicSlug: "loops" } }));
+  return renderToStaticMarkup(await TopicPage({ params: Promise.resolve({ gridSlug: "java", topicSlug: "loops" }) }));
 }
 
 beforeEach(() => {

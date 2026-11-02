@@ -29,7 +29,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(new URL("/login?error=oauth", request.url));
   }
 
-  const supabase = createAuthedServerSupabase();
+  const supabase = await createAuthedServerSupabase();
   const { data, error } = await supabase.auth.exchangeCodeForSession(code);
 
   if (error) {

@@ -1,3 +1,5 @@
+import { CustomProjectReadError } from "@/lib/customProjectReads";
+import { LoadError } from "../_builder/LoadError";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { CheckCircle2, Lock, ShieldCheck } from "lucide-react";
@@ -5,8 +7,8 @@ import { requireUser } from "@/lib/auth";
 import { formatINR } from "@/lib/format";
 import { type Platform, type ProjectLevel, type ProjectType } from "@/lib/customProjects";
 import { loadDraftWithEstimate } from "@/lib/customProjects.server";
-import StepBar from "../_builder/StepBar";
-import { ConfigSummary } from "../_builder/ConfigSummary";
+import FlowLayout from "../_builder/FlowLayout";
+import { SelectionSummary } from "../_builder/SelectionSummary";
 import CustomProjectCheckout from "./CustomProjectCheckout";
 
 export const metadata: Metadata = {
@@ -22,22 +24,29 @@ const TRUST_SIGNALS = [
 
 export default async function Page() {
   const user = await requireUser();
-  const { draft, estimate } = await loadDraftWithEstimate(user.id);
+  let result: Awaited<ReturnType<typeof loadDraftWithEstimate>>;
+  try {
+    result = await loadDraftWithEstimate(user.id);
+  } catch (error) {
+    if (!(error instanceof CustomProjectReadError)) throw error;
+    return <FlowLayout current={3}><LoadError kind={error.kind} /></FlowLayout>;
+  }
+  const { draft, estimate } = result;
 
   const included = estimate.selectedFeatures.filter((f) => f.isIncluded || f.price === 0 || draft.aiRecommendedFeatureIds.includes(f.id));
   const extra = estimate.selectedFeatures.filter((f) => !f.isIncluded && f.price > 0 && !draft.aiRecommendedFeatureIds.includes(f.id));
 
   return (
-    <div className="container-prose py-10 sm:py-12">
-      <StepBar current={3} />
+    <FlowLayout current={3}>
+      <div className="mx-auto max-w-[720px]">
 
       <p className="eyebrow">Step 4 · Payment</p>
-      <h1 className="mt-2 text-[1.6rem] font-bold tracking-tight text-ink sm:text-3xl">Complete your project request</h1>
+      <h1 className="mt-1 text-[25px] font-semibold leading-tight text-ink">Complete your project request</h1>
       <p className="mt-2 text-sm text-ink-muted sm:text-[15px]">
         Review your project details, then pay the token to submit your request.
       </p>
 
-      <div className="mt-8">
+      <div className="mt-5">
         {!estimate.ready ? (
           <div className="empty-state">
             Your request isn&apos;t complete yet.{" "}
@@ -47,41 +56,12 @@ export default async function Page() {
             .
           </div>
         ) : (
-          <div className="space-y-6">
+          <div className="space-y-4">
             {/* Same summary card as Features & Estimate, so this reads as the same project */}
-            <ConfigSummary
-              eyebrow="Payment summary"
-              projectType={draft.projectType as ProjectType}
-              projectLevel={draft.projectLevel as ProjectLevel}
-              platform={draft.platform as Platform}
-              title={draft.title}
-            />
+            <SelectionSummary draft={draft} estimate={estimate} review />
 
-            <section className="rounded-2xl border border-line bg-card p-5 shadow-card sm:p-6">
-              <p className="text-xs font-semibold uppercase tracking-wide text-ink-faint">Selected features</p>
-              <p className="mt-1.5 text-sm text-ink">
-                {included.length} included feature{included.length === 1 ? "" : "s"}
-                {extra.length > 0 && (
-                  <>
-                    {" "}
-                    · {extra.length} extra feature{extra.length === 1 ? "" : "s"}
-                  </>
-                )}
-              </p>
-              {extra.length > 0 && (
-                <ul className="mt-3 space-y-1.5 border-t border-line pt-3">
-                  {extra.map((f) => (
-                    <li key={f.id} className="flex items-center justify-between text-sm">
-                      <span className="text-ink-muted">{f.name}</span>
-                      <span className="font-medium text-ink">+{formatINR(f.price)}</span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </section>
-
-            {/* Secure payment — the visual focus of this page */}
-            <section className="rounded-2xl border border-primary/20 bg-primary-50/60 p-5 shadow-card sm:p-6">
+            <section className="rounded-xl border border-line bg-card p-4 shadow-sm">
+            <div className="mt-4 border-t border-line pt-4">
               <div className="flex items-center gap-2">
                 <Lock className="h-4 w-4 text-primary" aria-hidden />
                 <p className="text-sm font-bold text-primary">Secure payment</p>
@@ -94,17 +74,19 @@ export default async function Page() {
 
               <div className="mt-4">
                 <p className="text-xs font-medium text-ink-muted">Token due now</p>
-                <p className="mt-1 text-4xl font-bold text-ink">{formatINR(estimate.tokenAmount)}</p>
+                <p className="mt-1 text-[28px] font-semibold text-ink">{formatINR(estimate.tokenAmount)}</p>
               </div>
 
-              <div className="mt-5">
+              </div>
+            </section>
+
+              <div>
                 <CustomProjectCheckout
                   draft={draft}
                   featureIds={estimate.selectedFeatures.map((f) => f.id)}
                   tokenAmount={estimate.tokenAmount}
                 />
               </div>
-            </section>
 
             <ul className="space-y-2">
               {TRUST_SIGNALS.map((t) => (
@@ -133,6 +115,7 @@ export default async function Page() {
           </div>
         )}
       </div>
-    </div>
+      </div>
+    </FlowLayout>
   );
 }

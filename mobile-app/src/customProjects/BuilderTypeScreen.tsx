@@ -93,7 +93,7 @@ export function BuilderTypeScreen() {
                   <>
                     <Text className="text-gray-900 font-bold">{from !== null ? `Starting from ${rupees(from)}` : "Pricing unavailable"}</Text>
                     <Text className="text-gray-400 mx-2">·</Text>
-                    <Text className="text-gray-600">Token {rupees(tokenForType(t.id))} to start</Text>
+                    <Text className="text-gray-600">Token {rupees(tokenForType(t.id, data?.pricing))} to start</Text>
                     <InfoTooltip label={TERMS.token.label} text={TERMS.token.text} />
                   </>
                 )}

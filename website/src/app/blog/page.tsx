@@ -4,11 +4,9 @@ import { Newspaper, Rss } from "lucide-react";
 import {
   getBlogPage,
   getBlogCategories,
-  getLatestPosts,
   BLOG_PAGE_SIZE,
   FEATURED_COUNT,
 } from "@/lib/blog";
-import type { BlogPostCard } from "@/lib/blog";
 import { BlogCard } from "@/components/blog/BlogCard";
 import { EmptyState, Pagination, PageHeader } from "@/components/ui";
 import { cn } from "@/lib/cn";
@@ -17,19 +15,19 @@ import { absoluteUrl, listingCanonical, breadcrumbJsonLd, DEFAULT_OG_IMAGE } fro
 import { parsePage } from "@/lib/marketplace";
 import { BRAND } from "@/lib/brand";
 
-// Blog mutations invalidate the `blog` tag on demand (admin-panel blog actions),
-// so the timer is only the fallback for out-of-band writes.
-export const revalidate = 1800;
+// Admin invalidation is best-effort; publication changes require a fresh render.
+export const revalidate = 0;
 
 const HERO_TITLE = "Insights, Ideas & Technology";
 const DESCRIPTION =
   "Practical, plain-English articles on artificial intelligence, technology, programming and careers — written by the CampusEduX team for students and developers.";
 
 export async function generateMetadata({
-  searchParams,
+  searchParams: searchParamsPromise,
 }: {
-  searchParams: SP;
+  searchParams: Promise<SP>;
 }): Promise<Metadata> {
+  const searchParams = await searchParamsPromise;
   const page = parsePage(searchParams.page);
   const q = searchParams.q?.trim() || undefined;
   const category = searchParams.category?.trim() || undefined;
@@ -66,7 +64,8 @@ const chipCls = (active: boolean) =>
       : "border-line bg-card text-ink-muted hover:border-primary/40 hover:text-ink",
   );
 
-export default async function BlogIndexPage({ searchParams }: { searchParams: SP }) {
+export default async function BlogIndexPage({ searchParams: searchParamsPromise }: { searchParams: Promise<SP> }) {
+  const searchParams = await searchParamsPromise;
   const page = parsePage(searchParams.page);
   const q = searchParams.q?.trim() || undefined;
   const category = searchParams.category?.trim() || undefined;
@@ -74,20 +73,18 @@ export default async function BlogIndexPage({ searchParams }: { searchParams: SP
   const isFiltered = Boolean(q || category || tag);
   const showFeatured = page === 1 && !isFiltered;
 
-  const [{ posts, total, missing }, categories, featured] = await Promise.all([
+  const [{ posts, total, missing }, categories] = await Promise.all([
     getBlogPage({ page, q, category, tag }),
     getBlogCategories(),
-    // Featured = the newest published posts, up to FEATURED_COUNT (6). It is NOT
-    // the `is_featured` flag and never a single hero post — every other
-    // published post still appears in "Latest articles" / on later pages.
-    showFeatured ? getLatestPosts(FEATURED_COUNT) : Promise.resolve<BlogPostCard[]>([]),
   ]);
+  // Featured uses the same ordering as page 1; reuse those cards instead of
+  // issuing another read for its leading six rows.
+  const featured = showFeatured ? posts.slice(0, FEATURED_COUNT) : [];
 
   const totalPages = Math.max(1, Math.ceil(total / BLOG_PAGE_SIZE));
   const activeCategory = categories.find((c) => c.slug === category);
 
-  // `getLatestPosts` and `getBlogPage` share one ordering, so `featured` is the
-  // leading slice of page 1 — drop just those ids and keep every other post.
+  // Drop just the featured ids and keep every other post.
   const featuredIds = new Set(featured.map((p) => p.id));
   const latest = showFeatured ? posts.filter((p) => !featuredIds.has(p.id)) : posts;
 

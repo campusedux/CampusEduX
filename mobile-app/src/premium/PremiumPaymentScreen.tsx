@@ -40,6 +40,8 @@ export function PremiumPaymentScreen() {
       navigation.dispatch(
         CommonActions.reset({ index: 0, routes: [{ name: "PremiumSuccess", params: { subscriptionId: result.subscriptionId } }] })
       );
+    } else if (result.status === "pending") {
+      notify("Verification pending", result.message);
     } else if (result.status === "failed") {
       notify("Payment Failed", result.message);
     }

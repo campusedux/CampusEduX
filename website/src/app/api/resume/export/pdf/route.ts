@@ -14,7 +14,7 @@ import { slugifyFileName } from "@/lib/resumeBuilder/formatting";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const querySchema = z.object({ resumeId: z.string().uuid() });
+const querySchema = z.object({ resumeId: z.guid() });
 
 export async function GET(req: Request) {
   const url = new URL(req.url);
@@ -24,7 +24,7 @@ export async function GET(req: Request) {
   const result = await loadOwnResumeForExport(parsed.data.resumeId);
   if ("error" in result) return NextResponse.json({ error: result.error }, { status: result.status });
 
-  const limited = limitResponse(await rlHit(createAuthedServerSupabase(), "resume-export", 10, 600), { message: "Too many exports. Please retry shortly." });
+  const limited = limitResponse(await rlHit(await createAuthedServerSupabase(), "resume-export", 10, 600), { message: "Too many exports. Please retry shortly." });
   if (limited) return limited;
 
   const buffer = await renderResumePdfBuffer(result.resume, result.accentColor);

@@ -1,3 +1,4 @@
+set statement_timeout = 0;
 -- mobile-app/supabase/migrations/0151_dbms_sql_content_rewrite_batch01.sql
 -- CANONICAL PAIRED CONTENT MIGRATION
 -- BODY

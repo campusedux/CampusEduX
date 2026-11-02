@@ -16,7 +16,7 @@ export const dynamic = "force-dynamic";
 const PRIVATE = { "Cache-Control": "private, no-store" } as const;
 
 export async function GET() {
-  const supabase = createAuthedServerSupabase();
+  const supabase = await createAuthedServerSupabase();
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -32,6 +32,7 @@ export async function GET() {
     .maybeSingle();
 
   if (error) return NextResponse.json({ error: "Profile is unavailable. Please retry." }, { status: 503, headers: PRIVATE });
+  const entitlement = await supabase.rpc("current_user_is_premium");
 
   return NextResponse.json(
     {
@@ -40,7 +41,7 @@ export async function GET() {
         email: p?.email ?? user.email ?? "",
         fullName: p?.full_name ?? "",
         avatarUrl: p?.avatar_url ?? null,
-        isPremium: p?.is_premium ?? false,
+        isPremium: !entitlement.error && entitlement.data === true,
       },
     },
     { headers: PRIVATE },

@@ -32,7 +32,7 @@ function Bookmarks(){const ids=useLearningBookmarks();return <output id="bookmar
 // Exercise the real lesson route's JSX and client islands with mocked data access.
 function LessonFixture() {
  const [content,setContent]=useState<React.ReactNode>(null);
- useEffect(()=>{let live=true;LessonPage({params:{gridSlug:'java',topicSlug:'loops'}}).then(node=>{if(live)setContent(node)});return()=>{live=false}},[]);
+ useEffect(()=>{let live=true;LessonPage({params:Promise.resolve({gridSlug:'java',topicSlug:'loops'})}).then(node=>{if(live)setContent(node)});return()=>{live=false}},[]);
  return <><Header/><main id="main-content">{content}</main><div className="h-[calc(4rem+env(safe-area-inset-bottom))] md:hidden" aria-hidden/><BottomNav/></>;
 }
 function SharedUiFixture() {
@@ -40,12 +40,12 @@ function SharedUiFixture() {
 }
 function DiscoveryFixture({home}:{home:boolean}) {
  const [content,setContent]=useState<React.ReactNode>(null);
- useEffect(()=>{let live=true;(home?getLearningGrids().then(courses=><HomeHero courses={courses} stats={[{value:courses.length,label:'courses'},{value:courses.reduce((n,c)=>n+c.topic_count,0),label:'lessons'}]}/>):LearningIndexPage({searchParams:{}})).then(node=>{if(live)setContent(node)});return()=>{live=false}},[home]);
+ useEffect(()=>{let live=true;(home?getLearningGrids().then(courses=><HomeHero courses={courses} stats={[{value:courses.length,label:'courses'},{value:courses.reduce((n,c)=>n+c.topic_count,0),label:'lessons'}]}/>):LearningIndexPage({searchParams:Promise.resolve({})})).then(node=>{if(live)setContent(node)});return()=>{live=false}},[home]);
  return <><Header/><main id="main-content">{content}</main><div className="h-[calc(4rem+env(safe-area-inset-bottom))] md:hidden" aria-hidden/><BottomNav/></>;
 }
 function CourseFixture() {
  const [content,setContent]=useState<React.ReactNode>(null);
- useEffect(()=>{let live=true;CourseDetailPage({params:{gridSlug:'java'}}).then(node=>{if(live)setContent(node)});return()=>{live=false}},[]);
+ useEffect(()=>{let live=true;CourseDetailPage({params:Promise.resolve({gridSlug:'java'})}).then(node=>{if(live)setContent(node)});return()=>{live=false}},[]);
  return <><Header/><main id="main-content">{content}</main><div className="h-[calc(4rem+env(safe-area-inset-bottom))] md:hidden" aria-hidden/><BottomNav/></>;
 }
 function Draft(){const d=useDraft();const [status,setStatus]=useState('');return <><output id="draft">{d.loaded?'ready':'loading'}</output><button onClick={async()=>{d.patch({title:'Latest draft'});try{await d.saveNow();setStatus('saved')}catch{setStatus('failed')}}}>Save latest</button><button onClick={()=>d.patch({title:'Pending draft'})}>Edit draft</button><button onClick={async()=>{await d.clearDraft();setStatus('cleared')}}>Clear draft</button><output id="save-status">{status}</output></>}

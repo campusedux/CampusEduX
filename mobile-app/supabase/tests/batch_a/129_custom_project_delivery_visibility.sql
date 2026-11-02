@@ -15,12 +15,12 @@ declare
 begin
   insert into admin_users(id,email,role,status) values (adm,'adm129@x.io','super_admin','active');
 
-  insert into custom_project_requests(user_id,title,project_type,project_level,platform,token_payment_status,status)
-    values (a,'staged','personal','standard','web','paid','ready') returning id into r_staged;
-  insert into custom_project_requests(user_id,title,project_type,project_level,platform,token_payment_status)
-    values (a,'delivered','personal','standard','web','paid') returning id into r_delivered;
-  insert into custom_project_requests(user_id,title,project_type,project_level,platform,token_payment_status)
-    values (a,'moved back','personal','standard','web','paid') returning id into r_moved_back;
+  insert into custom_project_requests(user_id,title,project_type,project_level,platform,token_payment_status,status,service_scope,assessment_use,integrity_acknowledged_at)
+    values (a,'staged','personal','standard','web','paid','ready','custom_software','no',now()) returning id into r_staged;
+  insert into custom_project_requests(user_id,title,project_type,project_level,platform,token_payment_status,service_scope,assessment_use,integrity_acknowledged_at)
+    values (a,'delivered','personal','standard','web','paid','custom_software','no',now()) returning id into r_delivered;
+  insert into custom_project_requests(user_id,title,project_type,project_level,platform,token_payment_status,service_scope,assessment_use,integrity_acknowledged_at)
+    values (a,'moved back','personal','standard','web','paid','custom_software','no',now()) returning id into r_moved_back;
 
   insert into custom_project_deliveries(request_id, demo_url) values (r_staged, 'https://x.io/s') returning id into d_staged;
   insert into custom_project_deliveries(request_id, demo_url) values (r_delivered, 'https://x.io/d') returning id into d_delivered;

@@ -18,10 +18,11 @@ import { PracticeProblemGrid } from "./PracticeProblemGrid";
 export const revalidate = 300;
 
 export async function generateMetadata({
-  searchParams,
+  searchParams: searchParamsPromise,
 }: {
-  searchParams: SP;
+  searchParams: Promise<SP>;
 }): Promise<Metadata> {
+  const searchParams = await searchParamsPromise;
   const query = parsePracticeQuery(searchParams);
   const { items } = await getPracticeProblemsPage(query);
   const filtered = Boolean(
@@ -44,7 +45,8 @@ export async function generateMetadata({
 
 type SP = Record<string, string | string[] | undefined>;
 
-export default async function PracticeProblemsPage({ searchParams }: { searchParams: SP }) {
+export default async function PracticeProblemsPage({ searchParams: searchParamsPromise }: { searchParams: Promise<SP> }) {
+  const searchParams = await searchParamsPromise;
   const query = parsePracticeQuery(searchParams);
   const [{ total, items }, categories] = await Promise.all([
     getPracticeProblemsPage(query),

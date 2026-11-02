@@ -62,6 +62,7 @@ export default function PremiumSubscribeButton({
       if (order?.error) throw new Error(order.error);
 
       const Razorpay = await loadRazorpayScript();
+      let verificationStarted = false;
       const checkout = new Razorpay({
         key: order.razorpayKeyId,
         amount: order.amount,
@@ -70,6 +71,7 @@ export default function PremiumSubscribeButton({
         name: "CampusEduX Premium",
         description: `${order.planName} — ${order.billingCycle}`,
         handler: async function verifyHandler(response: any) {
+          verificationStarted = true;
           setStatus("processing");
           setError(null);
           setRetryVerification(null);
@@ -98,8 +100,11 @@ export default function PremiumSubscribeButton({
             router.refresh();
           }
         },
-        modal: { ondismiss: () => setStatus((current) => current === "pending" ? current : "idle") },
+        modal: { ondismiss: () => { if (!verificationStarted) setStatus((current) => current === "pending" ? current : "idle"); } },
         theme: { color: "#4F39F6" },
+      });
+      checkout.on("payment.failed", (response: { error?: { description?: string } }) => {
+        if (!verificationStarted) setError(response.error?.description ?? "Payment failed. Retry in checkout or close it to try again.");
       });
       checkout.open();
     } catch (err: any) {
@@ -131,7 +136,7 @@ export default function PremiumSubscribeButton({
       >
         {status === "processing" ? "Opening checkout…" : `Subscribe to ${planName}`}
       </button>
-      {retryVerification && <button type="button" className="btn-secondary mt-2" onClick={retryVerification}>Retry verification</button>}
+      {retryVerification && <button type="button" className="btn-secondary mt-2" disabled={status === "processing"} onClick={retryVerification}>Retry verification</button>}
       {error && <p className="mt-2 text-xs text-danger">{error}</p>}
     </div>
   );

@@ -8,7 +8,8 @@ export const alt = "CampusEduX lesson";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
-export default async function Image({ params }: { params: { gridSlug: string; topicSlug: string } }) {
+export default async function Image({ params: paramsPromise }: { params: Promise<{ gridSlug: string; topicSlug: string }> }) {
+  const params = await paramsPromise;
   const page = await getLearningTopicPage(params.gridSlug, params.topicSlug).catch(() => null);
   if (!page) return renderOgCard({ title: "Learning", eyebrow: "CampusEduX" });
   return renderOgCard({ title: page.topic.title, eyebrow: page.grid.name, footer: page.section.name });

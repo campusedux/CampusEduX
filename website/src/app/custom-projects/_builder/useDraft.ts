@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "@/components/ui/Toast";
 import { createBrowserSupabase } from "@/lib/supabase/browser";
 import { type BuilderDraft, emptyDraft, normalizeDraft } from "@/lib/customProjects";
+import { CustomProjectReadError, customProjectReadError, readCustomProject } from "@/lib/customProjectReads";
 
 /**
  * Wizard draft state backed by `custom_project_drafts` (one row per user, RLS
@@ -20,7 +21,12 @@ export function useDraft() {
   const latestDraft = useRef(draft);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const writes = useRef<Promise<void>>(Promise.resolve());
-  const [loadError, setLoadError] = useState<Error | null>(null);
+  const [loadError, setLoadError] = useState<CustomProjectReadError | null>(null);
+  const [attempt, setAttempt] = useState(0);
+  const retryLoad = useCallback(() => {
+    setLoadError(null);
+    setAttempt((value) => value + 1);
+  }, []);
 
   // initial load
   useEffect(() => {
@@ -29,32 +35,30 @@ export function useDraft() {
       const supabase = createBrowserSupabase();
       const {
         data: { user },
+        error: authError,
       } = await supabase.auth.getUser();
       if (cancelled) return;
-      if (!user) {
-        setLoaded(true);
-        return;
-      }
+      if (authError) throw customProjectReadError(authError);
+      if (!user) throw new CustomProjectReadError("unauthorized");
       setUserId(user.id);
-      const { data, error } = await supabase
+      const data = await readCustomProject((signal) => supabase
         .from("custom_project_drafts")
         .select("payload")
         .eq("user_id", user.id)
-        .maybeSingle();
+        .abortSignal(signal).maybeSingle());
       if (cancelled) return;
-      if (error) throw new Error(error.message);
-      if (data?.payload) {
+      if (data?.payload && !dirtyRef.current) {
         latestDraft.current = normalizeDraft(data.payload);
         setDraft(latestDraft.current);
       }
       setLoaded(true);
     })().catch((err) => {
-      if (!cancelled) setLoadError(err instanceof Error ? err : new Error("Something went wrong. Please try again."));
+      if (!cancelled) setLoadError(customProjectReadError(err));
     });
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [attempt]);
 
   const persist = useCallback(
     (payload: BuilderDraft, uid: string) => {
@@ -100,10 +104,11 @@ export function useDraft() {
 
   /** Flush any pending change immediately — call before navigating to the next step. */
   const saveNow = useCallback(async () => {
-    if (!userId) return;
+    if (!loaded) throw loadError ?? new CustomProjectReadError("transient");
+    if (!userId) throw new CustomProjectReadError("unauthorized");
     if (timer.current) clearTimeout(timer.current);
     await persist(latestDraft.current, userId);
-  }, [userId, persist]);
+  }, [loaded, loadError, userId, persist]);
 
   const clearDraft = useCallback(async () => {
     if (!userId) return;
@@ -116,7 +121,5 @@ export function useDraft() {
     setDraft(latestDraft.current);
   }, [userId]);
 
-  if (loadError) throw loadError;
-
-  return { draft, patch, update, saveNow, clearDraft, loaded, userId, saving };
+  return { draft, patch, update, saveNow, clearDraft, loaded, userId, saving, loadError, retryLoad };
 }

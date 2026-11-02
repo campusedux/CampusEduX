@@ -337,7 +337,11 @@ describe("/sitemap.xml index + /sitemaps/<section>.xml routes", () => {
   it("every sitemap route is ISR with revalidate = 3600", async () => {
     const r = await loadSitemapRoutes(populatedSupabase());
     expect(r.index.revalidate).toBe(3600);
-    for (const name of SITEMAP_SECTION_NAMES) expect(r.sections[name].revalidate).toBe(3600);
+    expect(r.index.dynamic).toBe("force-static");
+    for (const name of SITEMAP_SECTION_NAMES) {
+      expect(r.sections[name].revalidate).toBe(3600);
+      expect(r.sections[name].dynamic).toBe("force-static");
+    }
   });
 
   it("the index links all seven child sitemaps with lastmod = newest child lastmod", async () => {

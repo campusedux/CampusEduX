@@ -27,7 +27,7 @@ import { getCachedHomeData } from "@/lib/cache";
 import { IMAGE_BLUR_DATA_URL } from "@/lib/image";
 import { DEFAULT_OG_IMAGE } from "@/lib/seo";
 
-export const revalidate = 300; // 5-min ISR — catalog + CMS change via the admin panel, not per request
+export const revalidate = 0; // Publication changes must be checked on each render.
 
 interface HomeBanner {
   id: string;
@@ -38,7 +38,7 @@ interface HomeBanner {
 }
 
 // Per-request memo (shared by generateMetadata + the page) over the
-// cross-request cached rows in lib/cache.ts.
+// fresh public rows in lib/cache.ts.
 const getHomeData = cache(async () => {
   const raw = await getCachedHomeData();
   const activeBanner = raw.banners.find((b) => inWindow(b.starts_at, b.ends_at)) ?? null;
@@ -81,7 +81,7 @@ async function HomeContent() {
   const [{ trending, jobs, testimonials, faqs, banner }, latestPosts, grids, practiceCategories, interviewCategories] =
     await Promise.all([
       getHomeData(),
-      // Same cross-request-cached helper `/blog` uses for its Featured strip.
+      // Public cards only; article bodies stay out of the home payload.
       getLatestPosts(3),
       getLearningGrids(),
       getPracticeCategories(),
@@ -112,6 +112,9 @@ async function HomeContent() {
       <div className="container-page">
         <ContinueLearningRow courses={grids.map(({ slug, name, topic_count }) => ({ slug, name, topic_count }))} />
       </div>
+      <Reveal>
+        <ModuleGrid />
+      </Reveal>
       <PopularCourses courses={grids} />
 
       {/* Admin `banners` row (placement 'home') — shown as a promo card under the hero. */}
@@ -147,11 +150,6 @@ async function HomeContent() {
 
       {/* 3 · Custom Project promo banner */}
       <CustomProjectPromo />
-
-      {/* 4 · What you get */}
-      <Reveal>
-        <ModuleGrid />
-      </Reveal>
 
       {/* Keep the personalized dashboard; the resume card is already above. */}
       <HomePersonal

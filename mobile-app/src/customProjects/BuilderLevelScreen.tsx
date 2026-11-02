@@ -129,7 +129,7 @@ export function BuilderLevelScreen() {
           <View className="flex-row items-center rounded-xl px-3 py-3" style={{ backgroundColor: "#EEF0FF" }}>
             <Ionicons name="information-circle" size={18} color="#4F39F6" />
             <Text className="text-primary text-sm ml-2 flex-1">
-              Your token stays {rupees(tokenForType(projectType))} for both levels.
+              Your token stays {rupees(tokenForType(projectType, pricing?.pricing))} for both levels.
             </Text>
           </View>
         </>

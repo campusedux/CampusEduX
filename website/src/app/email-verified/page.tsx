@@ -27,10 +27,11 @@ function Shell({ children }: { children: React.ReactNode }) {
 }
 
 export default async function EmailVerifiedPage({
-  searchParams,
+  searchParams: searchParamsPromise,
 }: {
-  searchParams: { status?: string };
+  searchParams: Promise<{ status?: string }>;
 }) {
+  const searchParams = await searchParamsPromise;
   const status = normalizeStatus(searchParams.status);
   // The "Continue" CTA should land signed-in users on their account and
   // everyone else on sign-in — this page never forces a redirect itself, so

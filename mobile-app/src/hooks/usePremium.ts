@@ -1,3 +1,4 @@
+import { PaymentPendingError, checkoutWasCancelled, usePaymentVerification } from "./usePaymentVerification";
 import { userScopedKey } from "@/lib/queryClient";
 import { useCallback, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -28,6 +29,7 @@ export const useMembership = () => {
 };
 
 type SubscribeResult =
+  | { status: "pending"; message: string }
   | { status: "success"; subscriptionId: string }
   | { status: "failed"; message: string }
   | { status: "cancelled" };
@@ -37,52 +39,60 @@ export function useSubscribeToPlan() {
   const [isProcessing, setIsProcessing] = useState(false);
   const queryClient = useQueryClient();
   const user = useAuthStore((s) => s.user);
+  const verification = usePaymentVerification(user?.id);
   const updateUserFields = useAuthStore((s) => s.updateUserFields);
 
   const subscribe = useCallback(
     async (planId: string, billingCycle: BillingCycle): Promise<SubscribeResult> => {
       setIsProcessing(true);
       try {
-        const order = await premiumService.createOrder(planId, billingCycle);
+        return await verification.run<SubscribeResult>(async () => {
+          const order = await premiumService.createOrder(planId, billingCycle);
 
-        let checkoutResult;
-        try {
-          checkoutResult = await openRazorpayCheckout({
-            key: order.razorpayKeyId,
-            order_id: order.razorpayOrderId,
-            amount: order.amount,
-            currency: order.currency,
-            name: "CampusEduX Premium",
-            description: `${order.planName} (${order.billingCycle})`,
-            prefill: { name: user?.fullName, email: user?.email, contact: user?.mobileNumber },
-            theme: { color: "#4F39F6" },
+          let checkoutResult;
+          try {
+            checkoutResult = await openRazorpayCheckout({
+              key: order.razorpayKeyId,
+              order_id: order.razorpayOrderId,
+              amount: order.amount,
+              currency: order.currency,
+              name: "CampusEduX Premium",
+              description: `${order.planName} (${order.billingCycle})`,
+              prefill: { name: user?.fullName, email: user?.email, contact: user?.mobileNumber },
+              theme: { color: "#4F39F6" },
+            });
+          } catch (error) {
+            if (!checkoutWasCancelled(error)) throw error;
+            return { status: "cancelled" };
+          }
+
+          const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = checkoutResult;
+          if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
+            throw new Error("Razorpay returned an incomplete payment response.");
+          }
+
+          return verification.verify<SubscribeResult>(async () => {
+            const { subscriptionId } = await premiumService.verifyPayment({
+              orderId: order.orderId,
+              razorpayOrderId: razorpay_order_id,
+              razorpayPaymentId: razorpay_payment_id,
+              razorpaySignature: razorpay_signature,
+            });
+
+            updateUserFields({ isPremium: true });
+            queryClient.invalidateQueries({ queryKey: premiumQueryKeys.membership });
+            return { status: "success", subscriptionId };
           });
-        } catch {
-          return { status: "cancelled" };
-        }
-
-        const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = checkoutResult;
-        if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
-          throw new Error("Razorpay returned an incomplete payment response.");
-        }
-
-        const { subscriptionId } = await premiumService.verifyPayment({
-          orderId: order.orderId,
-          razorpayOrderId: razorpay_order_id,
-          razorpayPaymentId: razorpay_payment_id,
-          razorpaySignature: razorpay_signature,
         });
-
-        updateUserFields({ isPremium: true });
-        queryClient.invalidateQueries({ queryKey: premiumQueryKeys.membership });
-        return { status: "success", subscriptionId };
       } catch (error: any) {
+        if (error instanceof PaymentPendingError)
+          return { status: "pending", message: error.message };
         return { status: "failed", message: error.message ?? "Payment failed. Please try again." };
       } finally {
         setIsProcessing(false);
       }
     },
-    [queryClient, user, updateUserFields]
+    [queryClient, user, updateUserFields, verification],
   );
 
   return { subscribe, isProcessing };

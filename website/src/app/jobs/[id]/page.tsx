@@ -15,6 +15,7 @@ import { authoredDescription, fitDescription, cleanText } from "@/lib/metaDescri
 import { jobTitle } from "@/lib/seoTitles";
 import { BRAND } from "@/lib/brand";
 import { jobAvailability } from "@/lib/jobsActive";
+import { jobPostingGeography } from "@/lib/jobPostingGeography";
 import JobApplyPanel from "./JobApplyPanel";
 
 export const revalidate = 300;
@@ -42,7 +43,8 @@ export async function generateStaticParams() {
 
 const getJob = cache((id: string) => getCachedJobDetail(id));
 
-export async function generateMetadata({ params }: { params: { id: string } }): Promise<Metadata> {
+export async function generateMetadata({ params: paramsPromise }: { params: Promise<{ id: string }> }): Promise<Metadata> {
+  const params = await paramsPromise;
   const job = await getJob(params.id);
   if (!job) return { title: "Job not found", robots: { index: false, follow: false } };
   if (jobAvailability(job) !== "open") {
@@ -73,7 +75,8 @@ export async function generateMetadata({ params }: { params: { id: string } }): 
   };
 }
 
-export default async function JobDetailPage({ params }: { params: { id: string } }) {
+export default async function JobDetailPage({ params: paramsPromise }: { params: Promise<{ id: string }> }) {
+  const params = await paramsPromise;
   const job = await getJob(params.id);
   if (!job) notFound();
   const availability = jobAvailability(job);
@@ -112,24 +115,25 @@ export default async function JobDetailPage({ params }: { params: { id: string }
     ["Apply by", deadline ? new Date(deadline).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Kolkata" }) : null],
   ];
 
-  const jobJsonLd: Record<string, unknown> = {
+  const geography = jobPostingGeography(job);
+  // UI fallbacks are not employer/description facts. Withhold unsupported rich
+  // result claims without changing the visible page, metadata or breadcrumbs.
+  const hasRequiredFacts = job.title?.trim() && job.description?.trim()
+    && company.trim() && (job.company_name?.trim() || job.company?.name?.trim())
+    && job.posted_at && Number.isFinite(Date.parse(job.posted_at));
+  const jobJsonLd: Record<string, unknown> | null = geography && hasRequiredFacts ? {
     "@context": "https://schema.org",
     "@type": "JobPosting",
     title: job.title,
-    description: job.description || job.title,
+    description: job.description,
     identifier: jobPostingIdentifier(company, job.id),
     datePosted: job.posted_at,
     employmentType: job.job_type ? EMPLOYMENT_TYPE[job.job_type] : undefined,
     hiringOrganization: hiringOrganizationJsonLd({ name: company, logoUrl: logo, website: safeHref(job.company?.website) }),
-    jobLocation: { "@type": "Place", address: job.location || "India" },
-  };
-  if (deadline) jobJsonLd.validThrough = deadline;
-  // `jobs.work_mode` (migration 0114: Remote | Hybrid | On-site, nullable) is the
-  // only remote signal. Google also expects `applicantLocationRequirements` for
-  // a TELECOMMUTE posting, but no column records which countries may apply, so
-  // it is left out rather than guessed.
-  if (job.work_mode === "Remote") jobJsonLd.jobLocationType = "TELECOMMUTE";
-  if (job.salary_min_lpa && job.salary_max_lpa) {
+    ...geography,
+  } : null;
+  if (jobJsonLd && deadline) jobJsonLd.validThrough = deadline;
+  if (jobJsonLd && job.salary_min_lpa && job.salary_max_lpa) {
     jobJsonLd.baseSalary = {
       "@type": "MonetaryAmount",
       currency: "INR",
@@ -154,7 +158,7 @@ export default async function JobDetailPage({ params }: { params: { id: string }
 
   return (
     <div className="container-page pb-32 pt-6 sm:pt-8 md:pb-16">
-      <JsonLd data={jobJsonLd} />
+      {jobJsonLd && <JsonLd data={jobJsonLd} />}
       <JsonLd
         data={breadcrumbJsonLd([
           { name: "Jobs", path: "/jobs" },

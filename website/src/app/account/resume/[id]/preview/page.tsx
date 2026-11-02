@@ -13,9 +13,10 @@ import { ResumeSheetScaler } from "@/components/resumeBuilder/ResumeSheetScaler"
 
 export const metadata = { title: "Resume preview" };
 
-export default async function ResumePreviewPage({ params }: { params: { id: string } }) {
+export default async function ResumePreviewPage({ params: paramsPromise }: { params: Promise<{ id: string }> }) {
+  const params = await paramsPromise;
   const user = await requireUser();
-  const supabase = createAuthedServerSupabase();
+  const supabase = await createAuthedServerSupabase();
 
   const { data: row } = await supabase
     .from("resumes_builder")

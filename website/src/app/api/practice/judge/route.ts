@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { validationError } from "@/lib/validation";
 import { judgeRpcSecret, resolveApiCaller } from "@/lib/apiAuth";
 import { JUDGE_BUCKET, judgeMax, judgeWindowSeconds, limitResponse, rlHit } from "@/lib/rateLimitDb";
 import { resolveLanguage } from "@/lib/compiler/languages";
@@ -60,7 +61,7 @@ export async function POST(req: Request) {
   } catch {
     return NextResponse.json({ ok: false, error: "Malformed request." }, { status: 400 });
   }
-  const parsed = bodySchema.safeParse(json);
+  const parsed = bodySchema.safeParse(json, { error: validationError });
   if (!parsed.success) {
     return NextResponse.json(
       { ok: false, error: parsed.error.issues[0]?.message ?? "Check your input and try again." },

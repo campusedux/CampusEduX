@@ -117,7 +117,7 @@ export default async function ResumeBuilderPage() {
     );
   }
 
-  const supabase = createAuthedServerSupabase();
+  const supabase = await createAuthedServerSupabase();
   const publicSupabase = getPublicSupabase();
   const [{ data: rows }, { data: versionRows }, { data: downloadRows }, { data: downloads }, { data: templateRows }] =
     await Promise.all([

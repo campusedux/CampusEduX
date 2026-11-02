@@ -13,7 +13,8 @@ export const dynamic = "force-dynamic";
 
 type SP = { q?: string };
 
-export function generateMetadata({ searchParams }: { searchParams: SP }): Metadata {
+export async function generateMetadata({ searchParams: searchParamsPromise }: { searchParams: Promise<SP> }): Promise<Metadata> {
+  const searchParams = await searchParamsPromise;
   const term = sanitizeSearchTerm(searchParams.q);
   return {
     title: term ? `Search: ${term}` : "Search",
@@ -29,7 +30,8 @@ const BROWSE = [
   { label: "Blog", href: "/blog" },
 ];
 
-export default async function SearchPage({ searchParams }: { searchParams: SP }) {
+export default async function SearchPage({ searchParams: searchParamsPromise }: { searchParams: Promise<SP> }) {
+  const searchParams = await searchParamsPromise;
   const term = sanitizeSearchTerm(searchParams.q);
   const hasQuery = isSearchableTerm(term);
   const { groups, total } = hasQuery

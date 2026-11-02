@@ -1,6 +1,7 @@
 "use server";
 
 import { z } from "zod";
+import { validationError } from "@/lib/validation";
 import { getOptionalUser } from "@/lib/auth";
 import { createAuthedServerSupabase } from "@/lib/supabase/authed-server";
 import { getPublicSupabase } from "@/lib/supabase/server";
@@ -43,7 +44,7 @@ export async function toggleSaveJobAction(rawJobId: string): Promise<{ saved: bo
   const user = await getOptionalUser();
   if (!user) return { error: "Please sign in again to save this job." };
 
-  const supabase = createAuthedServerSupabase();
+  const supabase = await createAuthedServerSupabase();
 
   const { data: existing, error: readError } = await supabase
     .from("saved_jobs")
@@ -73,7 +74,7 @@ export async function toggleSaveJobAction(rawJobId: string): Promise<{ saved: bo
 const applySchema = z
   .object({
     jobId: jobIdSchema,
-    resumeId: z.string().uuid().optional(),
+    resumeId: z.guid().optional(),
     newResume: z
       .object({
         storagePath: z.string().trim().min(3).max(400),
@@ -94,7 +95,7 @@ export type ApplyToJobInput = z.infer<typeof applySchema>;
  * constraint means a repeat apply is a real error, surfaced as such.
  */
 export async function applyToJobAction(input: ApplyToJobInput): Promise<{ applicationId: string } | ActionError> {
-  const parsed = applySchema.safeParse(input);
+  const parsed = applySchema.safeParse(input, { error: validationError });
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "Invalid application." };
   }
@@ -105,7 +106,7 @@ export async function applyToJobAction(input: ApplyToJobInput): Promise<{ applic
 
   if (!(await jobExists(jobId, true))) return { error: "That job is no longer accepting applications." };
 
-  const supabase = createAuthedServerSupabase();
+  const supabase = await createAuthedServerSupabase();
 
   // 1. Resolve the resume_id to attach.
   let finalResumeId: string;

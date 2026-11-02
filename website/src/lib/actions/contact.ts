@@ -2,6 +2,7 @@
 
 import { headers } from "next/headers";
 import { z } from "zod";
+import { validationError } from "@/lib/validation";
 import { createAuthedServerSupabase } from "@/lib/supabase/authed-server";
 
 // The /contact form. All work happens in the DB function
@@ -23,16 +24,16 @@ const schema = z.object({
 export type ContactInput = z.infer<typeof schema>;
 
 export async function submitContactMessageAction(input: ContactInput): Promise<{ ok: true } | { error: string }> {
-  const parsed = schema.safeParse(input);
+  const parsed = schema.safeParse(input, { error: validationError });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Please check the form and try again." };
 
-  const h = headers();
+  const h = await headers();
   const forwarded = (h.get("x-forwarded-for") ?? "").split(",")[0].trim();
   const ip = forwarded || h.get("x-real-ip") || "";
   const clientKey = ip ? `ip:${ip}` : `ua:${(h.get("user-agent") ?? "unknown").slice(0, 100)}`;
 
   // Uses the signed-in session when present (records user_id), anon otherwise.
-  const supabase = createAuthedServerSupabase();
+  const supabase = await createAuthedServerSupabase();
 
   const { error } = await supabase.rpc("submit_contact_message", {
     p_name: parsed.data.name,

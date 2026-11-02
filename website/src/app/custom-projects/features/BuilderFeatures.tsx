@@ -1,11 +1,13 @@
 "use client";
 
+import { LoadError } from "../_builder/LoadError";
+
 import { toast } from "@/components/ui/Toast";
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowRight, FileText, HelpCircle, Image as ImageIcon, Info, Plus, Search, X } from "lucide-react";
+import { ArrowRight, FileText, Image as ImageIcon, Info, Plus, Search, X } from "lucide-react";
 import { createBrowserSupabase } from "@/lib/supabase/browser";
 import { formatINR } from "@/lib/format";
 import { Button, Modal } from "@/components/ui";
@@ -32,7 +34,7 @@ import {
 import { useDraft } from "../_builder/useDraft";
 import { resolveUploadContentType, withContentType } from "@/lib/uploads";
 import { BottomBar } from "../_builder/BottomBar";
-import { ConfigSummary } from "../_builder/ConfigSummary";
+import { SelectionSummary } from "../_builder/SelectionSummary";
 import { CollapsibleCategory } from "../_builder/CollapsibleCategory";
 import { Dropzone } from "../_builder/Dropzone";
 import { FeatureCard } from "../_builder/FeatureCard";
@@ -52,7 +54,7 @@ export default function BuilderFeatures({
   catalogAvailable: boolean;
 }) {
   const router = useRouter();
-  const { draft, update, patch, saveNow, loaded, userId } = useDraft();
+  const { draft, update, patch, saveNow, loaded, userId, loadError, retryLoad } = useDraft();
   const [going, setGoing] = useState(false);
   const [imageBusy, setImageBusy] = useState(false);
   const [fileBusy, setFileBusy] = useState(false);
@@ -60,6 +62,7 @@ export default function BuilderFeatures({
   const [notice, setNotice] = useState<string | null>(null);
   const [browseOpen, setBrowseOpen] = useState(false);
   const [browseQuery, setBrowseQuery] = useState("");
+  const [expandExtras, setExpandExtras] = useState(false);
 
   const eligible = useMemo(
     () => featuresForTier(features, draft.projectType, draft.projectLevel),
@@ -105,21 +108,18 @@ export default function BuilderFeatures({
   const groupedBrowse = useMemo(() => groupByCategory(browseResults), [browseResults]);
 
   const selectedSet = useMemo(() => new Set(draft.featureIds), [draft.featureIds]);
-  const extraSelectedCount = extraBucket.filter((f) => selectedSet.has(f.id)).length;
 
   const estimate = useMemo(
     () => computeEstimate(draft, pricing, platforms, features),
     [draft, pricing, platforms, features],
   );
 
-  const filesUploaded = draft.referenceFiles.length + (draft.projectImagePath ? 1 : 0);
 
   // One-time default selection: every included feature, the first time this
   // tier is seen. Re-visits never stomp a user's explicit toggles.
   useEffect(() => {
     if (
       !loaded ||
-      draft.projectType === "academic" ||
       draft.featuresSeeded ||
       includedBucket.length === 0
     )
@@ -131,42 +131,8 @@ export default function BuilderFeatures({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loaded, draft.featuresSeeded, includedBucket]);
 
+  if (loadError) return <LoadError kind={loadError.kind} onRetry={retryLoad} />;
   if (!loaded) return <p className="text-sm text-ink-muted">Loading your draft…</p>;
-
-  if (draft.projectType === "academic")
-    return (
-      <section className="card p-4 md:p-5">
-        <h2 className="text-lg font-semibold">Project mentoring scope</h2>
-        <p className="mt-3 text-sm text-ink-muted">
-          We can review code you wrote, help debug it, discuss architecture, and
-          give feedback. You write any assessed code, report, slides, and
-          answers yourself. Implementation packages and assessment deliverables
-          are unavailable.
-        </p>
-        <p className="mt-3 text-sm text-ink-muted">
-          Your objective from the previous step tells the mentor what you want
-          to learn. You can share your own draft or code as a reference.
-        </p>
-        <Button
-          className="mt-5"
-          onClick={handleContinue}
-          loading={going}
-        >
-          Review mentoring estimate
-        </Button>
-      </section>
-    );
-
-  if (!catalogAvailable || features.length === 0)
-    return (
-      <div className="empty-state">
-        The feature catalog isn&apos;t available right now.{" "}
-        <Link href="/custom-projects/estimate" className="text-ink underline">
-          Skip to the estimate
-        </Link>
-        .
-      </div>
-    );
 
   if (!draft.projectType || !draft.projectLevel) {
     return (
@@ -299,15 +265,22 @@ export default function BuilderFeatures({
   }
 
   return (
-    <div className="grid gap-4 md:gap-5 lg:grid-cols-[1fr_340px] lg:items-start">
-      <div className="min-w-0 space-y-8">
-        <ConfigSummary
-          projectType={draft.projectType as ProjectType}
-          projectLevel={draft.projectLevel as ProjectLevel}
-          platform={(draft.platform ?? "web") as Platform}
-          title={draft.title}
-          overview={draft.aiOverview || draft.objective.slice(0, 200)}
-        />
+    <div className="grid gap-4 md:gap-5 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-start">
+      <div className="min-w-0 space-y-4">
+        {!catalogAvailable && (
+          <p className="rounded-xl border border-line bg-surface p-4 text-sm text-ink-muted">
+            The feature catalog isn&apos;t available right now. You can still upload references and continue to the estimate.
+          </p>
+        )}
+        {draft.projectType === "academic" && (
+          <section className="card p-4 md:p-5">
+            <h2 className="text-lg font-semibold">Project mentoring scope</h2>
+            <p className="mt-3 text-sm text-ink-muted">
+              For assessed work, we can review code you wrote, help debug it, discuss architecture, and give feedback. You write any assessed code, report, slides, and answers yourself. Confirm how this project will be used at checkout.
+            </p>
+          </section>
+        )}
+
 
         {notice && (
           <div className="flex items-start gap-2 rounded-xl border border-primary/20 bg-primary-50/60 px-4 py-3 text-sm text-ink">
@@ -320,7 +293,7 @@ export default function BuilderFeatures({
         <section>
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <h2 className="text-lg font-bold text-ink">Included Features</h2>
+              <h2 className="text-base font-semibold text-ink">Included Features</h2>
               <p className="mt-1 text-sm text-ink-muted">
                 These are already part of your project based on what you told us. You can turn any of them off.
               </p>
@@ -336,7 +309,7 @@ export default function BuilderFeatures({
           ) : (
             <div className="mt-4 space-y-3">
               {groupedIncluded.map(([category, rows]) => (
-                <CollapsibleCategory key={category} title={category} count={rows.length} countLabel={rows.length === 1 ? "feature" : "features"}>
+                <CollapsibleCategory key={category} title={category} count={rows.length} countLabel={`${rows.filter((f) => tierIncluded.has(f.id) || selectedSet.has(f.id)).length} of ${rows.length} added`}>
                   {rows.map((f) =>
                     tierIncluded.has(f.id) ? (
                       <FeatureCard key={f.id} feature={{ ...f, price: 0 }} checked readOnly />
@@ -360,7 +333,7 @@ export default function BuilderFeatures({
         <section>
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <h2 className="flex items-center gap-2 text-lg font-bold text-ink">
+              <h2 className="flex items-center gap-2 text-base font-semibold text-ink">
                 Extra Features
                 {defaultExtras.length > 0 && (
                   <span className="rounded-full bg-surface px-2.5 py-0.5 text-xs font-semibold text-ink-muted">
@@ -370,10 +343,16 @@ export default function BuilderFeatures({
               </h2>
               <p className="mt-1 text-sm text-ink-muted">Optional enhancements you can add to this project.</p>
             </div>
+            {defaultExtras.length > 8 && <button type="button" className="text-sm font-medium text-primary" onClick={() => setExpandExtras((value) => !value)}>{expandExtras ? "Collapse all" : "Expand all"}</button>}
             <Button type="button" variant="secondary" size="sm" leftIcon={Plus} onClick={() => setBrowseOpen(true)}>
               Add extra feature
             </Button>
           </div>
+
+          {extraBucket.some((f) => selectedSet.has(f.id)) && <div className="mt-3 flex flex-wrap items-center gap-2" aria-label="Selected extras">
+            {extraBucket.filter((f) => selectedSet.has(f.id)).map((f) => <button key={f.id} type="button" onClick={() => toggle(f.id)} aria-label={`Remove ${f.name}`} className="inline-flex items-center gap-1 rounded-full bg-primary-50 px-3 py-1 text-xs font-medium text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">{f.name}<X className="h-3 w-3" aria-hidden /></button>)}
+            <span className="text-xs font-semibold text-primary">{formatINR(estimate.selectedFeatures.filter((f) => extraBucket.some((extra) => extra.id === f.id)).reduce((sum, f) => sum + f.price, 0))}</span>
+          </div>}
 
           {groupedExtras.length === 0 ? (
             <button
@@ -392,7 +371,7 @@ export default function BuilderFeatures({
           ) : (
             <div className="mt-4 space-y-3">
               {groupedExtras.map(([category, rows]) => (
-                <CollapsibleCategory key={category} title={category} count={rows.length} countLabel={rows.length === 1 ? "feature" : "features"}>
+                <CollapsibleCategory key={`${category}-${expandExtras}`} defaultOpen={defaultExtras.length <= 8 || expandExtras} title={category} count={rows.length} countLabel={`${rows.filter((f) => selectedSet.has(f.id)).length} of ${rows.length} added`}>
                   {rows.map((f) => (
                     <FeatureCard
                       key={f.id}
@@ -409,12 +388,13 @@ export default function BuilderFeatures({
 
         {/* Project files & references */}
         <section>
-          <h2 className="text-lg font-bold text-ink">Project files &amp; references</h2>
+          <h2 className="text-base font-semibold text-ink">Project files &amp; references</h2>
           <p className="mt-1 text-sm text-ink-muted">
             Upload documents, screenshots, PDFs, designs or reference files that help us understand your project.
           </p>
 
-          <div className="mt-4 space-y-2">
+          <div className="mt-4 grid gap-4 sm:grid-cols-2">
+          <div className="space-y-2">
             <p className="text-xs font-semibold text-ink">Project image (optional)</p>
             <Dropzone
               accept={CP_IMAGE_TYPES.join(",")}
@@ -438,7 +418,7 @@ export default function BuilderFeatures({
             )}
           </div>
 
-          <div className="mt-5 space-y-2">
+          <div className="space-y-2">
             <p className="text-xs font-semibold text-ink">Requirement / reference files (optional)</p>
             <Dropzone
               accept={CP_DOC_TYPES.join(",")}
@@ -469,10 +449,12 @@ export default function BuilderFeatures({
             )}
             {uploadError && <p className="text-xs text-danger">{uploadError}</p>}
           </div>
+          </div>
         </section>
 
         <BottomBar
           step={2}
+          total={formatINR(estimate.estimatedTotal)}
           left={
             <Link href="/custom-projects/start" className="text-sm font-medium text-ink-muted underline hover:text-ink">
               ← Back
@@ -488,49 +470,8 @@ export default function BuilderFeatures({
       </div>
 
       {/* Right sidebar */}
-      <aside className="space-y-4 lg:sticky lg:top-24">
-        <div className="rounded-2xl border border-line bg-card p-5 shadow-card">
-          <h2 className="text-base font-bold text-ink">Your selection</h2>
-          <dl className="mt-4 space-y-2.5 text-sm">
-            <div className="flex items-center justify-between gap-3">
-              <dt className="text-ink-muted">Included features</dt>
-              <dd className="font-medium text-ink">
-                {includedBucket.filter((f) => tierIncluded.has(f.id) || selectedSet.has(f.id)).length}
-              </dd>
-            </div>
-            <div className="flex items-center justify-between gap-3">
-              <dt className="text-ink-muted">Extra features</dt>
-              <dd className="font-medium text-ink">{extraSelectedCount} selected</dd>
-            </div>
-            <div className="flex items-center justify-between gap-3">
-              <dt className="text-ink-muted">Files uploaded</dt>
-              <dd className="font-medium text-ink">{filesUploaded}</dd>
-            </div>
-          </dl>
-
-          <div className="mt-4 border-t border-line pt-4">
-            <p className="text-xs font-medium text-ink-muted">Estimated price</p>
-            <p className="mt-1 text-2xl font-bold text-ink">{formatINR(estimate.estimatedTotal)}</p>
-          </div>
-
-          <Link
-            href="/custom-projects/estimate"
-            className="mt-4 inline-flex items-center gap-1 text-sm font-semibold text-primary hover:text-primary-700"
-          >
-            View full estimate <ArrowRight className="h-3.5 w-3.5" aria-hidden />
-          </Link>
-        </div>
-
-        <div className="rounded-2xl border border-line bg-surface p-4">
-          <div className="flex items-center gap-2">
-            <HelpCircle className="h-4 w-4 text-primary" aria-hidden />
-            <p className="text-sm font-semibold text-ink">Need help choosing?</p>
-          </div>
-          <p className="mt-1.5 text-xs leading-relaxed text-ink-muted">
-            Not sure which features to choose? You can continue and our team will help you refine the requirements.
-          </p>
-        </div>
-      </aside>
+      <SelectionSummary draft={draft} estimate={estimate} onRemoveFeature={toggle}
+        onRemoveFile={(path) => update((d) => ({ ...d, projectImagePath: d.projectImagePath === path ? null : d.projectImagePath, referenceFiles: d.referenceFiles.filter((file) => file.path !== path) }))} />
 
       <Modal open={browseOpen} onClose={() => setBrowseOpen(false)} title="Browse extra features" className="max-w-2xl">
         <div className="relative mb-4">
@@ -547,7 +488,7 @@ export default function BuilderFeatures({
             <p className="text-sm text-ink-faint">No features match &quot;{browseQuery}&quot;.</p>
           ) : (
             groupedBrowse.map(([category, rows]) => (
-              <CollapsibleCategory key={category} title={category} count={rows.length} countLabel={rows.length === 1 ? "feature" : "features"}>
+              <CollapsibleCategory key={category} title={category} count={rows.length} countLabel={`${rows.filter((f) => selectedSet.has(f.id)).length} of ${rows.length} added`}>
                 {rows.map((f) => (
                   <FeatureCard
                     key={f.id}

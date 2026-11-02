@@ -50,7 +50,7 @@ export interface ResizableSplit {
   /** First pane's current size, as a percentage (0-100) of the container. */
   pct: number;
   /** Attach to the element wrapping both panes and the handle. */
-  containerRef: React.RefObject<HTMLDivElement>;
+  containerRef: React.RefObject<HTMLDivElement | null>;
   /** Spread onto the draggable handle element. */
   handleProps: {
     role: "separator";

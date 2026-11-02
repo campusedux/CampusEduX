@@ -14,6 +14,7 @@ beforeEach(() => resetSupabaseMock());
 
 describe("integration: sign-in happy path", () => {
   it("resolves a mobile number to an email, signs in, and returns the mapped profile", async () => {
+    setRpcResult("current_user_is_premium", { data: true });
     setRpcResult("email_for_mobile", { data: "demo@campusedux.app" });
     setAuthResult("signInWithPassword", signInSuccess);
     setTableResult("profiles", { data: [profileRow] });
@@ -38,13 +39,14 @@ describe("integration: sign-in happy path", () => {
     });
   });
 
-  it("signs in directly when the identifier is already an email (no RPC lookup)", async () => {
+  it("signs in directly with an email and checks entitlement without a mobile-number lookup", async () => {
     setAuthResult("signInWithPassword", signInSuccess);
     setTableResult("profiles", { data: [profileRow] });
 
     await authService.login({ identifier: "demo@campusedux.app", password: "x" });
 
-    expect(supabase.rpc).not.toHaveBeenCalled();
+    expect(supabase.rpc).not.toHaveBeenCalledWith("email_for_mobile", expect.anything());
+    expect(supabase.rpc).toHaveBeenCalledWith("current_user_is_premium");
   });
 
   it("surfaces 'No account found' when the mobile number is unknown", async () => {

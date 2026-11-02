@@ -55,7 +55,7 @@ describe("/projects/category/[category] BreadcrumbList", () => {
     vi.mocked(getCachedCategoryPreview).mockResolvedValueOnce({ name: "Web & Mobile", projects: [], found: true });
 
     const { default: CategoryPage } = await import("@/app/projects/category/[category]/page");
-    const element = (await CategoryPage({ params: { category: "web-mobile" } })) as unknown as Node;
+    const element = (await CategoryPage({ params: Promise.resolve({ category: "web-mobile" }) })) as unknown as Node;
     const blocks = jsonLdBlocks(element);
     const crumb = blocks.find((d) => d["@type"] === "BreadcrumbList") as
       | { itemListElement: { position: number; name: string; item: string }[] }
@@ -79,7 +79,8 @@ describe("/jobs/[id] JobPosting safe enhancements", () => {
       description: "Build APIs.",
       posted_at: "2026-01-01T00:00:00.000Z",
       job_type: "Internship",
-      location: "Bengaluru",
+      location: "Bengaluru, India",
+      work_mode: "On-site",
       salary_min_lpa: null,
       salary_max_lpa: null,
       company_name: "Acme Corp",
@@ -88,7 +89,7 @@ describe("/jobs/[id] JobPosting safe enhancements", () => {
     });
 
     const { default: JobDetailPage } = await import("@/app/jobs/[id]/page");
-    const element = (await JobDetailPage({ params: { id: "job-42" } })) as unknown as Node;
+    const element = (await JobDetailPage({ params: Promise.resolve({ id: "job-42" }) })) as unknown as Node;
     const blocks = jsonLdBlocks(element);
     const job = blocks.find((d) => d["@type"] === "JobPosting") as Record<string, unknown>;
     expect(job).toBeDefined();
@@ -101,9 +102,9 @@ describe("/jobs/[id] JobPosting safe enhancements", () => {
       sameAs: "https://acme.example",
     });
 
-    // Never fabricated — no real DB fields exist for these.
+    // No deadline or remote eligibility was supplied by this source fixture.
     expect(job).not.toHaveProperty("validThrough");
-    expect((job.jobLocation as Record<string, unknown> | undefined)?.addressCountry).toBeUndefined();
+    expect(job.jobLocation).toMatchObject({ address: { "@type": "PostalAddress", addressCountry: "IN" } });
     expect(job).not.toHaveProperty("jobLocationType");
     expect(job).not.toHaveProperty("applicantLocationRequirements");
   });
@@ -112,11 +113,13 @@ describe("/jobs/[id] JobPosting safe enhancements", () => {
     vi.mocked(getCachedJobDetail).mockResolvedValueOnce({
       id: "job-salary", title: "Engineer", description: "Build APIs.",
       posted_at: "2026-01-01T00:00:00.000Z", job_type: "Full Time",
-      location: "Bengaluru", salary_min_lpa: 6, salary_max_lpa: 12,
+      location: "Bengaluru, India",
+      work_mode: "On-site",
+      salary_min_lpa: 6, salary_max_lpa: 12,
       company_name: "Acme", company: null,
     });
     const { default: JobDetailPage } = await import("@/app/jobs/[id]/page");
-    const blocks = jsonLdBlocks(await JobDetailPage({ params: { id: "job-salary" } }) as unknown as Node);
+    const blocks = jsonLdBlocks(await JobDetailPage({ params: Promise.resolve({ id: "job-salary" }) }) as unknown as Node);
     expect(blocks.find((d) => d["@type"] === "JobPosting")?.baseSalary).toMatchObject({
       currency: "INR", value: { minValue: 600000, maxValue: 1200000, unitText: "YEAR" },
     });
@@ -134,7 +137,8 @@ describe("/jobs/[id] JobPosting safe enhancements", () => {
       description: "Do engineering.",
       posted_at: "2026-01-01T00:00:00.000Z",
       job_type: jobType,
-      location: "Bengaluru",
+      location: "Bengaluru, India",
+      work_mode: "On-site",
       salary_min_lpa: null,
       salary_max_lpa: null,
       company_name: "Acme Corp",
@@ -143,7 +147,7 @@ describe("/jobs/[id] JobPosting safe enhancements", () => {
     });
 
     const { default: JobDetailPage } = await import("@/app/jobs/[id]/page");
-    const element = (await JobDetailPage({ params: { id: "job-1" } })) as unknown as Node;
+    const element = (await JobDetailPage({ params: Promise.resolve({ id: "job-1" }) })) as unknown as Node;
     const blocks = jsonLdBlocks(element);
     const job = blocks.find((d) => d["@type"] === "JobPosting") as Record<string, unknown>;
 
@@ -157,7 +161,8 @@ describe("/jobs/[id] JobPosting safe enhancements", () => {
       description: "Do engineering.",
       posted_at: "2026-01-01T00:00:00.000Z",
       job_type: "Freelance",
-      location: "Bengaluru",
+      location: "Bengaluru, India",
+      work_mode: "On-site",
       salary_min_lpa: null,
       salary_max_lpa: null,
       company_name: "Acme Corp",
@@ -166,7 +171,7 @@ describe("/jobs/[id] JobPosting safe enhancements", () => {
     });
 
     const { default: JobDetailPage } = await import("@/app/jobs/[id]/page");
-    const element = (await JobDetailPage({ params: { id: "job-2" } })) as unknown as Node;
+    const element = (await JobDetailPage({ params: Promise.resolve({ id: "job-2" }) })) as unknown as Node;
     const blocks = jsonLdBlocks(element);
     const job = blocks.find((d) => d["@type"] === "JobPosting") as Record<string, unknown>;
 
@@ -182,7 +187,8 @@ describe("/jobs/[id] JobPosting safe enhancements", () => {
       description: "Build UIs.",
       posted_at: "2026-01-01T00:00:00.000Z",
       job_type: "Internship",
-      location: "Remote",
+      location: "Toronto, Canada",
+      work_mode: "On-site",
       salary_min_lpa: null,
       salary_max_lpa: null,
       company_name: "Small Co",
@@ -191,7 +197,7 @@ describe("/jobs/[id] JobPosting safe enhancements", () => {
     });
 
     const { default: JobDetailPage } = await import("@/app/jobs/[id]/page");
-    const element = (await JobDetailPage({ params: { id: "job-99" } })) as unknown as Node;
+    const element = (await JobDetailPage({ params: Promise.resolve({ id: "job-99" }) })) as unknown as Node;
     const blocks = jsonLdBlocks(element);
     const job = blocks.find((d) => d["@type"] === "JobPosting") as Record<string, unknown>;
 
@@ -230,7 +236,7 @@ describe("/learning/[gridSlug] emits Course, not LearningResource", () => {
     } as never);
 
     const { default: GridOverviewPage } = await import("@/app/learning/[gridSlug]/page");
-    const element = (await GridOverviewPage({ params: { gridSlug: "java-tutorial" } })) as unknown as Node;
+    const element = (await GridOverviewPage({ params: Promise.resolve({ gridSlug: "java-tutorial" }) })) as unknown as Node;
     const blocks = jsonLdBlocks(element);
 
     const course = blocks.find((d) => d["@type"] === "Course");
@@ -261,7 +267,7 @@ describe("/learning ItemList of real Course entries", () => {
     vi.mocked(getLearningGrids).mockResolvedValueOnce(FIXTURE_GRIDS);
 
     const { default: LearningIndexPage } = await import("@/app/learning/page");
-    const element = await serverRoot((await LearningIndexPage({ searchParams: {} })) as unknown as Node);
+    const element = await serverRoot((await LearningIndexPage({ searchParams: Promise.resolve({}) })) as unknown as Node);
     const blocks = jsonLdBlocks(element);
 
     const itemList = blocks.find((d) => d["@type"] === "ItemList") as

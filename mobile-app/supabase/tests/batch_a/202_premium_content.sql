@@ -8,9 +8,10 @@ declare
   g uuid; sec uuid; t_free uuid; t_prem uuid; r jsonb; ids text[];
 begin
   insert into admin_users(id,email,role,status) values (admin_id,'adm202@x.io','super_admin','active');
-  perform set_config('app.sync_is_premium','on',true);
-  update profiles set is_premium = true where id = prem_u;
-  perform set_config('app.sync_is_premium','off',true);
+  -- Premium is authoritative subscription state, not a forged profile mirror.
+  insert into premium_plans(id,name) values ('test202-plan','Fixture');
+  insert into premium_subscriptions(user_id,plan_id,status,started_at,current_period_end)
+    values (prem_u,'test202-plan','active',statement_timestamp()-interval '1 day',statement_timestamp()+interval '1 day');
 
   insert into learning_grids(name,slug) values ('G2','g-two') returning id into g;
   insert into learning_sections(grid_id,name,slug) values (g,'S','s-one') returning id into sec;

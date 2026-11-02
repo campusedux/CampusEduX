@@ -40,7 +40,7 @@ function App() {
         return <ErrorView error={new Error("Private fixture diagnostics")} reset={() => { document.documentElement.dataset.retried = "true"; }} />;
       }
       const Page = pages[route as keyof typeof pages];
-      const page = await Page({searchParams: {}});
+      const page = await Page({searchParams: Promise.resolve({})});
       return resolveServer(route === "account" ? await AccountLayout({children: page}) : page);
     }
     render().then(setContent).catch(error => {

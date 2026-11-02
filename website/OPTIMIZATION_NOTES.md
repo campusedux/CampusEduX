@@ -338,3 +338,78 @@ thresholds to `error` as R1–R5 land. Reports upload to `temporary-public-stora
 config is JSON-validated and the audit ids are standard Lighthouse ids; the first
 CI run on a real PR will confirm the thresholds are calibrated — adjust the
 numeric values in `lighthouserc.json` from that run if needed.
+
+
+---
+
+## Website cleanup — 1 November 2026
+
+Scope: cleanup only in website; preserve all pre-existing owner edits, active
+routes, authentication, payments, entitlements, public APIs, SEO, course content,
+marketplace/resume/jobs behavior, tests, databases and production configuration.
+No dependency installation, database operation, deployment, commit or push.
+
+### Evidence and removals
+
+- TypeScript AST audit: 462 source modules, 126 Next entry points; import,
+  re-export, literal require and dynamic-import references checked alongside
+  tests. Root reachability confirms only the preserved ConfigSummary is
+orphaned; all three nonliteral imports are test loaders. Repository
+  searches excluded secrets, environment files and generated build snapshots.
+- Removed only categoryIcon, categoryVisual, TILE_TINTS and their lucide imports
+  from src/lib/home.ts: no other current source, test, script, configuration or
+  documentation references to these symbols. Both callers (home page and
+  announcements API) use only inWindow, whose implementation is unchanged.
+- Removed the unused CURRENT_LEGAL_VERSION import from LegalPageShell.tsx.
+  TypeScript confirms it unused; its config module has no import side effects.
+  Rendering and canonical shared legal configuration remain unchanged.
+- Deleted five tracked scripts/__pycache__/*.cpython-313.pyc files (118,800
+  bytes). All five Python sources remain; loaders refer to .py sources and no
+  script/test/deployment configuration references bytecode paths or uses a
+  sourceless loader. These are regenerable CPython caches. Added __pycache__/
+  to the website-local .gitignore. No Python/data-generation scripts executed.
+
+### Deliberately preserved
+
+- ConfigSummary.tsx is unreferenced but has pre-existing owner edits. Other
+  source modules have a caller or a framework entry-point role.
+- All 20 public assets: manifests, metadata, known public endpoints and brand
+  paths have consumers; apparent unused blog/brand variants may be CMS-linked
+  or externally requested. No live CMS queries performed to resolve this.
+- Six CSS tokens without literal JSX references (section-space, grid-gap,
+  h-display, mobile-section, mobile-card-list, mobile-form-control): shared
+  styles may be used by content or runtime composition. No styling changed.
+- All declared dependencies have runtime, framework, config, type or tooling
+  roles; npm ls reports an existing extraneous @img/sharp-wasm32 installation.
+  Preserved package manifests, lockfile and installed modules.
+- Enhanced TypeScript unused-symbol checking found 27 baseline diagnostics;
+  only the legal-component import was eligible here. Remaining findings are
+  in protected pages, purchase code or tests. No public contract was narrowed.
+- Exact duplicate function bodies were found in auth form shells, existing
+  tests and owner-created load-test scripts. Protected logic and test coverage
+  remain intact; no duplicate-code consolidation justified this cleanup.
+
+### Verification and recovery
+
+Before edits: npm run typecheck -- --incremental false and npm run lint --
+--no-cache passed; npm test -- --maxWorkers=1 --minWorkers=1 --no-cache passed
+121 files / 1,759 tests, with one file / 12 tests already skipped. The first
+sandboxed Vitest attempt could not create temporary files and ran no tests;
+the retry with filesystem permission produced the baseline above. npm ls
+--depth=0 --offline --ignore-scripts exited successfully, with the extraneous
+optional package noted above. Checks use existing dependencies and one worker.
+Post-edit verification:
+
+- `npm test -- tests/lib/home.test.ts tests/app/home-learning-ui.test.ts tests/app/home-features.test.ts tests/legal/consistency.test.ts --maxWorkers=1 --minWorkers=1 --no-cache`: 4 files / 47 tests passed.
+- `npm run typecheck -- --incremental false`: passed.
+- `npm run lint -- --no-cache`: passed; Next reports its existing lint-command deprecation notice.
+- `npm test -- --maxWorkers=1 --minWorkers=1 --no-cache`: 121 files / 1,759 tests passed, one file / 12 tests skipped, matching baseline; no test failures.
+- Python AST parsing passed for all five retained source files without executing them or writing bytecode.
+- `git diff --check` restricted to the cleanup paths passed. A SHA-256 comparison across 1,839 snapshotted source/test/script/asset/backend/config files found only the two planned source edits; other checked owner changes were preserved.
+- The installed `next build` CLI (the package build script's command) passed with exit code 0 in `/tmp/cx-website-cleanup-build-m7qnpavs/website`; all 69 static pages generated. The temporary copy excluded environment files, used only existing dependencies, one worker and a 1,536 MiB Node heap cap, and inherited no application credentials. Source/config/manifest copies were checked against the website before the restart. Repository build output was untouched. The first attempt was interrupted during compilation and has no pass result; only the completed restart counts. Log and exit status are in the temporary build directory's parent.
+- Final review: no cleanup-introduced defects identified. No database harness, browser flows or production-environment checks ran; protected behavior remains covered by the existing regression suite within its stated limits.
+
+No new regression tests: only uncalled helpers, an unused import and generated
+caches were removed; existing home/legal tests exercise the retained behavior.
+No measured bundle/runtime performance claim. Restore only these cleanup hunks
+or the five original bytecode files to roll back; preserve all owner changes.

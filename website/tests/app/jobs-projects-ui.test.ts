@@ -1,8 +1,11 @@
+import { tagWithAttributes } from "../helpers/html";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Children, cloneElement, createElement, isValidElement, Suspense, type ReactElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { jsx } from "react/jsx-runtime";
 import JobsPage from "@/app/jobs/page";
 import ProjectsPage from "@/app/projects/page";
+import { CustomProjectBanner } from "@/components/CustomProjectBanner";
 import JobsError from "@/app/jobs/error";
 import ProjectsError from "@/app/projects/error";
 import { JobCard, type JobCardData } from "@/components/JobCard";
@@ -56,12 +59,12 @@ beforeEach(() => {
 describe("Jobs listing presentation and preserved contracts", () => {
   it("keeps one labelled query and named icon submit inside the native Jobs search form", async () => {
     const searchParams = { q: "Java & SQL", location: "Remote", type: "Full Time", exp: "experienced", sort: "salary-high", page: "2" };
-    const html = await render(await JobsPage({ searchParams }));
+    const html = await render(await JobsPage({ searchParams: Promise.resolve(searchParams) }));
     const form = html.match(/<form[^>]+role="search"[\s\S]*?<\/form>/)?.[0] ?? "";
-    expect(form).toContain('action="/jobs" method="get"');
+    expect(form).toMatch(tagWithAttributes("form", { action: "/jobs", method: "get" }));
     expect(form.match(/type="search"/g)).toHaveLength(1);
     expect(form).toContain('class="sr-only">Search roles</span>');
-    expect(form).toContain('type="search" name="q"');
+    expect(form).toMatch(tagWithAttributes("input", { type: "search", name: "q" }));
     expect(form).toContain('value="Java &amp; SQL"');
     expect(form).toContain('placeholder="Search roles, e.g. Java developer, analyst…"');
     expect(form.match(/<button\b/g)).toHaveLength(1);
@@ -70,14 +73,14 @@ describe("Jobs listing presentation and preserved contracts", () => {
     expect(submit).toMatch(/<svg[^>]+aria-hidden="true"/);
     expect(submit).toContain('class="sr-only sm:not-sr-only">Search</span>');
     for (const name of ["location", "type", "exp", "sort"] as const) {
-      expect(form).toContain(`type="hidden" name="${name}" value="${searchParams[name]}"`);
+      expect(form).toMatch(tagWithAttributes("input", { type: "hidden", name, value: searchParams[name] }));
     }
     expect(form).not.toContain('name="page"');
   });
 
   it.each([undefined, "fresher", "experienced"])("preserves query filters when switching experience from %s", async exp => {
     const searchParams = { q: "Java & SQL", location: "Remote", type: "Full Time", exp, sort: "salary-high", page: "2" };
-    const html = await render(await JobsPage({ searchParams }));
+    const html = await render(await JobsPage({ searchParams: Promise.resolve(searchParams) }));
     const nav = html.match(/<nav aria-label="Experience level"[\s\S]*?<\/nav>/)?.[0] ?? "";
     const links = [...nav.matchAll(/<a\b([^>]*)>([^<]+)<\/a>/g)];
     expect(links).toHaveLength(3);
@@ -98,9 +101,9 @@ describe("Jobs listing presentation and preserved contracts", () => {
 
   it("retains GET search fields, experience links, company navigation, and query arguments", async () => {
     const searchParams = { q: "developer", location: "Remote", type: "Full Time", exp: "fresher", sort: "salary-high", page: "2" };
-    const html = await render(await JobsPage({ searchParams }));
+    const html = await render(await JobsPage({ searchParams: Promise.resolve(searchParams) }));
     expect(html).toContain("Jobs &amp; Internships");
-    expect(html).toContain('action="/jobs" method="get" role="search"');
+    expect(html).toMatch(tagWithAttributes("form", { action: "/jobs", method: "get", role: "search" }));
     for (const [name, value] of Object.entries(searchParams).filter(([name]) => name !== "page")) {
       expect(html).toContain(`name="${name}"`);
       expect(html).toContain(`value="${value}"`);
@@ -117,7 +120,7 @@ describe("Jobs listing presentation and preserved contracts", () => {
 
   it.each([false, true])("distinguishes genuine empty results from filtered results (%s)", async filtered => {
     api.jobs.mockResolvedValue({ jobs: [], count: 0 });
-    const html = await render(await JobsPage({ searchParams: filtered ? { q: "no match" } : {} }));
+    const html = await render(await JobsPage({ searchParams: Promise.resolve(filtered ? { q: "no match" } : {}) }));
     expect(html).toContain(filtered ? "No roles match these filters" : "No open roles right now");
     expect(html.includes("Clear filters")).toBe(filtered);
     expect(html).not.toContain("Original developer role");
@@ -131,16 +134,16 @@ describe("Jobs listing presentation and preserved contracts", () => {
 
   it("propagates data failures instead of presenting a genuine empty state", async () => {
     api.jobs.mockRejectedValue(new Error("catalog unavailable"));
-    await expect(render(await JobsPage({ searchParams: {} }))).rejects.toThrow("catalog unavailable");
+    await expect(render(await JobsPage({ searchParams: Promise.resolve({}) }))).rejects.toThrow("catalog unavailable");
   });
 });
 
 describe("Projects listing presentation and preserved contracts", () => {
   it("keeps an accessible submit action and the query inside the Projects GET search form", async () => {
-    const html = await render(await ProjectsPage({ searchParams: { q: "ML & Android" } }));
+    const html = await render(await ProjectsPage({ searchParams: Promise.resolve({ q: "ML & Android" }) }));
     const form = html.match(/<form[^>]+role="search"[\s\S]*?<\/form>/)?.[0] ?? "";
-    expect(form).toContain('action="/projects" method="get"');
-    expect(form).toContain('type="search" name="q"');
+    expect(form).toMatch(tagWithAttributes("form", { action: "/projects", method: "get" }));
+    expect(form).toMatch(tagWithAttributes("input", { type: "search", name: "q" }));
     expect(form).toContain('value="ML &amp; Android"');
     expect(form).toContain('class="sr-only">Search projects</span>');
     expect(form.match(/<button/g)).toHaveLength(1);
@@ -150,7 +153,7 @@ describe("Projects listing presentation and preserved contracts", () => {
 
   it("keeps every category keyboard reachable and changes only category and page in its links", async () => {
     const searchParams = { q: "ML & Android", category: "web", min: "100", max: "2000", sort: "price-low", flag: "premium", page: "2" };
-    const html = await render(await ProjectsPage({ searchParams }));
+    const html = await render(await ProjectsPage({ searchParams: Promise.resolve(searchParams) }));
     const nav = html.match(/<nav aria-label="Categories"[\s\S]*?<\/nav>/)?.[0] ?? "";
     const links = [...nav.matchAll(/<a\b([^>]*)>([^<]+)<\/a>/g)];
     expect(links).toHaveLength(categories.length + 1);
@@ -171,8 +174,8 @@ describe("Projects listing presentation and preserved contracts", () => {
 
   it("retains category/filter destinations, pagination offsets, and exact prices", async () => {
     const searchParams = { q: "example", category: "web", min: "100", max: "2000", sort: "price-low", flag: "premium", page: "2" };
-    const html = await render(await ProjectsPage({ searchParams }));
-    expect(html).toContain('action="/projects" method="get" role="search"');
+    const html = await render(await ProjectsPage({ searchParams: Promise.resolve(searchParams) }));
+    expect(html).toMatch(tagWithAttributes("form", { action: "/projects", method: "get", role: "search" }));
     for (const [name, value] of Object.entries(searchParams).filter(([name]) => name !== "page")) {
       expect(html).toContain(`name="${name}"`);
       expect(html).toContain(`value="${value}"`);
@@ -186,7 +189,7 @@ describe("Projects listing presentation and preserved contracts", () => {
     expect(html).toContain('href="/projects/project-1"');
     expect(html).toContain(formatINR(project.price));
     expect(html).toContain(formatINR(project.original_price!));
-    expect(html).toContain("Project help");
+    expect(html).toContain("Get Your Custom Project");
     expect(html).toContain("Mentoring &amp; software");
     expect(html).toContain("feedback on work they author");
     expect(html).toContain("Ask about mentoring");
@@ -195,7 +198,7 @@ describe("Projects listing presentation and preserved contracts", () => {
 
   it.each([false, true])("distinguishes genuine empty results from filtered results (%s)", async filtered => {
     api.projects.mockResolvedValue({ projects: [], count: 0 });
-    const html = await render(await ProjectsPage({ searchParams: filtered ? { q: "no match" } : {} }));
+    const html = await render(await ProjectsPage({ searchParams: Promise.resolve(filtered ? { q: "no match" } : {}) }));
     expect(html).toContain(filtered ? "No projects match these filters" : "No projects listed yet");
     expect(html.includes("Clear filters")).toBe(filtered);
     expect(html).not.toContain(project.title);
@@ -204,7 +207,59 @@ describe("Projects listing presentation and preserved contracts", () => {
 
   it("propagates data failures instead of presenting a genuine empty state", async () => {
     api.projects.mockRejectedValue(new Error("catalog unavailable"));
-    await expect(render(await ProjectsPage({ searchParams: {} }))).rejects.toThrow("catalog unavailable");
+    await expect(render(await ProjectsPage({ searchParams: Promise.resolve({}) }))).rejects.toThrow("catalog unavailable");
+  });
+});
+
+describe("Custom project banner", () => {
+  it("uses real request, information and results destinations without a second request form", () => {
+    const html = renderToStaticMarkup(createElement(CustomProjectBanner));
+    expect(html).toContain('aria-labelledby="custom-project-banner-title"');
+    expect(html).toContain('id="custom-project-banner-title"');
+    expect(plain(html)).toContain("Your idea.Built around you.");
+    const destinations = [...html.matchAll(/href="([^"]+)"/g)].map(match => match[1].replace(/&amp;/g, "&"));
+    expect(destinations).toHaveLength(4);
+    expect(destinations.slice(0, 3)).toEqual(["/custom-projects/start", "#project-results", "/custom-projects"]);
+    const support = new URL(destinations[3]);
+    expect(support.hostname).toBe("wa.me");
+    expect(support.searchParams.get("text")).toContain("work I author");
+    expect(html).toContain('rel="noopener noreferrer"');
+    expect(html).toContain("opens in a new tab");
+    expect(html).not.toMatch(/<(?:form|input|button|img)\b/);
+    expect(html.match(/<h1\b/g)).toHaveLength(1);
+  });
+
+  it("shows an honest workflow and keeps mentoring guidance accessible without JavaScript", () => {
+    const html = renderToStaticMarkup(createElement(CustomProjectBanner));
+    const workflow = html.match(/<ol\b[\s\S]*?<\/ol>/)?.[0] ?? "";
+    expect(workflow).toContain('aria-label="Custom project request steps"');
+    expect(workflow.match(/<li\b/g)).toHaveLength(3);
+    for (const title of ["Your idea", "Platform &amp; features", "Your estimate"]) expect(workflow).toContain(title);
+    expect(workflow).not.toMatch(/<(?:a|button)\b/);
+    expect(html).toContain("Request workflow preview");
+    expect(html).toMatch(/<details\b[\s\S]*?<summary\b[\s\S]*?Mentoring &amp; software/);
+    expect(html).toContain("feedback on work they author");
+    expect(html).toContain("Personal and business customers");
+  });
+
+  it("renders one banner and a focusable results target while keeping filtered results and query counts", async () => {
+    const html = await render(await ProjectsPage({ searchParams: Promise.resolve({ q: "example", category: "web", page: "2" }) }));
+    expect(html.match(/id="custom-project-banner-title"/g)).toHaveLength(1);
+    expect(html).toContain('id="project-results" tabindex="-1"');
+    const hero = html.indexOf('id="custom-project-banner-title"');
+    expect(html.match(/<h1\b/g)).toHaveLength(1);
+    expect(hero).toBeLessThan(html.indexOf('aria-label="Project marketplace"'));
+    expect(hero).toBeLessThan(html.indexOf('role="search"'));
+    expect(hero).toBeLessThan(html.indexOf('aria-label="Filters"'));
+    expect(hero).toBeLessThan(html.indexOf('aria-label="Categories"'));
+    expect(hero).toBeLessThan(html.indexOf('id="project-results"'));
+    for (const oldCopy of ["Project Marketplace", "Build, Explore &amp; Showcase Projects", "Real Projects", "Step-by-Step", "Portfolio Ready"]) {
+      expect(plain(html)).not.toContain(oldCopy);
+    }
+    expect(html).toContain('href="/projects/project-1"');
+    expect(html).toContain('value="example"');
+    expect(api.categories).toHaveBeenCalledTimes(1);
+    expect(api.projects).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -262,7 +317,7 @@ describe("loading, error and filter accessibility", () => {
   });
 
   it.each([["jobs", JobsPage], ["projects", ProjectsPage]] as const)("labels the %s loading fallback", async (name, Page) => {
-    const shell = await Page({ searchParams: {} });
+    const shell = await Page({ searchParams: Promise.resolve({}) });
     const fallback = find(shell, Suspense)?.props.fallback as ReactElement;
     const html = renderToStaticMarkup(fallback);
     expect(html).toContain('role="status"');
@@ -285,7 +340,7 @@ describe("loading, error and filter accessibility", () => {
 
   it("labels the filter dialog trigger and preserves all Jobs/Projects form values", () => {
     const state = { q: "example", category: "web", min: "100", max: "2000", flag: "premium", sort: "price-low" };
-    const html = renderToStaticMarkup(createElement(FilterSheet, { activeCount: 3, children: createElement(ProjectFilters, { categories, state }) }));
+    const html = renderToStaticMarkup(jsx(FilterSheet, { activeCount: 3, children: createElement(ProjectFilters, { categories, state }) }));
     expect(html).toContain('aria-haspopup="dialog"');
     expect(html).toContain('aria-expanded="false"');
     expect(html).toContain("3 active");
@@ -294,7 +349,7 @@ describe("loading, error and filter accessibility", () => {
       expect(html).toContain(`value="${value}"`);
     }
     expect(html).toMatch(/<input[^>]*checked=""[^>]*value="premium"/);
-    const jobs = renderToStaticMarkup(createElement(FilterSheet, { children: createElement(JobFilters, { state: { q: "developer", exp: "fresher", location: "Remote", type: "Full Time", sort: "salary-high" } }) }));
+    const jobs = renderToStaticMarkup(jsx(FilterSheet, { children: createElement(JobFilters, { state: { q: "developer", exp: "fresher", location: "Remote", type: "Full Time", sort: "salary-high" } }) }));
     expect(jobs).toContain('value="fresher" selected=""');
     expect(jobs).toContain('value="Full Time" selected=""');
     expect(jobs).toContain('value="Remote"');

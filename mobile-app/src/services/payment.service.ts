@@ -41,6 +41,7 @@ export const paymentService = {
       body: { projectId, couponCode },
     });
     if (error) throw new Error(error.message);
+    if (!data || data.error || !data.orderId || !data.razorpayOrderId) throw new Error(data?.error || "Could not create payment order.");
     return data as CreateOrderResponse;
   },
 
@@ -74,6 +75,7 @@ export const paymentService = {
   }): Promise<PurchaseOrder> {
     const { data, error } = await supabase.functions.invoke("verify-razorpay-payment", { body: payload });
     if (error) throw new Error(error.message);
+    if (!data || data.error || data.status !== "success" || !data.id) throw new Error(data?.error || "Payment verification pending.");
     return mapOrderRow(data);
   },
 

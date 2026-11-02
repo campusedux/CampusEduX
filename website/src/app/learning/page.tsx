@@ -12,7 +12,7 @@ import { BRAND } from "@/lib/brand";
 import { ContinueLearningRow } from "./_components/ContinueLearningRow";
 import { PopularTopics } from "./_components/PopularTopics";
 
-export const revalidate = 21600;
+export const revalidate = 0; // Publication changes must be checked on each render.
 
 // Names only courses that exist on the live /learning index (2026-09-27):
 // Java, Python, DBMS & SQL, Spring Boot, AI/ML Notes and Generative AI.
@@ -126,7 +126,8 @@ function CourseGrid({ courses }: { courses: LearningGridCard[] }) {
  * with a Free / Premium filter. A catalogue section with fewer than two items
  * is not shown, and the filter only appears when both kinds exist.
  */
-async function LearningContent({ searchParams }: { searchParams: SP }) {
+async function LearningContent({ searchParams: searchParamsPromise }: { searchParams: Promise<SP> }) {
+  const searchParams = await searchParamsPromise;
   const q = searchParams.q?.trim() ?? "";
   const access: Access | null = searchParams.access === "free" || searchParams.access === "premium" ? searchParams.access : null;
   const grids = await getLearningGrids();
@@ -234,6 +235,6 @@ async function LearningContent({ searchParams }: { searchParams: SP }) {
 }
 
 // Keep streaming local to this index page: ancestor loading routes change nested 404 status.
-export default function LearningPage({ searchParams }: { searchParams: SP }) {
+export default function LearningPage({ searchParams }: { searchParams: Promise<SP> }) {
   return <Suspense fallback={<ListLoading title="Learning" />}><LearningContent searchParams={searchParams} /></Suspense>;
 }

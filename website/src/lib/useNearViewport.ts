@@ -51,7 +51,7 @@ export function whenNearViewport(
  * the visitor scrolls toward it. The caller keeps a fixed-size placeholder in
  * the same box meanwhile, so the swap causes no layout shift.
  */
-export function useNearViewport(ref: RefObject<Element>, rootMargin = "200px"): boolean {
+export function useNearViewport(ref: RefObject<Element | null>, rootMargin = "200px"): boolean {
   const [near, setNear] = useState(false);
   useEffect(() => {
     const el = ref.current;

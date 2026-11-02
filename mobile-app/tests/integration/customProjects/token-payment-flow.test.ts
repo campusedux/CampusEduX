@@ -111,3 +111,14 @@ describe("integration: custom project token payment (create order -> verify)", (
     ).rejects.toThrow("signature verification failed");
   });
 });
+
+describe("custom payment settlement acknowledgement", () => {
+  it.each([null, {}, { id: "synthetic", token_payment_status: "pending" }])("rejects an unconfirmed token body: %p", async (data) => {
+    setFunctionResult("verify-custom-project-payment", { data });
+    await expect(customProjectsService.verifyPayment({ requestId: "synthetic", razorpayOrderId: "order_synthetic", razorpayPaymentId: "pay_synthetic", razorpaySignature: "synthetic" })).rejects.toThrow();
+  });
+  it.each([null, {}, { id: "synthetic", token_payment_status: "pending" }])("rejects an unconfirmed balance body: %p", async (data) => {
+    setFunctionResult("verify-custom-project-balance-payment", { data });
+    await expect(customProjectsService.verifyBalancePayment({ paymentId: "synthetic", razorpayOrderId: "order_synthetic", razorpayPaymentId: "pay_synthetic", razorpaySignature: "synthetic" })).rejects.toThrow();
+  });
+});

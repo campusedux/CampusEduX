@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { validationError } from "@/lib/validation";
 import { resolveApiCaller } from "@/lib/apiAuth";
 import { AI_DAILY_LIMIT_ASSIST, aiBudgetTake, budgetResponse, limitResponse, rlHit } from "@/lib/rateLimitDb";
 import { getAssistSuggestion, ASSIST_SECTIONS } from "@/lib/resumeBuilder/aiAssist";
@@ -40,7 +41,7 @@ const RATE_LIMIT_MAX = 20;
 const RATE_LIMIT_WINDOW_SECONDS = 10 * 60;
 
 const bodySchema = z.object({
-  resumeId: z.string().uuid().nullable().optional(),
+  resumeId: z.guid().nullable().optional(),
   section: z.enum(ASSIST_SECTIONS),
   currentText: z.string().max(20_000),
   instruction: z.string().trim().min(1, "Missing instruction.").max(500),
@@ -66,7 +67,7 @@ export async function POST(req: Request) {
   } catch {
     return corsJson({ error: "Malformed request." }, 400);
   }
-  const parsed = bodySchema.safeParse(json);
+  const parsed = bodySchema.safeParse(json, { error: validationError });
   if (!parsed.success) {
     return corsJson({ error: parsed.error.issues[0]?.message ?? "Invalid request." }, 400);
   }

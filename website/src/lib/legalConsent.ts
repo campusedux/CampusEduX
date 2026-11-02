@@ -31,7 +31,7 @@ export async function ensureLegalConsent(source = "website"): Promise<void> {
     const user = await getAuthUser();
     if (!user) return;
 
-    const supabase = createAuthedServerSupabase();
+    const supabase = await createAuthedServerSupabase();
     const { data, error } = await supabase
       .from("legal_consents")
       .select("id")

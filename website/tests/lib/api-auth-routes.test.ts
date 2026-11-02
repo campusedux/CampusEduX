@@ -124,3 +124,29 @@ describe("AI routes", () => {
     expect((await POST(req(body))).status).toBe(503);
   });
 });
+
+
+describe("Zod release gate: API validation", () => {
+  it.each(["compiler/run", "practice/judge", "practice/submit", "coding-problems/judge", "coding-problems/submit", "resume/assist", "custom-projects/understand"])("%s rejects anonymous callers before reading a body", async (route) => {
+    caller = null;
+    const request = req({});
+    const json = vi.spyOn(request, "json");
+    const { POST } = await load(route);
+    expect((await POST(request)).status).toBe(401);
+    expect(json).not.toHaveBeenCalled();
+    expect(rpc).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["compiler/run", { language: "python" }, "Required"],
+    ["resume/assist", { section: "summary", currentText: "x".repeat(20_001), instruction: "Improve" }, "String must contain at most 20000 character(s)"],
+    ["custom-projects/understand", { title: "x".repeat(201), objective: "Help" }, "String must contain at most 200 character(s)"],
+  ])("%s rejects invalid or excessive fields before downstream work", async (route, body, error) => {
+    rpc.mockResolvedValueOnce(allowHit);
+    const { POST } = await load(route);
+    const response = await POST(req(body));
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({ error });
+    expect(rpc).toHaveBeenCalledTimes(1); // rate limiter only; no provider/budget/data RPC
+  });
+});

@@ -5,7 +5,7 @@ import { AccountPageHeader } from "@/components/account/AccountPageHeader";
 
 export default async function ProfilePage() {
   const user = await requireUser();
-  const supabase = createAuthedServerSupabase();
+  const supabase = await createAuthedServerSupabase();
 
   const [{ data: courses }, { data: branches }, { data: years }] = await Promise.all([
     supabase.from("courses").select("id,name").eq("status", "active").order("sort_order"),

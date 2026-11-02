@@ -8,7 +8,8 @@ export const alt = "CampusEduX blog post";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
-export default async function Image({ params }: { params: { slug: string } }) {
+export default async function Image({ params: paramsPromise }: { params: Promise<{ slug: string }> }) {
+  const params = await paramsPromise;
   const post = await getBlogPost(params.slug).catch(() => null);
   if (!post) return renderOgCard({ title: "Blog", eyebrow: "CampusEduX" });
   return renderOgCard({ title: post.title, eyebrow: post.category_name || "Blog", footer: post.author_name || null });

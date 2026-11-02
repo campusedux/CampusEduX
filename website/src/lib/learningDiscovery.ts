@@ -139,7 +139,7 @@ export function mergeUniqueById<T extends { id: string }>(base: T[], extra: T[],
 // ---------------------------------------------------------------------------
 // Internal linking — "Related lessons" (lesson page) + "Popular topics"
 // (/learning). Both are pure selections over `LearningTree` data the caller
-// already fetched with `getLearningTree` (cached, tag-invalidated), so they
+// already fetched with `getLearningTree` (memoized for the render), so they
 // add no per-request query. Every result is a real, published, website-visible
 // topic straight out of the tree RPC — nothing here invents a slug.
 // ---------------------------------------------------------------------------

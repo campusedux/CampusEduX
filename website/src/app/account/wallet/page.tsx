@@ -10,7 +10,7 @@ import { AccountPageHeader } from "@/components/account/AccountPageHeader";
 
 export default async function WalletPage() {
   const user = await requireUser();
-  const supabase = createAuthedServerSupabase();
+  const supabase = await createAuthedServerSupabase();
 
   const [{ data: txns }, { data: withdrawals }, { data: rewardSettings }, { data: balance, error: balanceError }] = await Promise.all([
     supabase

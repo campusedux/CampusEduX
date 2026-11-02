@@ -25,7 +25,7 @@ export default async function PricingPage() {
       <Card>
         <CardHeader
           title="Base price & token"
-          description="The token amount is per project type — changing Standard ↔ Advanced must not change it. The server also enforces the spec constants (1,500 / 3,000 / 6,000)."
+          description="The token amount is per project type. Saving a token updates both Standard and Advanced; new checkouts use the saved amount."
         />
         {pricing.length === 0 ? (
           <EmptyState title="No pricing rows" description="Apply migration 0033 to seed the 6 rows." />

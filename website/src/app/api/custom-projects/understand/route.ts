@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { validationError } from "@/lib/validation";
 import { resolveApiCaller } from "@/lib/apiAuth";
 import { AI_DAILY_LIMIT_UNDERSTAND, aiBudgetTake, budgetResponse, limitResponse, rlHit } from "@/lib/rateLimitDb";
 import { getProjectUnderstanding } from "@/lib/customProjects/aiUnderstand";
@@ -46,7 +47,7 @@ export async function POST(req: Request) {
   } catch {
     return NextResponse.json({ error: "Malformed request." }, { status: 400 });
   }
-  const parsed = bodySchema.safeParse(json);
+  const parsed = bodySchema.safeParse(json, { error: validationError });
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid request." }, { status: 400 });
   }

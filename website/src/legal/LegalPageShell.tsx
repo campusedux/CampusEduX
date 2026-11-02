@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
-import { CURRENT_LEGAL_VERSION } from "./config";
 
 /**
  * Outer frame shared by every legal page (document-rendered and hand-composed).

@@ -19,10 +19,11 @@ export function generateStaticParams() {
 }
 
 export async function generateMetadata({
-  params,
+  params: paramsPromise,
 }: {
-  params: { problemSlug: string };
+  params: Promise<{ problemSlug: string }>;
 }): Promise<Metadata> {
+  const params = await paramsPromise;
   const detail = await getCodingProblem(params.problemSlug);
   if (!detail) return { title: "Coding problem not found", robots: { index: false, follow: false } };
   const { problem, topic, locked } = detail;
@@ -63,7 +64,8 @@ export async function generateMetadata({
   };
 }
 
-export default async function CodingProblemPage({ params }: { params: { problemSlug: string } }) {
+export default async function CodingProblemPage({ params: paramsPromise }: { params: Promise<{ problemSlug: string }> }) {
+  const params = await paramsPromise;
   const [detail, relatedData] = await Promise.all([
     getCodingProblem(params.problemSlug),
     getCodingProblemRelated(params.problemSlug),

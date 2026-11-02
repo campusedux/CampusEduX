@@ -22,10 +22,11 @@ export function generateStaticParams() {
 }
 
 export async function generateMetadata({
-  params,
+  params: paramsPromise,
 }: {
-  params: { category: string; topic: string };
+  params: Promise<{ category: string; topic: string }>;
 }): Promise<Metadata> {
+  const params = await paramsPromise;
   const detail = await getInterviewTopicDetail(params.category, params.topic);
   if (!detail || detail.questions.length === 0) return { title: "Not found", robots: { index: false, follow: false } };
   const { category, topic, questions } = detail;
@@ -54,10 +55,11 @@ export async function generateMetadata({
 }
 
 export default async function InterviewTopicPage({
-  params,
+  params: paramsPromise,
 }: {
-  params: { category: string; topic: string };
+  params: Promise<{ category: string; topic: string }>;
 }) {
+  const params = await paramsPromise;
   const detail = await getInterviewTopicDetail(params.category, params.topic);
   if (!detail || detail.questions.length === 0) notFound();
   const { category, topic, questions, prev, next } = detail;

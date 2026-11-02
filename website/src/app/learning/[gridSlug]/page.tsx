@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { getLearningTree, getLearningGridBrief, getLearningGridSlugs, getGridScopedTests } from "@/lib/learning";
+import { getLearningTree, getLearningGridBrief, getGridScopedTests } from "@/lib/learning";
 import { toOutline } from "@/lib/courseOutline";
 import JsonLd from "@/components/JsonLd";
 import { Breadcrumb } from "@/components/ui";
@@ -13,14 +13,11 @@ import { CourseCurriculum } from "../_components/CourseCurriculum";
 import { CourseCta } from "../_components/CourseCta";
 import { ProgressSummary } from "../_components/ProgressSummary";
 
-export const revalidate = 21600;
+export const revalidate = 0; // Publication changes must be checked on each render.
 export const dynamicParams = true;
 
-export async function generateStaticParams() {
-  return (await getLearningGridSlugs()).map((gridSlug) => ({ gridSlug }));
-}
-
-export async function generateMetadata({ params }: { params: { gridSlug: string } }): Promise<Metadata> {
+export async function generateMetadata({ params: paramsPromise }: { params: Promise<{ gridSlug: string }> }): Promise<Metadata> {
+  const params = await paramsPromise;
   const [grid, tree] = await Promise.all([getLearningGridBrief(params.gridSlug), getLearningTree(params.gridSlug)]);
   if (!grid) return { title: "Learning resource not found", robots: { index: false, follow: false } };
   const lessonCount = tree ? tree.sections.reduce((n, s) => n + s.topics.length, 0) : 0;
@@ -51,7 +48,8 @@ export async function generateMetadata({ params }: { params: { gridSlug: string 
  * in the HTML); progress, the resume CTA and bookmarks hydrate on the client
  * from device-only progress / the visitor's own bookmarks.
  */
-export default async function GridOverviewPage({ params }: { params: { gridSlug: string } }) {
+export default async function GridOverviewPage({ params: paramsPromise }: { params: Promise<{ gridSlug: string }> }) {
+  const params = await paramsPromise;
   const [brief, tree] = await Promise.all([getLearningGridBrief(params.gridSlug), getLearningTree(params.gridSlug)]);
   if (!brief || !tree) notFound();
   const { grid } = tree;

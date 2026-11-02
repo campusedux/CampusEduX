@@ -42,6 +42,15 @@ describe("CUSTOM_PROJECT_TOKENS (spec §2 / §41)", () => {
 });
 
 describe("calculateEstimate", () => {
+  it('uses edited catalog prices and tokens for both levels', () => {
+    const pricing = PRICING.map((row) => ({ ...row, basePrice: 12345, tokenAmount: 2123.45 }));
+    for (const projectLevel of ['standard', 'advanced'] as const) {
+      const estimate = calculateEstimate({ projectType: 'personal', projectLevel, platform: 'web', featureIds: [] }, pricing, PLATFORMS, []);
+      expect(estimate.basePrice).toBe(12345);
+      expect(estimate.token).toBe(2123.45);
+    }
+  });
+
   it("matches the spec §10 worked example (Personal Advanced = ₹32,999)", () => {
     const est = calculateEstimate(
       { projectType: "personal", projectLevel: "advanced", platform: "web", featureIds: ["ai", "chat", "razorpay", "analytics"] },

@@ -6,7 +6,7 @@ const dialogs: HTMLElement[] = [];
 let previousOverflow = "";
 
 /** Share the lock and focus stack so closing one overlay cannot unlock another. */
-export function useDialog(open: boolean, onClose: () => void, returnFocus?: RefObject<HTMLElement>) {
+export function useDialog(open: boolean, onClose: () => void, returnFocus?: RefObject<HTMLElement | null>) {
   const ref = useRef<HTMLDivElement>(null);
   const close = useRef(onClose);
   close.current = onClose;

@@ -449,8 +449,18 @@ describe('feature categories (spec §15)', () => {
 });
 
 describe('updatePricingRow', () => {
+  it('does not report success when the update returns no rows', async () => {
+    setTableResult('custom_project_pricing', { data: [], error: null });
+    const res = await updatePricingRow('personal', 'advanced', { ok: false },
+      form({ base_price: '21999', token_amount: '3000', pricing_version: '2' }));
+    expect(res.ok).toBe(false);
+    expect(res.error).toContain('No pricing row was updated');
+    expect(logActivity).not.toHaveBeenCalled();
+    expect(revalidatePath).not.toHaveBeenCalled();
+  });
+
   it('updates the matching (type, level) row', async () => {
-    setTableResult('custom_project_pricing', { error: null });
+    setTableResult('custom_project_pricing', { data: [{ project_type: 'personal', project_level: 'advanced' }], error: null });
 
     const res = await updatePricingRow(
       'personal',
@@ -469,6 +479,45 @@ describe('updatePricingRow', () => {
     const update = callsFor('custom_project_pricing').find((c) => c.verb === 'update');
     expect((update?.args[0] as Record<string, unknown>).base_price).toBe(21999);
     expect(res).toEqual({ ok: true });
+    expect(callsFor('custom_project_pricing').find((c) => c.verb === 'select')?.args)
+      .toEqual(['project_type, project_level']);
+    expect(revalidatePath).toHaveBeenCalledWith('/custom-projects/pricing');
+  });
+
+  it.each(['', '-1', 'NaN', 'Infinity', '100000000'])('rejects invalid amounts: %s', async (value) => {
+    for (const key of ['base_price', 'token_amount']) {
+      const res = await updatePricingRow('personal', 'standard', { ok: false },
+        form({ base_price: '10000', token_amount: '2500', pricing_version: '1', [key]: value }));
+      expect(res.ok).toBe(false);
+    }
+    expect(supabase.from).not.toHaveBeenCalled();
+  });
+
+  it.each(['', '0', '1.5', '2147483648'])('rejects invalid versions: %s', async (value) => {
+    const res = await updatePricingRow('personal', 'standard', { ok: false },
+      form({ base_price: '10000', token_amount: '2500', pricing_version: value }));
+    expect(res.ok).toBe(false);
+    expect(supabase.from).not.toHaveBeenCalled();
+  });
+
+  it('surfaces a database error and records only response diagnostics', async () => {
+    const diagnostic = vi.spyOn(console, 'error').mockImplementation(() => {});
+    setTableResult('custom_project_pricing', { data: null, error: { code: '42501', message: 'permission denied' } });
+    const res = await updatePricingRow('personal', 'standard', { ok: false },
+      form({ base_price: '10000', token_amount: '2500', pricing_version: '1' }));
+    expect(res).toEqual({ ok: false, error: 'permission denied' });
+    expect(diagnostic).toHaveBeenCalledWith('[custom_pricing.update]',
+      expect.objectContaining({ code: '42501', message: 'permission denied', rows: 0 }));
+    expect(logActivity).not.toHaveBeenCalled();
+    expect(revalidatePath).not.toHaveBeenCalled();
+    diagnostic.mockRestore();
+  });
+
+  it('does not write when the permission gate denies the caller', async () => {
+    requirePermission.mockRejectedValueOnce(new Error('denied'));
+    await expect(updatePricingRow('personal', 'standard', { ok: false },
+      form({ base_price: '10000', token_amount: '2500', pricing_version: '1' }))).rejects.toThrow('denied');
+    expect(supabase.from).not.toHaveBeenCalled();
   });
 });
 

@@ -11,11 +11,12 @@ export const metadata: Metadata = { robots: { index: false, follow: false } };
 export const dynamic = "force-dynamic";
 
 export default async function MockTestResultPage({
-  params,
+  params: paramsPromise,
 }: {
-  params: { testId: string; attemptId: string };
+  params: Promise<{ testId: string; attemptId: string }>;
 }) {
-  const supabase = createAuthedServerSupabase();
+  const params = await paramsPromise;
+  const supabase = await createAuthedServerSupabase();
   const {
     data: { user },
   } = await supabase.auth.getUser();

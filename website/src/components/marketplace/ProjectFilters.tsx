@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { PROJECT_SORTS } from "@/lib/marketplace";
 import { Input, Select } from "@/components/ui";
 
@@ -22,7 +23,7 @@ export function ProjectFilters({
   state: ProjectFilterState;
 }) {
   return (
-    <form action="/projects" method="get" className="space-y-5 text-sm">
+    <form action="/projects" method="get" className="space-y-5 text-sm [&_input:not([type=hidden]):not([type=radio])]:rounded-xl [&_select]:rounded-xl">
       {state.q ? <input type="hidden" name="q" value={state.q} /> : null}
 
       <div>
@@ -64,19 +65,19 @@ export function ProjectFilters({
       <fieldset>
         <legend className="mb-1.5 font-semibold text-ink">Show only</legend>
         <div className="space-y-1.5">
-          <label className="flex items-center gap-2 text-ink-muted">
-            <input type="radio" name="flag" value="" defaultChecked={!state.flag} className="accent-primary" /> All projects
+          <label className="flex cursor-pointer items-center gap-2.5 rounded-lg px-2 text-ink-muted transition-colors hover:bg-surface has-[:checked]:bg-primary-50 has-[:checked]:font-medium has-[:checked]:text-primary">
+            <input type="radio" name="flag" value="" defaultChecked={!state.flag} className="h-4 w-4 shrink-0 accent-primary" /> All projects
           </label>
-          <label className="flex items-center gap-2 text-ink-muted">
-            <input type="radio" name="flag" value="premium" defaultChecked={state.flag === "premium"} className="accent-primary" /> Premium
+          <label className="flex cursor-pointer items-center gap-2.5 rounded-lg px-2 text-ink-muted transition-colors hover:bg-surface has-[:checked]:bg-primary-50 has-[:checked]:font-medium has-[:checked]:text-primary">
+            <input type="radio" name="flag" value="premium" defaultChecked={state.flag === "premium"} className="h-4 w-4 shrink-0 accent-primary" /> Premium
           </label>
-          <label className="flex items-center gap-2 text-ink-muted">
+          <label className="flex cursor-pointer items-center gap-2.5 rounded-lg px-2 text-ink-muted transition-colors hover:bg-surface has-[:checked]:bg-primary-50 has-[:checked]:font-medium has-[:checked]:text-primary">
             <input
               type="radio"
               name="flag"
               value="bestseller"
               defaultChecked={state.flag === "bestseller"}
-              className="accent-primary"
+              className="h-4 w-4 shrink-0 accent-primary"
             />{" "}
             Best sellers
           </label>
@@ -87,9 +88,9 @@ export function ProjectFilters({
         <button type="submit" className="btn-primary h-11 flex-1 px-4 text-sm">
           Apply
         </button>
-        <a href="/projects" className="btn-ghost h-11 px-4 text-sm">
+        <Link href="/projects" prefetch={false} className="btn-ghost h-11 px-4 text-sm">
           Reset
-        </a>
+        </Link>
       </div>
     </form>
   );

@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { JOB_EXPERIENCE_LEVELS, JOB_SORTS, JOB_TYPES } from "@/lib/marketplace";
 import { Input, Select } from "@/components/ui";
 
@@ -70,9 +71,9 @@ export function JobFilters({ state }: { state: JobFilterState }) {
         <button type="submit" className="btn-primary h-11 flex-1 px-4 text-sm">
           Apply filters
         </button>
-        <a href="/jobs" className="btn-ghost h-11 px-4 text-sm">
+        <Link href="/jobs" prefetch={false} className="btn-ghost h-11 px-4 text-sm">
           Reset
-        </a>
+        </Link>
       </div>
     </form>
   );

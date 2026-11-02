@@ -67,6 +67,8 @@ export function BuilderPaymentScreen() {
           ],
         })
       );
+    } else if (result.status === "pending") {
+      notify("Verification pending", result.message);
     } else if (result.status === "failed") {
       navigation.navigate("SubmitFailed", { message: result.message });
     }

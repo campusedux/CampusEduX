@@ -13,7 +13,7 @@ vi.mock("react", async (importOriginal) => {
 describe("/mock-tests/[testId] metadata", () => {
   it("has an encoded, self-referencing canonical and stays noindex", async () => {
     const { generateMetadata } = await import("@/app/mock-tests/[testId]/page");
-    const metadata = generateMetadata({ params: { testId: "java basics/1" } });
+    const metadata = await generateMetadata({ params: Promise.resolve({ testId: "java basics/1" }) });
 
     expect(metadata.alternates?.canonical).toBe("https://www.campusedux.com/mock-tests/java%20basics%2F1");
     expect(metadata.alternates?.canonical).not.toBe("https://www.campusedux.com/");

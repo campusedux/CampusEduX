@@ -72,7 +72,10 @@ Deno.serve(async (req) => {
     const { error: linkError } = await db
       .from("wallet_topup_orders")
       .update({ razorpay_order_id: rzpOrder.id })
-      .eq("id", order.id);
+      .eq("id", order.id)
+      .is("razorpay_order_id", null)
+      .select("id")
+      .single();
     if (linkError) throw linkError;
 
     return json({

@@ -22,7 +22,8 @@ const JUDGE_ENDPOINT = "/api/practice/judge";
 const SUBMIT_ENDPOINT = "/api/practice/submit";
 const SUBMISSIONS_HREF = "/practice/submissions";
 
-export async function generateMetadata({ params }: { params: { slug: string } }): Promise<Metadata> {
+export async function generateMetadata({ params: paramsPromise }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
+  const params = await paramsPromise;
   const detail = await getPracticeProblem(params.slug);
   if (!detail) return { title: "Coding problem not found", robots: { index: false, follow: false } };
   const { problem, category, locked } = detail;
@@ -56,7 +57,8 @@ export async function generateMetadata({ params }: { params: { slug: string } })
   };
 }
 
-export default async function PracticeProblemPage({ params }: { params: { slug: string } }) {
+export default async function PracticeProblemPage({ params: paramsPromise }: { params: Promise<{ slug: string }> }) {
+  const params = await paramsPromise;
   const [detail, relatedData] = await Promise.all([
     getPracticeProblem(params.slug),
     getPracticeProblemRelated(params.slug),

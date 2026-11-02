@@ -22,8 +22,7 @@ export const CUSTOM_PROJECT_STATUSES = [
 ] as const;
 export type CustomProjectStatus = (typeof CUSTOM_PROJECT_STATUSES)[number];
 
-/** Trusted token per project type — DISPLAY only. The server recomputes the
- * real charge in create-custom-project-order (TOKEN_BY_TYPE there). */
+/** Legacy seed defaults; live estimates and checkout use the pricing catalog. */
 export const CUSTOM_PROJECT_TOKENS: Record<ProjectType, number> = {
   academic: 1500,
   personal: 3000,
@@ -80,14 +79,14 @@ export function trackingStepStates(
 }
 
 export const TYPE_LABELS: Record<ProjectType, string> = {
-  academic: "Mentoring",
+  academic: "Academic",
   personal: "Personal",
   business: "Business",
 };
 
 /** Short card copy for the Step 1 project-type picker. Presentation only. */
 export const TYPE_DESCRIPTIONS: Record<ProjectType, string> = {
-  academic: "Mentoring, code review, debugging and feedback on work you create yourself.",
+  academic: "Mentoring for assessed work, or a custom project that is not assessed.",
   personal: "For personal websites, portfolios, tools, apps and learning projects.",
   business: "For business websites, internal tools, customer-facing applications and commercial projects.",
 };
@@ -400,12 +399,12 @@ export function computeEstimate(
   const basePrice = Number(priceRow?.base_price) || 0;
 
   const platformRow = platforms.find((p) => p.platform === platform);
-  const platformCharge = projectType === "academic" ? 0 : Number(platformRow?.charge) || 0;
+  const platformCharge = Number(platformRow?.charge) || 0;
 
   // draft.featureIds is the source of truth for optional features. Features
   // the admin marked included for this type:level are always delivered and
   // never charged — create-custom-project-order snapshots them at price 0.
-  const eligible = projectType === "academic" ? [] : featuresForTier(features, projectType, projectLevel);
+  const eligible = featuresForTier(features, projectType, projectLevel);
   const selectedFeatures = eligible
     .filter((f) => isIncludedForTier(f, projectType, projectLevel) || draft.featureIds.includes(f.id))
     .map((f) => {
@@ -420,7 +419,7 @@ export function computeEstimate(
     });
   const featureTotal = round2(selectedFeatures.reduce((s, f) => s + f.price, 0));
 
-  const tokenAmount = projectType ? CUSTOM_PROJECT_TOKENS[projectType] : 0;
+  const tokenAmount = Number(priceRow?.token_amount) || 0;
   const estimatedTotal = round2(basePrice + featureTotal + platformCharge);
 
   const ready = !!(projectType && projectLevel && platform && draft.title.trim() && basePrice > 0 && tokenAmount > 0);

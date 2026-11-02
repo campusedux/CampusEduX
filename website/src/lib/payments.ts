@@ -16,7 +16,7 @@ export type Verdict =
 /**
  * Turn a `supabase.functions.invoke(...)` result into a pass/fail verdict.
  * `ok` is true only when the call had no transport error AND the returned
- * body is an object with no `error` field. Anything else — no body, a string
+ * body carries the existing endpoint's settlement acknowledgement. Anything else — no body, a string
  * body, `{ error }`, a thrown transport error — is a failure.
  */
 export function interpretVerifyResponse(
@@ -25,8 +25,13 @@ export function interpretVerifyResponse(
 ): Verdict {
   const { data, error } = result;
   if (error) return { ok: false, message: error.message || fallbackMessage };
-  if (!data || typeof data !== "object") return { ok: false, message: fallbackMessage };
+  if (!data || typeof data !== "object" || Array.isArray(data)) return { ok: false, message: fallbackMessage };
   const bodyError = (data as { error?: unknown }).error;
   if (bodyError) return { ok: false, message: String(bodyError) || fallbackMessage };
-  return { ok: true, data: data as Record<string, unknown> };
+  const body = data as Record<string, unknown>;
+  const settled = body.ok === true || body.status === "success" ||
+    (typeof body.subscriptionId === "string" && body.subscriptionId.length > 0) ||
+    body.token_payment_status === "paid";
+  if (!settled) return { ok: false, message: fallbackMessage };
+  return { ok: true, data: body };
 }

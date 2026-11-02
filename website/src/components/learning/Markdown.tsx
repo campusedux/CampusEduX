@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { JSX, ReactNode } from "react";
 import Link from "next/link";
 import { CodeBlock } from "./CodeBlock";
 import { slugId } from "@/lib/blogText";

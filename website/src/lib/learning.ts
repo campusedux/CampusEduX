@@ -1,3 +1,4 @@
+import { revisionedPublicRead } from "@/lib/revisionedPublicRead";
 import { cache } from "react";
 import { unstable_cache } from "next/cache";
 import { cachedPublicRead, RpcFailed } from "@/lib/publicCache";
@@ -70,91 +71,52 @@ function cachedRead<A extends string[], R>(
 }
 
 
-export const getLearningGrids = cache(async (): Promise<LearningGridCard[]> =>
-  cachedRead("learning:grids", [] as [], [learningTag.list], async () => {
-    const supabase = getPublicSupabase();
-    if (!supabase) return [];
-    const { data, error } = await supabase.rpc("learning_grids_list", { p_platform: PLATFORM });
-    if (error || !Array.isArray(data)) throw new RpcFailed();
-    return data as LearningGridCard[];
-  }, []),
+/** Revision-checked anonymous payload reuse; HTML remains dynamic. */
+export const getLearningGrids = revisionedPublicRead("learning", "getLearningGrids", async (supabase): Promise<LearningGridCard[]> => {
+  if (!supabase) throw new RpcFailed("Learning catalog is unavailable");
+  const { data, error } = await supabase.rpc("learning_grids_list", { p_platform: PLATFORM });
+  if (error || !Array.isArray(data)) throw new RpcFailed("Learning catalog is unavailable");
+  return data as LearningGridCard[];
+});
+
+export const getLearningTree = revisionedPublicRead("learning", "getLearningTree", async (supabase, gridSlug: string): Promise<LearningTree | null> => {
+  if (!supabase) throw new RpcFailed("Learning course is unavailable");
+  const { data, error } = await supabase.rpc("learning_tree", { p_grid_slug: gridSlug, p_platform: PLATFORM });
+  if (error) throw new RpcFailed("Learning course is unavailable");
+  return (data || null) as LearningTree | null;
+});
+
+export const getLearningTopicPage = revisionedPublicRead("learning", "getLearningTopicPage",
+  async (supabase, gridSlug: string, topicSlug: string): Promise<LearningTopicPage | null> => {
+    if (!supabase) throw new RpcFailed("Learning lesson is unavailable");
+    const { data, error } = await supabase.rpc("learning_topic_content", {
+      p_grid_slug: gridSlug, p_topic_slug: topicSlug, p_platform: PLATFORM,
+    });
+    if (error) throw new RpcFailed("Learning lesson is unavailable");
+    return (data || null) as LearningTopicPage | null;
+  },
 );
 
-export const getLearningTree = cache(async (gridSlug: string): Promise<LearningTree | null> =>
-  cachedRead("learning:tree", [gridSlug], [learningTag.grid(gridSlug)], async (g) => {
-    const supabase = getPublicSupabase();
-    if (!supabase) return null;
-    const { data, error } = await supabase.rpc("learning_tree", { p_grid_slug: g, p_platform: PLATFORM });
-    if (error) throw new RpcFailed();
-    return (data || null) as LearningTree | null;
-  }, null),
-);
-
-export const getLearningTopicPage = cache(
-  async (gridSlug: string, topicSlug: string): Promise<LearningTopicPage | null> =>
-    cachedRead(
-      "learning:topic",
-      [gridSlug, topicSlug],
-      [learningTag.grid(gridSlug), learningTag.topic(gridSlug, topicSlug)],
-      async (g, t) => {
-        const supabase = getPublicSupabase();
-        if (!supabase) return null;
-        const { data, error } = await supabase.rpc("learning_topic_content", {
-          p_grid_slug: g,
-          p_topic_slug: t,
-          p_platform: PLATFORM,
-        });
-        if (error) throw new RpcFailed();
-        return (data || null) as LearningTopicPage | null;
-      },
-      null,
-    ),
-);
-
-/**
- * Topic-specific Mock Tests + Coding Problems for the bottom of a topic page.
- * `learning_topic_practice` (migration 0048/025) enforces the same publish +
- * platform + academic-targeting chain as `learning_topic_content` and only
- * lists rows attached to this exact topic. Returns `{ mock_tests: [],
- * coding_problems: [] }` for a topic with no practice — the caller renders
- * nothing in that case.
- */
-export const getTopicPractice = cache(
-  async (gridSlug: string, topicSlug: string): Promise<TopicPractice> => {
-    const empty: TopicPractice = { mock_tests: [], coding_problems: [] };
-    return cachedRead(
-      "learning:topic-practice",
-      [gridSlug, topicSlug],
-      [learningTag.grid(gridSlug), learningTag.topic(gridSlug, topicSlug)],
-      async (g, t) => {
-        const supabase = getPublicSupabase();
-        if (!supabase) return empty;
-        const { data, error } = await supabase.rpc("learning_topic_practice", {
-          p_grid_slug: g,
-          p_topic_slug: t,
-          p_platform: PLATFORM,
-        });
-        if (error) throw new RpcFailed();
-        const payload = (data ?? {}) as Partial<TopicPractice>;
-        return {
-          mock_tests: Array.isArray(payload.mock_tests) ? payload.mock_tests : [],
-          coding_problems: Array.isArray(payload.coding_problems) ? payload.coding_problems : [],
-        };
-      },
-      empty,
-    );
+/** Topic-scoped practice metadata. The existing RPC enforces the parent
+ * publication/platform chain; failures remain different from an empty topic. */
+export const getTopicPractice = revisionedPublicRead("learning", "getTopicPractice",
+  async (supabase, gridSlug: string, topicSlug: string): Promise<TopicPractice> => {
+    if (!supabase) throw new RpcFailed("Lesson practice is unavailable");
+    const { data, error } = await supabase.rpc("learning_topic_practice", {
+      p_grid_slug: gridSlug, p_topic_slug: topicSlug, p_platform: PLATFORM,
+    });
+    if (error) throw new RpcFailed("Lesson practice is unavailable");
+    const payload = (data ?? {}) as Partial<TopicPractice>;
+    return {
+      mock_tests: Array.isArray(payload.mock_tests) ? payload.mock_tests : [],
+      coding_problems: Array.isArray(payload.coding_problems) ? payload.coding_problems : [],
+    };
   },
 );
 
 // ---------------------------------------------------------------------------
-// Bottom-of-topic content discovery — "Other Tutorials", "Related Projects",
-// "Related Jobs", "Latest Jobs", "Other Learning Topics". ONE cross-request
-// cache entry per grid (tags: learning / projects / jobs, so an admin edit +
-// `POST /api/revalidate` refreshes it) wrapping a SINGLE `Promise.all` of four
-// BOUNDED, explicit-column reads. Every table hit is anon on an RLS
-// `using (true)` catalog table (projects / jobs) or the already
-// visibility-filtered `learning_grids_list` RPC — nothing draft / private /
-// premium-gated can surface here.
+// Bottom-of-topic discovery: bounded anonymous reads. Request memoization
+// deduplicates the learning catalog; no stale publication data crosses renders.
 // ---------------------------------------------------------------------------
 
 export interface TopicDiscoveryData {
@@ -169,89 +131,79 @@ export interface TopicDiscoveryData {
   latestJobs: JobCardData[];
 }
 
-const EMPTY_DISCOVERY: Omit<TopicDiscoveryData, "techLabel"> = {
-  tutorials: [],
-  overflowTutorials: [],
-  relatedProjects: [],
-  relatedJobs: [],
-  latestJobs: [],
-};
-
 const DISCOVERY_TUTORIAL_LIMIT = 6;
 const DISCOVERY_CARD_LIMIT = 6;
 /** Below this many tech matches, top up from popular / latest so a section
  *  still has enough to be worth showing (never with fabricated rows). */
 const DISCOVERY_MIN_RELEVANT = 3;
 
-export const getTopicDiscovery = unstable_cache(
+export const getTopicDiscovery = cache(
   async (gridSlug: string, gridName: string): Promise<TopicDiscoveryData> => {
     const { label, terms } = gridTechProfile(gridSlug, gridName);
-    const supabase = getPublicSupabase();
-    if (!supabase) return { techLabel: label, ...EMPTY_DISCOVERY };
+    const supabase = getPublicSupabase({ fresh: true });
+    if (!supabase) throw new RpcFailed("Lesson discovery is unavailable");
 
     const variants = Array.from(new Set(terms.flatMap(arrayMatchVariants)));
 
-    try {
-      const [gridsRes, projByTechRes, jobsBySkillRes, latestJobsRes] = await Promise.all([
-        supabase.rpc("learning_grids_list", { p_platform: PLATFORM }),
-        supabase
-          .from("projects")
-          .select(PROJECT_LIST_FIELDS)
-          .overlaps("tech_stack", variants)
-          .order("sales_count", { ascending: false })
-          .limit(DISCOVERY_CARD_LIMIT),
-        onlyActiveJobs(supabase.from("jobs").select(JOB_LIST_FIELDS))
-          .overlaps("skills", variants)
-          .order("posted_at", { ascending: false })
-          .limit(DISCOVERY_CARD_LIMIT),
-        onlyActiveJobs(supabase.from("jobs").select(JOB_LIST_FIELDS))
-          .order("posted_at", { ascending: false })
-          .limit(DISCOVERY_CARD_LIMIT + 3),
-      ]);
+    const [gridsRes, projByTechRes, jobsBySkillRes, latestJobsRes] = await Promise.all([
+      getLearningGrids(),
+      supabase
+        .from("projects")
+        .select(PROJECT_LIST_FIELDS)
+        .overlaps("tech_stack", variants)
+        .order("sales_count", { ascending: false })
+        .limit(DISCOVERY_CARD_LIMIT),
+      onlyActiveJobs(supabase.from("jobs").select(JOB_LIST_FIELDS))
+        .overlaps("skills", variants)
+        .order("posted_at", { ascending: false })
+        .limit(DISCOVERY_CARD_LIMIT),
+      onlyActiveJobs(supabase.from("jobs").select(JOB_LIST_FIELDS))
+        .order("posted_at", { ascending: false })
+        .limit(DISCOVERY_CARD_LIMIT + 3),
+    ]);
 
-      // --- Other Tutorials — every other published grid, ranked -----------
-      const others = (Array.isArray(gridsRes.data) ? (gridsRes.data as LearningGridCard[]) : []).filter(
-        (g) => g.slug && g.slug.toLowerCase() !== gridSlug.toLowerCase(),
+    if ([projByTechRes, jobsBySkillRes, latestJobsRes].some((r) => r.error))
+      throw new RpcFailed("Lesson discovery is unavailable");
+
+    // --- Other Tutorials — every other published grid, ranked -----------
+    const others = gridsRes.filter(
+      (g) => g.slug && g.slug.toLowerCase() !== gridSlug.toLowerCase(),
+    );
+    const ranked = rankTutorials(others);
+    const tutorials = ranked.slice(0, DISCOVERY_TUTORIAL_LIMIT);
+    const overflowTutorials = ranked
+      .slice(DISCOVERY_TUTORIAL_LIMIT)
+      .map((g) => ({ slug: g.slug, name: g.name }));
+
+    // --- Related Projects — tech match, topped up with popular ----------
+    let relatedProjects = (projByTechRes.data ?? []) as ProjectCardData[];
+    if (relatedProjects.length < DISCOVERY_MIN_RELEVANT) {
+      const { data: popular, error } = await supabase
+        .from("projects")
+        .select(PROJECT_LIST_FIELDS)
+        .order("sales_count", { ascending: false })
+        .limit(DISCOVERY_CARD_LIMIT);
+      if (error) throw new RpcFailed("Lesson discovery is unavailable");
+      relatedProjects = mergeUniqueById(
+        relatedProjects,
+        (popular ?? []) as ProjectCardData[],
+        DISCOVERY_CARD_LIMIT,
       );
-      const ranked = rankTutorials(others);
-      const tutorials = ranked.slice(0, DISCOVERY_TUTORIAL_LIMIT);
-      const overflowTutorials = ranked
-        .slice(DISCOVERY_TUTORIAL_LIMIT)
-        .map((g) => ({ slug: g.slug, name: g.name }));
-
-      // --- Related Projects — tech match, topped up with popular ----------
-      let relatedProjects = (projByTechRes.data ?? []) as ProjectCardData[];
-      if (relatedProjects.length < DISCOVERY_MIN_RELEVANT) {
-        const { data: popular } = await supabase
-          .from("projects")
-          .select(PROJECT_LIST_FIELDS)
-          .order("sales_count", { ascending: false })
-          .limit(DISCOVERY_CARD_LIMIT);
-        relatedProjects = mergeUniqueById(
-          relatedProjects,
-          (popular ?? []) as ProjectCardData[],
-          DISCOVERY_CARD_LIMIT,
-        );
-      }
-
-      // --- Related Jobs — skill match, topped up with the latest pool -----
-      const latestPool = (latestJobsRes.data ?? []) as JobCardData[];
-      let relatedJobs = (jobsBySkillRes.data ?? []) as JobCardData[];
-      if (relatedJobs.length < DISCOVERY_MIN_RELEVANT) {
-        relatedJobs = mergeUniqueById(relatedJobs, latestPool, DISCOVERY_CARD_LIMIT);
-      }
-
-      // --- Latest Jobs — newest, minus anything already shown as related --
-      const shownJobIds = new Set(relatedJobs.map((j) => j.id));
-      const latestJobs = latestPool.filter((j) => !shownJobIds.has(j.id)).slice(0, DISCOVERY_CARD_LIMIT);
-
-      return { techLabel: label, tutorials, overflowTutorials, relatedProjects, relatedJobs, latestJobs };
-    } catch {
-      return { techLabel: label, ...EMPTY_DISCOVERY };
     }
+
+    // --- Related Jobs — skill match, topped up with the latest pool -----
+    const latestPool = (latestJobsRes.data ?? []) as JobCardData[];
+    let relatedJobs = (jobsBySkillRes.data ?? []) as JobCardData[];
+    if (relatedJobs.length < DISCOVERY_MIN_RELEVANT) {
+      relatedJobs = mergeUniqueById(relatedJobs, latestPool, DISCOVERY_CARD_LIMIT);
+    }
+
+    // --- Latest Jobs — newest, minus anything already shown as related --
+    const shownJobIds = new Set(relatedJobs.map((j) => j.id));
+    const latestJobs = latestPool.filter((j) => !shownJobIds.has(j.id)).slice(0, DISCOVERY_CARD_LIMIT);
+
+    return { techLabel: label, tutorials, overflowTutorials, relatedProjects, relatedJobs, latestJobs };
   },
-  ["learning:topic-discovery"],
-  { revalidate: 300, tags: ["learning", learningTag.list, "projects", "jobs"] },
 );
 
 /** One topic Coding Problem by its global slug, for `/coding-problems/<slug>`.
@@ -306,11 +258,10 @@ export interface GridScopedTests {
   courseTest: { id: string; title: string } | null;
   chapterTestBySectionId: Record<string, { id: string; title: string }>;
 }
-export const getGridScopedTests = cache(async (gridId: string): Promise<GridScopedTests> => {
-  const supabase = getPublicSupabase();
-  if (!supabase) return { courseTest: null, chapterTestBySectionId: {} };
+export const getGridScopedTests = revisionedPublicRead("learning", "getGridScopedTests", async (supabase, gridId: string): Promise<GridScopedTests> => {
+  if (!supabase) throw new RpcFailed("Course tests are unavailable");
 
-  const [{ data: courseRows }, { data: chapterRows }] = await Promise.all([
+  const [{ data: courseRows, error: courseError }, { data: chapterRows, error: chapterError }] = await Promise.all([
     supabase
       .from("practice_tests")
       .select("id,title")
@@ -328,6 +279,8 @@ export const getGridScopedTests = cache(async (gridId: string): Promise<GridScop
       .eq("show_on_website", true),
   ]);
 
+  if (courseError || chapterError || !Array.isArray(courseRows) || !Array.isArray(chapterRows))
+    throw new RpcFailed("Course tests are unavailable");
   const courseTest = courseRows?.[0] ? { id: courseRows[0].id as string, title: courseRows[0].title as string } : null;
   const chapterTestBySectionId: Record<string, { id: string; title: string }> = {};
   for (const r of (chapterRows ?? []) as { id: string; title: string; learning_section_id: string | null }[]) {
@@ -340,21 +293,18 @@ export const getGridScopedTests = cache(async (gridId: string): Promise<GridScop
  *  (migration 0045/022) already restricts anon to published + global +
  *  website-visible, so an unpublished / archived / targeted grid comes back
  *  null and the page 404s. */
-export const getLearningGridBrief = cache(async (slug: string): Promise<LearningGridBrief | null> =>
-  cachedRead("learning:grid-brief", [slug], [learningTag.grid(slug)], async (sl) => {
-    const supabase = getPublicSupabase();
-    if (!supabase) return null;
-    const { data, error } = await supabase
-      .from("learning_grids")
-      .select("id,name,slug,description,grid_type,is_premium,icon,cover_image_url,accent_color")
-      .ilike("slug", sl)
-      .eq("status", "published")
-      .eq("show_on_website", true)
-      .maybeSingle();
-    if (error) throw new RpcFailed();
-    return (data || null) as LearningGridBrief | null;
-  }, null),
-);
+export const getLearningGridBrief = revisionedPublicRead("learning", "getLearningGridBrief", async (supabase, slug: string): Promise<LearningGridBrief | null> => {
+  if (!supabase) throw new RpcFailed("Learning course is unavailable");
+  const { data, error } = await supabase
+    .from("learning_grids")
+    .select("id,name,slug,description,grid_type,is_premium,icon,cover_image_url,accent_color")
+    .ilike("slug", slug)
+    .eq("status", "published")
+    .eq("show_on_website", true)
+    .maybeSingle();
+  if (error) throw new RpcFailed("Learning course is unavailable");
+  return (data || null) as LearningGridBrief | null;
+});
 
 /**
  * `generateStaticParams` sources. Cross-request cached (`unstable_cache`, tag
@@ -401,7 +351,7 @@ export const getCodingProblemSlugs = unstable_cache(
 export async function searchLearning(q: string, limit = 20): Promise<LearningSearchHit[]> {
   const term = q.trim();
   if (!term) return [];
-  const supabase = getPublicSupabase();
+  const supabase = getPublicSupabase({ fresh: true });
   if (!supabase) throw new Error("Learning search is unavailable");
   const { data, error } = await supabase.rpc("learning_search", {
     p_q: term,

@@ -40,3 +40,12 @@ describe("interpretVerifyResponse", () => {
     expect(v).toEqual({ ok: false, message: "Could not verify." });
   });
 });
+
+describe("settlement acknowledgement", () => {
+  it.each([{}, [], { ok: false }, { status: "pending" }, { subscriptionId: "" }, { token_payment_status: "pending" }])("rejects an unsettled response: %j", (data) => {
+    expect(interpretVerifyResponse({ data, error: null }).ok).toBe(false);
+  });
+  it.each([{ ok: true }, { subscriptionId: "synthetic-sub" }, { token_payment_status: "paid" }, { status: "success" }])("accepts an existing settlement response: %j", (data) => {
+    expect(interpretVerifyResponse({ data, error: null }).ok).toBe(true);
+  });
+});

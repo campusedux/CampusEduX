@@ -29,7 +29,8 @@ interface SharedResumePayload {
   layout?: unknown;
 }
 
-export default async function SharedResumePage({ params }: { params: { token: string } }) {
+export default async function SharedResumePage({ params: paramsPromise }: { params: Promise<{ token: string }> }) {
+  const params = await paramsPromise;
   const supabase = getPublicSupabase();
   if (!supabase) notFound();
 

@@ -10,14 +10,15 @@
 // }
 // Response body : { ok: true, amount: number }   // client ignores the body
 //
-// Real HMAC-SHA256 verification. Only a passing check flips the top-up order to
-// "paid" and writes the settled credit into wallet_transactions (which is what
-// the wallet balance is computed from). Idempotent — a repeat call does not
-// double-credit.
+// HMAC-SHA256 and authoritative capture verification precede a single database
+// transaction committing the paid order and its unique wallet credit. A retry
+// succeeds only when the matching financial credit exists.
 
 import { json, preflight } from "../_shared/cors.ts";
 import { adminClient, getUser } from "../_shared/client.ts";
-import { razorpayConfigured, verifyRazorpaySignature } from "../_shared/razorpay.ts";
+import { nonEmptyString, orderBindingMatches, paymentIsAvailable } from "../_shared/paymentBinding.ts";
+import { PaymentVerificationError, paymentAmountPaise, razorpayConfigured, verifyCapturedRazorpayPayment, verifyRazorpaySignature } from "../_shared/razorpay.ts";
+import { settleWalletTopup } from "../_shared/walletSettlement.ts";
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return preflight();
@@ -30,8 +31,8 @@ Deno.serve(async (req) => {
 
     const { orderId, razorpayOrderId, razorpayPaymentId, razorpaySignature } = await req
       .json()
-      .catch(() => ({}));
-    if (!orderId || !razorpayOrderId || !razorpayPaymentId || !razorpaySignature) {
+      .catch(() => ({})) ?? {};
+    if (![orderId, razorpayOrderId, razorpayPaymentId, razorpaySignature].every(nonEmptyString)) {
       return json({ error: "orderId, razorpayOrderId, razorpayPaymentId and razorpaySignature are required." }, 400);
     }
 
@@ -39,53 +40,41 @@ Deno.serve(async (req) => {
 
     const { data: order, error: fetchError } = await db
       .from("wallet_topup_orders")
-      .select("id, user_id, amount, status, razorpay_order_id")
+      .select("id, user_id, amount, currency, status, razorpay_order_id, razorpay_payment_id")
       .eq("id", orderId)
       .maybeSingle();
     if (fetchError) throw fetchError;
     if (!order) return json({ error: "Top-up order not found." }, 404);
     if (order.user_id !== user.id) return json({ error: "This order is not yours." }, 403);
-    if (order.razorpay_order_id && order.razorpay_order_id !== razorpayOrderId) {
+    if (!orderBindingMatches(order.razorpay_order_id, razorpayOrderId)) {
       return json({ error: "Razorpay order id does not match this order." }, 400);
     }
 
-    if (order.status === "paid") return json({ ok: true, amount: Number(order.amount) });
-
-    const valid = await verifyRazorpaySignature(razorpayOrderId, razorpayPaymentId, razorpaySignature);
+    const valid = await verifyRazorpaySignature(order.razorpay_order_id, razorpayPaymentId, razorpaySignature);
     if (!valid) {
-      await db.from("wallet_topup_orders").update({ status: "failed" }).eq("id", order.id).neq("status", "paid");
+      if (order.status === "paid") return json({ error: "Payment signature verification failed." }, 400);
+      await db.from("wallet_topup_orders").update({ status: "failed" }).eq("id", order.id).eq("razorpay_order_id", order.razorpay_order_id).neq("status", "paid");
       return json({ error: "Payment signature verification failed." }, 400);
     }
 
-    // Atomic conditional update: only the caller that actually flips
-    // status away from "paid" gets a row back and credits the wallet.
-    // The Razorpay webhook can race this same order to "paid" (see
-    // razorpay-webhook/index.ts) — Postgres row-level locking on this
-    // UPDATE serializes the two, so exactly one of them ever inserts the
-    // wallet_transactions credit below.
-    const { data: updatedOrder, error: updateError } = await db
-      .from("wallet_topup_orders")
-      .update({ status: "paid", razorpay_payment_id: razorpayPaymentId })
-      .eq("id", order.id)
-      .neq("status", "paid")
-      .select("id")
-      .maybeSingle();
-    if (updateError) throw updateError;
-
-    if (updatedOrder) {
-      const { error: creditError } = await db.from("wallet_transactions").insert({
-        user_id: user.id,
-        type: "credit",
-        category: "added_money",
-        amount: Number(order.amount),
-        description: "Added Money",
-      });
-      if (creditError) throw creditError;
+    if (order.status === "paid" && order.razorpay_payment_id !== razorpayPaymentId) {
+      return json({ error: "Payment id does not match the settled order." }, 400);
+    }
+    if (!await paymentIsAvailable(db, razorpayPaymentId, order.razorpay_order_id, { type: "wallet", id: order.id })) {
+      return json({ error: "Payment id is already bound to another order." }, 400);
     }
 
-    return json({ ok: true, amount: Number(order.amount) });
+    await verifyCapturedRazorpayPayment({
+      paymentId: razorpayPaymentId,
+      orderId: order.razorpay_order_id,
+      amountPaise: paymentAmountPaise(order.amount),
+      currency: order.currency,
+    });
+
+    const settlement = await settleWalletTopup(db, order, razorpayPaymentId);
+    return json({ ok: true, amount: settlement.amount });
   } catch (err) {
     console.error("verify-wallet-topup-payment:", err);
-    return json({ error: (err as Error).message ?? "Unexpected error." }, 500);
+    return json({ error: (err as Error).message ?? "Unexpected error." }, err instanceof PaymentVerificationError ? err.status : 500);
   }
 });

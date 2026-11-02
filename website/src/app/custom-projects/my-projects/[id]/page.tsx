@@ -36,11 +36,12 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-type Params = { params: { id: string } };
+type Params = { params: Promise<{ id: string }> };
 
-export default async function Page({ params }: Params) {
+export default async function Page({ params: paramsPromise }: Params) {
+  const params = await paramsPromise;
   const user = await requireUser();
-  const supabase = createAuthedServerSupabase();
+  const supabase = await createAuthedServerSupabase();
 
   const { data: request } = await supabase
     .from("custom_project_requests")

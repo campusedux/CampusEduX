@@ -74,9 +74,10 @@ function CategoryCard({ category, resumeId }: { category: AtsCategory; resumeId:
   );
 }
 
-export default async function ResumeAtsPage({ params }: { params: { id: string } }) {
+export default async function ResumeAtsPage({ params: paramsPromise }: { params: Promise<{ id: string }> }) {
+  const params = await paramsPromise;
   const user = await requireUser();
-  const supabase = createAuthedServerSupabase();
+  const supabase = await createAuthedServerSupabase();
 
   // The resume row and the ATS computation both key off params.id and don't
   // depend on each other — run them together.

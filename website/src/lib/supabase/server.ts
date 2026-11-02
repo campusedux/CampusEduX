@@ -11,7 +11,7 @@ import { createClient } from "@supabase/supabase-js";
 // applications, purchases, etc.) — those belong to the Phase 2 account
 // dashboard, built with @supabase/ssr and a real session, matching the
 // pattern already used in admin-panel/.
-export function getPublicSupabase() {
+export function getPublicSupabase(options?: { fresh?: boolean }) {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   if (!url || !key) {
@@ -19,5 +19,10 @@ export function getPublicSupabase() {
   }
   return createClient(url, key, {
     auth: { persistSession: false },
+    // Public content whose publication/protection can change must bypass Next's
+    // persistent fetch cache. Keep this opt-in for existing catalog callers.
+    ...(options?.fresh ? {
+      global: { fetch: (input: RequestInfo | URL, init?: RequestInit) => fetch(input, { ...init, cache: "no-store" }) },
+    } : {}),
   });
 }

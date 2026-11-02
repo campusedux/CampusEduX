@@ -45,21 +45,25 @@ async function openWeb(options: RazorpayOptions): Promise<RazorpayResponse> {
 
   return new Promise<RazorpayResponse>((resolve, reject) => {
     let settled = false;
+    let lastFailure: { code: number; description: string } | undefined;
     const rzp = new Razorpay({
       ...options,
       handler: (response: RazorpayResponse) => {
+        if (settled) return;
         settled = true;
         resolve(response);
       },
       modal: {
         ondismiss: () => {
-          if (!settled) reject({ code: 0, description: "Payment cancelled by user" });
+          if (settled) return;
+          settled = true;
+          reject(lastFailure ?? { code: 0, description: "Payment cancelled by user" });
         },
       },
     });
     rzp.on("payment.failed", (response: any) => {
-      settled = true;
-      reject({ code: 2, description: response?.error?.description ?? "Payment failed" });
+      // Checkout can retry this same order. Keep listening for success until dismissal.
+      if (!settled) lastFailure = { code: 2, description: response?.error?.description ?? "Payment failed" };
     });
     rzp.open();
   });

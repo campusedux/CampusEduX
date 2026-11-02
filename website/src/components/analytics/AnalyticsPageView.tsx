@@ -4,9 +4,8 @@ import { usePathname, useSearchParams } from "next/navigation";
 import { useEffect, useRef } from "react";
 import { sendPageview } from "@/lib/analytics";
 
-// The gtag('config', ...) call in GoogleAnalytics already reports the initial
-// load's page_view. This component only reports the client-side navigations
-// that follow, so the first render is intentionally skipped.
+// initializeAnalytics reports the initial location after installing the
+// consent listener. Subsequent router changes use the same privacy boundary.
 export default function AnalyticsPageView() {
   const pathname = usePathname();
   const searchParams = useSearchParams();

@@ -9,7 +9,7 @@ export async function loadOwnResumeForExport(resumeId: string): Promise<LoadResu
   const user = await getOptionalUser();
   if (!user) return { error: "Please sign in again.", status: 401 };
 
-  const supabase = createAuthedServerSupabase();
+  const supabase = await createAuthedServerSupabase();
   const { data: row } = await supabase
     .from("resumes_builder")
     .select("id, title, template, design, personal_details, content, education, skills, sections, ats_score, layout, updated_at")
@@ -26,13 +26,13 @@ export async function loadOwnResumeForExport(resumeId: string): Promise<LoadResu
 }
 
 export async function recordResumeDownload(userId: string, resume: ResumeDocument, fileName: string): Promise<void> {
-  const supabase = createAuthedServerSupabase();
+  const supabase = await createAuthedServerSupabase();
   await supabase.from("resume_downloads").insert({ user_id: userId, resume_id: resume.id, resume_title: resume.title, file_url: fileName });
 }
 
 /** Best-effort version checkpoint before a download — never blocks the export if it fails. */
 export async function snapshotBeforeExport(userId: string, resume: ResumeDocument): Promise<void> {
-  const supabase = createAuthedServerSupabase();
+  const supabase = await createAuthedServerSupabase();
   await supabase.from("resume_versions").insert({
     user_id: userId,
     resume_id: resume.id,

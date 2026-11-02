@@ -23,7 +23,7 @@ interface ReferralHistoryRow {
 
 export default async function AccountReferralPage() {
   const user = await requireUser();
-  const supabase = createAuthedServerSupabase();
+  const supabase = await createAuthedServerSupabase();
 
   const [{ data: code }, { data: referrals }] = await Promise.all([
     supabase.from("referral_codes").select("code,total_referrals,total_earned").eq("user_id", user.id).maybeSingle(),

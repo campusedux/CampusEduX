@@ -20,7 +20,8 @@ export function generateStaticParams() {
   return [];
 }
 
-export async function generateMetadata({ params }: { params: { category: string } }): Promise<Metadata> {
+export async function generateMetadata({ params: paramsPromise }: { params: Promise<{ category: string }> }): Promise<Metadata> {
+  const params = await paramsPromise;
   const page = await getInterviewTopics(params.category);
   if (!page) return { title: "Not found", robots: { index: false, follow: false } };
   const url = absoluteUrl(`/practice/interview-questions/${page.category.slug}`);
@@ -45,7 +46,8 @@ export async function generateMetadata({ params }: { params: { category: string 
   };
 }
 
-export default async function InterviewCategoryPage({ params }: { params: { category: string } }) {
+export default async function InterviewCategoryPage({ params: paramsPromise }: { params: Promise<{ category: string }> }) {
+  const params = await paramsPromise;
   const page = await getInterviewTopics(params.category);
   if (!page) notFound();
   const { category, topics } = page;

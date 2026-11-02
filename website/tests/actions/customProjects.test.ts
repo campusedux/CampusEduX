@@ -5,7 +5,7 @@ vi.mock("next/navigation", () => ({ redirect: vi.fn() }));
 import { supabase, resetSupabaseMock, setUser, setTableResult, callsFor } from "../helpers/supabase.mock";
 vi.mock("@/lib/supabase/authed-server", () => ({ createAuthedServerSupabase: () => supabase }));
 
-import { sendCustomProjectMessageAction } from "@/lib/actions/customProjects";
+import { sendCustomProjectMessageAction, updateCustomProjectRequestAction } from "@/lib/actions/customProjects";
 
 const USER = { id: "user-1", email: "s@campusedux.app" };
 const REQ_ID = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
@@ -59,5 +59,27 @@ describe("sendCustomProjectMessageAction", () => {
       sender_role: "student",
       body: "When is delivery?", // trimmed
     });
+  });
+});
+
+
+describe("Zod release gate: request requirements", () => {
+  it("rejects 31 requirements before reading elements or authenticating", async () => {
+    const requirements = new Array<string>(31);
+    Object.defineProperty(requirements, 0, { get() { throw new Error("Do not read excessive requirements"); } });
+    expect(await updateCustomProjectRequestAction({ requestId: REQ_ID, changes: { custom_requirements: requirements } })).toEqual({ error: "Array must contain at most 30 element(s)" });
+    expect(supabase.auth.getUser).not.toHaveBeenCalled();
+    expect(supabase.calls).toEqual([]);
+  });
+
+  it("accepts 30 requirements and preserves the RPC contract", async () => {
+    setUser(USER);
+    expect(await updateCustomProjectRequestAction({ requestId: REQ_ID, changes: { custom_requirements: Array(30).fill("Feature") } })).toEqual({ ok: true });
+    expect(supabase.rpc).toHaveBeenCalledWith("custom_project_update_request", { p_request_id: REQ_ID, p_changes: { custom_requirements: Array(30).fill({ text: "Feature" }) } });
+  });
+
+  it("preserves requirement-length and identifier error messages", async () => {
+    expect(await updateCustomProjectRequestAction({ requestId: REQ_ID, changes: { custom_requirements: ["a".repeat(501)] } })).toEqual({ error: "Each requirement can be at most 500 characters." });
+    expect(await sendCustomProjectMessageAction({ requestId: "invalid", body: "Hello" })).toEqual({ error: "Invalid uuid" });
   });
 });

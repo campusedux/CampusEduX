@@ -59,8 +59,8 @@ const nextConfig = {
   // at runtime instead, which works correctly. @napi-rs/canvas is
   // pdf-parse's native optional dependency for the screenshot/table
   // features (unused here, but still resolved at import time).
+  serverExternalPackages: ["pdf-parse", "pdfjs-dist", "@napi-rs/canvas"],
   experimental: {
-    serverComponentsExternalPackages: ["pdf-parse", "pdfjs-dist", "@napi-rs/canvas"],
     // Barrel-file optimization: `@/components/ui` re-exports ~20 modules incl.
     // client ones (Modal, Drawer, FilterSheet, Reveal). This makes an import of
     // one symbol pull only that symbol's module, not evaluate the whole barrel.

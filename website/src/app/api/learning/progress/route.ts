@@ -16,7 +16,7 @@ export async function GET(req: Request) {
   const grid = new URL(req.url).searchParams.get("grid") ?? "";
   if (!SLUG.test(grid)) return NextResponse.json({ topics: [] }, { status: 400, headers: PRIVATE });
 
-  const supabase = createAuthedServerSupabase();
+  const supabase = await createAuthedServerSupabase();
   const {
     data: { user },
   } = await supabase.auth.getUser();

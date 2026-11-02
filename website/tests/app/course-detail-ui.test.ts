@@ -182,7 +182,7 @@ describe("course CTA presentation", () => {
 
 describe("course detail page composition", () => {
   it("retains the real course description, curriculum, and assessment contracts", async () => {
-    const html = renderToStaticMarkup(await CoursePage({ params: { gridSlug: "java" } }));
+    const html = renderToStaticMarkup(await CoursePage({ params: Promise.resolve({ gridSlug: "java" }) }));
     expect(html).toContain(description);
     expect(html).toContain('id="curriculum-title"');
     expect(html).toContain('href="/learning/java/intro"');
@@ -195,6 +195,6 @@ describe("course detail page composition", () => {
 
   it.each(["brief", "tree"] as const)("keeps missing %s records unavailable", async missing => {
     api[missing].mockResolvedValue(null);
-    await expect(CoursePage({ params: { gridSlug: "java" } })).rejects.toThrow("NOT_FOUND");
+    await expect(CoursePage({ params: Promise.resolve({ gridSlug: "java" }) })).rejects.toThrow("NOT_FOUND");
   });
 });

@@ -17,6 +17,11 @@ begin
   insert into custom_project_payments(request_id,user_id,project_type,amount,status,kind,razorpay_order_id)
     values (p,u,'personal',amount,'created',k,oid) returning id into l;
   perform test_as(null,'service_role');
+  -- Match order creation: both token mirrors are bound before capture arrives.
+  if k = 'token' then
+    update custom_project_requests set payment_order_id = oid
+      where id = p and payment_order_id is null;
+  end if;
   update custom_project_payments set status = 'paid', razorpay_payment_id = 'pay_' || oid where id = l;
   perform test_reset();
   return l;
@@ -32,8 +37,8 @@ begin
   insert into admin_users(id,email,role,status) values (adm,'adm128@x.io','super_admin','active');
 
   -- (1) unpaid: token not paid yet -> the whole value is due
-  insert into custom_project_requests(user_id,title,project_type,project_level,platform,estimated_total,token_amount)
-    values (a,'Unpaid','personal','standard','web',10000,3000) returning id into r;
+  insert into custom_project_requests(user_id,title,project_type,project_level,platform,estimated_total,token_amount,service_scope,assessment_use,integrity_acknowledged_at)
+    values (a,'Unpaid','personal','standard','web',10000,3000,'custom_software','no',now()) returning id into r;
   if pg_temp.amt(r,'due') <> 10000 or pg_temp.pstatus(r) <> 'unpaid' then raise exception 'FAIL unpaid %', custom_project_amounts(r); end if;
 
   -- (2) partial: token paid through the WEBHOOK ONLY (verify never ran) -> request settles itself
@@ -93,8 +98,8 @@ begin
   end if;
 
   -- (6) paise-precision amounts, no float drift, and the due never goes negative
-  insert into custom_project_requests(user_id,title,project_type,project_level,platform,estimated_total,token_amount)
-    values (a,'Paise','personal','standard','web',10000.50,1500.25) returning id into r;
+  insert into custom_project_requests(user_id,title,project_type,project_level,platform,estimated_total,token_amount,service_scope,assessment_use,integrity_acknowledged_at)
+    values (a,'Paise','personal','standard','web',10000.50,1500.25,'custom_software','no',now()) returning id into r;
   perform pg_temp.pay(r, a, 'token', 1500.25, 'o_tok_2');
   perform pg_temp.pay(r, a, 'balance', 1234.56, 'o_bal_4');   -- a checkout for a partial amount
   if pg_temp.amt(r,'due') <> 7265.69 then raise exception 'FAIL paise due %', custom_project_amounts(r); end if;
@@ -116,8 +121,8 @@ begin
   if pg_temp.amt(r,'due') <> 6765.69 then raise exception 'FAIL credit removal %', custom_project_amounts(r); end if;
 
   -- (7) legacy shape: token flag paid but no paid token ledger row -> token still counts
-  insert into custom_project_requests(user_id,title,project_type,project_level,platform,estimated_total,token_amount,token_payment_status)
-    values (a,'Legacy','academic','standard','web',7999,1500,'paid') returning id into r;
+  insert into custom_project_requests(user_id,title,project_type,project_level,platform,estimated_total,token_amount,token_payment_status,service_scope,assessment_use,integrity_acknowledged_at,student_authored_confirmed)
+    values (a,'Legacy','academic','standard','web',7999,1500,'paid','mentoring','yes',now(),true) returning id into r;
   if pg_temp.amt(r,'due') <> 6499 then raise exception 'FAIL legacy token %', custom_project_amounts(r); end if;
 
   -- (8) base value (admin) + add-ons: final price replaces the estimate as the base
@@ -145,8 +150,8 @@ declare
   r uuid; ad uuid; ad2 uuid; d uuid; j jsonb; n int;
 begin
   insert into admin_users(id,email,role,status) values (vw,'vw128@x.io','viewer','active');
-  insert into custom_project_requests(user_id,title,project_type,project_level,platform,estimated_total,token_amount,token_payment_status)
-    values (a,'Edit me','personal','standard','web',20000,3000,'paid') returning id into r;
+  insert into custom_project_requests(user_id,title,project_type,project_level,platform,estimated_total,token_amount,token_payment_status,service_scope,assessment_use,integrity_acknowledged_at)
+    values (a,'Edit me','personal','standard','web',20000,3000,'paid','custom_software','no',now()) returning id into r;
 
   -- the owner edits allowed fields while 'new'
   perform test_as(a);
@@ -295,8 +300,8 @@ begin
   perform test_reset();
 
   -- attachments: own folder + uploaded object only, and only while 'new'
-  insert into custom_project_requests(user_id,title,project_type,project_level,platform,estimated_total,token_amount,token_payment_status)
-    values (a,'Attach','personal','standard','web',5000,3000,'paid') returning id into r;
+  insert into custom_project_requests(user_id,title,project_type,project_level,platform,estimated_total,token_amount,token_payment_status,service_scope,assessment_use,integrity_acknowledged_at)
+    values (a,'Attach','personal','standard','web',5000,3000,'paid','custom_software','no',now()) returning id into r;
   insert into storage.objects(bucket_id, name) values ('custom-project-uploads', a::text || '/spec.pdf');
   insert into storage.objects(bucket_id, name) values ('custom-project-uploads', b::text || '/other.pdf');
   perform test_as(a);
@@ -339,6 +344,66 @@ begin
   perform test_reset();
   if (select price from custom_project_addons where id = ad) <> 2500 then raise exception 'FAIL add-on price moved'; end if;
   raise notice 'DB-128 OK';
+end $$;
+
+-- Both callback and webhook now use this single ledger UPDATE boundary. A
+-- notification failure must roll back the request, credit, claim and history.
+create function pg_temp.reject_token_notification() returns trigger language plpgsql as $$
+begin
+  if new.title = 'Token payment successful' then
+    raise exception 'synthetic notification failure' using errcode = 'P0001';
+  end if;
+  return new;
+end $$;
+create trigger cx_test_token_notification_failure before insert on public.notifications
+  for each row execute function pg_temp.reject_token_notification();
+do $$
+declare
+  u uuid := test_make_user('token-atomic-128@synthetic.invalid');
+  r uuid; p uuid;
+begin
+  insert into custom_project_requests(user_id,title,project_type,project_level,platform,
+    estimated_total,token_amount,service_scope,assessment_use,integrity_acknowledged_at,payment_order_id)
+    values(u,'Atomic token','personal','standard','web',10000,3000,'custom_software','no',now(),
+      'order_token_atomic_128') returning id into r;
+  insert into custom_project_payments(request_id,user_id,project_type,amount,kind,razorpay_order_id)
+    values(r,u,'personal',3000,'token','order_token_atomic_128') returning id into p;
+  perform test_as(null,'service_role');
+  begin
+    update custom_project_payments set status='paid',razorpay_payment_id='pay_token_atomic_128' where id=p;
+    raise exception 'Expected notification failure' using errcode='XX000';
+  exception when sqlstate 'P0001' then
+    if sqlerrm <> 'synthetic notification failure' then raise; end if;
+  end;
+  perform test_reset();
+  if (select status from custom_project_payments where id=p) <> 'created'
+     or (select token_payment_status from custom_project_requests where id=r) <> 'pending'
+     or (select amount_paid from custom_project_requests where id=r) <> 0
+     or exists(select 1 from custom_project_request_history where request_id=r)
+     or exists(select 1 from razorpay_payment_bindings where provider_payment_id='pay_token_atomic_128') then
+    raise exception 'FAIL token transaction left partial financial effects';
+  end if;
+end $$;
+drop trigger cx_test_token_notification_failure on public.notifications;
+do $$
+declare
+  r uuid := (select id from custom_project_requests where title='Atomic token');
+  p uuid := (select id from custom_project_payments where request_id=r);
+begin
+  perform test_as(null,'service_role');
+  update custom_project_payments set status='paid',razorpay_payment_id='pay_token_atomic_128'
+    where id=p and status in ('created','failed');
+  update custom_project_payments set status='paid',razorpay_payment_id='pay_token_atomic_128'
+    where id=p and status in ('created','failed');
+  perform test_reset();
+  if (select amount_paid from custom_project_requests where id=r) <> 3000
+     or (select token_payment_status from custom_project_requests where id=r) <> 'paid'
+     or (select count(*) from custom_project_request_history where request_id=r) <> 1
+     or (select count(*) from custom_project_admin_inbox where request_id=r) <> 1
+     or (select count(*) from razorpay_payment_bindings where provider_payment_id='pay_token_atomic_128') <> 1 then
+    raise exception 'FAIL token retry/replay conservation';
+  end if;
+  raise notice 'PASS token notification failure rollback, retry, replay and conservation';
 end $$;
 
 rollback;

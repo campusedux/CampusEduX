@@ -41,32 +41,31 @@ export function ModuleGrid() {
     <section className="container-page pt-10 md:pt-14 max-md:pt-8" aria-labelledby="home-features-title">
       <SectionHeader
         id="home-features-title"
-        eyebrow="What you get"
+        eyebrow="WHAT YOU GET"
         title="Everything you need, from first lesson to first offer"
         description="One account for learning, practice, projects and your job search — on the web and the CampusEduX app."
       />
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-5 xl:grid-cols-3 max-md:!grid-cols-2 max-md:gap-3">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-5 lg:grid-cols-3">
         {FEATURES.map((f) => {
           const Icon = f.icon;
           const a = ACCENT[f.accent];
           return (
-            <Link key={f.href} href={f.href} className="card card-hover group flex min-h-[120px] min-w-0 items-start gap-3 overflow-hidden p-4 max-md:relative max-md:min-h-[136px] max-md:flex-col max-md:gap-2 max-md:p-3">
+            <Link key={f.href} href={f.href} className="card card-hover group flex min-h-[180px] min-w-0 items-start gap-4 p-5 focus-visible:border-primary/50 motion-reduce:!transform-none md:p-6">
               <span
                 className={cn(
-                  "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl max-md:h-9 max-md:w-9",
+                  "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl",
                   a.tile,
                 )}
               >
                 <Icon className={cn("h-5 w-5", a.fg)} aria-hidden />
               </span>
-              <div className="flex min-w-0 flex-1 flex-col">
-                <h3 className="line-clamp-1 font-display text-base font-semibold text-ink max-md:line-clamp-2 max-md:text-[15px] max-md:leading-snug">{f.label}</h3>
-                <p className="mt-1 line-clamp-2 text-sm leading-5 text-ink-muted max-md:text-[13px] max-md:leading-4">{f.benefit}</p>
-                <span className="mt-2 inline-flex items-center gap-1 text-sm font-semibold text-primary max-md:hidden">
+              <div className="flex min-w-0 flex-1 flex-col self-stretch">
+                <h3 className="font-display text-base font-semibold text-ink">{f.label}</h3>
+                <p className="mt-1 text-sm leading-relaxed text-ink-muted">{f.benefit}</p>
+                <span className="mt-auto inline-flex items-center gap-1 pt-3 text-sm font-semibold text-primary">
                   {f.cta}
-                  <ArrowRight className="h-4 w-4 shrink-0 transition-transform group-hover:translate-x-0.5 motion-reduce:transform-none" aria-hidden />
+                  <ArrowRight className="h-4 w-4 shrink-0 transition-transform group-hover:translate-x-0.5 group-focus-visible:translate-x-0.5 motion-reduce:!transform-none" aria-hidden />
                 </span>
-                <ArrowRight className="hidden h-4 w-4 text-primary max-md:absolute max-md:right-3 max-md:top-3 max-md:block" aria-hidden />
               </div>
             </Link>
           );

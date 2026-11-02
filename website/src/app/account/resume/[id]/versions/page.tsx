@@ -5,9 +5,10 @@ import { listResumeVersionsAction } from "@/lib/actions/resumeBuilder";
 import { EmptyState } from "@/components/ui";
 import VersionHistory from "./VersionHistory";
 
-export default async function ResumeVersionsPage({ params }: { params: { id: string } }) {
+export default async function ResumeVersionsPage({ params: paramsPromise }: { params: Promise<{ id: string }> }) {
+  const params = await paramsPromise;
   const user = await requireUser();
-  const supabase = createAuthedServerSupabase();
+  const supabase = await createAuthedServerSupabase();
 
   const { data: resume } = await supabase.from("resumes_builder").select("id, title").eq("id", params.id).eq("user_id", user.id).maybeSingle();
   if (!resume) notFound();

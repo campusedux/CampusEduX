@@ -107,7 +107,7 @@ vi.mock("react", async (importOriginal) => {
 describe("Phase 4A: page components call notFound() for a missing record", () => {
   it("/projects/[id]", async () => {
     const { default: ProjectDetailPage } = await import("@/app/projects/[id]/page");
-    await expect(ProjectDetailPage({ params: { id: "missing" } })).rejects.toMatchObject({
+    await expect(ProjectDetailPage({ params: Promise.resolve({ id: "missing" }) })).rejects.toMatchObject({
       digest: "NEXT_NOT_FOUND",
     });
     expect(notFound).toHaveBeenCalled();
@@ -115,14 +115,14 @@ describe("Phase 4A: page components call notFound() for a missing record", () =>
 
   it("/jobs/[id]", async () => {
     const { default: JobDetailPage } = await import("@/app/jobs/[id]/page");
-    await expect(JobDetailPage({ params: { id: "missing" } })).rejects.toMatchObject({
+    await expect(JobDetailPage({ params: Promise.resolve({ id: "missing" }) })).rejects.toMatchObject({
       digest: "NEXT_NOT_FOUND",
     });
   });
 
   it("/jobs/companies/[id]", async () => {
     const { default: CompanyDetailPage } = await import("@/app/jobs/companies/[id]/page");
-    await expect(CompanyDetailPage({ params: { id: "missing" } })).rejects.toMatchObject({
+    await expect(CompanyDetailPage({ params: Promise.resolve({ id: "missing" }) })).rejects.toMatchObject({
       digest: "NEXT_NOT_FOUND",
     });
   });
@@ -133,7 +133,7 @@ describe("Phase 4A: page components call notFound() for a missing record", () =>
       getLearningTree: vi.fn(async () => null),
     }));
     const { default: TopicPage } = await import("@/app/learning/[gridSlug]/[topicSlug]/page");
-    await expect(TopicPage({ params: { gridSlug: "missing", topicSlug: "missing" } })).rejects.toMatchObject({
+    await expect(TopicPage({ params: Promise.resolve({ gridSlug: "missing", topicSlug: "missing" }) })).rejects.toMatchObject({
       digest: "NEXT_NOT_FOUND",
     });
     vi.doUnmock("@/lib/learning");

@@ -18,6 +18,10 @@ describe("new order academic-integrity gate", () => {
   it("blocks an academic completion package even when its title sounds harmless", () => {
     expect(validateAcademicOrder({ ...mentoring, featureIds: ["doc-academic-package"] })).toMatch(/unavailable/);
   });
+  it("allows a feature package for non-assessed Academic software", () => {
+    expect(validateAcademicOrder({ ...mentoring, serviceScope: "custom_software", assessmentUse: "no", studentAuthored: true, featureIds: ["auth-google", "doc-ppt"], text: ["Independent learning app"] })).toBeNull();
+    expect(validateAcademicOrder({ ...mentoring, serviceScope: "custom_software", assessmentUse: "yes", featureIds: ["auth-google"] })).toMatch(/mentoring/);
+  });
   it("blocks an explicit request to complete an assessment", () => {
     expect(validateAcademicOrder({ ...mentoring, text: ["Please write my final-year project for me"] })).toMatch(/cannot complete/);
   });

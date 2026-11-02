@@ -25,7 +25,7 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  const supabase = createAuthedServerSupabase();
+  const supabase = await createAuthedServerSupabase();
   const { error } = await supabase.auth.verifyOtp({
     token_hash: tokenHash,
     type: type as EmailOtpType,

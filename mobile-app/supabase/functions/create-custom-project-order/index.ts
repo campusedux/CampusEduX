@@ -24,21 +24,21 @@
 //     amount: number,              // paise — the TRUSTED token amount * 100
 //     currency: "INR",
 //     projectType, projectLevel: string,
-//     tokenAmount: number,         // rupees (Academic 1500 / Personal 3000 / Business 6000)
+//     tokenAmount: number,         // rupees, from the admin-managed catalog
 //     basePrice, platformCharge, featureTotal, estimatedTotal: number,  // rupees, informational
 //     pricingVersion: number
 //   }
 //
 // SECURITY (spec §11 / §14): the server recomputes EVERY amount from the DB and
-// never trusts a client-sent price or token. The token is a fixed per-type
-// constant here; the pricing table is only a cross-check. The Razorpay key
+// never trusts a client-sent price or token. The token comes from the active
+// pricing row, shared across levels of its project type. The Razorpay key
 // secret never touches the client — only the key id is returned.
 
 import { json, preflight } from "../_shared/cors.ts";
 import { adminClient, getUser } from "../_shared/client.ts";
 import { enforceRateLimit, RateLimitError } from "../_shared/rateLimit.ts";
 import { createRazorpayOrder, razorpayConfigured, razorpayKeyId } from "../_shared/razorpay.ts";
-import { priceFeatures, type FeatureRow } from "../_shared/customProjectPricing.ts";
+import { catalogTokenAmount, priceFeatures, type FeatureRow } from "../_shared/customProjectPricing.ts";
 import { validateAcademicOrder } from "../_shared/academicIntegrity.ts";
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
@@ -46,14 +46,6 @@ const round2 = (n: number) => Math.round(n * 100) / 100;
 const PROJECT_TYPES = ["academic", "personal", "business"] as const;
 const PROJECT_LEVELS = ["standard", "advanced"] as const;
 const PLATFORMS = ["web", "android", "ios", "web_android", "web_android_ios"] as const;
-
-// The one place the token amount is decided (spec §2 / §11 / §14). NOT derived
-// from the estimate or the selected features, NOT changed by Standard↔Advanced.
-const TOKEN_BY_TYPE: Record<string, number> = {
-  academic: 1500,
-  personal: 3000,
-  business: 6000,
-};
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return preflight();
@@ -123,6 +115,7 @@ Deno.serve(async (req) => {
         ...(Array.isArray(body.customRequirements) ? body.customRequirements.map((r: { text?: unknown }) => r?.text) : [])].map((value) => String(value ?? "")),
     });
     if (integrityError) return json({ error: integrityError }, 400);
+    const serviceScope = String(body.serviceScope);
 
     // 1. base price + pricing version (trusted, from the DB) --------------
     const { data: pricing, error: pricingError } = await db
@@ -147,29 +140,22 @@ Deno.serve(async (req) => {
       .maybeSingle();
     if (platformError) throw platformError;
     if (!platformRow) return json({ error: "That platform option is not available." }, 400);
-    const platformCharge = projectType === "academic" ? 0 : Number(platformRow.charge) || 0;
+    const platformCharge = serviceScope === "mentoring" ? 0 : Number(platformRow.charge) || 0;
 
-    // 3a. AI-recommended feature ids from this user's own draft — the same
-    // draft the website's Estimate page already priced from. Read here
-    // (server-side, service role, scoped to this user) so the snapshot below
-    // reuses the exact Included-vs-Extra split the customer saw, without the
-    // client having to resend it. Best-effort: a missing/unreadable draft
-    // just means no feature gets the "AI-recommended" exemption — the safe
-    // default, since it only widens which Academic features get repriced by
-    // the override below, never which features are selected or charged.
+    // Read saved AI recommendations for feature pricing. Assessment use is
+    // confirmed and validated at checkout, not stored in the builder draft.
+    const { data: draftRow, error: draftError } = await db
+      .from("custom_project_drafts")
+      .select("payload")
+      .eq("user_id", user.id)
+      .maybeSingle();
+    const savedDraft = draftRow?.payload as Record<string, unknown> | null;
+    // Reuse the same saved draft's AI recommendations for feature pricing.
+    // Other scopes can proceed without a draft, as older mobile builds do.
     let aiRecommendedFeatureIds: string[] = [];
-    try {
-      const { data: draftRow } = await db
-        .from("custom_project_drafts")
-        .select("payload")
-        .eq("user_id", user.id)
-        .maybeSingle();
-      const ids = (draftRow?.payload as { aiRecommendedFeatureIds?: unknown } | null)?.aiRecommendedFeatureIds;
-      if (Array.isArray(ids)) {
-        aiRecommendedFeatureIds = ids.filter((x): x is string => typeof x === "string");
-      }
-    } catch (e) {
-      console.warn("create-custom-project-order: could not read draft for AI-recommended feature ids:", e);
+    if (!draftError) {
+      const ids = savedDraft?.aiRecommendedFeatureIds;
+      if (Array.isArray(ids)) aiRecommendedFeatureIds = ids.filter((x): x is string => typeof x === "string");
     }
 
     // 3b. features — the ones selected PLUS every feature included for this
@@ -179,10 +165,10 @@ Deno.serve(async (req) => {
     const tierKey = `${projectType}:${projectLevel}`;
     const featureSelect = "id, name, price, category, project_types, project_levels, included_in_levels";
     const [selectedRes, includedRes] = await Promise.all([
-      projectType !== "academic" && featureIds.length > 0
+      serviceScope !== "mentoring" && featureIds.length > 0
         ? db.from("custom_project_features").select(featureSelect).in("id", featureIds).eq("is_active", true)
         : Promise.resolve({ data: [] as FeatureRow[], error: null }),
-      projectType === "academic"
+      serviceScope === "mentoring"
         ? Promise.resolve({ data: [] as FeatureRow[], error: null })
         : db.from("custom_project_features").select(featureSelect).contains("included_in_levels", [tierKey]).eq("is_active", true),
     ]);
@@ -199,12 +185,10 @@ Deno.serve(async (req) => {
     );
 
     // 4. trusted token amount (§14) -----------------------------------
-    const tokenAmount = TOKEN_BY_TYPE[projectType];
-    if (Number(pricing.token_amount) !== tokenAmount) {
-      console.warn(
-        `create-custom-project-order: pricing.token_amount (${pricing.token_amount}) ` +
-          `!= constant (${tokenAmount}) for ${projectType}; using the constant.`,
-      );
+    // Read the trusted database catalog, never a client-supplied amount.
+    const tokenAmount = catalogTokenAmount(pricing.token_amount);
+    if (tokenAmount === null) {
+      return json({ error: "A positive token amount must be configured for this project type." }, 400);
     }
     const estimatedTotal = round2(basePrice + featureTotal + platformCharge);
     const amountPaise = Math.round(tokenAmount * 100);
@@ -221,7 +205,7 @@ Deno.serve(async (req) => {
         target_users: String(body.targetUsers ?? "").trim(),
         technology_preference: String(body.technologyPreference ?? "").trim(),
         project_type: projectType,
-        service_scope: projectType === "academic" ? "mentoring" : "custom_software",
+        service_scope: serviceScope,
         assessment_use: body.assessmentUse,
         integrity_acknowledged_at: new Date().toISOString(),
         student_authored_confirmed: projectType === "academic" ? true : null,
@@ -298,11 +282,13 @@ Deno.serve(async (req) => {
     });
 
     // 8. link them ------------------------------------------------
-    const [{ error: linkReqError }, { error: linkPayError }] = await Promise.all([
-      db.from("custom_project_requests").update({ payment_order_id: rzpOrder.id }).eq("id", request.id),
-      db.from("custom_project_payments").update({ razorpay_order_id: rzpOrder.id }).eq("request_id", request.id),
-    ]);
+    const { error: linkReqError } = await db.from("custom_project_requests")
+      .update({ payment_order_id: rzpOrder.id }).eq("id", request.id)
+      .is("payment_order_id", null).select("id").single();
     if (linkReqError) throw linkReqError;
+    const { error: linkPayError } = await db.from("custom_project_payments")
+      .update({ razorpay_order_id: rzpOrder.id }).eq("request_id", request.id).eq("kind", "token")
+      .is("razorpay_order_id", null).select("id").single();
     if (linkPayError) throw linkPayError;
 
     return json({

@@ -25,7 +25,7 @@ export default async function OnboardingPage() {
   // show the form again.
   if (account && isAcademicComplete(account)) redirect("/account");
 
-  const supabase = createAuthedServerSupabase();
+  const supabase = await createAuthedServerSupabase();
   const [{ data: courses }, { data: branches }, { data: years }] = await Promise.all([
     supabase.from("courses").select("id,name").eq("status", "active").order("sort_order"),
     supabase.from("branches").select("id,name,course_id").eq("status", "active").order("sort_order"),

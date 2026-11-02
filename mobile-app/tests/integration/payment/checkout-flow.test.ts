@@ -113,3 +113,14 @@ describe("integration: project purchase (create order -> checkout -> verify)", (
     expect(supabase.from).toHaveBeenCalledWith("purchases");
   });
 });
+
+describe("payment response safety", () => {
+  it.each([null, {}, { error: "Synthetic rejected payment" }, { id: "purchase-1", status: "pending" }])("rejects an unsettled body: %p", async (data) => {
+    setFunctionResult("verify-razorpay-payment", { data });
+    await expect(paymentService.verifyPayment({ orderId: "purchase-1", razorpayOrderId: "order_synthetic", razorpayPaymentId: "pay_synthetic", razorpaySignature: "synthetic" })).rejects.toThrow();
+  });
+  it("rejects an order error body before checkout", async () => {
+    setFunctionResult("create-razorpay-order", { data: { error: "Synthetic rejected order" } });
+    await expect(paymentService.createOrder("synthetic-project")).rejects.toThrow("Synthetic rejected order");
+  });
+});

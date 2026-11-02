@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Children, createElement, isValidElement, type ReactElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { jsx } from "react/jsx-runtime";
 import { FilterSheet } from "@/components/ui/FilterSheet";
 import { Drawer } from "@/components/ui/Drawer";
 import { JobFilters } from "@/components/marketplace/JobFilters";
@@ -25,8 +26,8 @@ function find(node: ReactNode, type: unknown): ReactElement<Props> | undefined {
 function sheet(children: ReactNode) {
   const tree = FilterSheet({ children });
   const drawer = find(tree, Drawer)!;
-  const content = drawer.props.children as ReactElement;
-  const attach = (content as unknown as { ref?: (root: HTMLDivElement | null) => void }).ref ?? (() => {});
+  const content = drawer.props.children as ReactElement<Props & { ref?: (root: HTMLDivElement | null) => void }>;
+  const attach = content.props.ref ?? (() => {});
   return { tree, drawer, content, attach };
 }
 
@@ -53,7 +54,7 @@ beforeEach(() => { state.open = false; state.scope = "drawer-one"; });
 
 describe("FilterSheet ID and value preservation", () => {
   it("names the square trigger and retains the active-filter count", () => {
-    const html = renderToStaticMarkup(createElement(FilterSheet, { iconOnly: true, activeCount: 2, children: null }));
+    const html = renderToStaticMarkup(jsx(FilterSheet, { iconOnly: true, activeCount: 2, children: null }));
     expect(html).toContain('aria-label="Filters (2 active filters)"');
     expect(html).toContain('aria-haspopup="dialog"');
     expect(html).toContain('aria-expanded="false"');

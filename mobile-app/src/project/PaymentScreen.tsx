@@ -5,6 +5,7 @@ import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Ionicons } from "@expo/vector-icons";
 import { Screen, Button, LoadingState, ErrorState } from "@/components/ui";
 import { useProjectDetail } from "@/hooks/useProjects";
+import { notify } from "@/lib/notify";
 import { usePurchaseFlow } from "@/hooks/usePayment";
 import type { ProjectStackParamList } from "@/types";
 
@@ -48,6 +49,8 @@ export function PaymentScreen() {
           routes: [{ name: "AllProjects" }, { name: "PaymentSuccess", params: { orderId: result.orderId } }],
         })
       );
+    } else if (result.status === "pending" || !result.orderId) {
+      notify(result.status === "pending" ? "Verification pending" : "Payment not completed", result.message ?? "Please retry.");
     } else if (result.status === "failed") {
       navigation.dispatch(
         CommonActions.reset({
