@@ -25,9 +25,11 @@ vi.mock("@/lib/supabase/server", () => ({
       };
       return chain;
     },
-    rpc: async (name: string) => name === "public_content_revision"
-      ? { data: null, error: { code: "PGRST202" } } // pre-migration staging
-      : state.practice,
+    rpc: (name: string) => {
+      const result = Promise.resolve(name === "public_content_revision"
+        ? { data: null, error: { code: "PGRST202" } } : state.practice);
+      return Object.assign(result, { abortSignal: () => result });
+    },
   } : null,
 }));
 
@@ -109,5 +111,20 @@ describe("backend failures never become empty/noindex listings", () => {
     state.client = false;
     await expect(blogMetadata({ searchParams: Promise.resolve({}) })).rejects.toThrow();
     await expect(practiceMetadata({ searchParams: Promise.resolve({}) })).rejects.toThrow();
+  });
+});
+
+describe("populated query variants", () => {
+  it.each([{ q: "java" }, { page: "2" }, { page: "1" }, { utm_source: "newsletter" }])("noindexes %j while preserving follow", async (searchParams) => {
+    state.posts = { data: [{ id: "b", slug: "java", title: "Java" }], count: 30, error: null };
+    state.practice.data = { items: [{ id: "p", slug: "sum" }], total: 30 };
+    for (const metadata of [blogMetadata, practiceMetadata]) {
+      expect((await metadata({ searchParams: Promise.resolve(searchParams) })).robots).toEqual({ index: false, follow: true });
+    }
+  });
+  it("keeps distinct pagination canonical while canonicalizing search to the hub", async () => {
+    state.posts = { data: [{ id: "b", slug: "java", title: "Java" }], count: 30, error: null };
+    expect((await blogMetadata({ searchParams: Promise.resolve({ page: "2" }) })).alternates?.canonical).toBe(`${SITE}/blog?page=2`);
+    expect((await blogMetadata({ searchParams: Promise.resolve({ q: "java" }) })).alternates?.canonical).toBe(`${SITE}/blog`);
   });
 });

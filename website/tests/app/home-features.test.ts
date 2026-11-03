@@ -82,7 +82,7 @@ describe("Home What you get section", () => {
 
   it.each([false, true])("keeps one feature section before the other home sections with signedIn=%s", async signedIn => {
     if (signedIn) api.session.mockReturnValue({ loading: false, profile: { id: "student", fullName: "Test Student" } });
-    const html = renderToStaticMarkup(await serverChildren(HomePage()) as ReactElement);
+    const html = renderToStaticMarkup(await serverChildren(await HomePage()) as ReactElement);
     const sections = [...html.matchAll(/<section\b[^>]*aria-(?:labelledby|label)="([^"]+)"/g)].map(match => match[1]);
     expect(sections.slice(0, signedIn ? 6 : 5)).toEqual([
       "home-hero-title",

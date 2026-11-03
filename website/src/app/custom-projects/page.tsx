@@ -1,3 +1,5 @@
+import { Breadcrumb } from "@/components/ui/Breadcrumb";
+import { completeSeoMetadata } from "@/lib/seo";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { getPublicSupabase } from "@/lib/supabase/server";
@@ -11,12 +13,12 @@ import { CustomProjectReadError, readCustomProject } from "@/lib/customProjectRe
 // Pricing deliberately bypasses the fetch cache; load the live catalog at request
 // time rather than making deployment depend on Supabase availability.
 export const dynamic = "force-dynamic";
-export const metadata: Metadata = {
+export const metadata: Metadata = completeSeoMetadata({
   title: "Project Mentoring and Custom Software",
   description:
     "Get guidance on student-authored projects or commission personal and business software. Explore scope, pricing and the request process.",
   alternates: { canonical: absoluteUrl("/custom-projects") },
-};
+});
 
 const STEPS = [
   "Choose a project type and level",
@@ -92,6 +94,7 @@ export default async function CustomProjectsPage() {
   return (
     <div className="page-shell">
       <JsonLd data={breadcrumbJsonLd([{ name: "Custom Projects", path: "/custom-projects" }])} />
+      <Breadcrumb className="mb-4" items={[{ label: "Custom Projects" }]} />
       <section className="relative overflow-hidden rounded-xl bg-[#0F0B2E] px-5 py-8 text-white shadow-card md:px-8 md:py-10">
         <div aria-hidden className="pointer-events-none absolute -left-20 -top-24 h-72 w-72 rounded-full bg-primary/50 blur-3xl" />
         <div aria-hidden className="pointer-events-none absolute -bottom-28 right-0 h-72 w-80 rounded-full bg-accent-pink/30 blur-3xl" />

@@ -1,3 +1,4 @@
+import { completeSeoMetadata } from "@/lib/seo";
 import type { Metadata } from "next";
 import { getPublicSupabase } from "@/lib/supabase/server";
 import type { ProjectCardData } from "@/components/ProjectCard";
@@ -26,7 +27,7 @@ async function getTrendingProjects(): Promise<ProjectCardData[]> {
 
 export async function generateMetadata(): Promise<Metadata> {
   const projects = await getTrendingProjects();
-  return {
+  return completeSeoMetadata({
     title: "Trending Projects",
     description: DESCRIPTION,
     alternates: { canonical: absoluteUrl("/projects/trending") },
@@ -40,7 +41,7 @@ export async function generateMetadata(): Promise<Metadata> {
     },
     // No trending projects yet -> don't index an empty shell page.
     robots: projects.length === 0 ? { index: false, follow: true } : undefined,
-  };
+  });
 }
 
 export default async function TrendingPage() {

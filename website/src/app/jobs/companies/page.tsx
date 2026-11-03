@@ -1,3 +1,4 @@
+import { completeSeoMetadata } from "@/lib/seo";
 import type { Metadata } from "next";
 import { getCompaniesWithOpenRoles } from "@/lib/cache";
 import { Building2 } from "lucide-react";
@@ -16,7 +17,7 @@ async function getCompanies(): Promise<CompanyCardData[]> {
 
 export async function generateMetadata(): Promise<Metadata> {
   const companies = await getCompanies().catch(() => null);
-  return {
+  return completeSeoMetadata({
     // Absolute: the layout's " | CampusEduX" template would repeat the brand.
     title: { absolute: "Companies Hiring on CampusEduX" },
     description: DESCRIPTION,
@@ -30,7 +31,7 @@ export async function generateMetadata(): Promise<Metadata> {
     },
     // No companies listed yet -> don't index an empty shell page.
     robots: !companies?.length ? { index: false, follow: true } : undefined,
-  };
+  });
 }
 
 export default async function CompaniesPage() {

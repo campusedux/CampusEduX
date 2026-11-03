@@ -1,10 +1,12 @@
+import { Breadcrumb } from "@/components/ui/Breadcrumb";
+import { completeSeoMetadata, hasQueryVariants } from "@/lib/seo";
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import Link from "next/link";
 import { BookOpen, FileText, LayoutGrid, SearchX } from "lucide-react";
 import { getLearningGrids, searchLearning } from "@/lib/learning";
 import type { LearningGridCard } from "@/lib/learning";
-import { Badge, EmptyState, PageHeader, SearchBar, SectionHeader, Skeleton, Chip, ChipRow, ListLoading } from "@/components/ui";
+import { Badge, EmptyState, PageHeader, SearchBar, SectionHeader, Skeleton, Chip, ChipRow } from "@/components/ui";
 import { CourseCard } from "@/components/learning/CourseCard";
 import JsonLd from "@/components/JsonLd";
 import { absoluteUrl, breadcrumbJsonLd, courseListJsonLd, DEFAULT_OG_IMAGE } from "@/lib/seo";
@@ -20,7 +22,7 @@ const TITLE = "Programming Tutorials: Java, Python, SQL & More | CampusEduX";
 const DESCRIPTION =
   "Structured programming tutorials on CampusEduX — Java, Python, DBMS & SQL, Spring Boot, AI/ML and Generative AI, split into short lessons with examples.";
 
-export const metadata: Metadata = {
+const baseMetadata: Metadata = completeSeoMetadata({
   title: { absolute: TITLE },
   description: DESCRIPTION,
   alternates: { canonical: absoluteUrl("/learning") },
@@ -33,7 +35,14 @@ export const metadata: Metadata = {
     images: [DEFAULT_OG_IMAGE],
   },
   twitter: { card: "summary_large_image", title: TITLE, description: DESCRIPTION },
-};
+});
+
+export async function generateMetadata({ searchParams }: { searchParams: Promise<SP> }): Promise<Metadata> {
+  const params = await searchParams;
+  if (hasQueryVariants(params)) return { ...baseMetadata, robots: { index: false, follow: true } };
+  const grids = await getLearningGrids();
+  return { ...baseMetadata, robots: grids.length === 0 ? { index: false, follow: true } : undefined };
+}
 
 type Access = "free" | "premium";
 type SP = { q?: string; access?: string; [key: string]: string | string[] | undefined };
@@ -156,6 +165,7 @@ async function LearningContent({ searchParams: searchParamsPromise }: { searchPa
   return (
     <div className="mobile-discovery page-shell">
       <JsonLd data={breadcrumbJsonLd([{ name: "Learning", path: "/learning" }])} />
+      <Breadcrumb className="mb-4" items={[{ label: "Learning" }]} />
       {grids.length > 0 ? (
         <JsonLd
           data={courseListJsonLd(grids.map((g) => ({ name: g.name, description: g.description, path: `/learning/${g.slug}` })))}
@@ -234,7 +244,7 @@ async function LearningContent({ searchParams: searchParamsPromise }: { searchPa
   );
 }
 
-// Keep streaming local to this index page: ancestor loading routes change nested 404 status.
-export default function LearningPage({ searchParams }: { searchParams: Promise<SP> }) {
-  return <Suspense fallback={<ListLoading title="Learning" />}><LearningContent searchParams={searchParams} /></Suspense>;
+// Required course reads must settle before the page can commit a loading-only 200.
+export default async function LearningPage({ searchParams }: { searchParams: Promise<SP> }) {
+  return await LearningContent({ searchParams });
 }

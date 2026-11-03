@@ -1,3 +1,4 @@
+import { completeSeoMetadata } from "@/lib/seo";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -5,18 +6,20 @@ import { ArrowLeft, ArrowRight, Code2, Briefcase, FolderKanban, Newspaper, Gradu
 import { Breadcrumb } from "@/components/ui";
 import { Markdown } from "@/components/learning/Markdown";
 import JsonLd from "@/components/JsonLd";
-import { absoluteUrl, breadcrumbJsonLd, DEFAULT_OG_IMAGE, faqJsonLd } from "@/lib/seo";
+import { absoluteUrl, breadcrumbJsonLd, faqJsonLd } from "@/lib/seo";
 import { cleanText, interviewTopicDescription } from "@/lib/metaDescription";
 import { interviewTopicTitle } from "@/lib/seoTitles";
 import { BRAND } from "@/lib/brand";
 import { getInterviewTopicDetail } from "@/lib/interviewQuestions";
 import { interviewQuestionsCrumbs, JAVA_TOPIC_LEARNING_LINKS } from "@/lib/interviewQuestions.types";
 
+// Request-specific CSP nonces cannot be reused in statically cached HTML.
+// Existing data-layer caches still serve public content reads.
+export const dynamic = "force-dynamic";
 export const revalidate = 86400;
 export const dynamicParams = true;
 
-// [] registers the route for ISR without prerendering every topic at build
-// time — mirrors the coding-problem and Learning topic pages.
+// Retained route enumeration; HTML itself renders per request for nonce safety.
 export function generateStaticParams() {
   return [];
 }
@@ -28,7 +31,7 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const params = await paramsPromise;
   const detail = await getInterviewTopicDetail(params.category, params.topic);
-  if (!detail || detail.questions.length === 0) return { title: "Not found", robots: { index: false, follow: false } };
+  if (!detail || detail.questions.length === 0) return completeSeoMetadata({ title: "Not found", robots: { index: false, follow: false } });
   const { category, topic, questions } = detail;
   const title = interviewTopicTitle({ categoryName: category.name, topicName: topic.name });
   const description = interviewTopicDescription({
@@ -38,7 +41,7 @@ export async function generateMetadata({
     questions,
   });
   const url = absoluteUrl(`/practice/interview-questions/${category.slug}/${topic.slug}`);
-  return {
+  return completeSeoMetadata({
     title: { absolute: title },
     description,
     alternates: { canonical: url },
@@ -48,10 +51,9 @@ export async function generateMetadata({
       url,
       type: "article",
       siteName: BRAND.name,
-      images: [DEFAULT_OG_IMAGE],
     },
-    twitter: { card: "summary", title, description },
-  };
+    twitter: { card: "summary_large_image", title, description },
+  }, { dynamicImage: true });
 }
 
 export default async function InterviewTopicPage({

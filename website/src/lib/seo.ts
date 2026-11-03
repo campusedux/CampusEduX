@@ -1,5 +1,6 @@
 import { BRAND } from "@/lib/brand";
 import { BRAND_ASSETS } from "@/lib/brandAssets";
+import type { Metadata } from "next";
 
 /** Keep our www origin consistent even when an environment uses the apex alias. */
 export function normalizeSiteUrl(value?: string): string {
@@ -31,12 +32,52 @@ export const DEFAULT_OG_IMAGE = absoluteUrl(BRAND_ASSETS.ogImage.src);
 /** Absolute URL of the square CX logo mark, for schema.org `Organization.logo`. */
 export const BRAND_LOGO_URL = absoluteUrl(BRAND_ASSETS.logoMark.src);
 
+/** Complete social metadata without replacing authored copy or route image conventions. */
+export function completeSeoMetadata(metadata: Metadata, options: { dynamicImage?: boolean } = {}): Metadata {
+  const canonical = metadata.alternates?.canonical;
+  // Private/error metadata deliberately has no public canonical or social card.
+  if (!canonical || !metadata.description) return metadata;
+  const url = new URL(typeof canonical === "string" || canonical instanceof URL ? canonical : canonical.url, SITE_URL).href;
+  const title = typeof metadata.title === "string"
+    ? (metadata.title.includes(BRAND.name) ? metadata.title : `${metadata.title} | ${BRAND.name}`)
+    : metadata.title && "absolute" in metadata.title ? metadata.title.absolute : undefined;
+  const images = metadata.openGraph?.images ?? (options.dynamicImage ? undefined : [DEFAULT_OG_IMAGE]);
+  return {
+    ...metadata,
+    alternates: { ...metadata.alternates, canonical: url },
+    openGraph: {
+      ...(metadata.openGraph ?? { type: "website" as const }),
+      siteName: BRAND.name,
+      title,
+      description: metadata.description,
+      url,
+      ...metadata.openGraph,
+      locale: "en_IN",
+      ...(images ? { images } : {}),
+    },
+    twitter: {
+      card: "summary_large_image",
+      title,
+      description: metadata.description,
+      ...(images ? { images } : {}),
+      ...metadata.twitter,
+    },
+  };
+}
+
+/** Query variants stay crawlable so their noindex directive can be read. */
+export function hasQueryVariants(params: Record<string, string | string[] | undefined>): boolean {
+  return Object.keys(params).length > 0;
+}
+
 /** schema.org BreadcrumbList for a detail page. */
 export function breadcrumbJsonLd(items: { name: string; path: string }[]): Record<string, unknown> {
+  // Match the visible Breadcrumb component, including Home on deep pages.
+  const trail = items.length > 0 && items[0].path !== "/" ? [{ name: "Home", path: "/" }, ...items] : items;
   return {
     "@context": "https://schema.org",
     "@type": "BreadcrumbList",
-    itemListElement: items.map((it, i) => ({
+    itemListElement: trail.map((it, i) => ({
       "@type": "ListItem",
       position: i + 1,
       name: it.name,

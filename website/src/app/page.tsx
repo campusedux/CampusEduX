@@ -1,12 +1,13 @@
+import { completeSeoMetadata } from "@/lib/seo";
 import { safeHref } from "@/lib/safeUrl";
-import { cache, Suspense } from "react";
+import { cache } from "react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import Image from "next/image";
 import { ArrowRight, Plus } from "lucide-react";
 import ProjectCard, { ProjectCardData } from "@/components/ProjectCard";
 import JobCard, { JobCardData } from "@/components/JobCard";
-import { SectionHeader, Reveal, ListLoading } from "@/components/ui";
+import { SectionHeader, Reveal } from "@/components/ui";
 import { HomeHero } from "@/components/home/HomeHero";
 import { ContinueLearningRow } from "./learning/_components/ContinueLearningRow";
 import { HomePersonal } from "@/components/home/HomePersonal";
@@ -63,7 +64,7 @@ type FaqRow = { id: string; question: string; answer: string };
 
 export async function generateMetadata(): Promise<Metadata> {
   const { banner } = await getHomeData();
-  return {
+  return completeSeoMetadata({
     title: { absolute: "CampusEduX: Projects, Jobs & Placement Prep" },
     description: "Explore student projects, fresher jobs, tutorials, coding practice and resume tools on CampusEduX.",
     // Declared here, not in the root layout, so pages without their own
@@ -74,7 +75,7 @@ export async function generateMetadata(): Promise<Metadata> {
       description: "Explore student projects, fresher jobs, tutorials, coding practice and resume tools on CampusEduX.",
       images: safeHref(banner?.image_url) ? [{ url: safeHref(banner?.image_url) as string }] : [DEFAULT_OG_IMAGE],
     },
-  };
+  });
 }
 
 async function HomeContent() {
@@ -85,7 +86,8 @@ async function HomeContent() {
       getLatestPosts(3),
       getLearningGrids(),
       getPracticeCategories(),
-      getInterviewCategories(),
+      // Optional home discovery may be omitted; the interview hub must surface failures.
+      getInterviewCategories().catch(() => []),
     ]);
   const posts = latestPosts as BlogPostCard[];
 
@@ -263,7 +265,7 @@ async function HomeContent() {
   );
 }
 
-// Keep streaming local to this index page: ancestor loading routes change nested 404 status.
-export default function HomePage() {
-  return <Suspense fallback={<ListLoading title="Home" />}><HomeContent /></Suspense>;
+// Resolve the hero and its required reads before committing the page response.
+export default async function HomePage() {
+  return await HomeContent();
 }

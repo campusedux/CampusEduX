@@ -1,3 +1,4 @@
+import { completeSeoMetadata } from "@/lib/seo";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -11,11 +12,13 @@ import { BRAND } from "@/lib/brand";
 import { getInterviewTopics } from "@/lib/interviewQuestions";
 import { interviewQuestionsCrumbs } from "@/lib/interviewQuestions.types";
 
+// Request-specific CSP nonces cannot be reused in statically cached HTML.
+// Existing data-layer caches still serve public content reads.
+export const dynamic = "force-dynamic";
 export const revalidate = 21600;
 export const dynamicParams = true;
 
-// [] registers the route for ISR without prerendering every category at
-// build time — mirrors practice/problems and the Learning topic pages.
+// Retained route enumeration; HTML itself renders per request for nonce safety.
 export function generateStaticParams() {
   return [];
 }
@@ -23,7 +26,7 @@ export function generateStaticParams() {
 export async function generateMetadata({ params: paramsPromise }: { params: Promise<{ category: string }> }): Promise<Metadata> {
   const params = await paramsPromise;
   const page = await getInterviewTopics(params.category);
-  if (!page) return { title: "Not found", robots: { index: false, follow: false } };
+  if (!page) return completeSeoMetadata({ title: "Not found", robots: { index: false, follow: false } });
   const url = absoluteUrl(`/practice/interview-questions/${page.category.slug}`);
   const title = interviewCategoryTitle(page.category.name);
   const description = interviewCategoryDescription({
@@ -31,9 +34,10 @@ export async function generateMetadata({ params: paramsPromise }: { params: Prom
     categoryDescription: page.category.description,
     topics: page.topics,
   });
-  return {
+  return completeSeoMetadata({
     title: { absolute: title },
     description,
+    robots: page.topics.length === 0 ? { index: false, follow: true } : undefined,
     alternates: { canonical: url },
     openGraph: {
       title,
@@ -43,7 +47,7 @@ export async function generateMetadata({ params: paramsPromise }: { params: Prom
       siteName: BRAND.name,
       images: [DEFAULT_OG_IMAGE],
     },
-  };
+  });
 }
 
 export default async function InterviewCategoryPage({ params: paramsPromise }: { params: Promise<{ category: string }> }) {

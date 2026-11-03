@@ -1,10 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
-import { ChevronRight, Lock } from "lucide-react";
+import { Lock } from "lucide-react";
 import { useSessionProfile } from "@/lib/useSessionProfile";
-import { Button } from "@/components/ui";
+import { Breadcrumb, Button } from "@/components/ui";
 import { cn } from "@/lib/cn";
 import { CodingProblemBody } from "@/app/coding-problems/[problemSlug]/CodingProblemBody";
 import { practiceCrumbs, DIFFICULTY_PILL_CLASS } from "@/lib/practice.types";
@@ -33,17 +32,7 @@ export function PracticeProblemLockedNotice({
 }) {
   return (
     <div className="container-page py-8">
-      <nav aria-label="Breadcrumb" className="mb-4 flex flex-wrap items-center gap-1 text-sm text-ink-faint">
-        <Link href="/practice" className="hover:text-ink">
-          Practice
-        </Link>
-        <ChevronRight className="h-3.5 w-3.5" aria-hidden />
-        <Link href="/practice/problems" className="hover:text-ink">
-          Coding Problems
-        </Link>
-        <ChevronRight className="h-3.5 w-3.5" aria-hidden />
-        <span className="text-ink-faint">{problem.title}</span>
-      </nav>
+      <Breadcrumb className="mb-4" items={practiceCrumbs(problem.title)} />
 
       <header className="mb-6">
         <h1 className="text-2xl font-bold text-ink sm:text-3xl">{problem.title}</h1>

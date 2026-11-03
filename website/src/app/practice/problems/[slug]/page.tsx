@@ -1,3 +1,4 @@
+import { completeSeoMetadata } from "@/lib/seo";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getPracticeProblem, getPracticeProblemRelated } from "@/lib/practice";
@@ -10,10 +11,13 @@ import { BRAND } from "@/lib/brand";
 import { CodingProblemBody } from "@/app/coding-problems/[problemSlug]/CodingProblemBody";
 import { PracticeProblemPremiumGate } from "./PracticeProblemPremiumGate";
 
+// Request-specific CSP nonces cannot be reused in statically cached HTML.
+// Existing data-layer caches still serve public content reads.
+export const dynamic = "force-dynamic";
 export const revalidate = 86400;
 export const dynamicParams = true;
 
-// [] registers the route for ISR without prerendering every problem at build time.
+// Retained route enumeration; HTML itself renders per request for nonce safety.
 export function generateStaticParams() {
   return [];
 }
@@ -25,7 +29,7 @@ const SUBMISSIONS_HREF = "/practice/submissions";
 export async function generateMetadata({ params: paramsPromise }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const params = await paramsPromise;
   const detail = await getPracticeProblem(params.slug);
-  if (!detail) return { title: "Coding problem not found", robots: { index: false, follow: false } };
+  if (!detail) return completeSeoMetadata({ title: "Coding problem not found", robots: { index: false, follow: false } }, { dynamicImage: true });
   const { problem, category, locked } = detail;
   // Locked problems stay indexable (same convention as the Learning topic
   // page), but `problem.description` is nulled server-side for a locked
@@ -46,7 +50,7 @@ export async function generateMetadata({ params: paramsPromise }: { params: Prom
     locked,
   });
   const url = absoluteUrl(`/practice/problems/${problem.slug}`);
-  return {
+  return completeSeoMetadata({
     title: { absolute: title },
     description,
     alternates: { canonical: url },
@@ -54,7 +58,7 @@ export async function generateMetadata({ params: paramsPromise }: { params: Prom
     openGraph: { title, description, url, type: "article", siteName: BRAND.name },
     twitter: { card: "summary_large_image", title, description },
     other: { "topic:name": categoryName },
-  };
+  }, { dynamicImage: true });
 }
 
 export default async function PracticeProblemPage({ params: paramsPromise }: { params: Promise<{ slug: string }> }) {

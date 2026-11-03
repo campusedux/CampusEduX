@@ -1,3 +1,5 @@
+import { Breadcrumb } from "@/components/ui/Breadcrumb";
+import { completeSeoMetadata, hasQueryVariants } from "@/lib/seo";
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import Link from "next/link";
@@ -64,7 +66,7 @@ export async function generateMetadata({ searchParams: searchParamsPromise }: { 
       projectSort(searchParams.sort) !== "newest",
   );
   const url = listingCanonical("/projects", page, filtered);
-  return {
+  return completeSeoMetadata({
     title: "Project Marketplace",
     description: DESCRIPTION,
     alternates: { canonical: url },
@@ -78,10 +80,10 @@ export async function generateMetadata({ searchParams: searchParamsPromise }: { 
     // No results for this view (e.g. the catalog is empty, or the filters
     // matched nothing) -> don't index an empty shell page.
     robots:
-      count === 0 || (page - 1) * PROJECT_PAGE_SIZE >= (count ?? Infinity)
+      hasQueryVariants(searchParams) || count === 0 || (page - 1) * PROJECT_PAGE_SIZE >= (count ?? Infinity)
         ? { index: false, follow: true }
         : undefined,
-  };
+  });
 }
 
 type ProjectQuery = {
@@ -246,6 +248,7 @@ export default async function ProjectsPage({ searchParams: searchParamsPromise }
   return (
     <div className="mobile-discovery min-w-0">
       <JsonLd data={breadcrumbJsonLd([{ name: "Projects", path: "/projects" }])} />
+      <Breadcrumb className="mb-4" items={[{ label: "Projects" }]} />
       <CustomProjectBanner />
       <section aria-label="Project marketplace" className={`container-page py-6 sm:py-8 lg:py-10 ${styles.marketplace}`}>
         <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_44px] gap-4 lg:grid-cols-[250px_minmax(0,1fr)] lg:grid-rows-[auto_auto_1fr] lg:items-start lg:gap-x-7 lg:gap-y-5">

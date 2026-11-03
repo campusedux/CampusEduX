@@ -1,3 +1,4 @@
+import { completeSeoMetadata } from "@/lib/seo";
 import type { Metadata } from "next";
 import { getPublicSupabase } from "@/lib/supabase/server";
 import JsonLd from "@/components/JsonLd";
@@ -25,13 +26,13 @@ const getFaqs = cache(async (): Promise<Faq[]> => {
 
 export async function generateMetadata(): Promise<Metadata> {
   const faqs = await getFaqs();
-  return {
+  return completeSeoMetadata({
     title: "Frequently Asked Questions",
     description: DESCRIPTION,
     alternates: { canonical: absoluteUrl("/faq") },
     // The policy-backed fallback keeps this page useful when the FAQ table is empty.
     robots: faqs.length === 0 ? { index: false, follow: true } : undefined,
-  };
+  });
 }
 
 export default async function FaqPage() {

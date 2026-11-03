@@ -1,3 +1,5 @@
+import { Breadcrumb } from "@/components/ui/Breadcrumb";
+import { completeSeoMetadata, hasQueryVariants } from "@/lib/seo";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { X } from "lucide-react";
@@ -28,7 +30,7 @@ export async function generateMetadata({
   const filtered = Boolean(
     query.q || query.difficulty || query.category || query.lang || query.status,
   );
-  return {
+  return completeSeoMetadata({
     title: "Coding Problems",
     description:
       "Practise programming problems on CampusEduX — each solvable in Java, Python, C, C++ and JavaScript. Filter by difficulty, topic, language and your progress.",
@@ -39,8 +41,8 @@ export async function generateMetadata({
         filtered,
       ),
     },
-    robots: items.length === 0 ? { index: false, follow: true } : undefined,
-  };
+    robots: hasQueryVariants(searchParams) || items.length === 0 ? { index: false, follow: true } : undefined,
+  });
 }
 
 type SP = Record<string, string | string[] | undefined>;
@@ -81,6 +83,7 @@ export default async function PracticeProblemsPage({ searchParams: searchParamsP
           { name: "Coding Problems", path: "/practice/problems" },
         ])}
       />
+      <Breadcrumb className="mb-4" items={[{ label: "Practice", href: "/practice" }, { label: "Coding Problems" }]} />
       <PageHeader eyebrow="Practice" title="Coding Problems" />
 
       <div className="mt-6 grid gap-4 md:gap-5 lg:grid-cols-[260px_1fr] lg:items-start">

@@ -8,6 +8,8 @@ const { buildCsp } = require("./src/lib/csp");
 const csp = buildCsp({ isDev: process.env.NODE_ENV !== "production" });
 
 const nextConfig = {
+  // Resolve metadata before the initial HTML for browsers and crawlers alike.
+  htmlLimitedBots: /.*/,
   images: {
     remotePatterns: [{ protocol: "https", hostname: "**.supabase.co" }],
     // Serve AVIF first (≈20–30% smaller than WebP), WebP fallback. Every

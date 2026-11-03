@@ -3,6 +3,7 @@ import { getPublicSupabase } from "@/lib/supabase/server";
 import { onlyActiveJobs } from "@/lib/jobsActive";
 import { learningTag } from "@/lib/learningTags";
 import { SITE_URL } from "@/lib/seo";
+import { publicReadDeadline } from "@/lib/publicReadDeadline";
 import {
   buildBlogEntries,
   buildInterviewEntries,
@@ -41,8 +42,8 @@ import {
  * an admin save that already sends e.g. `projects` / `blog` refreshes the
  * matching sitemap too.
  *
- * A failed query THROWS (never cached): during ISR the last good sitemap keeps
- * being served instead of a truncated one.
+ * A failed query THROWS (never cached): revalidation retains successful section
+ * data; a cold HTTP request gets a retryable 503 instead of a truncated sitemap.
  */
 
 export const SITEMAP_REVALIDATE = 3600;
@@ -64,13 +65,14 @@ export async function readAllPages<T>(
 ): Promise<T[]> {
   const out: T[] = [];
   while (out.length < maxRows) {
-    const { data, error } = await page(out.length, out.length + pageSize - 1);
+    const { data, error } = await publicReadDeadline(() => page(out.length, out.length + pageSize - 1));
     if (error || !Array.isArray(data)) throw new SitemapReadFailed();
     const rows = data as T[];
-    if (rows.length === 0) break;
+    if (rows.length === 0) return out;
     out.push(...rows);
   }
-  return out;
+  // Never advertise a truncated catalog as a successful complete sitemap.
+  throw new SitemapReadFailed("Sitemap read limit reached; add section shards before increasing capacity");
 }
 
 type Client = NonNullable<ReturnType<typeof getPublicSupabase>>;
@@ -246,7 +248,8 @@ const cachedSection = Object.fromEntries(
           // /faq and /premium would render empty (noindex), so they're left out.
           return section === "static" ? buildStaticEntries({ hasActiveFaqs: false, hasPremiumPlans: false }) : [];
         }
-        return load(supabase);
+        // Covers multi-query sections as well as an individual stalled read.
+        return publicReadDeadline(() => load(supabase), 20_000);
       },
       ["sitemap:section", section],
       { revalidate: SITEMAP_REVALIDATE, tags: [learningTag.sitemap, ...tags] },

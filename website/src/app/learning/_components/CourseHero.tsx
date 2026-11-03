@@ -31,11 +31,11 @@ function StatPill({
 }) {
   return (
     <div className={`inline-flex min-w-0 items-center gap-1.5 rounded-lg py-1 pl-1 pr-2.5 text-xs text-white ring-1 ${PILL[tone].box}`}>
-      <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md ${PILL[tone].icon}`}>
-        <Icon className="h-3.5 w-3.5" aria-hidden />
-      </span>
       <dt className="sr-only">{label}</dt>
-      <dd>
+      <dd className="inline-flex items-center gap-1.5">
+        <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md ${PILL[tone].icon}`}>
+          <Icon className="h-3.5 w-3.5" aria-hidden />
+        </span>
         <span className="font-semibold tabular-nums">{value}</span>{" "}
         <span className="text-white/80">
           {unit}

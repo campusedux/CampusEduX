@@ -1,3 +1,4 @@
+import { completeSeoMetadata } from "@/lib/seo";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getLearningTree, getLearningGridBrief, getGridScopedTests } from "@/lib/learning";
@@ -19,13 +20,13 @@ export const dynamicParams = true;
 export async function generateMetadata({ params: paramsPromise }: { params: Promise<{ gridSlug: string }> }): Promise<Metadata> {
   const params = await paramsPromise;
   const [grid, tree] = await Promise.all([getLearningGridBrief(params.gridSlug), getLearningTree(params.gridSlug)]);
-  if (!grid) return { title: "Learning resource not found", robots: { index: false, follow: false } };
+  if (!grid) return completeSeoMetadata({ title: "Learning resource not found", robots: { index: false, follow: false } }, { dynamicImage: true });
   const lessonCount = tree ? tree.sections.reduce((n, s) => n + s.topics.length, 0) : 0;
   const chapterCount = tree ? tree.sections.filter((s) => s.topics.length > 0).length : 0;
   const title = courseTitle({ courseName: grid.name, lessonCount });
   const description = courseDescription({ courseName: grid.name, description: grid.description, lessonCount, chapterCount });
   const url = absoluteUrl(`/learning/${grid.slug}`);
-  return {
+  return completeSeoMetadata({
     title: { absolute: title },
     description,
     alternates: { canonical: url },
@@ -40,7 +41,7 @@ export async function generateMetadata({ params: paramsPromise }: { params: Prom
       ...(grid.cover_image_url ? { images: [{ url: grid.cover_image_url }] } : {}),
     },
     twitter: { card: "summary_large_image", title, description },
-  };
+  }, { dynamicImage: true });
 }
 
 /**

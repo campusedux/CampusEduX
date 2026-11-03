@@ -1,4 +1,6 @@
 import { cache } from "react";
+import { headers } from "next/headers";
+import { readPublicContentRevision } from "@/lib/publicContentRevision";
 import { createHash } from "node:crypto";
 import { getPublicSupabase } from "@/lib/supabase/server";
 import { RevisionCache } from "@/lib/revisionCache";
@@ -9,19 +11,16 @@ type Client = NonNullable<ReturnType<typeof getPublicSupabase>>;
 const payloads = new RevisionCache();
 
 async function revision(client: Client, scope: Scope): Promise<string | null> {
-  const { data, error } = await client.rpc("public_content_revision", { p_scope: scope });
-  // Compatibility before the prepared migration (or during rollback). No reuse.
-  if (error?.code === "PGRST202" || error?.code === "42883") return null;
-  if (error || typeof data !== "string" || !/^[0-9a-f-]{36}$/i.test(data))
-    throw new Error("Public content revision is unavailable");
-  return data;
+  let route = scope as string;
+  try { route = (await headers()).get("x-public-content-route") ?? scope; } catch { /* Build/test context. */ }
+  return readPublicContentRevision(client, scope, route);
 }
 
 // Primitive arguments keep this scoped to one environment + React render.
 const renderRevision = cache(async (scope: Scope, _identity: string) => {
   const client = getPublicSupabase({ fresh: true });
   if (!client) throw new Error("Public content is unavailable");
-  return publicReadDeadline(() => revision(client, scope), 5000);
+  return revision(client, scope);
 });
 
 /** Only anonymous projections. Authenticated clients cannot be supplied here.

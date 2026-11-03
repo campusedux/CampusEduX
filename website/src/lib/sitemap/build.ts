@@ -125,6 +125,7 @@ export function buildLearningEntries(
   thinGenerativeAiTopicSlugs: ReadonlySet<string>,
   topicsWithContent?: ReadonlySet<string>,
 ): SitemapEntry[] {
+  if (!rows.some((row) => row.grid_slug)) return [];
   const gridDates = new Map<string, unknown[]>();
   const topics: SitemapEntry[] = [];
   for (const row of rows) {
@@ -208,6 +209,7 @@ export type InterviewSitemapRow = { category_slug: string; topic_slug: string; u
  * published website-visible topic, and every topic page.
  */
 export function buildInterviewEntries(rows: InterviewSitemapRow[]): SitemapEntry[] {
+  if (!rows.some((row) => row.category_slug && row.topic_slug)) return [];
   const categoryDates = new Map<string, unknown[]>();
   const topics: SitemapEntry[] = [];
   for (const row of rows) {
@@ -350,6 +352,7 @@ export function dedupeEntries(entries: SitemapEntry[]): SitemapEntry[] {
 }
 
 export function renderUrlset(siteUrl: string, entries: SitemapEntry[]): string {
+  if (entries.length > 50000) throw new Error("Sitemap section needs numbered shards");
   const body = dedupeEntries(entries)
     .map((e) => {
       const loc = `<loc>${escapeXml(absoluteSitemapUrl(siteUrl, e.path))}</loc>`;

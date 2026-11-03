@@ -274,7 +274,8 @@ function renderBlocks(src: string, opts: BlockOpts): ReactNode[] {
     const h = line.match(HEADING);
     if (h) {
       const level = h[1].length;
-      const Tag = `h${Math.min(Math.max(level + headingLevelOffset, 1), 6)}` as unknown as keyof JSX.IntrinsicElements;
+      const minimumLevel = opts.loneCards || opts.structure || opts.body ? 2 : 1;
+      const Tag = `h${Math.min(Math.max(level + headingLevelOffset, minimumLevel), 6)}` as unknown as keyof JSX.IntrinsicElements;
       const { number, title } = splitHeadingNumber(h[2]);
 
       // Inside a Practice card, "### 1. Question" + its body = one numbered question.

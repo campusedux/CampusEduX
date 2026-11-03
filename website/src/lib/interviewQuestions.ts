@@ -30,9 +30,9 @@ const PLATFORM = "website";
 export const getInterviewCategories = unstable_cache(
   async (): Promise<InterviewCategory[]> => {
     const supabase = getPublicSupabase();
-    if (!supabase) return [];
+    if (!supabase) throw new RpcFailed("Interview categories are unavailable");
     const { data, error } = await supabase.rpc("interview_categories_list", { p_platform: PLATFORM });
-    if (error || !Array.isArray(data)) return [];
+    if (error || !Array.isArray(data)) throw new RpcFailed("Interview categories are unavailable");
     return data as InterviewCategory[];
   },
   ["interview-categories"],

@@ -1,3 +1,4 @@
+import { completeSeoMetadata } from "@/lib/seo";
 import { cache } from "react";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
@@ -11,12 +12,12 @@ import { getCachedProjectDetail, getCachedTopProjectIds } from "@/lib/cache";
 import ProjectPurchasePanel from "./ProjectPurchasePanel";
 import Gallery from "./Gallery";
 
+// Request-specific CSP nonces cannot be reused in statically cached HTML.
+// Existing data-layer caches still serve public content reads.
+export const dynamic = "force-dynamic";
 export const revalidate = 300;
 
-// Registering generateStaticParams (even a bounded list) is what flips this
-// dynamic-segment route from "rendered on every request" to ISR: the params
-// below are prerendered at build, and `dynamicParams` (default true) renders
-// the long tail on demand and then caches it for `revalidate` seconds.
+// Known project enumeration; HTML renders per request for nonce safety.
 export async function generateStaticParams() {
   return (await getCachedTopProjectIds(40)).map((id) => ({ id }));
 }
@@ -53,16 +54,16 @@ const getProject = cache(async (id: string) => {
 export async function generateMetadata({ params: paramsPromise }: { params: Promise<{ id: string }> }): Promise<Metadata> {
   const params = await paramsPromise;
   const result = await getProject(params.id);
-  if (!result?.project) return { title: "Project not found", robots: { index: false, follow: false } };
+  if (!result?.project) return completeSeoMetadata({ title: "Project not found", robots: { index: false, follow: false } });
   const { project } = result;
   const image = project.thumbnail_url ? [{ url: project.thumbnail_url }] : [DEFAULT_OG_IMAGE];
-  return {
+  return completeSeoMetadata({
     title: { absolute: plainTitle(project.title) },
     description: authoredDescription(project.description, `${project.title} — a project on CampusEduX.`),
     alternates: { canonical: absoluteUrl(`/projects/${params.id}`) },
     openGraph: { title: project.title, images: image, url: absoluteUrl(`/projects/${params.id}`), type: "website" },
     twitter: { card: "summary_large_image", title: project.title, images: project.thumbnail_url ? [project.thumbnail_url] : undefined },
-  };
+  });
 }
 
 export default async function ProjectDetailPage({ params: paramsPromise }: { params: Promise<{ id: string }> }) {

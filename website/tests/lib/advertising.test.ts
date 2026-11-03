@@ -11,6 +11,11 @@ vi.mock("next/headers", () => ({ cookies: async () => ({
   get: () => ({ value: cookieState.consent }),
 }) }));
 
+// This suite exercises successful document nonce forwarding; outage responses
+// are covered with the real revision reader in public-revision-response.test.ts.
+vi.mock("@/lib/supabase/server", () => ({ getPublicSupabase: () => ({
+  rpc: () => ({ abortSignal: async () => ({ data: "00000000-0000-4000-8000-000000000001", error: null }) }),
+}) }));
 vi.mock("@supabase/ssr", () => ({ createServerClient: () => ({ auth: { getUser: async () => ({ data: { user: null } }) } }) }));
 afterEach(() => vi.unstubAllEnvs());
 

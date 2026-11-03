@@ -1,3 +1,4 @@
+import { completeSeoMetadata } from "@/lib/seo";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { ArrowRight, FileUp, ShieldCheck, Sparkles } from "lucide-react";
@@ -15,7 +16,7 @@ import { absoluteUrl, DEFAULT_OG_IMAGE } from "@/lib/seo";
 const DESCRIPTION =
   "Build an ATS-friendly résumé on CampusEduX — pick a template, start from real demo content, track your ATS score, and export a polished PDF.";
 
-export const metadata: Metadata = {
+export const metadata: Metadata = completeSeoMetadata({
   title: "Resume Builder",
   description: DESCRIPTION,
   alternates: { canonical: absoluteUrl("/resume") },
@@ -26,7 +27,7 @@ export const metadata: Metadata = {
     type: "website",
     images: [DEFAULT_OG_IMAGE],
   },
-};
+});
 export const dynamic = "force-dynamic";
 
 function tally(rows: { resume_id: string | null }[] | null): Map<string, number> {

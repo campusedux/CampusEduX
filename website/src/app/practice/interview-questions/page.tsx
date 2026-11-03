@@ -1,3 +1,4 @@
+import { completeSeoMetadata } from "@/lib/seo";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Coffee, ArrowRight } from "lucide-react";
@@ -8,12 +9,14 @@ import { getInterviewCategories } from "@/lib/interviewQuestions";
 import { interviewQuestionsCrumbs } from "@/lib/interviewQuestions.types";
 
 export const revalidate = 21600;
+// An unavailable catalog must not be prerendered as a successful empty hub.
+export const dynamic = "force-dynamic";
 
 const TITLE = "Interview Questions & Answers by Topic | CampusEduX";
 const DESCRIPTION =
   "Programming interview questions and answers by language, organized topic by topic — each with a clear answer, a code example and a key point to remember.";
 
-export const metadata: Metadata = {
+const baseMetadata: Metadata = completeSeoMetadata({
   title: { absolute: TITLE },
   description: DESCRIPTION,
   alternates: { canonical: absoluteUrl("/practice/interview-questions") },
@@ -24,7 +27,12 @@ export const metadata: Metadata = {
     type: "website",
     images: [DEFAULT_OG_IMAGE],
   },
-};
+});
+
+export async function generateMetadata(): Promise<Metadata> {
+  const categories = await getInterviewCategories();
+  return { ...baseMetadata, robots: categories.some((category) => category.topic_count > 0) ? undefined : { index: false, follow: true } };
+}
 
 // Only Java exists today; a fixed icon keeps this page free of a dynamic
 // icon-name lookup for a single, known category — mirrors the hardcoded

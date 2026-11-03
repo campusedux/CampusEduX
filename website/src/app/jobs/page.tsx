@@ -1,3 +1,5 @@
+import { Breadcrumb } from "@/components/ui/Breadcrumb";
+import { completeSeoMetadata, hasQueryVariants } from "@/lib/seo";
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import Link from "next/link";
@@ -39,7 +41,7 @@ export async function generateMetadata({ searchParams: searchParamsPromise }: { 
       jobSort(searchParams.sort) !== "newest",
   );
   const url = listingCanonical("/jobs", page, filtered);
-  return {
+  return completeSeoMetadata({
     title: "Jobs & Internships",
     description: DESCRIPTION,
     alternates: { canonical: url },
@@ -52,10 +54,10 @@ export async function generateMetadata({ searchParams: searchParamsPromise }: { 
     },
     // No results for this view -> don't index an empty shell page.
     robots:
-      count === 0 || (page - 1) * JOB_PAGE_SIZE >= (count ?? Infinity)
+      hasQueryVariants(searchParams) || count === 0 || (page - 1) * JOB_PAGE_SIZE >= (count ?? Infinity)
         ? { index: false, follow: true }
         : undefined,
-  };
+  });
 }
 
 /** The result list — its own async boundary so the page shell + filters paint first. */
@@ -166,6 +168,7 @@ export default async function JobsPage({ searchParams: searchParamsPromise }: { 
   return (
     <div className="mobile-discovery page-shell max-sm:py-4">
       <JsonLd data={breadcrumbJsonLd([{ name: "Jobs", path: "/jobs" }])} />
+      <Breadcrumb className="mb-4" items={[{ label: "Jobs" }]} />
       <PageHeader title="Jobs & Internships" caption="Find your next career opportunity." icon={Briefcase} iconClassName="text-accent-sky" action={
         <Link href="/jobs/companies" aria-label="Browse companies" title="Browse companies" className="inline-flex min-h-11 min-w-11 items-center justify-center gap-2 rounded-xl border border-line bg-card px-3 text-sm font-medium text-ink-muted hover:text-ink sm:border-0 sm:bg-transparent">
           <Building2 className="h-4 w-4 shrink-0" aria-hidden /> <span className="sr-only sm:not-sr-only">Browse companies</span>
@@ -213,9 +216,11 @@ export default async function JobsPage({ searchParams: searchParamsPromise }: { 
               </Link>
             </div>
           )}
+          <div className="min-h-[840px] md:min-h-[440px] xl:min-h-[320px]">
           <Suspense key={JSON.stringify(searchParams)} fallback={<JobResultsSkeleton />}>
             <JobResults searchParams={searchParams} />
           </Suspense>
+          </div>
         </div>
       </div>
     </div>

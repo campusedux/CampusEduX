@@ -1,3 +1,5 @@
+import { Breadcrumb } from "@/components/ui/Breadcrumb";
+import { completeSeoMetadata } from "@/lib/seo";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { ArrowRight, BadgeIndianRupee } from "lucide-react";
@@ -12,13 +14,13 @@ export const revalidate = 300;
 
 export async function generateMetadata(): Promise<Metadata> {
   const settings = await getRewardSettings();
-  return {
+  return completeSeoMetadata({
     title: { absolute: "CampusEduX Referral Rewards" },
     description: "Invite friends to CampusEduX and see how current referral rewards, wallet credit and eligibility work.",
     alternates: { canonical: absoluteUrl("/referral") },
     // No reward rule configured yet -> don't index a page with no terms to show.
     robots: settings ? undefined : { index: false, follow: true },
-  };
+  });
 }
 
 export default async function ReferralPage() {
@@ -27,6 +29,7 @@ export default async function ReferralPage() {
   return (
     <div className="page-shell space-y-10 md:space-y-14">
       <JsonLd data={breadcrumbJsonLd([{ name: "Referral", path: "/referral" }])} />
+      <Breadcrumb className="mb-4" items={[{ label: "Referral" }]} />
       <ReferralHero
         title="Invite friends, earn wallet credit"
         subtitle={referralRewardText(settings)}

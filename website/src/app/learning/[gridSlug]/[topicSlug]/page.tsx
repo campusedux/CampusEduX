@@ -1,3 +1,4 @@
+import { completeSeoMetadata } from "@/lib/seo";
 import { safeHref } from "@/lib/safeUrl";
 import type { Metadata } from "next";
 import Link from "next/link";
@@ -71,7 +72,7 @@ export async function generateMetadata({
     getLearningTopicPage(params.gridSlug, params.topicSlug),
     getLearningTree(params.gridSlug),
   ]);
-  if (!page || (!page.locked && page.contents.length === 0)) return { title: "Topic not found", robots: { index: false, follow: false } };
+  if (!page || (!page.locked && page.contents.length === 0)) return completeSeoMetadata({ title: "Topic not found", robots: { index: false, follow: false } }, { dynamicImage: true });
   const { topic, grid } = page;
   const bodyText = page.contents.map((c) => c.body).join(" ").replace(/[#>*`_|\-]+/g, " ").trim();
   const title = lessonTitle({ topicTitle: topic.title, gridSlug: grid.slug, courseName: grid.name, topicSlug: topic.slug });
@@ -84,7 +85,7 @@ export async function generateMetadata({
   // and is left indexable, since this checks actual body content, not grid
   // membership.
   const isThinTemplate = isTemplatedGenerativeAiBody(bodyText);
-  return {
+  return completeSeoMetadata({
     title: { absolute: title },
     description,
     alternates: { canonical: url },
@@ -93,7 +94,7 @@ export async function generateMetadata({
     openGraph: { title, description, url, type: "article", siteName: BRAND.name },
     twitter: { card: "summary_large_image", title, description },
     robots: isThinTemplate ? { index: false, follow: true } : undefined,
-  };
+  }, { dynamicImage: true });
 }
 
 export default async function TopicPage({
@@ -179,7 +180,7 @@ export default async function TopicPage({
       >
         <RecordLessonVisit {...lessonRef} />
         <Breadcrumb
-          className="mb-4 hidden lg:flex"
+          className="mb-4"
           items={[
             { label: "Learning", href: "/learning" },
             { label: grid.name, href: `/learning/${grid.slug}` },

@@ -61,6 +61,20 @@ describe("lesson reading presentation preserves its contracts", () => {
     expect((html.match(/<h1\b/g) ?? [])).toHaveLength(1);
   });
 
+  it.each(["#", "##", "###"])("starts an untitled %s block at H2 beneath the lesson H1", async marker => {
+    api.page.mockResolvedValue({ ...lesson, contents: [{ ...lesson.contents[0], heading: "", body: `${marker} First section\n\nOriginal text.` }] });
+    const html = await render();
+    expect(html).toMatch(/<h2[^>]*id="first-section"/);
+    expect(html).not.toMatch(/<h3[^>]*id="first-section"/);
+  });
+
+  it("places authored H3 sections directly below the block H2", async () => {
+    api.page.mockResolvedValue({ ...lesson, contents: [{ ...lesson.contents[0], body: "### Definition\n\nOriginal text.\n\n#### Detail\n\nMore text." }] });
+    const html = await render();
+    expect(html).toMatch(/<h3[^>]*id="definition"/);
+    expect(html).toMatch(/<h4[^>]*id="detail"/);
+  });
+
   it("exposes course navigation, real lesson position, and a named action group", async () => {
     const html = await render();
     expect(html).toContain("Back to course: ");

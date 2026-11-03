@@ -124,8 +124,7 @@ function LoginForm() {
   }
 
   return (
-    <Shell>
-      <h1 className="mt-5 text-2xl font-bold text-ink">Sign in</h1>
+    <>
       <p className="mt-1 text-sm text-ink-muted">Use the same account as the CampusEduX app.</p>
 
       <button
@@ -190,21 +189,17 @@ function LoginForm() {
           Create an account
         </Link>
       </p>
-    </Shell>
+    </>
   );
 }
 
 export default function LoginView() {
   return (
-    <Suspense
-      fallback={
-        <Shell>
-          <h1 className="mt-5 text-2xl font-bold text-ink">Sign in</h1>
-          <p className="mt-1 text-sm text-ink-muted">Loading…</p>
-        </Shell>
-      }
-    >
-      <LoginForm />
-    </Suspense>
+    <Shell>
+      <h1 className="mt-5 text-2xl font-bold text-ink">Sign in</h1>
+      <Suspense fallback={<p className="mt-1 text-sm text-ink-muted">Loading…</p>}>
+        <LoginForm />
+      </Suspense>
+    </Shell>
   );
 }
