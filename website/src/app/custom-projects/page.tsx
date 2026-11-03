@@ -6,8 +6,11 @@ import { absoluteUrl, breadcrumbJsonLd } from "@/lib/seo";
 import JsonLd from "@/components/JsonLd";
 import { loadProjectPricing } from "@/lib/customProjectPricing.server";
 import { projectTokenPrices } from "@/lib/projectPricingText";
+import { CustomProjectReadError, readCustomProject } from "@/lib/customProjectReads";
 
-export const revalidate = 300;
+// Pricing deliberately bypasses the fetch cache; load the live catalog at request
+// time rather than making deployment depend on Supabase availability.
+export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
   title: "Project Mentoring and Custom Software",
   description:
@@ -34,26 +37,29 @@ const TYPE_LABEL: Record<string, string> = {
 
 export default async function CustomProjectsPage() {
   const supabase = getPublicSupabase();
+  if (!supabase) throw new CustomProjectReadError("unavailable");
   let typeStarting: { type: string; from: number; token: number }[] = [];
   let platforms: any[] = [];
   let features: any[] = [];
   let tokenPrices = projectTokenPrices([]);
 
   if (supabase) {
-    const [pricing, { data: p }, { data: f }] = await Promise.all([
+    const [pricing, p, f] = await Promise.all([
       // Base price + upfront token per (project_type, project_level) —
       // custom_project_pricing (mobile-app/supabase/migrations/0033).
       loadProjectPricing(),
       // Platform is an add-on charge on top of the base price — 0 for web.
-      supabase.from("custom_project_platform_pricing").select("platform,label,charge").eq("is_active", true).order("sort_order"),
+      readCustomProject((signal) => supabase.from("custom_project_platform_pricing").select("platform,label,charge").eq("is_active", true).order("sort_order").abortSignal(signal)),
       // Feature catalog — 0034_custom_feature_catalog.sql (category is free text).
-      supabase
+      readCustomProject((signal) => supabase
         .from("custom_project_features")
         .select("id,name,category,price,project_types")
         .eq("is_active", true)
-        .order("sort_order"),
+        .order("sort_order").abortSignal(signal)),
     ]);
 
+    // A successful empty catalog is valid; a missing response is a read failure.
+    if (!Array.isArray(p) || !Array.isArray(f)) throw new CustomProjectReadError("unavailable");
     tokenPrices = projectTokenPrices(pricing);
     const byType = new Map<string, { from: number; token: number }>();
     for (const row of pricing ?? []) {

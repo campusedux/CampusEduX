@@ -15,6 +15,7 @@ vi.mock("@/app/custom-projects/_builder/EditableEstimateSummary", () => ({ Edita
 vi.mock("@/app/custom-projects/checkout/CustomProjectCheckout", () => ({ default: () => createElement("button", null, "Pay token") }));
 
 import { loadCatalog, loadDraftServer, loadDraftWithEstimate } from "@/lib/customProjects.server";
+import Landing, { dynamic } from "@/app/custom-projects/page";
 import Start from "@/app/custom-projects/start/page";
 import Features from "@/app/custom-projects/features/page";
 import Estimate from "@/app/custom-projects/estimate/page";
@@ -170,5 +171,42 @@ describe("Custom Project pages", () => {
     api.results.custom_project_drafts = good;
     const html = renderToStaticMarkup(await Checkout());
     for (const text of ["4,100", "500", "Pay token", 'href="/custom-projects/features"', 'href="/custom-projects/estimate"']) expect(html).toContain(text);
+  });
+});
+
+
+describe("Custom Project landing rendering regression", () => {
+  it("uses request-time rendering for the live pricing catalog", () => {
+    expect(dynamic).toBe("force-dynamic");
+  });
+  it("renders the current catalog and existing request links", async () => {
+    const html = renderToStaticMarkup(await Landing());
+    for (const text of ["4,000", "500", "Platform options", "Feature", 'href="/custom-projects/start"', 'href="/custom-projects/my-projects"']) expect(html).toContain(text);
+  });
+  it.each(tables)("propagates %s failures to the retryable route error boundary", async table => {
+    api.results[table] = fail;
+    await expect(Landing()).rejects.toMatchObject({ name: "CustomProjectReadError", kind: "transient" });
+    await expect(Landing()).rejects.not.toThrow("private-provider-detail");
+  });
+  it("rejects unavailable configuration rather than hiding catalog sections", async () => {
+    api.available = false;
+    await expect(Landing()).rejects.toMatchObject({ kind: "unavailable" });
+  });
+  it.each(tables)("rejects a missing successful response from %s", async table => {
+    api.results[table] = { data: null, error: null };
+    await expect(Landing()).rejects.toMatchObject({ kind: "unavailable" });
+  });
+  it("preserves a successful empty catalog", async () => {
+    for (const table of tables) api.results[table] = { data: [], error: null };
+    const html = renderToStaticMarkup(await Landing());
+    expect(html).toContain("How it works");
+    expect(html).not.toContain("Starting price by project type");
+  });
+  it("recovers on a subsequent request after a transient pricing failure", async () => {
+    const good = api.results[tables[0]];
+    api.results[tables[0]] = fail;
+    await expect(Landing()).rejects.toMatchObject({ kind: "transient" });
+    api.results[tables[0]] = good;
+    expect(renderToStaticMarkup(await Landing())).toContain("4,000");
   });
 });
