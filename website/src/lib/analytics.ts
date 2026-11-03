@@ -1,8 +1,14 @@
 import { COOKIE_CONSENT_EVENT, readCookieConsent } from "@/lib/cookieConsent";
 import { documentScriptNonce } from "@/components/analytics/ScriptNonce";
-import { analyticsFrameDocument } from "@/lib/analyticsFrame";
 
 export const GA_MEASUREMENT_ID = process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID;
+
+declare global {
+  interface Window {
+    dataLayer?: unknown[];
+    gtag?: (...args: unknown[]) => void;
+  }
+}
 
 export type AnalyticsPage = {
   page_path: string;
@@ -42,90 +48,123 @@ export function analyticsPage(value: string, origin: string, referrer = ""): Ana
   return { page_path: path, page_location: `${origin}${path}`, page_referrer: safeReferrer };
 }
 
-let frame: HTMLIFrameElement | null = null;
-let ready = false;
-let pending: AnalyticsPage | null = null;
+let script: HTMLScriptElement | null = null;
+let loaded = false;
+let configured = false;
+let pending: AnalyticsPage[] = [];
 let previous = "";
-let clientId: string | null = null;
-let active = false;
+let users = 0;
+let enabled = false;
+const DENIED = { analytics_storage: "denied", ad_storage: "denied", ad_user_data: "denied", ad_personalization: "denied" };
 
-function analyticsClientId(): string {
-  // Retain the existing pseudonymous GA visitor ID without giving Google
-  // access to application cookies. Accept only the numeric GA cookie shape.
-  const saved = document.cookie.split("; ").find(cookie => cookie.startsWith("_ga="));
-  const existing = saved?.match(/^_ga=GA\d+\.\d+\.(\d{1,20}\.\d{1,20})$/)?.[1];
-  const id = existing ?? `${window.crypto.getRandomValues(new Uint32Array(1))[0]}.${Math.floor(Date.now() / 1000)}`;
-  // This runs only after analytics consent and public-route validation. The
-  // existing CookieConsent banner clears _ga on revocation as before.
-  document.cookie = `_ga=GA1.1.${id}; Path=/; Max-Age=63072000; SameSite=Lax${window.location.protocol === "https:" ? "; Secure" : ""}`;
-  return id;
+function setEnabled(next: boolean) {
+  // Removing a loaded script does not unload Google or its timers. Use GA's
+  // collection opt-out as well as Consent Mode on withdrawal/private routes.
+  Object.assign(window, { [`ga-disable-${GA_MEASUREMENT_ID}`]: !next });
+  if (enabled !== next) {
+    window.gtag?.("consent", "update", { ...DENIED, analytics_storage: next ? "granted" : "denied" });
+    enabled = next;
+  }
 }
 
-function stopFrame() {
-  frame?.remove();
-  frame = null;
-  ready = false;
-  pending = null;
+function pause() {
+  setEnabled(false);
+  pending = [];
   previous = "";
 }
 
 function deliver() {
-  // Opaque sandbox origins require '*'; the receiver checks event.source.
-  if (ready && pending && readCookieConsent()?.analytics) {
-    frame?.contentWindow?.postMessage(pending, "*");
-    previous = pending.page_location;
-    pending = null;
+  if (!loaded || !users || !enabled) return;
+  if (!readCookieConsent()?.analytics || !analyticsPage(window.location.href, window.location.origin)) {
+    pause();
+    return;
+  }
+  for (const page of pending.splice(0)) {
+    const fields = { ...page, page_title: "CampusEduX" };
+    window.gtag?.("set", fields);
+    window.gtag?.("event", "page_view", { ...fields, send_to: GA_MEASUREMENT_ID });
   }
 }
 
 export function sendPageview(value: string) {
-  if (!active || !GA_MEASUREMENT_ID || typeof window === "undefined") return;
+  if (!users || !GA_MEASUREMENT_ID || typeof window === "undefined") return;
   const origin = window.location.origin;
   // A caller cannot disguise an auth page by supplying a public path.
   // Never alter history or consume authentication credentials.
   const current = analyticsPage(window.location.href, origin);
   const page = analyticsPage(value, origin, previous || document.referrer);
   if (!readCookieConsent()?.analytics || !current || !page || current.page_path !== page.page_path) {
-    stopFrame();
+    pause();
     return;
   }
-  pending = page;
-  if (!frame) {
-    clientId ??= analyticsClientId();
-    const next = document.createElement("iframe");
-    next.hidden = true;
-    next.title = "Website analytics";
-    // No allow-same-origin: Google cannot read the parent's URL, DOM,
-    // cookies or history, regardless of remote Enhanced Measurement settings.
-    next.setAttribute("sandbox", "allow-scripts");
+  // Google requires a document with HTTP(S) and cookie access. An opaque
+  // sandbox/srcdoc document throws inside Google's cookie reader before send.
+  if (!/^https?:$/.test(window.location.protocol)) return;
+  if (!window.gtag) {
+    window.dataLayer = window.dataLayer || [];
+    window.gtag = function () { window.dataLayer!.push(arguments); };
+  }
+  if (!configured) window.gtag("consent", "default", DENIED);
+  setEnabled(true);
+  // Queries, hashes and unchanged consent saves are not new logical pages.
+  if (previous === page.page_location) return;
+  pending.push(page);
+  previous = page.page_location;
+  if (!configured) {
+    configured = true;
+    window.gtag("set", { ...page, page_title: "CampusEduX" });
+    window.gtag("js", new Date());
+    window.gtag("config", GA_MEASUREMENT_ID, {
+      // This app owns page views. The stream's Enhanced Measurement setting
+      // "Page changes based on browser history events" must also be off;
+      // send_page_view suppresses config's initial view, not that remote rule.
+      ...page, page_title: "CampusEduX", send_page_view: false,
+      allow_google_signals: false, allow_ad_personalization_signals: false,
+    });
+  }
+  if (!script) {
+    const next = document.createElement("script");
+    next.src = `https://www.googletagmanager.com/gtag/js?id=${encodeURIComponent(GA_MEASUREMENT_ID)}`;
+    next.async = true;
     next.referrerPolicy = "no-referrer";
-    next.srcdoc = analyticsFrameDocument(GA_MEASUREMENT_ID, origin, clientId, process.env.NEXT_PUBLIC_ADSENSE_ENABLED === "true" ? documentScriptNonce() : undefined);
+    const nonce = documentScriptNonce();
+    if (nonce) next.nonce = nonce;
     next.onload = () => {
-      if (frame !== next) return;
-      ready = true;
+      if (script !== next) return;
+      loaded = true;
       deliver();
     };
-    frame = next;
-    document.body.appendChild(next);
+    next.onerror = () => {
+      if (script !== next) return;
+      next.remove();
+      script = null;
+      loaded = false;
+      // Fail closed, without throwing or retrying in a background loop. A
+      // subsequent consent action/navigation can retry the current public page.
+      pause();
+    };
+    script = next;
+    document.head.appendChild(next);
   }
   deliver();
 }
 
 export function initializeAnalytics(): () => void {
   if (typeof window === "undefined" || !GA_MEASUREMENT_ID || !/^G-[A-Z0-9]+$/.test(GA_MEASUREMENT_ID)) return () => {};
-  active = true;
-  const update = () => {
-    if (!readCookieConsent()?.analytics) clientId = null;
-    sendPageview(window.location.href);
-  };
-  window.addEventListener(COOKIE_CONSENT_EVENT, update);
-  window.addEventListener("hashchange", update);
-  update();
+  if (users++ === 0) {
+    window.addEventListener(COOKIE_CONSENT_EVENT, update);
+    window.addEventListener("hashchange", update);
+    update();
+  }
+  let disposed = false;
   return () => {
-    active = false;
+    if (disposed) return;
+    disposed = true;
+    if (--users > 0) return;
     window.removeEventListener(COOKIE_CONSENT_EVENT, update);
     window.removeEventListener("hashchange", update);
-    stopFrame();
-    clientId = null;
+    pause();
   };
 }
+
+function update() { sendPageview(window.location.href); }

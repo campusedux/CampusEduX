@@ -13,8 +13,8 @@ function buildCsp({ nonce = "", adsEnabled = false, isDev = false } = {}) {
   return [
     "default-src 'self'", `script-src ${scripts}`,
     "style-src 'self' 'unsafe-inline'", "font-src 'self'",
-    `img-src 'self' data: https://*.supabase.co${ads}`,
-    `connect-src 'self' https://*.supabase.co https://api.razorpay.com https://lumberjack.razorpay.com https://www.google-analytics.com https://analytics.google.com${ads}`,
+    `img-src 'self' data: https://*.supabase.co https://*.google-analytics.com https://www.googletagmanager.com${ads}`,
+    `connect-src 'self' https://*.supabase.co https://api.razorpay.com https://lumberjack.razorpay.com https://*.google-analytics.com https://analytics.google.com https://www.googletagmanager.com${ads}`,
     `frame-src 'self' https://api.razorpay.com https://checkout.razorpay.com${ads}`,
     "frame-ancestors 'none'", "object-src 'none'", "base-uri 'self'", "form-action 'self'",
   ].join("; ");

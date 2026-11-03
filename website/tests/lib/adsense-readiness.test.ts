@@ -7,7 +7,6 @@ import { interpolateDocument } from "@/legal/interpolate";
 import { getLegalDocument } from "@/legal/registry";
 import { publicReadDeadline } from "@/lib/publicReadDeadline";
 import { onlyActiveJobs } from "@/lib/jobsActive";
-import { analyticsFrameDocument } from "@/lib/analyticsFrame";
 
 afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers(); });
 
@@ -62,12 +61,6 @@ describe("consent persistence and withdrawal", () => {
     expect(consentModeSignals(readCookieConsent()!).ad_storage).toBe("denied");
     saveCookieConsent({ analytics: false, ads: false });
     expect(readCookieConsent()).toEqual({ analytics: false, ads: false });
-  });
-  it("carries the document nonce into the isolated analytics bootstrap and its tag loader", () => {
-    const html = analyticsFrameDocument("G-TEST", "https://fixture.invalid", "fixture", "randomNonce123");
-    expect(html).toContain('<script nonce="randomNonce123">');
-    expect(html).toContain("script.nonce = \"randomNonce123\"");
-    expect(html).not.toContain("unsafe-inline");
   });
 });
 

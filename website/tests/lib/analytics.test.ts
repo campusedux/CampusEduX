@@ -1,49 +1,49 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { runInNewContext } from "node:vm";
-import { analyticsFrameDocument } from "@/lib/analyticsFrame";
+import { buildCsp } from "@/lib/csp";
 
 const ORIGIN = "https://website-fixture.invalid";
 const SECRET = "fabricated-sec08-credential";
 let analytics: typeof import("@/lib/analytics");
 let cleanup = () => {};
-let cookie = "campusedux_consent_v1=a1d0";
+let cookie: string;
 let location: URL;
 let events: EventTarget;
-type Frame = {
-  srcdoc: string;
-  onload?: () => void;
-  remove: ReturnType<typeof vi.fn>;
-  setAttribute: ReturnType<typeof vi.fn>;
-  contentWindow: { postMessage: ReturnType<typeof vi.fn> };
-};
-let frames: Frame[];
+type Tag = { src: string; nonce?: string; onload?: () => void; onerror?: () => void; remove: ReturnType<typeof vi.fn> };
+let scripts: Tag[];
+let browser: Window;
+let nonce: string | undefined;
+const calls = () => (browser.dataLayer ?? []).map(args => Array.from(args as IArguments));
+const pageviews = () => calls().filter(call => call[0] === "event" && call[1] === "page_view");
+const optOut = () => (browser as unknown as Record<string, unknown>)["ga-disable-G-SEC08TEST"];
 
 beforeEach(async () => {
   vi.resetModules();
   vi.stubEnv("NEXT_PUBLIC_GA_MEASUREMENT_ID", "G-SEC08TEST");
   cookie = "campusedux_consent_v1=a1d0";
+  nonce = undefined;
   location = new URL("/projects", ORIGIN);
   events = new EventTarget();
-  frames = [];
-  vi.stubGlobal("window", {
+  scripts = [];
+  browser = {
     get location() { return location; },
-    crypto: { getRandomValues: (values: Uint32Array) => { values[0] = 123456; return values; } },
     addEventListener: events.addEventListener.bind(events),
     removeEventListener: events.removeEventListener.bind(events),
-  });
+  } as unknown as Window;
+  vi.stubGlobal("window", browser);
   vi.stubGlobal("document", {
     get cookie() { return cookie; },
-    set cookie(value: string) {
-      const entry = value.split(";")[0];
-      cookie = cookie.split("; ").filter(item => !item.startsWith(entry.split("=")[0] + "=")).concat(entry).join("; ");
-    },
     referrer: `${ORIGIN}/reset-password?token_hash=${SECRET}`,
-    createElement: () => {
-      const frame = { srcdoc: "", remove: vi.fn(), setAttribute: vi.fn(), contentWindow: { postMessage: vi.fn() } };
-      frames.push(frame);
-      return frame;
+    querySelector: () => nonce ? { content: nonce } : null,
+    createElement: (name: string) => {
+      // Google's cookie reader cannot run in the old opaque sandbox. The
+      // replacement must execute as a script in this HTTP(S) document.
+      if (name === "iframe") throw new DOMException("The document is sandboxed and lacks the 'allow-same-origin' flag.", "SecurityError");
+      expect(name).toBe("script");
+      const script = { src: "", remove: vi.fn() };
+      scripts.push(script);
+      return script;
     },
-    body: { appendChild: vi.fn() },
+    head: { appendChild: vi.fn() },
   });
   analytics = await import("@/lib/analytics");
 });
@@ -79,125 +79,149 @@ describe("central analytics URL policy", () => {
   });
 });
 
-describe("actual analytics initialization and navigation", () => {
-  it.each(privatePaths)("never loads the tag on initial %s, even with prior consent", path => {
-    location = new URL(`${path}?token_hash=${SECRET}&code=${SECRET}&state=${SECRET}`, ORIGIN);
-    const original = location.href;
+describe("page-level analytics lifecycle", () => {
+  it.each(privatePaths)("never loads on initial %s, even with stored consent", path => {
+    location = new URL(`${path}?token_hash=${SECRET}`, ORIGIN);
     cleanup = analytics.initializeAnalytics();
     analytics.sendPageview("/projects");
-    expect(frames).toHaveLength(0);
-    expect(location.href).toBe(original);
+    expect(scripts).toHaveLength(0);
+    expect(optOut()).toBe(true);
+    expect(location.search).toContain(SECRET);
   });
 
-  it.each(["", "campusedux_consent_v1=a0d0", "campusedux_consent_v1=invalid"])("does not load without valid consent (%s)", choice => {
+  it.each(["", "campusedux_consent_v1=a0d0", "campusedux_consent_v1=invalid", "campusedux_consent_v1=a0d1"])("does not load with absent/denied consent (%s)", choice => {
     cookie = choice;
     cleanup = analytics.initializeAnalytics();
-    expect(frames).toHaveLength(0);
+    expect(scripts).toHaveLength(0);
+    expect(browser.gtag).toBeUndefined();
   });
 
-  it("sends only sanitized locations before and after sensitive navigation", () => {
-    location = new URL(`/projects?access_token=${SECRET}#refresh_token=${SECRET}`, ORIGIN);
+  it("uses HTTP(S) document cookie access and queues defaults before config", () => {
     cleanup = analytics.initializeAnalytics();
-    expect(frames[0].setAttribute).toHaveBeenCalledWith("sandbox", "allow-scripts");
-    expect(frames[0].srcdoc).not.toContain(SECRET);
-    frames[0].onload?.();
-    expect(frames[0].contentWindow.postMessage).toHaveBeenCalledWith({ page_path: "/projects", page_location: `${ORIGIN}/projects`, page_referrer: "" }, "*");
-    location = new URL(`/reset-password?token_hash=${SECRET}&type=recovery`, ORIGIN);
-    analytics.sendPageview(location.pathname + location.search);
-    expect(frames[0].remove).toHaveBeenCalledOnce();
-    location = new URL(`/jobs?code=${SECRET}&state=${SECRET}`, ORIGIN);
-    analytics.sendPageview(location.pathname + location.search);
-    frames[1].onload?.();
-    expect(frames[1].contentWindow.postMessage).toHaveBeenCalledWith({ page_path: "/jobs", page_location: `${ORIGIN}/jobs`, page_referrer: "" }, "*");
-    expect(JSON.stringify(frames.map(f => f.contentWindow.postMessage.mock.calls))).not.toContain(SECRET);
+    expect(scripts).toHaveLength(1);
+    expect(scripts[0].src).toBe("https://www.googletagmanager.com/gtag/js?id=G-SEC08TEST");
+    expect(calls()[0]).toMatchObject(["consent", "default", { analytics_storage: "denied", ad_storage: "denied", ad_user_data: "denied", ad_personalization: "denied" }]);
+    expect(calls()[1]).toMatchObject(["consent", "update", { analytics_storage: "granted", ad_storage: "denied" }]);
+    expect(calls().find(c => c[0] === "config")).toMatchObject(["config", "G-SEC08TEST", { send_page_view: false }]);
+    expect(pageviews()).toHaveLength(0);
+    scripts[0].onload?.();
+    expect(pageviews()).toHaveLength(1);
+    expect(optOut()).toBe(false);
   });
 
-  it("supports consent grant/revocation/regrant and removes pending frames", () => {
-    cookie = "";
+  it.each([undefined, "documentNonce123"])("carries the document nonce (%s)", value => {
+    nonce = value;
     cleanup = analytics.initializeAnalytics();
-    cookie = "campusedux_consent_v1=a1d0";
+    expect(scripts[0].nonce).toBe(value);
+  });
+
+  it("deduplicates initialization, unchanged consent, query and hash changes", () => {
+    cleanup = analytics.initializeAnalytics();
+    const secondCleanup = analytics.initializeAnalytics();
+    scripts[0].onload?.();
     events.dispatchEvent(new Event("campusedux:cookie-consent"));
-    expect(frames).toHaveLength(1);
+    location = new URL(`/projects?code=${SECRET}#${SECRET}`, ORIGIN);
+    events.dispatchEvent(new Event("hashchange"));
+    analytics.sendPageview(location.href);
+    expect(scripts).toHaveLength(1);
+    expect(calls().filter(c => c[0] === "config")).toHaveLength(1);
+    expect(pageviews()).toHaveLength(1);
+    secondCleanup();
+    secondCleanup();
+    expect(optOut()).toBe(false);
+  });
+
+  it("retains navigation order and safe referrers while the tag is loading", () => {
+    cleanup = analytics.initializeAnalytics();
+    location = new URL(`/jobs?code=${SECRET}`, ORIGIN);
+    analytics.sendPageview(location.href);
+    scripts[0].onload?.();
+    expect(pageviews().map(c => c[2])).toMatchObject([
+      { page_path: "/projects", page_referrer: "" },
+      { page_path: "/jobs", page_referrer: `${ORIGIN}/projects` },
+    ]);
+    expect(JSON.stringify(calls())).not.toContain(SECRET);
+  });
+
+  it("tracks revisiting a public page without counting private pages", () => {
+    cleanup = analytics.initializeAnalytics();
+    scripts[0].onload?.();
+    location = new URL(`/reset-password?token_hash=${SECRET}`, ORIGIN);
+    analytics.sendPageview(location.href);
+    expect(optOut()).toBe(true);
+    expect(calls().at(-1)).toMatchObject(["consent", "update", { analytics_storage: "denied" }]);
+    location = new URL("/jobs", ORIGIN);
+    analytics.sendPageview(location.href);
+    location = new URL("/projects", ORIGIN);
+    analytics.sendPageview(location.href);
+    expect(pageviews().map(c => (c[2] as { page_path: string }).page_path)).toEqual(["/projects", "/jobs", "/projects"]);
+    expect(scripts).toHaveLength(1);
+    expect(JSON.stringify(calls())).not.toContain(SECRET);
+  });
+
+  it("drops pending events on withdrawal and reuses the tag on regrant", () => {
+    cleanup = analytics.initializeAnalytics();
     cookie = "campusedux_consent_v1=a0d0";
     events.dispatchEvent(new Event("campusedux:cookie-consent"));
-    frames[0].onload?.();
-    expect(frames[0].remove).toHaveBeenCalledOnce();
-    expect(frames[0].contentWindow.postMessage).not.toHaveBeenCalled();
+    scripts[0].onload?.();
+    expect(pageviews()).toHaveLength(0);
+    expect(optOut()).toBe(true);
     cookie = "campusedux_consent_v1=a1d0";
     events.dispatchEvent(new Event("campusedux:cookie-consent"));
-    frames[1].onload?.();
-    expect(frames[1].contentWindow.postMessage).toHaveBeenCalledOnce();
+    expect(pageviews()).toHaveLength(1);
+    expect(scripts).toHaveLength(1);
   });
 
-  it("sanitizes hash-only navigation and keeps ordinary navigation referrers", () => {
+  it("fails closed on script error and retries only on a later user action", () => {
     cleanup = analytics.initializeAnalytics();
-    frames[0].onload?.();
-    location = new URL(`/projects#access_token=${SECRET}`, ORIGIN);
-    events.dispatchEvent(new Event("hashchange"));
-    location = new URL("/jobs?sort=newest", ORIGIN);
+    scripts[0].onerror?.();
+    expect(optOut()).toBe(true);
+    expect(pageviews()).toHaveLength(0);
+    expect(scripts[0].remove).toHaveBeenCalledOnce();
+    events.dispatchEvent(new Event("campusedux:cookie-consent"));
+    expect(scripts).toHaveLength(2);
+    scripts[0].onload?.(); // stale callback cannot flush the retry
+    expect(pageviews()).toHaveLength(0);
+    scripts[1].onload?.();
+    expect(pageviews()).toHaveLength(1);
+    expect(calls().filter(c => c[0] === "config")).toHaveLength(1);
+  });
+
+  it("disables collection after cleanup and ignores a late script load", () => {
+    cleanup = analytics.initializeAnalytics();
+    cleanup();
+    scripts[0].onload?.();
     analytics.sendPageview(location.href);
-    expect(frames[0].contentWindow.postMessage).toHaveBeenLastCalledWith({ page_path: "/jobs", page_location: `${ORIGIN}/jobs`, page_referrer: `${ORIGIN}/projects` }, "*");
-    expect(JSON.stringify(frames[0].contentWindow.postMessage.mock.calls)).not.toContain(SECRET);
+    expect(optOut()).toBe(true);
+    expect(pageviews()).toHaveLength(0);
   });
 
-  it("retains an existing pseudonymous visitor ID without forwarding other cookie values", () => {
-    cookie += `; _ga=GA1.2.12345.67890; unrelated_cookie=${SECRET}`;
-    cleanup = analytics.initializeAnalytics();
-    expect(frames[0].srcdoc).toContain('const clientId = "12345.67890"');
-    expect(frames[0].srcdoc).not.toContain(SECRET);
-    expect(cookie).toContain("_ga=GA1.1.12345.67890");
-  });
-
-  it("replaces a malformed GA cookie instead of sending its value", () => {
-    cookie += `; _ga=${SECRET}`;
-    cleanup = analytics.initializeAnalytics();
-    expect(frames[0].srcdoc).not.toContain(SECRET);
-    expect(cookie).toMatch(/_ga=GA1\.1\.123456\.\d+/);
-  });
-
-  it.each([undefined, "invalid-id"])("stays off for absent/invalid measurement ID %s", async id => {
+  it.each([undefined, "invalid-id"])("stays off for missing/invalid ID %s", async id => {
     vi.stubEnv("NEXT_PUBLIC_GA_MEASUREMENT_ID", id);
     vi.resetModules();
     analytics = await import("@/lib/analytics");
     cleanup = analytics.initializeAnalytics();
-    expect(frames).toHaveLength(0);
+    expect(scripts).toHaveLength(0);
+  });
+
+  it("does not attempt to load Google in an about: document", () => {
+    location = new URL("about:blank");
+    cleanup = analytics.initializeAnalytics();
+    expect(scripts).toHaveLength(0);
   });
 });
 
-describe("actual isolated tag bootstrap", () => {
-  function bootstrap() {
-    const parent = {};
-    const scripts: unknown[] = [];
-    let receive: (event: unknown) => void = () => {};
-    const window = { dataLayer: [] as IArguments[], addEventListener: (_: string, fn: typeof receive) => { receive = fn; } };
-    const html = analyticsFrameDocument("G-SEC08TEST", ORIGIN, "fabricated-client");
-    const source = html.match(/<script>([\s\S]*)<\/script>/)?.[1];
-    runInNewContext(source!, { window, parent, URL, Date, document: { createElement: () => ({}), head: { appendChild: (script: unknown) => scripts.push(script) } } });
-    return { parent, scripts, receive, calls: () => window.dataLayer.map(args => Array.from(args)) };
-  }
-
-  it("queues denied defaults, safe config and one explicit pageview before loading Google", () => {
-    const tag = bootstrap();
-    expect(tag.scripts).toHaveLength(0);
-    tag.receive({ source: tag.parent, origin: ORIGIN, data: analytics.analyticsPage(`/projects?code=${SECRET}`, ORIGIN) });
-    const calls = tag.calls();
-    expect(calls[0]).toMatchObject(["consent", "default", { analytics_storage: "denied", ad_storage: "denied" }]);
-    expect(calls.find(call => call[0] === "config")).toMatchObject(["config", "G-SEC08TEST", { send_page_view: false, page_location: `${ORIGIN}/projects`, page_referrer: "" }]);
-    expect(calls.filter(call => call[0] === "event")).toHaveLength(1);
-    expect(tag.scripts).toHaveLength(1);
-    expect(JSON.stringify(calls)).not.toContain(SECRET);
-  });
-
-  it("rejects foreign messages and unsafe URLs and drops arbitrary event parameters", () => {
-    const tag = bootstrap();
-    const page = analytics.analyticsPage("/projects", ORIGIN)!;
-    tag.receive({ source: {}, origin: ORIGIN, data: page });
-    tag.receive({ source: tag.parent, origin: "https://external.invalid", data: page });
-    for (const field of ["page_location", "page_referrer"]) {
-      tag.receive({ source: tag.parent, origin: ORIGIN, data: { ...page, [field]: `${ORIGIN}/projects?token_hash=${SECRET}` } });
+describe("analytics CSP", () => {
+  it.each([false, true])("allows analytics resources without weakening script policy (nonce mode %s)", adsEnabled => {
+    const csp = buildCsp({ adsEnabled, nonce: "testNonce123" });
+    expect(csp).toContain("https://*.google-analytics.com");
+    expect(csp).toContain("https://www.googletagmanager.com");
+    expect(csp).not.toContain("unsafe-eval");
+    expect(csp).toContain("frame-ancestors 'none'");
+    expect(csp).toContain("object-src 'none'");
+    if (adsEnabled) {
+      expect(csp).toContain("'nonce-testNonce123' 'strict-dynamic'");
+      expect(csp.split("; ").find(d => d.startsWith("script-src"))).not.toContain("unsafe-inline");
     }
-    expect(tag.scripts).toHaveLength(0);
-    tag.receive({ source: tag.parent, origin: ORIGIN, data: { ...page, token_hash: SECRET, event_params: { code: SECRET }, page_title: SECRET } });
-    expect(JSON.stringify(tag.calls())).not.toContain(SECRET);
   });
 });
