@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { loadSitemapRoutes, unloadSitemapRoutes } from "../helpers/sitemapFakes";
+import { fakeSitemapSupabase, loadSitemapRoutes, unloadSitemapRoutes } from "../helpers/sitemapFakes";
 
 /**
  * Phase 3 Batch 5: compiler URL consolidation.
@@ -57,7 +57,7 @@ describe("Phase 3 Batch 5: /practice/compiler -> /compiler redirect", () => {
 
 describe("Phase 3 Batch 5: sitemap", () => {
   it("no longer lists /practice/compiler, but keeps /compiler", async () => {
-    const r = await loadSitemapRoutes(null);
+    const r = await loadSitemapRoutes(fakeSitemapSupabase());
     const urls = await r.allLocs();
     expect(urls).not.toContain("https://www.campusedux.com/practice/compiler");
     expect(urls).toContain("https://www.campusedux.com/compiler");

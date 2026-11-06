@@ -13,9 +13,10 @@ interface WaitingFill {
   deadline: number;
 }
 
-/** Bounded process-local storage/admission. No stale-on-error fallback. */
+/** Bounded process-local storage/admission. Callers must verify publication
+ * before reading a key; revalidation never permits reuse under another revision. */
 export class RevisionCache {
-  private entries = new Map<string, string>();
+  private entries = new Map<string, { value: string; updatedAt: number }>();
   private fills = new Map<string, Promise<string>>();
   private waiting = new Map<string, WaitingFill>();
   private active = 0;
@@ -29,13 +30,22 @@ export class RevisionCache {
     private waitMs = 2000,
   ) {}
 
-  async read<T>(key: string, load: () => Promise<T>): Promise<T> {
+  async read<T>(key: string, load: () => Promise<T>, refreshMs = Infinity): Promise<T> {
     const hit = this.entries.get(key);
     if (hit !== undefined) {
       this.entries.delete(key);
       this.entries.set(key, hit);
-      return JSON.parse(hit) as T;
+      if (Date.now() - hit.updatedAt >= refreshMs) {
+        // The verified payload remains available if a refresh fails. Fills
+        // share the same bounded admission queue as cold reads.
+        void this.fill(key, load).catch(() => {});
+      }
+      return JSON.parse(hit.value) as T;
     }
+    return JSON.parse(await this.fill(key, load)) as T;
+  }
+
+  private async fill<T>(key: string, load: () => Promise<T>): Promise<string> {
     let pending = this.fills.get(key);
     if (!pending) {
       if (this.active >= this.maxFills && this.waiting.size >= this.maxQueued)
@@ -52,12 +62,17 @@ export class RevisionCache {
           if (encoded === undefined) throw new Error("Invalid public content payload");
           const size = Buffer.byteLength(key) + Buffer.byteLength(encoded);
           if (size <= this.maxBytes) {
+            const previous = this.entries.get(key);
+            if (previous) {
+              this.bytes -= Buffer.byteLength(key) + Buffer.byteLength(previous.value);
+              this.entries.delete(key);
+            }
             while (this.entries.size >= this.maxEntries || this.bytes + size > this.maxBytes) {
               const oldest = this.entries.keys().next().value as string;
-              this.bytes -= Buffer.byteLength(oldest) + Buffer.byteLength(this.entries.get(oldest)!);
+              this.bytes -= Buffer.byteLength(oldest) + Buffer.byteLength(this.entries.get(oldest)!.value);
               this.entries.delete(oldest);
             }
-            this.entries.set(key, encoded);
+            this.entries.set(key, { value: encoded, updatedAt: Date.now() });
             this.bytes += size;
           }
           return encoded;
@@ -76,7 +91,7 @@ export class RevisionCache {
         this.waiting.set(key, { start, reject, timer, deadline: Date.now() + this.waitMs });
       }
     }
-    return JSON.parse(await pending) as T;
+    return pending;
   }
 
   private finish(key: string) {

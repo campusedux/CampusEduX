@@ -207,7 +207,7 @@ describe("SEO-01 preserved job detail contracts", () => {
     expect(metadata.title).toEqual({ absolute: "Backend Engineer at Example Employer | CampusEduX" });
     expect(metadata.alternates?.canonical).toBe("https://www.campusedux.com/jobs/seo01-fixture");
     expect(metadata.openGraph).toMatchObject({ url: "https://www.campusedux.com/jobs/seo01-fixture", type: "website", siteName: "CampusEduX" });
-    expect(metadata.twitter).toMatchObject({ card: "summary", title: "Backend Engineer at Example Employer | CampusEduX" });
+    expect(metadata.twitter).toMatchObject({ card: "summary_large_image", title: "Backend Engineer at Example Employer | CampusEduX" });
     expect(metadata.description).toContain(physical.title);
     expect(metadata.robots).toBeUndefined();
     expect(revalidate).toBe(300);

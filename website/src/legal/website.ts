@@ -14,6 +14,13 @@ export function websiteDocument(source: LegalDocument): LegalDocument {
       }
     }
     if (doc.id !== "privacy-policy") continue;
+    for (const subsection of section.subsections ?? []) {
+      if (subsection.heading !== "Website analytics (website only)") continue;
+      subsection.bullets = subsection.bullets?.map(text => text.replace(
+        "GA4 records page views and general technical information (such as browser type and approximate location derived from IP address) and sets the cookies described in the Cookie Policy. We have not linked this data to your CampusEduX account.",
+        "GA4 receives page views and technical request information on public pages. Analytics storage is denied by default: limited cookieless measurements still send data to Google before consent and after rejection. If you allow analytics, GA4 may set the cookies described in the Cookie Policy. We have not linked this data to your CampusEduX account.",
+      ));
+    }
     section.bullets = section.bullets?.map((text) => text
       .replace("We do NOT use your personal data for third-party advertising, and we do NOT sell your personal data.", "The mobile app does not use personal data for third-party advertising. On the website, when we display advertising, Google and third-party vendors may process advertising data as described below. We do not sell your personal data.")
       .replace("We do not sell your personal data and we do not share it with third parties for their own advertising.", "We do not sell your personal data. When we display advertising on the website, data may be shared with Google and third-party advertising vendors as described below; this does not change the mobile app disclosures."));

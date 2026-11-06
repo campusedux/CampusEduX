@@ -47,6 +47,7 @@ export const metadata: Metadata = {
   description,
   applicationName: BRAND.name,
   openGraph: {
+    locale: "en_IN",
     type: "website",
     siteName: BRAND.name,
     url: siteUrl,
@@ -88,7 +89,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   return (
     // suppressHydrationWarning: THEME_INIT_SCRIPT adds `dark` to <html> before
     // React hydrates, which is expected and must not warn.
-    <html lang="en" suppressHydrationWarning>
+    <html lang="en-IN" suppressHydrationWarning>
       <head>
         {nonce && <meta name="csp-nonce" content={nonce} />}
         <script nonce={nonce} dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />

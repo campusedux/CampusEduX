@@ -1,3 +1,4 @@
+import { completeSeoMetadata } from "@/lib/seo";
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import JsonLd from "@/components/JsonLd";
@@ -6,7 +7,7 @@ import CompilerWorkspace from "./CompilerWorkspace";
 import { CompilerFallback } from "./CompilerFallback";
 import { compilerAuthRequired } from "@/lib/apiAuth";
 
-export const metadata: Metadata = {
+export const metadata: Metadata = completeSeoMetadata({
   title: "Online Code Compiler",
   description:
     "Write, run and practise programming code online with CampusEduX — Java, Python, JavaScript, C and C++ in a secure sandbox, straight from your browser.",
@@ -23,7 +24,7 @@ export const metadata: Metadata = {
     title: "Online Code Compiler | CampusEduX",
     description: "Write, run and practise programming code online with CampusEduX.",
   },
-};
+});
 
 export default function CompilerPage() {
   return (

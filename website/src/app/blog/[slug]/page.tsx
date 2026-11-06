@@ -1,3 +1,4 @@
+import { completeSeoMetadata } from "@/lib/seo";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -32,7 +33,7 @@ export const dynamicParams = true;
 export async function generateMetadata({ params: paramsPromise }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const params = await paramsPromise;
   const post = await getBlogPost(params.slug);
-  if (!post) return { title: "Article not found", robots: { index: false, follow: false } };
+  if (!post) return completeSeoMetadata({ title: "Article not found", robots: { index: false, follow: false } }, { dynamicImage: true });
 
   const description = authoredDescription(post.seo_description || post.excerpt || stripMarkdown(post.content), post.title);
   const title = plainTitle(post.seo_title || post.title);
@@ -42,7 +43,7 @@ export async function generateMetadata({ params: paramsPromise }: { params: Prom
     : undefined;
   const keywords = post.seo_keywords || post.tags.join(", ") || undefined;
 
-  return {
+  return completeSeoMetadata({
     title: { absolute: title },
     description,
     ...(keywords ? { keywords } : {}),
@@ -66,7 +67,7 @@ export async function generateMetadata({ params: paramsPromise }: { params: Prom
       description,
       ...(images ? { images: images.map((i) => i.url) } : {}),
     },
-  };
+  }, { dynamicImage: true });
 }
 
 export default async function BlogPostPage({ params: paramsPromise }: { params: Promise<{ slug: string }> }) {

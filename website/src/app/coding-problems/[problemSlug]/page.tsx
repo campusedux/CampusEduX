@@ -1,3 +1,4 @@
+import { completeSeoMetadata } from "@/lib/seo";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getCodingProblem, getCodingProblemRelated } from "@/lib/learning";
@@ -9,11 +10,13 @@ import { BRAND } from "@/lib/brand";
 import { CodingProblemBody } from "./CodingProblemBody";
 import { CodingProblemPremiumGate } from "./CodingProblemPremiumGate";
 
+// Request-specific CSP nonces cannot be reused in statically cached HTML.
+// Existing data-layer caches still serve public content reads.
+export const dynamic = "force-dynamic";
 export const revalidate = 86400;
 export const dynamicParams = true;
 
-// [] still registers the route for ISR (on-demand renders are cached for
-// `revalidate` seconds) without prerendering every problem at build time.
+// Retained route enumeration; HTML itself renders per request for nonce safety.
 export function generateStaticParams() {
   return [];
 }
@@ -25,7 +28,7 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const params = await paramsPromise;
   const detail = await getCodingProblem(params.problemSlug);
-  if (!detail) return { title: "Coding problem not found", robots: { index: false, follow: false } };
+  if (!detail) return completeSeoMetadata({ title: "Coding problem not found", robots: { index: false, follow: false } }, { dynamicImage: true });
   const { problem, topic, locked } = detail;
   // Locked problems stay indexable (same convention as the Learning topic
   // page), but `problem.description` is nulled server-side for a locked
@@ -52,7 +55,7 @@ export async function generateMetadata({
     problem.examples.length === 0 &&
     problem.constraints.length === 0 &&
     Object.keys(problem.starter_code ?? {}).length === 0;
-  return {
+  return completeSeoMetadata({
     title: { absolute: title },
     description,
     alternates: { canonical: url },
@@ -61,7 +64,7 @@ export async function generateMetadata({
     twitter: { card: "summary_large_image", title, description },
     other: { "topic:name": topic.title },
     robots: isThin ? { index: false, follow: true } : undefined,
-  };
+  }, { dynamicImage: true });
 }
 
 export default async function CodingProblemPage({ params: paramsPromise }: { params: Promise<{ problemSlug: string }> }) {

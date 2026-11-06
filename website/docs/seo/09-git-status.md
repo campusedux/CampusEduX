@@ -1,0 +1,82 @@
+# Working tree at final verification
+
+```text
+## feat/seo-overhaul
+ M .codex/config.toml
+ M website/src/app/about/page.tsx
+ M website/src/app/blog/[slug]/page.tsx
+ M website/src/app/blog/page.tsx
+ M website/src/app/coding-problems/[problemSlug]/CodingProblemPremiumGate.tsx
+ M website/src/app/coding-problems/[problemSlug]/_components/ProblemPanel.tsx
+ M website/src/app/coding-problems/[problemSlug]/page.tsx
+ M website/src/app/compiler/CompilerWorkspace.tsx
+ M website/src/app/compiler/page.tsx
+ M website/src/app/custom-projects/page.tsx
+ M website/src/app/faq/page.tsx
+ M website/src/app/jobs/[id]/page.tsx
+ M website/src/app/jobs/companies/[id]/page.tsx
+ M website/src/app/jobs/companies/page.tsx
+ M website/src/app/jobs/page.tsx
+ M website/src/app/layout.tsx
+ M website/src/app/learning/[gridSlug]/[topicSlug]/page.tsx
+ M website/src/app/learning/[gridSlug]/page.tsx
+ M website/src/app/learning/page.tsx
+ M website/src/app/legal/page.tsx
+ M website/src/app/mock-tests/[testId]/page.tsx
+ M website/src/app/not-found.tsx
+ M website/src/app/page.tsx
+ M website/src/app/practice/interview-questions/[category]/[topic]/page.tsx
+ M website/src/app/practice/interview-questions/[category]/page.tsx
+ M website/src/app/practice/interview-questions/page.tsx
+ M website/src/app/practice/page.tsx
+ M website/src/app/practice/problems/[slug]/PracticeProblemPremiumGate.tsx
+ M website/src/app/practice/problems/[slug]/page.tsx
+ M website/src/app/practice/problems/page.tsx
+ M website/src/app/premium/page.tsx
+ M website/src/app/projects/[id]/page.tsx
+ M website/src/app/projects/category/[category]/page.tsx
+ M website/src/app/projects/page.tsx
+ M website/src/app/projects/trending/page.tsx
+ M website/src/app/referral/page.tsx
+ M website/src/app/resume/page.tsx
+ M website/src/app/resume/templates/page.tsx
+ M website/src/app/robots.ts
+ M website/src/app/search/page.tsx
+ M website/src/app/sitemap.xml/route.ts
+ M website/src/app/sitemaps/blog.xml/route.ts
+ M website/src/app/sitemaps/interview-questions.xml/route.ts
+ M website/src/app/sitemaps/jobs.xml/route.ts
+ M website/src/app/sitemaps/learning.xml/route.ts
+ M website/src/app/sitemaps/problems.xml/route.ts
+ M website/src/app/sitemaps/projects.xml/route.ts
+ M website/src/app/sitemaps/static.xml/route.ts
+ M website/src/app/support/page.tsx
+ M website/src/legal/seo.ts
+ M website/src/lib/interviewQuestions.ts
+ M website/src/lib/lessonFaq.ts
+ M website/src/lib/seo.ts
+ M website/src/lib/sitemap/build.ts
+ M website/src/lib/sitemap/data.ts
+ M website/src/lib/sitemap/response.ts
+ M website/tests/app/job-posting-geography.test.ts
+ M website/tests/app/schema-structured-data.test.ts
+ M website/tests/app/seo-indexing-audit.test.ts
+ M website/tests/lib/listing-indexing.test.ts
+ M website/tests/lib/seo.test.ts
+ M website/tests/lib/seoDescriptions.test.ts
+ M website/tests/lib/sitemap.test.ts
+?? mobile-app/supabase/migrations/0162_staging_payment_maintenance.sql
+?? release-packages/
+?? website/audit-reports/
+?? website/docs/seo/
+?? website/loadtest.js
+?? website/loadtest50.js
+?? website/public/llms.txt
+?? website/result.txt
+?? website/src/app/jobs/[id]/opengraph-image.tsx
+?? website/src/app/practice/interview-questions/[category]/[topic]/opengraph-image.tsx
+?? website/tests/lib/interview-hub-indexing.test.ts
+?? website/tests/lib/seo-completion.test.ts
+```
+
+No commit, push or deployment. Unrelated configuration, migration, release-package and load-test files preserved.

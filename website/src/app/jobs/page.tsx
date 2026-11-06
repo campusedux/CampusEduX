@@ -1,3 +1,5 @@
+import { Breadcrumb } from "@/components/ui/Breadcrumb";
+import { completeSeoMetadata } from "@/lib/seo";
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import Link from "next/link";
@@ -5,7 +7,8 @@ import { Briefcase, Building2, X } from "lucide-react";
 import JobCard, { JobCardData } from "@/components/JobCard";
 import { FilterSheet, Pagination, PageHeader, SearchBar, SkeletonJobCard, Chip, ChipRow, EmptyState } from "@/components/ui";
 import { JobFilters } from "@/components/marketplace/JobFilters";
-import { getCachedJobsPage } from "@/lib/cache";
+import { getJobsCatalogState } from "@/lib/catalogState";
+import { CatalogUnavailable } from "@/components/marketplace/CatalogUnavailable";
 import { absoluteUrl, listingCanonical, breadcrumbJsonLd, DEFAULT_OG_IMAGE } from "@/lib/seo";
 import JsonLd from "@/components/JsonLd";
 import { JOB_PAGE_SIZE, JOB_SORTS, cleanParams, jobExperience, jobSort, parsePage, totalPages } from "@/lib/marketplace";
@@ -15,14 +18,15 @@ const DESCRIPTION =
 
 export const revalidate = 0;
 
-type SP = { q?: string; location?: string; type?: string; exp?: string; sort?: string; page?: string };
+type SP = { [key: string]: string | undefined; q?: string; location?: string; type?: string; exp?: string; sort?: string; page?: string };
 
 export async function generateMetadata({ searchParams: searchParamsPromise }: { searchParams: Promise<SP> }): Promise<Metadata> {
   const searchParams = await searchParamsPromise;
   const s = JOB_SORTS[jobSort(searchParams.sort)];
-  const { count } = await getCachedJobsPage({
-    from: 0,
-    size: 1,
+  const page = parsePage(searchParams.page);
+  const catalog = await getJobsCatalogState({
+    from: (page - 1) * JOB_PAGE_SIZE,
+    size: JOB_PAGE_SIZE,
     sortColumn: s.column,
     sortAscending: s.ascending,
     q: searchParams.q,
@@ -30,16 +34,11 @@ export async function generateMetadata({ searchParams: searchParamsPromise }: { 
     type: searchParams.type,
     experience: jobExperience(searchParams.exp),
   });
-  const page = parsePage(searchParams.page);
-  const filtered = Boolean(
-    searchParams.q ||
-      searchParams.location ||
-      searchParams.type ||
-      jobExperience(searchParams.exp) ||
-      jobSort(searchParams.sort) !== "newest",
-  );
+  const count = catalog.data?.count;
+  // Tracking keys do not change content or indexation; explicit facets do.
+  const filtered = ["q", "location", "type", "exp", "sort"].some(key => key in searchParams);
   const url = listingCanonical("/jobs", page, filtered);
-  return {
+  return completeSeoMetadata({
     title: "Jobs & Internships",
     description: DESCRIPTION,
     alternates: { canonical: url },
@@ -52,10 +51,10 @@ export async function generateMetadata({ searchParams: searchParamsPromise }: { 
     },
     // No results for this view -> don't index an empty shell page.
     robots:
-      count === 0 || (page - 1) * JOB_PAGE_SIZE >= (count ?? Infinity)
+      catalog.state !== "unavailable" && (filtered || catalog.data?.jobs.length === 0 || count === 0 || (page - 1) * JOB_PAGE_SIZE >= (count ?? Infinity))
         ? { index: false, follow: true }
         : undefined,
-  };
+  });
 }
 
 /** The result list — its own async boundary so the page shell + filters paint first. */
@@ -66,7 +65,7 @@ async function JobResults({ searchParams }: { searchParams: SP }) {
   const experience = jobExperience(searchParams.exp);
 
   // Per-filter cross-request cache (lib/cache.ts) — dynamic route, cached data.
-  const { jobs: rows, count } = await getCachedJobsPage({
+  const catalog = await getJobsCatalogState({
     from: (page - 1) * JOB_PAGE_SIZE,
     size: JOB_PAGE_SIZE,
     sortColumn: s.column,
@@ -76,6 +75,8 @@ async function JobResults({ searchParams }: { searchParams: SP }) {
     type: searchParams.type,
     experience,
   });
+  if (catalog.state === "unavailable") return <CatalogUnavailable catalog="jobs" lastKnownCount={catalog.lastKnownCount} />;
+  const { jobs: rows, count } = catalog.data;
   const jobs = rows as JobCardData[];
   const pages = totalPages(count, JOB_PAGE_SIZE);
   const carried = cleanParams({
@@ -166,6 +167,7 @@ export default async function JobsPage({ searchParams: searchParamsPromise }: { 
   return (
     <div className="mobile-discovery page-shell max-sm:py-4">
       <JsonLd data={breadcrumbJsonLd([{ name: "Jobs", path: "/jobs" }])} />
+      <Breadcrumb className="mb-4" items={[{ label: "Jobs" }]} />
       <PageHeader title="Jobs & Internships" caption="Find your next career opportunity." icon={Briefcase} iconClassName="text-accent-sky" action={
         <Link href="/jobs/companies" aria-label="Browse companies" title="Browse companies" className="inline-flex min-h-11 min-w-11 items-center justify-center gap-2 rounded-xl border border-line bg-card px-3 text-sm font-medium text-ink-muted hover:text-ink sm:border-0 sm:bg-transparent">
           <Building2 className="h-4 w-4 shrink-0" aria-hidden /> <span className="sr-only sm:not-sr-only">Browse companies</span>
@@ -213,9 +215,11 @@ export default async function JobsPage({ searchParams: searchParamsPromise }: { 
               </Link>
             </div>
           )}
+          <div className="min-h-[840px] md:min-h-[440px] xl:min-h-[320px]">
           <Suspense key={JSON.stringify(searchParams)} fallback={<JobResultsSkeleton />}>
             <JobResults searchParams={searchParams} />
           </Suspense>
+          </div>
         </div>
       </div>
     </div>

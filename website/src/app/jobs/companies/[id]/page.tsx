@@ -1,3 +1,4 @@
+import { completeSeoMetadata } from "@/lib/seo";
 import { cache } from "react";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
@@ -24,15 +25,15 @@ const getCompany = cache(async (id: string) => {
 export async function generateMetadata({ params: paramsPromise }: { params: Promise<{ id: string }> }): Promise<Metadata> {
   const params = await paramsPromise;
   const res = await getCompany(params.id);
-  if (!res) return { title: "Company not found", robots: { index: false, follow: false } };
-  return {
+  if (!res) return completeSeoMetadata({ title: "Company not found", robots: { index: false, follow: false } });
+  return completeSeoMetadata({
     title: `${res.company.name} — jobs`,
     description: (res.company.about || `Open roles at ${res.company.name}`).slice(0, 155),
     alternates: { canonical: absoluteUrl(`/jobs/companies/${params.id}`) },
     // No open roles -> just a name and a blurb; keep it out of the index
     // (the jobs sitemap lists only companies with an open job).
     robots: res.jobs.length === 0 ? { index: false, follow: true } : undefined,
-  };
+  });
 }
 
 export default async function CompanyDetailPage({ params: paramsPromise }: { params: Promise<{ id: string }> }) {
@@ -45,6 +46,7 @@ export default async function CompanyDetailPage({ params: paramsPromise }: { par
     <div className="page-shell">
       <JsonLd
         data={breadcrumbJsonLd([
+          { name: "Jobs", path: "/jobs" },
           { name: "Companies", path: "/jobs/companies" },
           { name: company.name, path: `/jobs/companies/${company.id}` },
         ])}

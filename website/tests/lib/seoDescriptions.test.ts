@@ -297,6 +297,14 @@ describe("lessonFaqPairs", () => {
     expect(lessonFaqPairs([{ body: "**Q: What?** Answer.", content_format: "plain" }])).toEqual([]);
     expect(lessonFaqPairs([{ body: "Just prose.\n\nMore prose.", content_format: "markdown" }])).toEqual([]);
   });
+
+  it("preserves literal code identifiers in the visible question and answer", () => {
+    const [pair] = lessonFaqPairs([{ body: "**Q: What is `TIMED_WAITING`?** The `department_summary` example uses `SELECT *`." }]);
+    expect(pair.question).toContain("TIMED_WAITING");
+    expect(pair.answer).toContain("department_summary");
+    expect(pair.answer).toContain("SELECT *");
+    expect(pair.answer).not.toContain("`");
+  });
 });
 
 describe("techArticleJsonLd", () => {

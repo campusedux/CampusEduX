@@ -7,8 +7,8 @@ vi.mock("react", async (original) => ({
   cache: <T>(fn: T) => fn,
 }));
 vi.mock("@/lib/cache", () => ({
-  getCachedProjectsPage: vi.fn(async () => ({ count: 60 })),
-  getCachedJobsPage: vi.fn(async () => ({ count: 60 })),
+  getCachedProjectsPage: vi.fn(async () => ({ count: 60, projects: [{ id: "p1" }] })),
+  getCachedJobsPage: vi.fn(async () => ({ count: 60, jobs: [{ id: "j1" }] })),
 }));
 vi.mock("@/lib/blog", () => ({
   getBlogPage: vi.fn(async () => ({ posts: [{ id: "p1" }], total: 60 })),
@@ -35,7 +35,7 @@ describe("listing canonicals", () => {
     expect(listingCanonical("/jobs", 1)).toBe("https://www.campusedux.com/jobs");
     expect(listingCanonical("/jobs", 2, true)).toBe("https://www.campusedux.com/jobs");
   });
-  it.each(["projects", "jobs", "blog", "practice/problems"])("/%s page 2 self-canonicalizes without adding an index directive", async (path) => {
+  it.each(["projects", "jobs", "blog", "practice/problems"])("/%s page 2 preserves its canonical and route indexing policy", async (path) => {
     const modules = {
       projects: () => import("@/app/projects/page"),
       jobs: () => import("@/app/jobs/page"),
@@ -46,7 +46,7 @@ describe("listing canonicals", () => {
     const metadata = await generateMetadata({ searchParams: Promise.resolve({ page: "2" }) });
     const canonicalPath = path;
     expect(metadata.alternates?.canonical).toBe(`https://www.campusedux.com/${canonicalPath}?page=2`);
-    expect(metadata.robots).toBeUndefined();
+    expect(metadata.robots).toEqual(["jobs", "projects"].includes(path) ? undefined : { index: false, follow: true });
   });
   it("retains noindex for an out-of-range marketplace page", async () => {
     const { generateMetadata } = await import("@/app/projects/page");
@@ -75,15 +75,15 @@ describe("sitemap RLS and quality parity", () => {
     expect(await routes.sectionXml("problems")).not.toContain("/practice/problems</loc>");
   });
 
-  it.each(["blog_posts", "practice_problems_sitemap"])("throws on %s failure rather than caching an empty sitemap", async (source) => {
+  it.each(["blog_posts", "practice_problems_sitemap"])("returns retryable failure for %s rather than caching an empty sitemap", async (source) => {
     const routes = await loadSitemapRoutes(fakeSitemapSupabase({ errors: [source] }));
-    await expect(routes.sections[source === "blog_posts" ? "blog" : "problems"].GET()).rejects.toThrow();
-    await expect(routes.index.GET()).rejects.toThrow();
+    expect((await routes.sections[source === "blog_posts" ? "blog" : "problems"].GET()).status).toBe(503);
+    expect((await routes.index.GET()).status).toBe(503);
   });
 
   it("rejects a malformed sitemap RPC payload instead of publishing an empty hub", async () => {
     const routes = await loadSitemapRoutes(fakeSitemapSupabase({ rpcResults: { practice_problems_sitemap: null } }));
-    await expect(routes.sections.problems.GET()).rejects.toThrow();
+    expect((await routes.sections.problems.GET()).status).toBe(503);
   });
 
   it("keeps visible premium teasers, excludes empty free lessons and respects the website RPC", async () => {
@@ -112,6 +112,6 @@ describe("sitemap RLS and quality parity", () => {
   });
   it("fails rather than caching a sitemap after a content-presence lookup fails", async () => {
     const routes = await loadSitemapRoutes(fakeSitemapSupabase({ errors: ["learning_contents"] }));
-    await expect(routes.sections.learning.GET()).rejects.toThrow();
+    expect((await routes.sections.learning.GET()).status).toBe(503);
   });
 });

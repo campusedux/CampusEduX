@@ -1,3 +1,4 @@
+import { completeSeoMetadata } from "@/lib/seo";
 import { cache } from "react";
 import type { Metadata } from "next";
 import Link from "next/link";
@@ -9,13 +10,16 @@ import JsonLd from "@/components/JsonLd";
 import { absoluteUrl, breadcrumbJsonLd, DEFAULT_OG_IMAGE } from "@/lib/seo";
 import { Breadcrumb } from "@/components/ui";
 
+// Request-specific CSP nonces cannot be reused in statically cached HTML.
+// Existing data-layer caches still serve public content reads.
+export const dynamic = "force-dynamic";
 export const revalidate = 300;
 
 // This landing page has no pagination of its own; cap it and point at the
 // fully paginated marketplace view (/projects?category=<id>) for the rest.
 const CATEGORY_PREVIEW_LIMIT = 48;
 
-// ISR: prerender every category page; long tail renders on demand + caches.
+// Known category enumeration; HTML renders per request for nonce safety.
 export async function generateStaticParams() {
   return (await getCachedCategoryIds()).map((category) => ({ category }));
 }
@@ -31,22 +35,22 @@ export async function generateMetadata({ params: paramsPromise }: { params: Prom
   const params = await paramsPromise;
   const { name, projects, missing } = await getData(params.category);
   if (missing)
-    return {
+    return completeSeoMetadata({
       title: "Category not found",
       robots: { index: false, follow: false },
-    };
+    });
   const description = `${name} projects on CampusEduX — browse educational source-code examples in this category.`;
   const url = absoluteUrl(
     `/projects/category/${encodeURIComponent(params.category)}`,
   );
-  return {
+  return completeSeoMetadata({
     title: `${name} projects`,
     description,
     alternates: { canonical: url },
     openGraph: { title: `${name} projects | CampusEduX`, description, url, type: "website", images: [DEFAULT_OG_IMAGE] },
     // No projects in this category yet -> don't index an empty shell page.
     robots: projects.length === 0 ? { index: false, follow: true } : undefined,
-  };
+  });
 }
 
 export default async function CategoryPage({ params: paramsPromise }: { params: Promise<{ category: string }> }) {

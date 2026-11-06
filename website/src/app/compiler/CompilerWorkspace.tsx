@@ -1,9 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import Link from "next/link";
+import { Breadcrumb } from "@/components/ui/Breadcrumb";
 import { useSearchParams } from "next/navigation";
-import { ChevronRight, CheckCircle2, Clock, Loader2, XCircle } from "lucide-react";
+import { CheckCircle2, Clock, Loader2, XCircle } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import {
   LANGUAGES,
@@ -294,16 +294,7 @@ export default function CompilerWorkspace({ requireAuth = true }: { requireAuth?
       }
     >
       {!fullscreen ? (
-        <nav
-          aria-label="Breadcrumb"
-          className="mb-3 flex flex-wrap items-center gap-1 text-sm text-ink-faint"
-        >
-          <Link href="/practice" className="hover:text-ink">
-            Practice
-          </Link>
-          <ChevronRight className="h-3.5 w-3.5" aria-hidden />
-          <span className="text-ink-muted">Online Compiler</span>
-        </nav>
+        <Breadcrumb className="mb-3" items={[{ label: "Practice", href: "/practice" }, { label: "Online Compiler" }]} />
       ) : null}
 
       <CompilerShell

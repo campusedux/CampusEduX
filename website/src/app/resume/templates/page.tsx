@@ -1,15 +1,18 @@
+import { Breadcrumb } from "@/components/ui/Breadcrumb";
+import JsonLd from "@/components/JsonLd";
+import { completeSeoMetadata } from "@/lib/seo";
 import type { Metadata } from "next";
 import { getPublicSupabase } from "@/lib/supabase/server";
 import { DEFAULT_RESOLVED_TEMPLATES, resolveTemplate, type ResolvedTemplate } from "@/lib/resumeBuilder/templateSpecs";
 import { demoRenderModel, demoResume } from "@/lib/resumeBuilder/demoResumes";
 import { TemplateGallery, type TemplateDemo } from "./TemplateGallery";
-import { absoluteUrl, DEFAULT_OG_IMAGE } from "@/lib/seo";
+import { absoluteUrl, breadcrumbJsonLd, DEFAULT_OG_IMAGE } from "@/lib/seo";
 
 const DESCRIPTION =
   "Browse résumé templates on CampusEduX — each one opens with a complete, realistic demo résumé you can edit or clear and make your own.";
 
 export const revalidate = 300;
-export const metadata: Metadata = {
+export const metadata: Metadata = completeSeoMetadata({
   title: "Resume Templates",
   description: DESCRIPTION,
   alternates: { canonical: absoluteUrl("/resume/templates") },
@@ -20,7 +23,7 @@ export const metadata: Metadata = {
     type: "website",
     images: [DEFAULT_OG_IMAGE],
   },
-};
+});
 
 type TemplateRow = { id: string; name: string | null; description: string | null; accent_color: string | null; is_premium: boolean | null };
 
@@ -49,6 +52,8 @@ export default async function ResumeTemplatesPage() {
 
   return (
     <div className="page-shell">
+      <JsonLd data={breadcrumbJsonLd([{ name: "Resume", path: "/resume" }, { name: "Templates", path: "/resume/templates" }])} />
+      <Breadcrumb className="mb-4" items={[{ label: "Resume", href: "/resume" }, { label: "Templates" }]} />
       <TemplateGallery templates={templates} demos={demos} />
     </div>
   );

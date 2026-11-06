@@ -19,6 +19,16 @@ export default function NotFound() {
       <div className="mt-6">
         <Button href="/">Back to home</Button>
       </div>
+      <form action="/search" className="mt-6 flex gap-2">
+        <label htmlFor="not-found-search" className="sr-only">Search CampusEduX</label>
+        <input id="not-found-search" name="q" type="search" required placeholder="Search courses, jobs and projects" className="min-w-0 flex-1 rounded-lg border border-line bg-card px-3 py-2" />
+        <button type="submit" className="btn-primary">Search</button>
+      </form>
+      <nav aria-label="Explore CampusEduX" className="mt-5 flex flex-wrap justify-center gap-4">
+        <Button href="/learning">Browse tutorials</Button>
+        <Button href="/practice/interview-questions">Interview questions</Button>
+        <Button href="/resume">Build a resume</Button>
+      </nav>
     </div>
   );
 }

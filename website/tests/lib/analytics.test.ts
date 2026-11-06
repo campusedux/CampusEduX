@@ -89,11 +89,15 @@ describe("page-level analytics lifecycle", () => {
     expect(location.search).toContain(SECRET);
   });
 
-  it.each(["", "campusedux_consent_v1=a0d0", "campusedux_consent_v1=invalid", "campusedux_consent_v1=a0d1"])("does not load with absent/denied consent (%s)", choice => {
+  it.each(["", "campusedux_consent_v1=a0d0", "campusedux_consent_v1=invalid", "campusedux_consent_v1=a0d1"])("measures public visits with storage denied for absent/denied consent (%s)", choice => {
     cookie = choice;
     cleanup = analytics.initializeAnalytics();
-    expect(scripts).toHaveLength(0);
-    expect(browser.gtag).toBeUndefined();
+    expect(scripts).toHaveLength(1);
+    expect(calls()[0]).toMatchObject(["consent", "default", { analytics_storage: "denied", ad_storage: "denied", ad_user_data: "denied", ad_personalization: "denied" }]);
+    scripts[0].onload?.();
+    expect(pageviews()).toHaveLength(1);
+    expect(optOut()).toBe(false);
+    expect(calls().filter(c => c[0] === "consent" && c[1] === "update")).toHaveLength(0);
   });
 
   it("uses HTTP(S) document cookie access and queues defaults before config", () => {
@@ -102,9 +106,10 @@ describe("page-level analytics lifecycle", () => {
     expect(scripts[0].src).toBe("https://www.googletagmanager.com/gtag/js?id=G-SEC08TEST");
     expect(calls()[0]).toMatchObject(["consent", "default", { analytics_storage: "denied", ad_storage: "denied", ad_user_data: "denied", ad_personalization: "denied" }]);
     expect(calls()[1]).toMatchObject(["consent", "update", { analytics_storage: "granted", ad_storage: "denied" }]);
-    expect(calls().find(c => c[0] === "config")).toMatchObject(["config", "G-SEC08TEST", { send_page_view: false }]);
+    expect(calls().find(c => c[0] === "config")).toBeUndefined();
     expect(pageviews()).toHaveLength(0);
     scripts[0].onload?.();
+    expect(calls().find(c => c[0] === "config")).toMatchObject(["config", "G-SEC08TEST", { send_page_view: false }]);
     expect(pageviews()).toHaveLength(1);
     expect(optOut()).toBe(false);
   });
@@ -159,13 +164,17 @@ describe("page-level analytics lifecycle", () => {
     expect(JSON.stringify(calls())).not.toContain(SECRET);
   });
 
-  it("drops pending events on withdrawal and reuses the tag on regrant", () => {
+  it("keeps cookieless collection after withdrawal without duplicating a view on regrant", () => {
     cleanup = analytics.initializeAnalytics();
     cookie = "campusedux_consent_v1=a0d0";
     events.dispatchEvent(new Event("campusedux:cookie-consent"));
     scripts[0].onload?.();
-    expect(pageviews()).toHaveLength(0);
-    expect(optOut()).toBe(true);
+    expect(pageviews()).toHaveLength(1);
+    expect(optOut()).toBe(false);
+    const commands = calls();
+    const consent = commands.filter(c => c[0] === "consent");
+    expect(consent.at(-1)).toMatchObject(["consent", "update", { analytics_storage: "denied" }]);
+    expect(commands.findIndex(c => c[0] === "config")).toBeGreaterThan(commands.indexOf(consent.at(-1)!));
     cookie = "campusedux_consent_v1=a1d0";
     events.dispatchEvent(new Event("campusedux:cookie-consent"));
     expect(pageviews()).toHaveLength(1);

@@ -1,6 +1,6 @@
 --- a/website/src/lib/revisionedPublicRead.ts
 +++ b/website/src/lib/revisionedPublicRead.ts
-@@ -1,55 +1,21 @@
+@@ -1,104 +1,21 @@
  import { cache } from "react";
 -import { createHash } from "node:crypto";
  import { getPublicSupabase } from "@/lib/supabase/server";
@@ -10,28 +10,74 @@
  type Scope = "learning" | "blog" | "home";
  type Client = NonNullable<ReturnType<typeof getPublicSupabase>>;
 -const payloads = new RevisionCache();
+-const REVISION_TIMEOUT_MS = 1000;
+-const PAYLOAD_REFRESH_MS = 60_000;
+-let checkCount = 0;
+-let failureCount = 0;
  
+-class RevisionUnavailable extends Error {
+-  constructor(readonly recoverable: boolean, readonly code?: string) {
+-    super("Public content revision is unavailable");
+-  }
+-}
+-
 -async function revision(client: Client, scope: Scope): Promise<string | null> {
--  const { data, error } = await client.rpc("public_content_revision", { p_scope: scope });
--  // Compatibility before the prepared migration (or during rollback). No reuse.
--  if (error?.code === "PGRST202" || error?.code === "42883") return null;
--  if (error || typeof data !== "string" || !/^[0-9a-f-]{36}$/i.test(data))
--    throw new Error("Public content revision is unavailable");
--  return data;
+-  const started = Date.now();
+-  const controller = new AbortController();
+-  const check = ++checkCount;
+-  try {
+-    const { data, error, status } = await publicReadDeadline(() => {
+-      const request = client.rpc("public_content_revision", { p_scope: scope });
+-      return request.abortSignal(controller.signal);
+-    }, REVISION_TIMEOUT_MS);
+-    // Compatibility before the prepared migration (or during rollback). No reuse.
+-    if (error?.code === "PGRST202" || error?.code === "42883") return null;
+-    if (error) {
+-      const code = /^[A-Z0-9]{5,12}$/.test(error.code) ? error.code : undefined;
+-      const denied = error.code === "42501" || error.code.startsWith("28") || status === 401 || status === 403;
+-      throw new RevisionUnavailable(!denied && (status >= 500 || !error.code ||
+-        /^(08|53|57)/.test(error.code) || /^PGRST00[0-3]$/.test(error.code)), code);
+-    }
+-    if (typeof data !== "string" || !/^[0-9a-f-]{36}$/i.test(data))
+-      throw new RevisionUnavailable(false);
+-    return data;
+-  } catch (error) {
+-    const failure = error instanceof RevisionUnavailable ? error : new RevisionUnavailable(true);
+-    failureCount++;
+-    // No raw errors, arguments, URLs, credentials or content in Render logs.
+-    console.error(JSON.stringify({ event: "public_content_revision_failed", scope,
+-      duration_ms: Date.now() - started, check_count: checkCount, failure_count: failureCount,
+-      check, code: failure.code, recoverable: failure.recoverable }));
+-    throw failure;
+-  } finally {
+-    controller.abort();
+-    console.info(JSON.stringify({ event: "public_content_revision_checked", scope,
+-      duration_ms: Date.now() - started, check_count: checkCount, failure_count: failureCount, check }));
+-  }
 -}
 -
 -// Primitive arguments keep this scoped to one environment + React render.
 -const renderRevision = cache(async (scope: Scope, _identity: string) => {
 -  const client = getPublicSupabase({ fresh: true });
 -  if (!client) throw new Error("Public content is unavailable");
--  return publicReadDeadline(() => revision(client, scope), 5000);
+-  try {
+-    return await revision(client, scope);
+-  } catch (error) {
+-    if (!(error instanceof RevisionUnavailable) || !error.recoverable) throw error;
+-    // An old token cannot prove that a cached lesson/article remains public.
+-    // A fresh anonymous projection still enforces current publication/RLS.
+-    // Do not cache its result without a verified revision.
+-    return null;
+-  }
 -});
 -
 -/** Only anonymous projections. Authenticated clients cannot be supplied here.
 - * Every render checks the primary DB; a fill is checked again before admission.
 - * A write overlapping a read may linearize after its initial revision snapshot.
+- * Warm payloads refresh in the background only under a freshly verified token.
+- * An unavailable token uses fresh anonymous reads, never an unverified snapshot.
 - * Process restarts/evictions cause cold reads; this is not Next/CDN/HTML caching.
-+/** Phase 2 app-first rollback: request memoization and fresh anonymous reads.
++/** App-only rollback: request memoization and fresh anonymous reads.
 + * No revision RPC, process cache, authenticated client or stale fallback.
 + * The public client retains its transport timeout.
   */
@@ -58,7 +104,10 @@
 -      if (await revision(client, scope) !== token)
 -        throw new Error("Public content changed during read; retry the request");
 -      return result;
--    }));
+-    }).catch(error => {
+-      console.error(JSON.stringify({ event: "public_content_refresh_failed", scope, name }));
+-      throw error;
+-    }), PAYLOAD_REFRESH_MS);
 +    return read(client, ...args);
    });
  }

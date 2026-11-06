@@ -1,3 +1,5 @@
+import { Breadcrumb } from "@/components/ui/Breadcrumb";
+import { completeSeoMetadata } from "@/lib/seo";
 import type { Metadata } from "next";
 import { getPublicSupabase } from "@/lib/supabase/server";
 import Link from "next/link";
@@ -38,13 +40,13 @@ async function getPremiumData(): Promise<{ plans: Plan[]; features: Feature[] }>
 
 export async function generateMetadata(): Promise<Metadata> {
   const { plans } = await getPremiumData();
-  return {
+  return completeSeoMetadata({
     title: { absolute: "CampusEduX Premium: Plans & Benefits" },
     description: "Compare CampusEduX Premium plans and benefits for learning and practice. See current pricing, access and cancellation details.",
     alternates: { canonical: absoluteUrl("/premium") },
     // No plans published yet -> don't index a page with no pricing to show.
     robots: plans.length === 0 ? { index: false, follow: true } : undefined,
-  };
+  });
 }
 
 /**
@@ -91,6 +93,7 @@ export default async function PremiumPage() {
   return (
     <div className="page-shell">
       <JsonLd data={breadcrumbJsonLd([{ name: "Premium", path: "/premium" }])} />
+      <Breadcrumb className="mb-4" items={[{ label: "Premium" }]} />
       {/* Hero — fixed dark panel in both themes */}
       <section className="relative overflow-hidden rounded-xl bg-[#0F0B2E] px-6 py-8 text-center text-white shadow-card md:px-8 md:py-10 max-md:px-4 max-md:py-6">
         <div aria-hidden className="pointer-events-none absolute -left-24 -top-24 h-72 w-72 rounded-full bg-primary/50 blur-3xl" />

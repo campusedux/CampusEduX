@@ -4,6 +4,50 @@ import { PublicContentOverload, RevisionCache } from "@/lib/revisionCache";
 afterEach(() => vi.useRealTimers());
 
 describe("bounded revision payload storage", () => {
+  it("returns a verified stale payload immediately and joins one background refresh", async () => {
+    vi.useFakeTimers();
+    const cache = new RevisionCache();
+    await cache.read("revision-a", async () => ({ body: "old" }), 100);
+    await vi.advanceTimersByTimeAsync(100);
+    let finish!: (value: { body: string }) => void;
+    const load = vi.fn(() => new Promise<{ body: string }>(resolve => { finish = resolve; }));
+    const a = await cache.read("revision-a", load, 100);
+    a.body = "mutated";
+    expect(await cache.read("revision-a", load, 100)).toEqual({ body: "old" });
+    expect(load).toHaveBeenCalledTimes(1);
+    finish({ body: "new" });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(await cache.read("revision-a", load, 100)).toEqual({ body: "new" });
+    expect(load).toHaveBeenCalledTimes(1);
+  });
+
+  it("retains a verified payload after failed refresh without using it for a new revision", async () => {
+    vi.useFakeTimers();
+    const cache = new RevisionCache();
+    await cache.read("revision-a", async () => "old", 100);
+    await vi.advanceTimersByTimeAsync(100);
+    const failing = vi.fn(async () => { throw new Error("upstream"); });
+    expect(await cache.read("revision-a", failing, 100)).toBe("old");
+    await vi.advanceTimersByTimeAsync(0);
+    await expect(cache.read("revision-b", failing, 100)).rejects.toThrow("upstream");
+    expect(await cache.read("revision-a", async () => "recovered", 100)).toBe("old");
+    await vi.advanceTimersByTimeAsync(0);
+    expect(await cache.read("revision-a", failing, 100)).toBe("recovered");
+  });
+
+  it("accounts for replacement bytes and continues to enforce its storage limit", async () => {
+    vi.useFakeTimers();
+    const cache = new RevisionCache(2, 16);
+    await cache.read("a", async () => "123456", 100);
+    await vi.advanceTimersByTimeAsync(100);
+    expect(await cache.read("a", async () => "123456", 100)).toBe("123456");
+    await vi.advanceTimersByTimeAsync(0);
+    const load = vi.fn(async () => "123456");
+    await cache.read("b", load);
+    await cache.read("a", load);
+    expect(load).toHaveBeenCalledTimes(2);
+  });
+
   it("shares a concurrent fill and isolates returned objects", async () => {
     const cache = new RevisionCache();
     const load = vi.fn(async () => ({ body: "public" }));

@@ -57,6 +57,8 @@ const post = (n: number, status = "published"): Row => ({
 });
 
 beforeEach(() => {
+  vi.spyOn(console, "info").mockImplementation(() => {});
+  vi.spyOn(console, "error").mockImplementation(() => {});
   newRender();
   persistentRead.mockClear();
   posts = Array.from({ length: 14 }, (_, i) => post(i + 1));
@@ -347,13 +349,84 @@ describe("atomic-revision payload reuse (isolated HTTP fixtures)", () => {
     expect(await learning.getLearningTree("java")).toBeNull();
   });
 
-  it("fails closed on authoritative errors even when a payload is warm", async () => {
+  it("uses a fresh anonymous projection on transient revision failure instead of an old payload", async () => {
     await blog.getBlogPost("article-1");
+    posts[0].title = "Fresh during revision outage";
     failed = "public_content_revision"; newRender(); calls = [];
-    await expect(blog.getBlogPost("article-1")).rejects.toThrow("revision is unavailable");
-    expect(calls).toHaveLength(0);
+    expect(await blog.getBlogPost("article-1")).toMatchObject({ title: "Fresh during revision outage" });
+    expect(calls.map(c => c.path)).toEqual(["blog_posts"]);
+    posts[0].status = "draft"; newRender();
+    expect(await blog.getBlogPost("article-1")).toBeNull();
     failed = undefined; newRender();
-    expect(await blog.getBlogPost("article-1")).not.toBeNull();
+    advanceRevision();
+    expect(await blog.getBlogPost("article-1")).toBeNull();
+  });
+
+  it("respects newly protected lessons during a revision outage", async () => {
+    await learning.getLearningTopicPage("java", "intro");
+    failed = "public_content_revision";
+    rpc.learning_topic_content = { locked: true, contents: [] };
+    newRender();
+    expect(await learning.getLearningTopicPage("java", "intro")).toMatchObject({ locked: true, contents: [] });
+  });
+
+  it("keeps failing closed when neither revision nor fresh publication can be read", async () => {
+    await blog.getBlogPost("article-1");
+    failed = "public_content_revision"; newRender();
+    const upstream = globalThis.fetch;
+    vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL, init?: RequestInit) =>
+      String(input).includes("/rest/v1/blog_posts")
+        ? Promise.resolve(new Response(JSON.stringify({ code: "08006", message: "Unavailable" }), { status: 400 }))
+        : upstream(input, init)));
+    await expect(blog.getBlogPost("article-1")).rejects.toThrow("unavailable");
+  });
+
+  it("serves a warm payload during failed background refresh only while its revision is current", async () => {
+    vi.useFakeTimers();
+    try {
+      await blog.getBlogPost("article-1");
+      await vi.advanceTimersByTimeAsync(60_000);
+      failed = "blog_posts"; newRender(); calls = [];
+      expect(await blog.getBlogPost("article-1")).toMatchObject({ slug: "article-1" });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(calls.map(c => c.path)).toEqual(["blog_posts"]);
+      advanceRevision(); newRender();
+      await expect(blog.getBlogPost("article-1")).rejects.toThrow("unavailable");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("reports sanitized timing and counters for revision failures", async () => {
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    failed = "public_content_revision";
+    await blog.getBlogPost("article-1");
+    const entry = errors.mock.calls.map(([line]) => JSON.parse(line))
+      .find(log => log.event === "public_content_revision_failed");
+    expect(entry).toMatchObject({ scope: "blog", code: "08006", recoverable: true });
+    expect(entry.duration_ms).toBeGreaterThanOrEqual(0);
+    expect(entry.failure_count).toBeGreaterThan(0);
+    expect(entry.check_count).toBeGreaterThanOrEqual(entry.failure_count);
+    expect(JSON.stringify(entry)).not.toMatch(/staging-fixture|unit-test-anon|Article|failure\"/);
+  });
+
+  it("falls back after one second even if a revision transport ignores abort", async () => {
+    vi.useFakeTimers();
+    try {
+      const upstream = globalThis.fetch;
+      vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL, init?: RequestInit) =>
+        String(input).includes("/rpc/public_content_revision")
+          ? new Promise<Response>(() => {})
+          : upstream(input, init)));
+      const result = blog.getBlogPost("article-1");
+      await vi.advanceTimersByTimeAsync(999);
+      expect(calls).toHaveLength(0);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(await result).toMatchObject({ slug: "article-1" });
+      expect(calls.map(c => c.path)).toEqual(["blog_posts"]);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("never returns stale payloads on failed refreshes or stores failed fills", async () => {

@@ -1,10 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
-import { ChevronRight, Lock } from "lucide-react";
+import { Lock } from "lucide-react";
 import { useSessionProfile } from "@/lib/useSessionProfile";
-import { Button } from "@/components/ui";
+import { Breadcrumb, Button } from "@/components/ui";
 import { cn } from "@/lib/cn";
 import type { CodingProblemDetail } from "@/lib/learning.types";
 import { CodingProblemBody } from "./CodingProblemBody";
@@ -40,17 +39,7 @@ export function CodingProblemLockedNotice({
 
   return (
     <div className="container-page py-8">
-      <nav aria-label="Breadcrumb" className="mb-4 flex flex-wrap items-center gap-1 text-sm text-ink-faint">
-        <Link href="/learning" className="hover:text-ink">
-          Learning
-        </Link>
-        <ChevronRight className="h-3.5 w-3.5" aria-hidden />
-        <Link href={backToTopic} className="hover:text-ink">
-          {topic.title}
-        </Link>
-        <ChevronRight className="h-3.5 w-3.5" aria-hidden />
-        <span className="text-ink-faint">{problem.title}</span>
-      </nav>
+      <Breadcrumb className="mb-4" items={[{ label: "Learning", href: "/learning" }, { label: topic.title, href: backToTopic }, { label: problem.title }]} />
 
       <header className="mb-6">
         <h1 className="text-2xl font-bold text-ink sm:text-3xl">{problem.title}</h1>

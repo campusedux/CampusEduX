@@ -1,3 +1,5 @@
+import { Breadcrumb } from "@/components/ui/Breadcrumb";
+import { completeSeoMetadata, hasQueryVariants } from "@/lib/seo";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Newspaper, Rss } from "lucide-react";
@@ -34,7 +36,7 @@ export async function generateMetadata({
   const tag = searchParams.tag?.trim() || undefined;
   const { posts } = await getBlogPage({ page, q, category, tag });
   const url = listingCanonical("/blog", page, Boolean(q || category || tag));
-  return {
+  return completeSeoMetadata({
     title: "Blog: AI, Programming & Career Articles",
     description: DESCRIPTION,
     alternates: { canonical: url },
@@ -50,8 +52,8 @@ export async function generateMetadata({
       title: `Blog: AI, Programming & Career Articles | ${BRAND.name}`,
       description: DESCRIPTION,
     },
-    robots: posts.length === 0 ? { index: false, follow: true } : undefined,
-  };
+    robots: hasQueryVariants(searchParams) || posts.length === 0 ? { index: false, follow: true } : undefined,
+  });
 }
 
 type SP = { page?: string; q?: string; category?: string; tag?: string };
@@ -106,6 +108,7 @@ export default async function BlogIndexPage({ searchParams: searchParamsPromise 
   return (
     <div className="page-shell">
       <JsonLd data={breadcrumbJsonLd([{ name: "Blog", path: "/blog" }])} />
+      <Breadcrumb className="mb-4" items={[{ label: "Blog" }]} />
 
       <PageHeader eyebrow="Blog" title={HERO_TITLE} />
 

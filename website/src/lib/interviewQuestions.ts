@@ -30,9 +30,9 @@ const PLATFORM = "website";
 export const getInterviewCategories = unstable_cache(
   async (): Promise<InterviewCategory[]> => {
     const supabase = getPublicSupabase();
-    if (!supabase) return [];
+    if (!supabase) throw new RpcFailed("Interview categories are unavailable");
     const { data, error } = await supabase.rpc("interview_categories_list", { p_platform: PLATFORM });
-    if (error || !Array.isArray(data)) return [];
+    if (error || !Array.isArray(data)) throw new RpcFailed("Interview categories are unavailable");
     return data as InterviewCategory[];
   },
   ["interview-categories"],
@@ -42,14 +42,10 @@ export const getInterviewCategories = unstable_cache(
 /** Topic grid for one category (e.g. `java`) — `null` when the category
  *  doesn't exist or isn't published, so the caller can 404. */
 export const getInterviewTopics = cache(async (categorySlug: string): Promise<InterviewTopicsPage | null> =>
-  cachedPublicRead(
-    "interview:topics",
-    [categorySlug],
-    ["interview-questions", interviewTag.category(categorySlug)],
-    CONTENT_SHARED_REVALIDATE,
+  unstable_cache(
     async (cat): Promise<InterviewTopicsPage | null> => {
       const supabase = getPublicSupabase();
-      if (!supabase) return null;
+      if (!supabase) throw new RpcFailed("Interview topics are unavailable");
       const { data, error } = await supabase.rpc("interview_topics_list", {
         p_category_slug: cat,
         p_platform: PLATFORM,
@@ -57,8 +53,9 @@ export const getInterviewTopics = cache(async (categorySlug: string): Promise<In
       if (error) throw new RpcFailed();
       return (data || null) as InterviewTopicsPage | null;
     },
-    null,
-  ),
+    ["interview:topics", categorySlug],
+    { revalidate: CONTENT_SHARED_REVALIDATE, tags: ["interview-questions", interviewTag.category(categorySlug)] },
+  )(categorySlug),
 );
 
 /** One topic page — every published question in order, plus prev/next topic

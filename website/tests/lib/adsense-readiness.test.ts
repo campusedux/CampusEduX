@@ -45,6 +45,14 @@ describe("verified public information", () => {
     expect(text).toContain("https://policies.google.com/technologies/partner-sites");
     expect(text).toContain("https://adssettings.google.com/");
   });
+  it("discloses cookieless measurement and consent-gated storage on the website", () => {
+    const privacy = JSON.stringify(getLegalDocument("privacy-policy"));
+    const cookies = JSON.stringify(getLegalDocument("cookie-policy"));
+    expect(privacy).toContain("limited cookieless measurements still send data to Google before consent and after rejection");
+    expect(cookies).toContain("Analytics cookies require your consent");
+    expect(cookies).not.toContain("GA4 is not loaded before you allow analytics");
+    expect(privacy).toContain("does not use a third-party analytics or advertising SDK");
+  });
 });
 
 describe("consent persistence and withdrawal", () => {

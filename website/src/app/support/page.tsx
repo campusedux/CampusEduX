@@ -1,13 +1,14 @@
+import { completeSeoMetadata } from "@/lib/seo";
 import type { Metadata } from "next";
 import { Button } from "@/components/ui";
 import { WhatsAppSupport } from "@/components/support/WhatsAppSupport";
 import { absoluteUrl } from "@/lib/seo";
 
-export const metadata: Metadata = {
+export const metadata: Metadata = completeSeoMetadata({
   title: { absolute: "CampusEduX Support: Get Help" },
   description: "Find help with your account, projects, payments, jobs and learning. Browse FAQs or contact CampusEduX support by email or WhatsApp.",
   alternates: { canonical: absoluteUrl("/support") },
-};
+});
 
 export default function SupportPage() {
   return (

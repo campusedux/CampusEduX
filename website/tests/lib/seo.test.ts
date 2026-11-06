@@ -21,8 +21,8 @@ describe("seo helpers", () => {
       { name: "Projects", path: "/projects" },
       { name: "Thing", path: "/projects/thing" },
     ]) as { itemListElement: { position: number; name: string }[] };
-    expect(d.itemListElement.map((i) => i.position)).toEqual([1, 2]);
-    expect(d.itemListElement[1].name).toBe("Thing");
+    expect(d.itemListElement.map((i) => i.position)).toEqual([1, 2, 3]);
+    expect(d.itemListElement.map((i) => i.name)).toEqual(["Home", "Projects", "Thing"]);
   });
   it("faqJsonLd maps questions/answers", () => {
     const d = faqJsonLd([{ question: "Q?", answer: "A." }]) as {

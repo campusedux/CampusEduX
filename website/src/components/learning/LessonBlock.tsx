@@ -21,6 +21,15 @@ export function LessonBlock({
   topicLinks?: TopicLinkEntry[];
   linkState?: TopicLinkState;
 }) {
+  // Authored blocks sometimes start at ###. Align their shallowest heading
+  // below the block H2 (or the page H1), preserving relative nesting and anchors.
+  let inFence = false;
+  const levels = block.body.split(/\r?\n/).flatMap(line => {
+    if (/^```/.test(line)) { inFence = !inFence; return []; }
+    const match = !inFence && line.match(/^(#{1,6})\s/);
+    return match ? [match[1].length] : [];
+  });
+  const headingLevelOffset = (block.heading ? 3 : 2) - Math.min(...levels, 6);
   const kind = block.heading && block.content_format !== "plain" ? classifyLessonHeading(block.heading) : null;
   if (kind === "practice" || kind === "keypoints") {
     return (
@@ -28,7 +37,7 @@ export function LessonBlock({
         <LessonHeading as="h2" id={slugId(block.heading)} kind={kind} number={null} framed>
           {block.heading}
         </LessonHeading>
-        <Markdown source={block.body} topicLinks={topicLinks} linkState={linkState} callouts sectionBody={kind} />
+        <Markdown source={block.body} topicLinks={topicLinks} linkState={linkState} callouts headingLevelOffset={headingLevelOffset} sectionBody={kind} />
         <TopicDiagrams metadata={block.metadata} />
       </LessonSectionFrame>
     );
@@ -43,7 +52,7 @@ export function LessonBlock({
       {block.content_format === "plain" ? (
         <p className="whitespace-pre-line leading-8 text-ink-muted">{block.body}</p>
       ) : (
-        <Markdown source={block.body} topicLinks={topicLinks} linkState={linkState} callouts sections />
+        <Markdown source={block.body} topicLinks={topicLinks} linkState={linkState} callouts sections headingLevelOffset={headingLevelOffset} />
       )}
       <TopicDiagrams metadata={block.metadata} />
     </>

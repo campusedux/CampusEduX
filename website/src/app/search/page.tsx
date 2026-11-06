@@ -1,3 +1,4 @@
+import { completeSeoMetadata } from "@/lib/seo";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { ArrowRight, SearchX } from "lucide-react";
@@ -16,11 +17,11 @@ type SP = { q?: string };
 export async function generateMetadata({ searchParams: searchParamsPromise }: { searchParams: Promise<SP> }): Promise<Metadata> {
   const searchParams = await searchParamsPromise;
   const term = sanitizeSearchTerm(searchParams.q);
-  return {
+  return completeSeoMetadata({
     title: term ? `Search: ${term}` : "Search",
     description: "Search projects, learning resources, tutorials, jobs and blog posts across CampusEduX.",
     robots: { index: false, follow: true },
-  };
+  });
 }
 
 const BROWSE = [

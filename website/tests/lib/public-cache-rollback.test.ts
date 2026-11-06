@@ -4,6 +4,8 @@ import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { resolve, join } from "node:path";
 import ts from "typescript";
+import { NextRequest } from "next/server";
+import { middleware } from "../../src/middleware";
 
 const render = vi.hoisted(() => ({ memo: new Map<unknown, Map<string, unknown>>() }));
 vi.mock("react", async original => ({
@@ -66,6 +68,7 @@ beforeEach(() => {
   title = "Public article"; hidden = false; failed = false;
   vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "https://rollback-fixture.invalid");
   vi.stubEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY", "unit-test-anon");
+  vi.stubEnv("NEXT_PUBLIC_ADSENSE_ENABLED", "true");
   vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(String(input));
     expect(url.host).toBe("rollback-fixture.invalid");
@@ -105,6 +108,10 @@ describe("durable app-first rollback patch", () => {
     // An undrained old process fails closed; permission errors are not fallback.
     await expect(oldProcess()).rejects.toThrow("revision is unavailable");
     revisionCalls = 0;
+    const response = await middleware(new NextRequest("https://website-fixture.invalid/blog/article"));
+    expect(response.status).toBe(200);
+    expect(await response.text()).not.toContain("noindex");
+    expect(response.headers.get("cache-control")).toContain("no-store");
     expect((await blog.getBlogPost("article"))?.title).toBe("Edited after SQL rollback");
     hidden = true; render.memo.clear();
     expect(await blog.getBlogPost("article")).toBeNull();

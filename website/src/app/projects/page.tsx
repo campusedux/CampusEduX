@@ -1,3 +1,5 @@
+import { Breadcrumb } from "@/components/ui/Breadcrumb";
+import { completeSeoMetadata } from "@/lib/seo";
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import Link from "next/link";
@@ -7,7 +9,9 @@ import { CustomProjectBanner } from "@/components/CustomProjectBanner";
 import { FilterSheet, Pagination, EmptyState, SearchBar, SkeletonCard, Chip, ChipRow } from "@/components/ui";
 import { ProjectFilters } from "@/components/marketplace/ProjectFilters";
 import styles from "@/components/marketplace/projects.module.css";
-import { getCachedProjectsPage, getCachedCategories } from "@/lib/cache";
+import { getCachedCategories } from "@/lib/cache";
+import { getProjectsCatalogState } from "@/lib/catalogState";
+import { CatalogUnavailable } from "@/components/marketplace/CatalogUnavailable";
 import {
   absoluteUrl,
   listingCanonical,
@@ -31,6 +35,7 @@ const DESCRIPTION =
 export const revalidate = 120;
 
 type SP = {
+  [key: string]: string | undefined;
   q?: string;
   category?: string;
   min?: string;
@@ -42,10 +47,11 @@ type SP = {
 
 export async function generateMetadata({ searchParams: searchParamsPromise }: { searchParams: Promise<SP> }): Promise<Metadata> {
   const searchParams = await searchParamsPromise;
-  const { count } = await getCachedProjectsPage({
-    page: 1,
-    from: 0,
-    size: 1,
+  const page = parsePage(searchParams.page);
+  const catalog = await getProjectsCatalogState({
+    page,
+    from: (page - 1) * PROJECT_PAGE_SIZE,
+    size: PROJECT_PAGE_SIZE,
     sortColumn: PROJECT_SORTS[projectSort(searchParams.sort)].column,
     sortAscending: PROJECT_SORTS[projectSort(searchParams.sort)].ascending,
     q: searchParams.q,
@@ -54,17 +60,11 @@ export async function generateMetadata({ searchParams: searchParamsPromise }: { 
     max: parsePrice(searchParams.max),
     flag: searchParams.flag === "premium" || searchParams.flag === "bestseller" ? searchParams.flag : undefined,
   });
-  const page = parsePage(searchParams.page);
-  const filtered = Boolean(
-    searchParams.q ||
-      searchParams.category ||
-      searchParams.min ||
-      searchParams.max ||
-      searchParams.flag ||
-      projectSort(searchParams.sort) !== "newest",
-  );
+  const count = catalog.data?.count;
+  // Tracking keys do not change content or indexation; explicit facets do.
+  const filtered = ["q", "category", "min", "max", "flag", "sort"].some(key => key in searchParams);
   const url = listingCanonical("/projects", page, filtered);
-  return {
+  return completeSeoMetadata({
     title: "Project Marketplace",
     description: DESCRIPTION,
     alternates: { canonical: url },
@@ -78,10 +78,10 @@ export async function generateMetadata({ searchParams: searchParamsPromise }: { 
     // No results for this view (e.g. the catalog is empty, or the filters
     // matched nothing) -> don't index an empty shell page.
     robots:
-      count === 0 || (page - 1) * PROJECT_PAGE_SIZE >= (count ?? Infinity)
+      catalog.state !== "unavailable" && (filtered || catalog.data?.projects.length === 0 || count === 0 || (page - 1) * PROJECT_PAGE_SIZE >= (count ?? Infinity))
         ? { index: false, follow: true }
         : undefined,
-  };
+  });
 }
 
 type ProjectQuery = {
@@ -101,7 +101,7 @@ async function ProjectResults({ query }: { query: ProjectQuery }) {
   const s = PROJECT_SORTS[query.sort];
   // Data is served from a per-filter cross-request cache (lib/cache.ts) — this
   // route stays dynamic to read the URL, but no longer hits Supabase per visit.
-  const { projects: rows, count } = await getCachedProjectsPage({
+  const catalog = await getProjectsCatalogState({
     page: query.page,
     from: (query.page - 1) * PROJECT_PAGE_SIZE,
     size: PROJECT_PAGE_SIZE,
@@ -113,6 +113,8 @@ async function ProjectResults({ query }: { query: ProjectQuery }) {
     max: query.max,
     flag: query.flag,
   });
+  if (catalog.state === "unavailable") return <CatalogUnavailable catalog="projects" lastKnownCount={catalog.lastKnownCount} />;
+  const { projects: rows, count } = catalog.data;
   const projects = rows as ProjectCardData[];
   const pages = totalPages(count, PROJECT_PAGE_SIZE);
 
@@ -146,6 +148,9 @@ async function ProjectResults({ query }: { query: ProjectQuery }) {
               </Link>
             ) : (
               <div className="flex flex-wrap justify-center gap-3">
+                <Link href="/learning" className="btn-secondary min-h-11 text-sm">
+                  Explore Learning
+                </Link>
                 <Link href="/custom-projects" className="btn-secondary min-h-11 text-sm">
                   Custom Projects
                 </Link>
@@ -246,6 +251,7 @@ export default async function ProjectsPage({ searchParams: searchParamsPromise }
   return (
     <div className="mobile-discovery min-w-0">
       <JsonLd data={breadcrumbJsonLd([{ name: "Projects", path: "/projects" }])} />
+      <Breadcrumb className="mb-4" items={[{ label: "Projects" }]} />
       <CustomProjectBanner />
       <section aria-label="Project marketplace" className={`container-page py-6 sm:py-8 lg:py-10 ${styles.marketplace}`}>
         <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_44px] gap-4 lg:grid-cols-[250px_minmax(0,1fr)] lg:grid-rows-[auto_auto_1fr] lg:items-start lg:gap-x-7 lg:gap-y-5">

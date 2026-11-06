@@ -22,6 +22,14 @@ export interface FaqPair {
 const UL = /^(\s*)[-*+]\s+(.*)$/;
 const OL = /^(\s*)(\d+)[.)]\s+(.*)$/;
 
+// Inline code is literal content: stripping Markdown from it would change
+// identifiers such as TIMED_WAITING and department_summary in the schema.
+function faqText(source: string): string {
+  return source.split(/(`[^`]+`)/g)
+    .map((part) => part.startsWith("`") && part.endsWith("`") ? part.slice(1, -1) : cleanText(part))
+    .join(" ").replace(/\s+/g, " ").trim();
+}
+
 function pairsInMarkdown(source: string): DetectedQnA[] {
   const lines = String(source || "").replace(/\r\n/g, "\n").split("\n");
   const out: DetectedQnA[] = [];
@@ -95,8 +103,8 @@ export function lessonFaqPairs(
     if (block.content_format === "plain") continue;
     for (const pair of pairsInMarkdown(String(block.body ?? ""))) {
       // "Q2. What is …?" → "What is …?" — the number/label is presentation, not the question.
-      const question = cleanText(pair.question).replace(/^Q\d*\s*[:.)]\s*/i, "");
-      const answer = cleanText(pair.answer);
+      const question = faqText(pair.question).replace(/^Q\d*\s*[:.)]\s*/i, "");
+      const answer = faqText(pair.answer);
       const key = question.toLowerCase();
       if (!question || !answer || seen.has(key)) continue;
       seen.add(key);

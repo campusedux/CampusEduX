@@ -198,7 +198,7 @@ export const getCachedProjectsPage = unstable_cache(
     if (a.flag === "bestseller") query = query.eq("is_best_seller", true);
 
     const { data, count, error } = await query;
-    if (error || count === null) throw new Error("Projects catalog query failed");
+    if (error || count === null || !Array.isArray(data)) throw new Error("Projects catalog query failed");
     return { ok: true, projects: data ?? [], count };
   },
   ["catalog:projects-page"],
@@ -233,7 +233,7 @@ export const getCachedJobsPage = cache(
     if (a.experience) query = query.eq("experience_level", a.experience);
 
     const { data, count, error } = await query;
-    if (error || count === null) throw new Error("Jobs catalog query failed");
+    if (error || count === null || !Array.isArray(data)) throw new Error("Jobs catalog query failed");
     return { ok: true, jobs: data ?? [], count };
   },
 );

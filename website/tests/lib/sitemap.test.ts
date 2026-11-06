@@ -334,13 +334,13 @@ function populatedSupabase(extra: { errors?: string[] } = {}) {
 }
 
 describe("/sitemap.xml index + /sitemaps/<section>.xml routes", () => {
-  it("every sitemap route is ISR with revalidate = 3600", async () => {
+  it("sitemap routes render on demand while section data retains hourly caching", async () => {
     const r = await loadSitemapRoutes(populatedSupabase());
     expect(r.index.revalidate).toBe(3600);
-    expect(r.index.dynamic).toBe("force-static");
+    expect(r.index.dynamic).toBe("force-dynamic");
     for (const name of SITEMAP_SECTION_NAMES) {
       expect(r.sections[name].revalidate).toBe(3600);
-      expect(r.sections[name].dynamic).toBe("force-static");
+      expect(r.sections[name].dynamic).toBe("force-dynamic");
     }
   });
 
@@ -367,12 +367,11 @@ describe("/sitemap.xml index + /sitemaps/<section>.xml routes", () => {
         rpcs: { learning_sitemap: [{ grid_slug: "java-tutorial", topic_slug: "intro", updated_at: "2026-02-01T00:00:00Z" }] },
       }),
     );
-    // Practice and interview hubs remain; the empty blog child is omitted.
+    // Practice is a useful static hub; empty interview and blog sections are omitted.
     expect(locs(await r.indexXml())).toEqual([
       `${SITE}/sitemaps/static.xml`,
       `${SITE}/sitemaps/learning.xml`,
       `${SITE}/sitemaps/problems.xml`,
-      `${SITE}/sitemaps/interview-questions.xml`,
     ]);
     // The omitted child routes still answer with a valid (empty) urlset.
     expect(await r.sectionXml("jobs")).toContain("<urlset");
@@ -451,21 +450,24 @@ describe("/sitemap.xml index + /sitemaps/<section>.xml routes", () => {
     ]);
   });
 
-  it("a failed query throws (so ISR keeps the last good sitemap) instead of serving a truncated one", async () => {
+  it("a cold failed query returns retryable 503 instead of a successful truncated sitemap", async () => {
     const r = await loadSitemapRoutes(populatedSupabase({ errors: ["learning_sitemap"] }));
-    await expect(r.sections.learning.GET()).rejects.toBeTruthy();
-    await expect(r.index.GET()).rejects.toBeTruthy();
+    for (const response of [await r.sections.learning.GET(), await r.index.GET()]) {
+      expect(response.status).toBe(503);
+      expect(response.headers.get("Retry-After")).toBe("60");
+      expect(response.headers.get("Cache-Control")).toBe("no-store");
+      expect(await response.text()).not.toContain("<urlset");
+    }
   });
 
-  it("without Supabase env the static pages are still listed (minus data-gated /faq and /premium)", async () => {
+  it("missing configuration returns retryable failure without publishing empty sections", async () => {
     const r = await loadSitemapRoutes(null);
-    const staticLocs = locs(await r.sectionXml("static"));
-    expect(staticLocs).toContain(SITE);
-    expect(staticLocs).toContain(`${SITE}/compiler`);
-    expect(staticLocs).not.toContain(`${SITE}/faq`);
-    expect(locs(await r.sectionXml("blog"))).toEqual([]);
-    // Only the static child has URLs without data, so it's the only one indexed.
-    expect(locs(await r.indexXml())).toEqual([`${SITE}/sitemaps/static.xml`]);
+    for (const response of [await r.index.GET(), ...await Promise.all(Object.values(r.sections).map(section => section.GET()))]) {
+      expect(response.status).toBe(503);
+      expect(response.headers.get("Retry-After")).toBe("60");
+      expect(response.headers.get("Cache-Control")).toBe("no-store");
+      expect(await response.text()).not.toContain("<urlset");
+    }
   });
 
   it("every section's cached loader carries the learning:sitemap tag (POST /api/revalidate contract)", async () => {
@@ -552,5 +554,30 @@ describe("not-found page metadata", () => {
   it("the homepage declares its own canonical", () => {
     const src = readFileSync(join(process.cwd(), "src/app/page.tsx"), "utf8");
     expect(src).toMatch(/alternates:\s*\{\s*canonical:\s*"\/"\s*\}/);
+  });
+});
+
+
+describe("empty sitemap hubs", () => {
+  it("omits learning and interview hubs without content", () => {
+    expect(buildLearningEntries([], new Set())).toEqual([]);
+    expect(buildInterviewEntries([])).toEqual([]);
+  });
+});
+
+describe("bounded sitemap reads", () => {
+  it("rejects a stalled transport instead of waiting indefinitely", async () => {
+    await loadSitemapRoutes(null);
+    const { readAllPages } = await import("@/lib/sitemap/data");
+    vi.useFakeTimers();
+    const reading = readAllPages(() => new Promise(() => {}));
+    const assertion = expect(reading).rejects.toThrow("temporarily unavailable");
+    await vi.advanceTimersByTimeAsync(10_000);
+    await assertion;
+  });
+  it("fails closed at the row cap instead of returning truncated results", async () => {
+    await loadSitemapRoutes(null);
+    const { readAllPages } = await import("@/lib/sitemap/data");
+    await expect(readAllPages(async () => ({ data: [{ id: 1 }], error: null }), { pageSize: 1, maxRows: 2 })).rejects.toThrow("limit reached");
   });
 });

@@ -1,3 +1,5 @@
+import { Breadcrumb } from "@/components/ui/Breadcrumb";
+import { completeSeoMetadata } from "@/lib/seo";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Code2, TerminalSquare, History, MessageSquareText, ArrowRight } from "lucide-react";
@@ -8,7 +10,7 @@ import { getPracticeCategories } from "@/lib/practice";
 
 export const revalidate = 21600;
 
-export const metadata: Metadata = {
+export const metadata: Metadata = completeSeoMetadata({
   title: "Coding Practice & Interview Prep",
   description: "Solve coding problems, prepare for interviews and run code online with CampusEduX practice tools for students.",
   alternates: { canonical: absoluteUrl("/practice") },
@@ -19,7 +21,7 @@ export const metadata: Metadata = {
     type: "website",
     images: [DEFAULT_OG_IMAGE],
   },
-};
+});
 
 const TILES = [
   {
@@ -63,6 +65,7 @@ export default async function PracticeHubPage() {
   return (
     <div className="page-shell">
       <JsonLd data={breadcrumbJsonLd([{ name: "Practice", path: "/practice" }])} />
+      <Breadcrumb className="mb-4" items={[{ label: "Practice" }]} />
       <PageHeader
         eyebrow="Practice"
         title="Practice"

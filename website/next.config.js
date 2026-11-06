@@ -2,12 +2,17 @@
 
 const contentRedirects = require("./src/lib/contentRedirects.json");
 const { buildCsp } = require("./src/lib/csp");
+const { normalizeSiteUrl } = require("./src/lib/siteOrigin");
+// Fail before compilation if production canonical configuration is unsafe.
+normalizeSiteUrl(process.env.NEXT_PUBLIC_SITE_URL);
 // Always retain an enforced static fallback, including middleware-excluded assets.
 // Next applies configured headers before middleware; nonce-mode middleware
 // replaces this header for matched requests with its stricter request policy.
 const csp = buildCsp({ isDev: process.env.NODE_ENV !== "production" });
 
 const nextConfig = {
+  // Resolve metadata before the initial HTML for browsers and crawlers alike.
+  htmlLimitedBots: /.*/,
   images: {
     remotePatterns: [{ protocol: "https", hostname: "**.supabase.co" }],
     // Serve AVIF first (≈20–30% smaller than WebP), WebP fallback. Every

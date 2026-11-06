@@ -61,10 +61,11 @@ describe("/projects/category/[category] BreadcrumbList", () => {
       | { itemListElement: { position: number; name: string; item: string }[] }
       | undefined;
     expect(crumb).toBeDefined();
-    expect(crumb!.itemListElement).toHaveLength(2);
-    expect(crumb!.itemListElement[0]).toMatchObject({ position: 1, name: "Projects", item: "https://www.campusedux.com/projects" });
-    expect(crumb!.itemListElement[1]).toMatchObject({
-      position: 2,
+    expect(crumb!.itemListElement).toHaveLength(3);
+    expect(crumb!.itemListElement[0]).toMatchObject({ position: 1, name: "Home", item: "https://www.campusedux.com/" });
+    expect(crumb!.itemListElement[1]).toMatchObject({ position: 2, name: "Projects", item: "https://www.campusedux.com/projects" });
+    expect(crumb!.itemListElement[2]).toMatchObject({
+      position: 3,
       name: "Web & Mobile",
       item: "https://www.campusedux.com/projects/category/web-mobile",
     });

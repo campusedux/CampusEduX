@@ -1,3 +1,4 @@
+import { completeSeoMetadata } from "@/lib/seo";
 import type { Metadata } from "next";
 import { absoluteUrl, DEFAULT_OG_IMAGE } from "@/lib/seo";
 import type { LegalDocId } from "./types";
@@ -24,13 +25,13 @@ export function legalMetadata(docId: LegalDocId): Metadata {
   const path = legalPath(docId);
   const title = SEO_COPY[docId]?.title ?? doc.title;
   const description = SEO_COPY[docId]?.description ?? fillTokens(doc.summary);
-  return {
+  return completeSeoMetadata({
     title: SEO_COPY[docId] ? { absolute: title } : title,
     description,
     alternates: { canonical: path },
     openGraph: { title, description, url: absoluteUrl(path), type: "article", images: [DEFAULT_OG_IMAGE] },
     robots: { index: true, follow: true },
-  };
+  });
 }
 
 /** Same, for a hand-composed legal page (no content JSON). */
@@ -39,11 +40,11 @@ export function composedLegalMetadata(opts: {
   description: string;
   path: string;
 }): Metadata {
-  return {
+  return completeSeoMetadata({
     title: opts.title,
     description: opts.description,
     alternates: { canonical: absoluteUrl(opts.path) },
     openGraph: { title: opts.title, description: opts.description, url: absoluteUrl(opts.path), type: "article", images: [DEFAULT_OG_IMAGE] },
     robots: { index: true, follow: true },
-  };
+  });
 }

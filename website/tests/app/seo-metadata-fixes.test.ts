@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { loadSitemapRoutes, locs, unloadSitemapRoutes } from "../helpers/sitemapFakes";
+import { fakeSitemapSupabase, loadSitemapRoutes, locs, unloadSitemapRoutes } from "../helpers/sitemapFakes";
 
 // The five fixed static-metadata pages import UI/data modules that touch
 // Supabase only inside functions (never at module top-level), so importing
@@ -162,7 +162,7 @@ describe("robots.ts / sitemap.ts fallback domain", () => {
   // sitemap.ts was replaced by the /sitemap.xml index + /sitemaps/<section>.xml routes.
   it("the sitemap falls back to https://www.campusedux.com (not campusedux.app) when NEXT_PUBLIC_SITE_URL is unset", async () => {
     delete process.env.NEXT_PUBLIC_SITE_URL;
-    const r = await loadSitemapRoutes(null);
+    const r = await loadSitemapRoutes(fakeSitemapSupabase());
     const urls = [...locs(await r.indexXml()), ...(await r.allLocs())];
     expect(locs(await r.sectionXml("static"))[0]).toBe("https://www.campusedux.com");
     expect(urls.every((u) => u.startsWith("https://www.campusedux.com"))).toBe(true);
@@ -171,7 +171,7 @@ describe("robots.ts / sitemap.ts fallback domain", () => {
 
   it("the sitemap still honors NEXT_PUBLIC_SITE_URL when set", async () => {
     process.env.NEXT_PUBLIC_SITE_URL = "https://example.test";
-    const r = await loadSitemapRoutes(null);
+    const r = await loadSitemapRoutes(fakeSitemapSupabase());
     const urls = [...locs(await r.indexXml()), ...(await r.allLocs())];
     expect(urls.length).toBeGreaterThan(7);
     expect(urls.every((u) => u.startsWith("https://example.test"))).toBe(true);

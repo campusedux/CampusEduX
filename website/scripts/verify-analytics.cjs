@@ -77,13 +77,32 @@ async function main() {
         for (const line of (route.request().postData() || '').split('\n')) {
           const params = new URLSearchParams(url.search);
           for (const [key, value] of new URLSearchParams(line.trim())) params.set(key, value);
-          report.requests.push({ host: url.hostname, event: params.get('en'), page: params.get('dl'), referrer: params.get('dr'), measurementIdMatches: params.get('tid') === id });
+          report.requests.push({ host: url.hostname, event: params.get('en'), page: params.get('dl'), referrer: params.get('dr'), consent: params.get('gcs'), measurementIdMatches: params.get('tid') === id });
         }
         return route.fulfill({ status: 204, headers: { 'access-control-allow-origin': '*' }, body: '' });
       }
       return route.abort('blockedbyclient');
     });
     const page = await context.newPage();
+    await page.addInitScript(() => {
+      // Observe the real Google tag's cookie writes without recording values.
+      const cookie = Object.getOwnPropertyDescriptor(Document.prototype, 'cookie');
+      window.analyticsCookieViolations = [];
+      Object.defineProperty(document, 'cookie', {
+        get: () => cookie.get.call(document),
+        set: value => {
+          if (/^(_ga($|_)|_gid$|_gat($|_)|_gac_)/.test(value.split('=')[0]) &&
+              !cookie.get.call(document).split('; ').includes('campusedux_consent_v1=a1d0') &&
+              !cookie.get.call(document).split('; ').includes('campusedux_consent_v1=a1d1') &&
+              !/Max-Age=0/i.test(value)) window.analyticsCookieViolations.push(value.split('=')[0]);
+          cookie.set.call(document, value);
+        },
+      });
+    });
+    const assertNoAnalyticsCookies = async () => {
+      assert.deepEqual((await context.cookies()).filter(c => /^(_ga($|_)|_gid$|_gat($|_)|_gac_)/.test(c.name)).map(c => c.name), []);
+      assert.deepEqual(await page.evaluate(() => window.analyticsCookieViolations), []);
+    };
     const waitForRequests = async count => {
       for (let attempt = 0; attempt < 50 && report.requests.length < count; attempt++) await page.waitForTimeout(200);
     };
@@ -107,16 +126,17 @@ async function main() {
     exceptions.length = 0;
 
     await page.goto(origin + '/projects');
-    await page.waitForTimeout(300);
+    await waitForRequests(1);
     const beforeConsent = loaderCount;
-    assert.equal(await page.evaluate(() => !!window.gtag), false);
-    assert.equal(report.requests.length, 0);
+    assert.equal(await page.evaluate(() => !!window.gtag), true);
+    assert.equal(report.requests.filter(x => x.event === 'page_view').length, 1, 'A cookieless public view before consent');
+    await assertNoAnalyticsCookies();
     await page.evaluate(() => window.qa.choose(false));
     assert.equal(loaderCount, beforeConsent);
     await page.evaluate(() => window.qa.choose(true));
     await page.waitForFunction(() => window.google_tag_manager);
     await waitForRequests(1);
-    assert.equal(report.requests.filter(x => x.event === 'page_view').length, 1, 'One initial page view after consent');
+    assert.equal(report.requests.filter(x => x.event === 'page_view').length, 1, 'Consent updates do not duplicate the initial view');
     await page.evaluate(() => { window.qa.choose(true); window.qa.navigate('/projects?code=fabricated-secret#fabricated-secret'); });
     await page.waitForTimeout(600);
     assert.equal(report.requests.filter(x => x.event === 'page_view').length, 1, 'Unchanged consent/query/hash must not duplicate views');
@@ -133,8 +153,9 @@ async function main() {
     if (views.length !== expectedPaths.length) report.blockers.push('Disable Enhanced Measurement: Page changes based on browser history events. Google sent extra page views beyond the app-owned events.');
     assert(!JSON.stringify(report.requests).includes('fabricated-secret'), 'No query/fragment credential leakage');
     assert(report.requests.every(x => x.measurementIdMatches));
-    assert.equal(loaderCount - beforeConsent, 1, 'One loader across client navigation');
-    report.checks.push('Fresh/denied/accepted consent, one initial view, manual navigation and deduplication');
+    assert.equal(loaderCount, beforeConsent, 'One loader across consent updates and client navigation');
+    assert.deepEqual(await page.evaluate(() => window.analyticsCookieViolations), []);
+    report.checks.push('Real Google tag: cookieless initial view, no analytics cookie writes before consent, acceptance, manual navigation and deduplication');
 
     const count = report.requests.length;
     await page.evaluate(() => window.qa.navigate('/account/applications?code=fabricated-secret'));
@@ -142,11 +163,14 @@ async function main() {
     assert.equal(await page.evaluate(id => window[`ga-disable-${id}`], id), true);
     assert.equal(report.requests.length, count, 'No private-route collection');
     await page.evaluate(() => { window.qa.choose(false); window.qa.navigate('/jobs'); });
-    await page.waitForTimeout(600);
-    assert.equal(report.requests.length, count, 'No collection after withdrawal');
+    await waitForRequests(count + 1);
+    assert(report.requests.length > count, 'Cookieless collection resumes on public pages after withdrawal');
+    await assertNoAnalyticsCookies();
     await page.reload();
-    assert.equal(await page.evaluate(() => !!window.gtag), false);
-    report.checks.push('Private-route opt-out, withdrawal and persisted denial');
+    await page.waitForTimeout(1000);
+    assert.equal(await page.evaluate(() => !!window.gtag), true);
+    await assertNoAnalyticsCookies();
+    report.checks.push('Private-route opt-out, withdrawal clears analytics cookies, persisted denial keeps cookieless measurement');
 
     await page.goto(origin + '/nonce/projects');
     const beforeNonce = report.requests.length;
@@ -174,6 +198,8 @@ async function main() {
       await context.clearCookies();
       const initialCount = report.requests.length;
       await page.goto(appUrl.origin);
+      await page.waitForTimeout(500);
+      await assertNoAnalyticsCookies();
       await page.getByRole('button', { name: 'Accept all', exact: true }).click();
       await waitForRequests(initialCount + 1);
       for (const path of ['/learning', '/projects', '/jobs']) {

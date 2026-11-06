@@ -21,6 +21,9 @@ export const ROBOTS_DISALLOW = [
   "/custom-projects/my-projects",
 ];
 
+// Owner decision (2026-11-03): preserve training access. The wildcard also allows
+// search/citation crawlers on public content with the same private-path exclusions.
+// See docs/seo/10-crawler-policy.md; change this policy here when requested.
 export default function robots(): MetadataRoute.Robots {
   return {
     rules: {

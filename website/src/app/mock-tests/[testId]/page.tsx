@@ -1,3 +1,4 @@
+import { completeSeoMetadata } from "@/lib/seo";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -10,10 +11,10 @@ import { MockTestRunner } from "./MockTestRunner";
 // the page inheriting the root layout's `canonical: "/"` (the homepage).
 export async function generateMetadata({ params: paramsPromise }: { params: Promise<{ testId: string }> }): Promise<Metadata> {
   const params = await paramsPromise;
-  return {
+  return completeSeoMetadata({
     robots: { index: false, follow: false },
     alternates: { canonical: absoluteUrl(`/mock-tests/${encodeURIComponent(params.testId)}`) },
-  };
+  });
 }
 export const dynamic = "force-dynamic";
 

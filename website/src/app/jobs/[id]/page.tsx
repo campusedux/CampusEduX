@@ -1,3 +1,4 @@
+import { completeSeoMetadata } from "@/lib/seo";
 import { safeHref } from "@/lib/safeUrl";
 import { cache } from "react";
 import { notFound } from "next/navigation";
@@ -9,7 +10,7 @@ import { timeAgo } from "@/lib/format";
 import JsonLd from "@/components/JsonLd";
 import { TagPill, Breadcrumb, EmptyState } from "@/components/ui";
 import { ExperienceBadge } from "@/components/JobCard";
-import { absoluteUrl, breadcrumbJsonLd, jobPostingIdentifier, hiringOrganizationJsonLd, DEFAULT_OG_IMAGE } from "@/lib/seo";
+import { absoluteUrl, breadcrumbJsonLd, jobPostingIdentifier, hiringOrganizationJsonLd } from "@/lib/seo";
 import { getCachedJobDetail, getCachedRecentJobIds } from "@/lib/cache";
 import { authoredDescription, fitDescription, cleanText } from "@/lib/metaDescription";
 import { jobTitle } from "@/lib/seoTitles";
@@ -18,6 +19,9 @@ import { jobAvailability } from "@/lib/jobsActive";
 import { jobPostingGeography } from "@/lib/jobPostingGeography";
 import JobApplyPanel from "./JobApplyPanel";
 
+// Request-specific CSP nonces cannot be reused in statically cached HTML.
+// Existing data-layer caches still serve public content reads.
+export const dynamic = "force-dynamic";
 export const revalidate = 300;
 
 // `jobs.job_type` is DB-constrained (mobile-app/supabase/migrations/0010_jobs.sql)
@@ -35,8 +39,7 @@ const EMPLOYMENT_TYPE: Record<string, string> = {
   Contract: "CONTRACTOR",
 };
 
-// See the note in projects/[id]/page.tsx — registering generateStaticParams is
-// what turns this route into ISR instead of per-request dynamic rendering.
+// Known job enumeration; HTML renders per request for nonce safety.
 export async function generateStaticParams() {
   return (await getCachedRecentJobIds(40)).map((id) => ({ id }));
 }
@@ -46,9 +49,9 @@ const getJob = cache((id: string) => getCachedJobDetail(id));
 export async function generateMetadata({ params: paramsPromise }: { params: Promise<{ id: string }> }): Promise<Metadata> {
   const params = await paramsPromise;
   const job = await getJob(params.id);
-  if (!job) return { title: "Job not found", robots: { index: false, follow: false } };
+  if (!job) return completeSeoMetadata({ title: "Job not found", robots: { index: false, follow: false } });
   if (jobAvailability(job) !== "open") {
-    return { title: "Job no longer available", robots: { index: false, follow: true } };
+    return completeSeoMetadata({ title: "Job no longer available", robots: { index: false, follow: true } });
   }
   const company = job.company_name || job.company?.name || "a CampusEduX employer";
   const title = jobTitle({ title: job.title, company: job.company_name || job.company?.name || "" });
@@ -59,7 +62,7 @@ export async function generateMetadata({ params: paramsPromise }: { params: Prom
       `${job.title} at ${company}${facts ? ` (${facts})` : ""}.`,
       cleanText(job.summary || job.description),
     ]) || authoredDescription(job.title);
-  return {
+  return completeSeoMetadata({
     title: { absolute: title },
     description,
     alternates: { canonical: absoluteUrl(`/jobs/${params.id}`) },
@@ -69,10 +72,9 @@ export async function generateMetadata({ params: paramsPromise }: { params: Prom
       url: absoluteUrl(`/jobs/${params.id}`),
       type: "website",
       siteName: BRAND.name,
-      images: [DEFAULT_OG_IMAGE],
     },
-    twitter: { card: "summary", title, description },
-  };
+    twitter: { card: "summary_large_image", title, description },
+  }, { dynamicImage: true });
 }
 
 export default async function JobDetailPage({ params: paramsPromise }: { params: Promise<{ id: string }> }) {

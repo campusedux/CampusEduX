@@ -1,13 +1,14 @@
+import { completeSeoMetadata } from "@/lib/seo";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { absoluteUrl } from "@/lib/seo";
 import { LEGAL } from "@/legal/config";
 
-export const metadata: Metadata = {
+export const metadata: Metadata = completeSeoMetadata({
   title: { absolute: "About CampusEduX: Tools for Indian Students" },
   description: "Learn who operates CampusEduX and how its projects, jobs, tutorials and resume tools help college students prepare for careers.",
   alternates: { canonical: absoluteUrl("/about") },
-};
+});
 
 export default function AboutPage() {
   return (

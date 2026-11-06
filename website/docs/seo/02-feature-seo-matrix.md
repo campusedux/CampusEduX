@@ -1,0 +1,26 @@
+# Feature SEO matrix
+
+Existing URLs and contracts are authoritative; suggested copy is editorial direction, not a claim that content exists. Dynamic segments are patterns. All metrics: **needs GSC data**.
+
+| Feature | Existing route | Intent | Title direction | H1 direction | Schema | Gap/action |
+|---|---|---|---|---|---|---|
+| Home | / | student learning and placement tools | CampusEduX: Projects, Jobs & Placement Prep | Learn skills. Build projects. Land the job. | Organization + WebSite | Preserve real catalog counts; prioritize actual learning paths. |
+| Courses | /learning; /learning/[gridSlug] | programming tutorial + language | Language Tutorial with Examples — CampusEduX | Actual course name | Course / ItemList + breadcrumbs | Noindex search/empty hub; preserve real curriculum and premium gates. |
+| Lessons | /learning/[gridSlug]/[topicSlug] | concept definition, syntax and worked example | Concept in Language — CampusEduX | Actual lesson topic | TechArticle + visible Q&A + breadcrumbs | Editor checks answer-first intro, example output, source citations and real updated date. |
+| Interview | /practice/interview-questions/[category]/[topic] | technical interview questions by topic | Topic Interview Questions — CampusEduX | Topic Interview Questions | BreadcrumbList; FAQPage only visible Q&A | Existing answers/examples/important points and next/previous links; add branded OG. |
+| Coding | /practice/problems; /practice/problems/[slug]; /coding-problems/[problemSlug] | practice a specific algorithm/problem | Problem – Language Practice — CampusEduX | Actual problem title | BreadcrumbList / learning resource where accurate | Preserve premium answer protection; noindex filters; editorial review of statement/examples. |
+| Compiler | /compiler | online code execution | Online Compiler — CampusEduX | Online compiler | WebApplication | Keep working language capabilities accurate; preserve lazy editor loading. |
+| Blog | /blog; /blog/[slug] | AI/programming/career explanations | Actual authored topic — CampusEduX | Actual authored title | BlogPosting + BreadcrumbList | Existing author/dates/TOC/related articles; fact-check claims and review sources. |
+| Jobs | /jobs; /jobs/[id] | real fresher jobs and internships | Role at Company — CampusEduX | Actual role title | JobPosting on valid current detail only | No fabricated locations/salaries/deadlines; empty/filter views noindex; no mass city pages. |
+| Companies | /jobs/companies; /jobs/companies/[id] | employer openings | Company Jobs — CampusEduX | Company name | BreadcrumbList; Organization only verified data | Only employers with current openings in sitemap; avoid fake reviews. |
+| Projects | /projects; /projects/[id]; /projects/category/[category] | educational source code and project examples | Project name — CampusEduX | Actual project name | Product/Offer only true price/availability | Preserve academic integrity notices; category content needs real projects. |
+| Custom projects | /custom-projects | mentoring/code review/custom software | Project Mentoring & Custom Software — CampusEduX | Existing service heading | WebPage + breadcrumbs | Business scope/pricing confirmation required for new claims; workflow noindex. |
+| Resume | /resume; /resume/templates | resume builder and fresher templates | Resume Builder / Templates — CampusEduX | Resume builder / Resume templates | WebApplication only accurate capabilities | Explain ATS limitations and real examples; do not claim universal ATS pass rates. |
+| Referral | /referral | CampusEduX referral program | Referral Program — CampusEduX | Existing referral heading | WebPage | Dynamic reward rules are authority; no invented earnings; conditional noindex. |
+| Premium | /premium | CampusEduX plans | Premium Plans — CampusEduX | Existing plans heading | WebPage; Offer only actual plan | Pricing/benefits remain database-owned; noindex without plans. |
+| About/contact/support | /about; /contact; /support | brand identity and support | Purpose-specific title — CampusEduX | Purpose-specific existing heading | Organization + WebPage | Real author/team credentials, social links and review policy need owner confirmation. |
+| Legal | /legal and policy routes | publisher trust and policy lookup | Policy title | Policy title | WebPage | Public crawlable pages; keep AdSense/legal copy and consent unchanged. |
+| Search | /search | navigate existing catalog | Search CampusEduX | Search results | None needed | Noindex/follow; do not create landing pages for arbitrary queries. |
+| Auth/account | /login; /register; /auth/*; /account/* | account tasks | Task-specific title | Task-specific heading | None needed | Noindex; retain authentication, token handling and robots restrictions. |
+| Tests/results | /mock-tests/[testId]; /mock-tests/[testId]/result/[attemptId] | private learning workflow | Test/result title | Existing heading | None needed | Noindex and out of sitemaps; no public attempt enumeration. |
+| BAMS | NONE | syllabus and exam revision | Proposed BAMS study guide — CampusEduX | Proposed BAMS study resources | Article only after expert review | No verified content/reviewer: proposal only, not a new medical-content claim. |

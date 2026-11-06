@@ -1,3 +1,4 @@
+import { completeSeoMetadata } from "@/lib/seo";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
@@ -8,7 +9,7 @@ import { LEGAL_INDEX } from "@/legal/registry";
 
 const lastUpdated = LEGAL_INDEX.map((item) => item.effectiveDate).sort().at(-1)!;
 
-export const metadata: Metadata = {
+export const metadata: Metadata = completeSeoMetadata({
   title: { absolute: "CampusEduX Legal & Privacy Policies" },
   description: "Find CampusEduX privacy, terms, refund, cookie, grievance and other policies in one place.",
   alternates: { canonical: "/legal" },
@@ -20,7 +21,7 @@ export const metadata: Metadata = {
     images: [DEFAULT_OG_IMAGE],
   },
   robots: { index: true, follow: true },
-};
+});
 
 export default function LegalHubPage() {
   return (

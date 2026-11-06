@@ -51,20 +51,24 @@ export function analyticsPage(value: string, origin: string, referrer = ""): Ana
 let script: HTMLScriptElement | null = null;
 let loaded = false;
 let configured = false;
+let defaultsSet = false;
 let pending: AnalyticsPage[] = [];
 let previous = "";
 let users = 0;
 let enabled = false;
+let storageGranted = false;
 const DENIED = { analytics_storage: "denied", ad_storage: "denied", ad_user_data: "denied", ad_personalization: "denied" };
 
 function setEnabled(next: boolean) {
-  // Removing a loaded script does not unload Google or its timers. Use GA's
-  // collection opt-out as well as Consent Mode on withdrawal/private routes.
+  // Collection is disabled on private routes and cleanup. On public routes,
+  // Consent Mode gates cookies while denied storage permits cookieless pings.
   Object.assign(window, { [`ga-disable-${GA_MEASUREMENT_ID}`]: !next });
-  if (enabled !== next) {
-    window.gtag?.("consent", "update", { ...DENIED, analytics_storage: next ? "granted" : "denied" });
-    enabled = next;
+  const granted = next && readCookieConsent()?.analytics === true;
+  if (storageGranted !== granted) {
+    window.gtag?.("consent", "update", { ...DENIED, analytics_storage: granted ? "granted" : "denied" });
+    storageGranted = granted;
   }
+  enabled = next;
 }
 
 function pause() {
@@ -75,9 +79,21 @@ function pause() {
 
 function deliver() {
   if (!loaded || !users || !enabled) return;
-  if (!readCookieConsent()?.analytics || !analyticsPage(window.location.href, window.location.origin)) {
+  if (!analyticsPage(window.location.href, window.location.origin)) {
     pause();
     return;
+  }
+  // Configure only once the loader is ready, using the latest consent. This
+  // avoids configuring granted storage after consent was withdrawn in flight.
+  if (!configured) {
+    configured = true;
+    const page = analyticsPage(window.location.href, window.location.origin)!;
+    window.gtag?.("set", { ...page, page_title: "CampusEduX" });
+    window.gtag?.("js", new Date());
+    window.gtag?.("config", GA_MEASUREMENT_ID, {
+      ...page, page_title: "CampusEduX", send_page_view: false,
+      allow_google_signals: false, allow_ad_personalization_signals: false,
+    });
   }
   for (const page of pending.splice(0)) {
     const fields = { ...page, page_title: "CampusEduX" };
@@ -93,7 +109,7 @@ export function sendPageview(value: string) {
   // Never alter history or consume authentication credentials.
   const current = analyticsPage(window.location.href, origin);
   const page = analyticsPage(value, origin, previous || document.referrer);
-  if (!readCookieConsent()?.analytics || !current || !page || current.page_path !== page.page_path) {
+  if (!current || !page || current.page_path !== page.page_path) {
     pause();
     return;
   }
@@ -104,24 +120,17 @@ export function sendPageview(value: string) {
     window.dataLayer = window.dataLayer || [];
     window.gtag = function () { window.dataLayer!.push(arguments); };
   }
-  if (!configured) window.gtag("consent", "default", DENIED);
+  if (!defaultsSet) {
+    window.gtag("consent", "default", DENIED);
+    defaultsSet = true;
+  }
   setEnabled(true);
   // Queries, hashes and unchanged consent saves are not new logical pages.
   if (previous === page.page_location) return;
   pending.push(page);
   previous = page.page_location;
-  if (!configured) {
-    configured = true;
-    window.gtag("set", { ...page, page_title: "CampusEduX" });
-    window.gtag("js", new Date());
-    window.gtag("config", GA_MEASUREMENT_ID, {
-      // This app owns page views. The stream's Enhanced Measurement setting
-      // "Page changes based on browser history events" must also be off;
-      // send_page_view suppresses config's initial view, not that remote rule.
-      ...page, page_title: "CampusEduX", send_page_view: false,
-      allow_google_signals: false, allow_ad_personalization_signals: false,
-    });
-  }
+  // This app owns page views. Disable the stream's Enhanced Measurement
+  // "Page changes based on browser history events" to avoid remote duplicates.
   if (!script) {
     const next = document.createElement("script");
     next.src = `https://www.googletagmanager.com/gtag/js?id=${encodeURIComponent(GA_MEASUREMENT_ID)}`;

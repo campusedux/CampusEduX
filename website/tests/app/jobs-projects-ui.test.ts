@@ -3,8 +3,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Children, cloneElement, createElement, isValidElement, Suspense, type ReactElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { jsx } from "react/jsx-runtime";
-import JobsPage from "@/app/jobs/page";
-import ProjectsPage from "@/app/projects/page";
+import JobsPage, { generateMetadata as jobsMetadata } from "@/app/jobs/page";
+import ProjectsPage, { generateMetadata as projectsMetadata } from "@/app/projects/page";
 import { CustomProjectBanner } from "@/components/CustomProjectBanner";
 import JobsError from "@/app/jobs/error";
 import ProjectsError from "@/app/projects/error";
@@ -132,9 +132,14 @@ describe("Jobs listing presentation and preserved contracts", () => {
     expect(html).not.toContain("Get notified");
   });
 
-  it("propagates data failures instead of presenting a genuine empty state", async () => {
+  it.each([{}, { q: "outage", page: "2" }, { utm_source: "newsletter" }])("keeps query failures distinct from empty inventory and never adds noindex (%j)", async searchParams => {
     api.jobs.mockRejectedValue(new Error("catalog unavailable"));
-    await expect(render(await JobsPage({ searchParams: Promise.resolve({}) }))).rejects.toThrow("catalog unavailable");
+    const html = await render(await JobsPage({ searchParams: Promise.resolve(searchParams) }));
+    expect(html).toContain("Jobs temporarily unavailable");
+    expect(html).toContain('role="alert"');
+    expect(html).toContain('href="/learning"');
+    expect(html).not.toContain("No open roles right now");
+    expect((await jobsMetadata({ searchParams: Promise.resolve(searchParams) })).robots).toBeUndefined();
   });
 });
 
@@ -219,9 +224,52 @@ describe("Projects listing presentation and preserved contracts", () => {
     expect(html).not.toContain("Coming soon");
   });
 
-  it("propagates data failures instead of presenting a genuine empty state", async () => {
+  it.each([{}, { q: "outage", page: "2" }, { utm_source: "newsletter" }])("keeps query failures distinct from empty inventory and never adds noindex (%j)", async searchParams => {
     api.projects.mockRejectedValue(new Error("catalog unavailable"));
-    await expect(render(await ProjectsPage({ searchParams: Promise.resolve({}) }))).rejects.toThrow("catalog unavailable");
+    const html = await render(await ProjectsPage({ searchParams: Promise.resolve(searchParams) }));
+    expect(html).toContain("Projects temporarily unavailable");
+    expect(html).toContain('role="alert"');
+    expect(html).toContain('href="/learning"');
+    expect(html).not.toContain("No projects listed right now");
+    expect((await projectsMetadata({ searchParams: Promise.resolve(searchParams) })).robots).toBeUndefined();
+  });
+});
+
+describe("catalog indexing states", () => {
+  it.each(["jobs", "projects"] as const)("/%s noindexes facets but ignores tracking and indexes populated pagination", async surface => {
+    const metadata = surface === "jobs" ? jobsMetadata : projectsMetadata;
+    api.jobs.mockResolvedValue({ jobs: [job], count: 60 });
+    api.projects.mockResolvedValue({ projects: [project], count: 60 });
+    for (const params of [{ q: "developer" }, { sort: "newest" }]) {
+      expect((await metadata({ searchParams: Promise.resolve(params) })).robots).toEqual({ index: false, follow: true });
+    }
+    const tracked = await metadata({ searchParams: Promise.resolve({ utm_source: "mail", gclid: "click", fbclid: "click", ref: "friend" }) });
+    expect(tracked.robots).toBeUndefined();
+    expect(tracked.alternates?.canonical).toBe(`https://www.campusedux.com/${surface}`);
+    const second = await metadata({ searchParams: Promise.resolve({ page: "2" }) });
+    expect(second.robots).toBeUndefined();
+    expect(second.alternates?.canonical).toBe(`https://www.campusedux.com/${surface}?page=2`);
+    expect((await metadata({ searchParams: Promise.resolve({ page: "99" }) })).robots).toEqual({ index: false, follow: true });
+    // A positive count alone cannot make an empty page indexable.
+    api.jobs.mockResolvedValue({ jobs: [], count: 60 });
+    api.projects.mockResolvedValue({ projects: [], count: 60 });
+    expect((await metadata({ searchParams: Promise.resolve({ page: "2" }) })).robots).toEqual({ index: false, follow: true });
+  });
+
+  it("noindexes only confirmed empty inventory", async () => {
+    api.jobs.mockResolvedValue({ jobs: [], count: 0 });
+    api.projects.mockResolvedValue({ projects: [], count: 0 });
+    for (const metadata of [jobsMetadata, projectsMetadata])
+      expect((await metadata({ searchParams: Promise.resolve({}) })).robots).toMatchObject({ index: false });
+    const html = await render(await ProjectsPage({ searchParams: Promise.resolve({}) }));
+    expect(html).toContain('href="/learning"');
+  });
+
+  it("does not noindex even an out-of-range view when its query fails", async () => {
+    api.jobs.mockRejectedValue(new Error("timeout"));
+    api.projects.mockRejectedValue(new Error("timeout"));
+    for (const metadata of [jobsMetadata, projectsMetadata])
+      expect((await metadata({ searchParams: Promise.resolve({ page: "999" }) })).robots).toBeUndefined();
   });
 });
 

@@ -71,7 +71,7 @@ export default function CookieConsentBanner() {
     >
       <h2 className="text-base font-bold">Cookie choices</h2>
       <p className="mt-2 text-sm leading-relaxed text-ink-muted">
-        Essential cookies keep the site working. Optional analytics helps us understand visits. Advertising is a separate choice for when we display ads. Read our{" "}
+        Essential cookies keep the site working. Google Analytics sends limited cookieless measurements while analytics cookies are denied. Allowing analytics enables those cookies. Advertising is a separate choice. Read our{" "}
         <Link href="/cookie-policy" className="hit-44 font-semibold text-primary underline underline-offset-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">
           Cookie Policy
         </Link>.

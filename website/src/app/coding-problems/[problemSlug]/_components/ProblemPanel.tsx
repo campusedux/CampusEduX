@@ -1,3 +1,4 @@
+import { Breadcrumb } from "@/components/ui/Breadcrumb";
 import { canonicalContentPath } from "@/lib/contentRedirects";
 import Link from "next/link";
 import { ArrowLeft, ArrowRight, BookOpen, ChevronRight, Lock } from "lucide-react";
@@ -139,20 +140,7 @@ export function ProblemPanel({
 
   return (
     <div className="px-4 py-5 sm:px-6 sm:py-6">
-      {!embedded && <nav aria-label="Breadcrumb" className="flex flex-wrap items-center gap-1 text-sm text-ink-faint">
-        {crumbs.map((c, i) => (
-          <span key={i} className="flex items-center gap-1">
-            {i > 0 ? <ChevronRight className="h-3.5 w-3.5 flex-shrink-0" aria-hidden /> : null}
-            {c.href ? (
-              <Link href={c.href} className="truncate transition-colors hover:text-ink">
-                {c.label}
-              </Link>
-            ) : (
-              <span className="text-ink-muted">{c.label}</span>
-            )}
-          </span>
-        ))}
-      </nav>}
+      {!embedded && <Breadcrumb items={crumbs} />}
 
       <Heading className="mt-3 text-2xl font-bold tracking-tight text-ink sm:text-[1.75rem]">{problem.title}</Heading>
 
