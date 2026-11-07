@@ -1,19 +1,17 @@
 --- a/website/src/lib/revisionedPublicRead.ts
 +++ b/website/src/lib/revisionedPublicRead.ts
-@@ -1,104 +1,21 @@
+@@ -1,127 +1,21 @@
  import { cache } from "react";
 -import { createHash } from "node:crypto";
  import { getPublicSupabase } from "@/lib/supabase/server";
--import { RevisionCache } from "@/lib/revisionCache";
--import { publicReadDeadline } from "@/lib/publicReadDeadline";
+-import { PublicReadTimeout, publicReadDeadline } from "@/lib/publicReadDeadline";
+-import { isPublicReadColdStart, publicReadRuntime as runtime } from "@/lib/publicReadRuntime";
  
  type Scope = "learning" | "blog" | "home";
  type Client = NonNullable<ReturnType<typeof getPublicSupabase>>;
--const payloads = new RevisionCache();
--const REVISION_TIMEOUT_MS = 1000;
+-const REVISION_TIMEOUT_MS = 2500;
+-const FIRST_REVISION_TIMEOUT_MS = 5000;
 -const PAYLOAD_REFRESH_MS = 60_000;
--let checkCount = 0;
--let failureCount = 0;
  
 -class RevisionUnavailable extends Error {
 -  constructor(readonly recoverable: boolean, readonly code?: string) {
@@ -21,15 +19,23 @@
 -  }
 -}
 -
--async function revision(client: Client, scope: Scope): Promise<string | null> {
+-async function revisionAttempt(client: Client, scope: Scope, attempt: number, phase: "render" | "verification"): Promise<string | null> {
 -  const started = Date.now();
 -  const controller = new AbortController();
--  const check = ++checkCount;
+-  const firstRead = !runtime.revisionStarted;
+-  runtime.revisionStarted = true; // Claim synchronously, including concurrent startup reads.
+-  const deadlineMs = firstRead ? FIRST_REVISION_TIMEOUT_MS : REVISION_TIMEOUT_MS;
+-  const coldStart = isPublicReadColdStart();
+-  const check = ++runtime.checkCount;
+-  let timedOut = false;
+-  const diagnostics = () => ({ scope, phase, attempt, first_read: firstRead, cold_start: coldStart,
+-    deadline_ms: deadlineMs, duration_ms: Date.now() - started, timed_out: timedOut,
+-    check_count: runtime.checkCount, failure_count: runtime.failureCount, check });
 -  try {
 -    const { data, error, status } = await publicReadDeadline(() => {
 -      const request = client.rpc("public_content_revision", { p_scope: scope });
 -      return request.abortSignal(controller.signal);
--    }, REVISION_TIMEOUT_MS);
+-    }, deadlineMs);
 -    // Compatibility before the prepared migration (or during rollback). No reuse.
 -    if (error?.code === "PGRST202" || error?.code === "42883") return null;
 -    if (error) {
@@ -43,16 +49,24 @@
 -    return data;
 -  } catch (error) {
 -    const failure = error instanceof RevisionUnavailable ? error : new RevisionUnavailable(true);
--    failureCount++;
+-    timedOut = error instanceof PublicReadTimeout;
+-    runtime.failureCount++;
 -    // No raw errors, arguments, URLs, credentials or content in Render logs.
--    console.error(JSON.stringify({ event: "public_content_revision_failed", scope,
--      duration_ms: Date.now() - started, check_count: checkCount, failure_count: failureCount,
--      check, code: failure.code, recoverable: failure.recoverable }));
+-    console.error(JSON.stringify({ event: "public_content_revision_failed", ...diagnostics(),
+-      code: failure.code, recoverable: failure.recoverable }));
 -    throw failure;
 -  } finally {
 -    controller.abort();
--    console.info(JSON.stringify({ event: "public_content_revision_checked", scope,
--      duration_ms: Date.now() - started, check_count: checkCount, failure_count: failureCount, check }));
+-    console.info(JSON.stringify({ event: "public_content_revision_checked", ...diagnostics() }));
+-  }
+-}
+-
+-async function revision(client: Client, scope: Scope, phase: "render" | "verification" = "render"): Promise<string | null> {
+-  try {
+-    return await revisionAttempt(client, scope, 1, phase);
+-  } catch (error) {
+-    if (!(error instanceof RevisionUnavailable) || !error.recoverable) throw error;
+-    return revisionAttempt(client, scope, 2, phase);
 -  }
 -}
 -
@@ -95,19 +109,28 @@
 -      process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
 -    ])).digest("hex");
 -    const token = await renderRevision(scope, identity);
--    if (token === null) return publicReadDeadline(() => read(client, ...args));
+-    const load = async (verified: boolean): Promise<R> => {
+-      const started = Date.now();
+-      const coldStart = isPublicReadColdStart();
+-      try {
+-        return await publicReadDeadline(async () => {
+-          const result = await read(client, ...args);
+-          // Do not admit a fill with dependencies from a different revision.
+-          if (verified && await revision(client, scope, "verification") !== token)
+-            throw new Error("Public content changed during read; retry the request");
+-          return result;
+-        });
+-      } catch (error) {
+-        console.error(JSON.stringify({ event: "public_content_refresh_failed", scope, name,
+-          phase: verified ? "verified-fill" : "fresh", duration_ms: Date.now() - started,
+-          cold_start: coldStart, timed_out: error instanceof PublicReadTimeout,
+-          deadline_ms: error instanceof PublicReadTimeout ? error.deadlineMs : undefined }));
+-        throw error;
+-      }
+-    };
+-    if (token === null) return load(false);
 -    const key = JSON.stringify(["public-v1", "website", "anon", identity, scope, name, args, token]);
--    return payloads.read(key, () => publicReadDeadline(async () => {
--      const result = await read(client, ...args);
--      // Reject the render rather than retry with memoized dependencies from a
--      // different revision (e.g. Blog category resolution). Next render retries.
--      if (await revision(client, scope) !== token)
--        throw new Error("Public content changed during read; retry the request");
--      return result;
--    }).catch(error => {
--      console.error(JSON.stringify({ event: "public_content_refresh_failed", scope, name }));
--      throw error;
--    }), PAYLOAD_REFRESH_MS);
+-    return runtime.payloads.read(key, () => load(true), PAYLOAD_REFRESH_MS);
 +    return read(client, ...args);
    });
  }

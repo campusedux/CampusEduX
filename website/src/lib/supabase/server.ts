@@ -1,4 +1,8 @@
-import { createClient } from "@supabase/supabase-js";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { createHash } from "node:crypto";
+
+type Clients = { identity: string; catalog?: SupabaseClient; fresh?: SupabaseClient };
+const processGlobal = globalThis as typeof globalThis & { __campusPublicClients?: Clients };
 
 // Read-only, anon-key client for public catalog data. Every table queried
 // from this file has a "select using (true)" RLS policy in the existing
@@ -17,7 +21,14 @@ export function getPublicSupabase(options?: { fresh?: boolean }) {
   if (!url || !key) {
     return null;
   }
-  return createClient(url, key, {
+  // One reusable client per fetch policy, including across Next server bundles.
+  // Replacing the pair on configuration changes prevents cross-environment reuse.
+  const identity = createHash("sha256").update(JSON.stringify([url, key])).digest("hex");
+  if (processGlobal.__campusPublicClients?.identity !== identity)
+    processGlobal.__campusPublicClients = { identity };
+  const clients = processGlobal.__campusPublicClients;
+  const mode = options?.fresh ? "fresh" : "catalog";
+  return clients[mode] ??= createClient(url, key, {
     auth: { persistSession: false },
     // Public content whose publication/protection can change must bypass Next's
     // persistent fetch cache. Keep this opt-in for existing catalog callers.
@@ -29,8 +40,7 @@ export function getPublicSupabase(options?: { fresh?: boolean }) {
         deadline.addEventListener("abort", abort, { once: true });
         if (init?.signal?.aborted) abort();
         else init?.signal?.addEventListener("abort", abort, { once: true });
-        const signal = controller.signal;
-        return fetch(input, { ...init, signal, cache: "no-store" });
+        return fetch(input, { ...init, signal: controller.signal, cache: "no-store" });
       } },
     } : {}),
   });

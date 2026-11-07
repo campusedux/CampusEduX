@@ -111,14 +111,14 @@ describe("middleware and authoritative public reader", () => {
     await expect(generateMetadata({ params: Promise.resolve({ slug: "published" }) })).rejects.toThrow("unavailable");
   });
 
-  it("bounds a hung revision at one second and then reads fresh content", async () => {
+  it("bounds a hung revision at 2.5 seconds per attempt and then reads fresh content", async () => {
     vi.useFakeTimers();
     const upstream = globalThis.fetch;
     vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL, init?: RequestInit) =>
       String(input).includes("/rpc/public_content_revision") ? new Promise<Response>(() => {}) : upstream(input, init)));
     middleware(request());
     const pending = getBlogPost("published");
-    await vi.advanceTimersByTimeAsync(999);
+    await vi.advanceTimersByTimeAsync(4999);
     expect(payloadCalls).toBe(0);
     await vi.advanceTimersByTimeAsync(1);
     expect(await pending).toMatchObject({ title });

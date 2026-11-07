@@ -410,7 +410,7 @@ describe("atomic-revision payload reuse (isolated HTTP fixtures)", () => {
     expect(JSON.stringify(entry)).not.toMatch(/staging-fixture|unit-test-anon|Article|failure\"/);
   });
 
-  it("falls back after one second even if a revision transport ignores abort", async () => {
+  it("falls back after two bounded attempts even if a revision transport ignores abort", async () => {
     vi.useFakeTimers();
     try {
       const upstream = globalThis.fetch;
@@ -419,7 +419,7 @@ describe("atomic-revision payload reuse (isolated HTTP fixtures)", () => {
           ? new Promise<Response>(() => {})
           : upstream(input, init)));
       const result = blog.getBlogPost("article-1");
-      await vi.advanceTimersByTimeAsync(999);
+      await vi.advanceTimersByTimeAsync(4999);
       expect(calls).toHaveLength(0);
       await vi.advanceTimersByTimeAsync(1);
       expect(await result).toMatchObject({ slug: "article-1" });

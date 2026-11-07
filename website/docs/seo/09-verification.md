@@ -1,3 +1,44 @@
+# Public revision cold-start verification — 2026-11-07
+
+Current source: uncommitted changes on `feat/seo-on-stability`. This section supersedes the earlier revision-timeout and integration counts below. No commit, push, deployment, dependency installation, SQL execution, schema/RLS change, or environment/credential-file read occurred. Nonce CSP, consent, AdSlot and ads.txt source remain unchanged. The mobile/admin surfaces are unchanged.
+
+The error wording for digest `710537029` originates in `src/lib/publicReadDeadline.ts`; the helper bounds both revision and payload reads, so the digest alone cannot identify the historical failing stage. The inspected branch used a 1,000ms revision deadline without retry, while complete payload reads had a separate 10,000ms deadline. Production logs were not available to prove the upstream cause. Revision logs now identify phase, attempt, duration_ms, deadline_ms, timed_out, first_read, cold_start, sanitized code and process counters. Payload-failure logs distinguish fresh reads from verified fills and identify their own deadline. No URLs, arguments, provider messages, credentials or content enter these diagnostics.
+
+Only the first process revision attempt gets 5,000ms; all subsequent attempts get 2,500ms, including its single recoverable retry. Denied/malformed revisions still fail closed. Exhausted recoverable revision reads use a fresh anonymous projection without admitting it to the verified cache. A fill still requires a matching post-read revision. Existing withdrawal/protection checks, current-token refresh behavior and error propagation remain intact. cold_start records process uptime below 60 seconds at attempt start; it does not extend every read in that window.
+
+`src/instrumentation.ts` runs one Node startup pass, excluded from Edge and build execution. It warms the existing Home/CMS payload, Learning grids, Blog page one/categories, and Home’s exact `getLatestPosts(3)` key. Process-global storage bridges the instrumentation and RSC bundles. The whole pass has a 20,000ms deadline, including Home’s fresh Jobs query; failed/partial warm-up is contained, missing configuration skips it, and the next visitor can recover. Jobs remain fresh and every visitor still verifies current revisions. The anonymous helper reuses one client per existing fetch policy (fresh versus catalog), two at most for the active configuration; it does not construct a client per request or introduce a separate connection agent. This is HTTP connection-pool reuse through Node fetch, not a claim of exactly one physical TCP connection.
+
+The existing RPC in `mobile-app/supabase/migrations/0155_public_content_revisions.sql` and its admin `123` twin performs one `scope = p_scope` lookup returning a UUID. `scope text primary key` supplies its index. No new query, migration or index was needed. The definition was inspected; no live EXPLAIN/index inspection or SQL/RLS harness was run. The existing app-only rollback patch was refreshed and its three scratch-application tests passed.
+
+## Completed checks
+
+Earlier completed checks on the same application/test source: `npm run lint` passed without lint findings; `npx --no-install tsc --noEmit` passed; nine focused files passed 119 tests, including 22 startup/lifecycle tests; `npm test -- --maxWorkers=1 --minWorkers=1 --testTimeout=30000 --hookTimeout=30000` passed 1,938 tests with 12 existing opt-in database tests skipped. The temporary raw logs were lost at interruption; [completed-checks.json](../../audit-reports/public-content-startup-20261107/completed-checks.json) explicitly records that provenance and the exact commands rather than implying a new run. One preceding full run had 1,937 passes, 12 skips and a compiler-poll fixture failure after about 93 seconds; all 13 unchanged compiler tests passed in isolation, then the full retry passed. Compiler code/assertions were not changed.
+
+Fresh final command: `NEXT_PUBLIC_SITE_URL=https://www.campusedux.com NEXT_PUBLIC_ADSENSE_ENABLED=true npm run build` passed in **97.22s**, generating **57/57** static pages. Only a credential-free isolated source copy and existing dependencies were used. [Build result](../../audit-reports/public-content-startup-20261107/nonce-build.json) and [sanitized log](../../audit-reports/public-content-startup-20261107/nonce-build.log) persist in the worktree; public connection values were acquired anonymously from browser assets only for runtime testing and held only in process memory.
+
+## Local production HTTP checks
+
+Command: `python3 website/audit-reports/public-content-startup-20261107/verify-runtime.py`. This starts the isolated nonce build, waits for actual warm-up completion without issuing a local request, then runs 30 sequential curl requests per route with 500ms spacing. TTFB is curl time_starttransfer; p95 is nearest-rank, using complete successful documents. These are local measurements, not Render latency or a before/after performance claim.
+
+| Route | Complete 200 | Non-200 / invalid 200 / transport error | Median / p95 TTFB ms | Noindex / confirmed-empty |
+|---|---:|---:|---:|---:|
+| `/` | 30/30 | 0 / 0 / 0 | 275.15 / 571.98 | 0 / 0 |
+| `/jobs` | 30/30 | 0 / 0 / 0 | 149.44 / 321.09 | 30 / 30 |
+| `/learning` | 30/30 | 0 / 0 / 0 | 160.88 / 293.58 | 0 / 0 |
+| `/blog` | 30/30 | 0 / 0 / 0 | 131.96 / 296.36 | 0 / 0 |
+
+All 120 documents had initial-head title/description/canonical/OG metadata, exactly one H1, matching script/CSP nonces and no-store. No renderer or catalog-unavailable UI appeared. Jobs was a successfully read, confirmed-empty current listing, with its existing “No open roles right now” state and expected noindex on all 30 responses; this is not an outage converted to an empty result. No jobs, deadlines or indexation policy were changed.
+
+Startup completed before any local curl: **2204.28ms** after process launch. The warm-up itself took **1581ms**, completed all five tasks, and made **5** post-fill verification checks. The first Home request made **0** fill-verification checks, proving it reused those warmed payloads. The first revision took **648ms** under the 5,000ms allowance. There were **168** checks total (**121** cold / **47** later), **0** failures, **0** timeouts and **0** retries.
+
+Next printed its listening “Ready” event at **554.69ms**, before instrumentation finished. The installed production constructor starts preparation eagerly and request handling awaits it; an immediately arriving request can still include startup wait. The verifier therefore waits for `public_content_warmup`, not the listening banner, to measure a visitor after startup. A first immediate-arrival pass is preserved as `first-pass-*`: it returned 120 HTTP 200s but its initial verifier incorrectly treated intentional Jobs noindex as invalid HTML and counted startup checks within the first visitor’s window. A subsequent verifier wait-loop bug was corrected. These were verification corrections, not changes to application behavior.
+
+[HTTP totals](../../audit-reports/public-content-startup-20261107/http-results.json), [per-request timings](../../audit-reports/public-content-startup-20261107/http-samples.json), [startup/counter summary](../../audit-reports/public-content-startup-20261107/runtime-summary.json), [sanitized server log](../../audit-reports/public-content-startup-20261107/runtime-server.log), and [isolated source hashes](../../audit-reports/public-content-startup-20261107/source-hashes.json) contain the final evidence. The local server was stopped after verification.
+
+Remaining limits: no production deployment/log investigation, live publication/protection mutation, database authorization test or live planner verification occurred. Synthetic tests cover denied/malformed revisions, withdrawal/protection during outages, ignored abort, retries, warm-up failure and next-visitor recovery. Healthy local loops do not prove that future backend outages cannot occur.
+
+---
+
 # Integration verification — 2026-11-06
 
 Current candidate: uncommitted merge on `feat/seo-on-stability`, based on stability `088de09`, incorporating SEO `3523968`. This section supersedes the historical SEO-only results below. Nothing committed, pushed or deployed. No environment/credential files read; no dependencies installed; no SQL/migrations executed. Runtime tests use only a public anonymous source from the live browser assets, passed temporarily to local child processes without recording values.
